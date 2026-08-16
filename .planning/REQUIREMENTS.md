@@ -130,58 +130,59 @@ Explicit exclusions prevent unsafe behavior and uncontrolled scope growth.
 
 ## Traceability
 
-Phase mappings are populated during roadmap creation.
+Every v1 requirement maps to exactly one delivery phase in `.planning/ROADMAP.md`.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| AUTH-01 | TBD | Pending |
-| AUTH-02 | TBD | Pending |
-| AUTH-03 | TBD | Pending |
-| SECR-01 | TBD | Pending |
-| SECR-02 | TBD | Pending |
-| SECR-03 | TBD | Pending |
-| CLNT-01 | TBD | Pending |
-| CLNT-02 | TBD | Pending |
-| CLNT-03 | TBD | Pending |
-| CLNT-04 | TBD | Pending |
-| CLNT-05 | TBD | Pending |
-| COMP-01 | TBD | Pending |
-| COMP-02 | TBD | Pending |
-| CAT-01 | TBD | Pending |
-| CAT-02 | TBD | Pending |
-| CAT-03 | TBD | Pending |
-| PLAY-01 | TBD | Pending |
-| PLAY-02 | TBD | Pending |
-| PLAY-03 | TBD | Pending |
-| PLAY-04 | TBD | Pending |
-| META-01 | TBD | Pending |
-| META-02 | TBD | Pending |
-| LIBR-01 | TBD | Pending |
-| LIBR-02 | TBD | Pending |
-| LIBR-03 | TBD | Pending |
-| MAC-01 | TBD | Pending |
-| MAC-02 | TBD | Pending |
-| MAC-03 | TBD | Pending |
-| MAC-04 | TBD | Pending |
-| UI-01 | TBD | Pending |
-| UI-02 | TBD | Pending |
-| UI-03 | TBD | Pending |
-| UI-04 | TBD | Pending |
-| ACCS-01 | TBD | Pending |
-| ACCS-02 | TBD | Pending |
-| SKIN-01 | TBD | Pending |
-| SKIN-02 | TBD | Pending |
-| SKIN-03 | TBD | Pending |
-| SKIN-04 | TBD | Pending |
-| SKIN-05 | TBD | Pending |
-| REL-01 | TBD | Pending |
-| REL-02 | TBD | Pending |
-| REL-03 | TBD | Pending |
+| AUTH-01 | Phase 1 | Pending |
+| AUTH-02 | Phase 1 | Pending |
+| AUTH-03 | Phase 1 | Pending |
+| SECR-01 | Phase 1 | Pending |
+| SECR-02 | Phase 1 | Pending |
+| SECR-03 | Phase 1 | Pending |
+| CLNT-01 | Phase 1 | Pending |
+| CLNT-02 | Phase 1 | Pending |
+| CLNT-03 | Phase 1 | Pending |
+| CLNT-04 | Phase 1 | Pending |
+| CLNT-05 | Phase 5 | Pending |
+| COMP-01 | Phase 5 | Pending |
+| COMP-02 | Phase 5 | Pending |
+| CAT-01 | Phase 2 | Pending |
+| CAT-02 | Phase 2 | Pending |
+| CAT-03 | Phase 2 | Pending |
+| PLAY-01 | Phase 2 | Pending |
+| PLAY-02 | Phase 2 | Pending |
+| PLAY-03 | Phase 2 | Pending |
+| PLAY-04 | Phase 2 | Pending |
+| META-01 | Phase 2 | Pending |
+| META-02 | Phase 2 | Pending |
+| LIBR-01 | Phase 3 | Pending |
+| LIBR-02 | Phase 3 | Pending |
+| LIBR-03 | Phase 3 | Pending |
+| MAC-01 | Phase 3 | Pending |
+| MAC-02 | Phase 3 | Pending |
+| MAC-03 | Phase 3 | Pending |
+| MAC-04 | Phase 3 | Pending |
+| UI-01 | Phase 3 | Pending |
+| UI-02 | Phase 3 | Pending |
+| UI-03 | Phase 3 | Pending |
+| UI-04 | Phase 3 | Pending |
+| ACCS-01 | Phase 3 | Pending |
+| ACCS-02 | Phase 4 | Pending |
+| SKIN-01 | Phase 4 | Pending |
+| SKIN-02 | Phase 4 | Pending |
+| SKIN-03 | Phase 4 | Pending |
+| SKIN-04 | Phase 4 | Pending |
+| SKIN-05 | Phase 4 | Pending |
+| REL-01 | Phase 5 | Pending |
+| REL-02 | Phase 5 | Pending |
+| REL-03 | Phase 5 | Pending |
 
 **Coverage:**
 - v1 requirements: 43 total
-- Mapped to phases: 0
-- Unmapped: 43 ⚠️
+- Mapped to phases: 43
+- Unmapped: 0 ✓
+- Duplicate mappings: 0 ✓
 
 ---
 *Requirements defined: 2026-08-16*

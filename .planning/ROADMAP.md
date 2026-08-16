@@ -1,0 +1,102 @@
+# Roadmap: Sirius Mac
+
+## Overview
+
+Sirius Mac moves from a safe, repairable proof of authorized SiriusXM interoperability to a dependable native live-radio experience, then completes its distinctive declarative skinning and public release path. Each phase preserves the central boundary: SiriusXM protocol behavior can change behind the reusable client library, while the Mac app remains secure, native, and clear about unsupported upstream conditions.
+
+## Phases
+
+**Phase Numbering:**
+- Integer phases (1, 2, 3): Planned milestone work
+- Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
+
+Decimal phases appear between their surrounding integers in numeric order.
+
+- [ ] **Phase 1: Safe Interoperability Foundation** - Subscribers get a fail-closed, private authorization foundation and a reusable client boundary.
+- [ ] **Phase 2: Authorized Live Listening** - Subscribers can browse entitled linear channels and listen reliably with truthful playback and metadata states.
+- [ ] **Phase 3: Native Mac Listening Experience** - Subscribers control one shared listening session through native windows, local library features, and macOS media controls.
+- [ ] **Phase 4: Safe Skins & Accessible Recovery** - Subscribers can personalize the player with bundled or validated local skins without compromising safety or access.
+- [ ] **Phase 5: Public Release & Compatibility Support** - Subscribers can install trusted public releases and receive privacy-safe compatibility help.
+
+## Phase Details
+
+### Phase 1: Safe Interoperability Foundation
+**Goal**: Subscribers can establish or end an authorized SiriusXM session without exposing secrets or weakening access controls, through a reusable Apple-platform client boundary.
+**Mode:** mvp
+**Depends on**: Nothing (first phase)
+**Requirements**: AUTH-01, AUTH-02, AUTH-03, SECR-01, SECR-02, SECR-03, CLNT-01, CLNT-02, CLNT-03, CLNT-04
+**Success Criteria** (what must be TRUE):
+  1. A subscriber can sign in directly to SiriusXM and receives an explicit success, rejection, challenge, unsupported-flow, or entitlement outcome.
+  2. When the authorized flow is unknown, changed, or requires a prohibited access-control workaround, the subscriber receives an explicit unsupported result and the attempt stops without a bypass.
+  3. A subscriber can sign out, after which active session material and stored SiriusXM credentials are cleared.
+  4. Subscriber credentials are Keychain-backed, session and resolved-stream data are ephemeral and direct-to-SiriusXM only, and no secret or raw sensitive response appears in diagnostics, fixtures, tests, or local app data.
+  5. A native Apple-platform developer can consume the `SiriusXMClient` SwiftPM product and use typed async capabilities without depending on SiriusXM endpoints, cookies, headers, or raw schemas.
+**Plans**: TBD
+
+### Phase 2: Authorized Live Listening
+**Goal**: Subscribers can find their entitled linear SiriusXM channels and reliably listen to one live stream with clear state and current metadata.
+**Mode:** mvp
+**Depends on**: Phase 1
+**Requirements**: CAT-01, CAT-02, CAT-03, PLAY-01, PLAY-02, PLAY-03, PLAY-04, META-01, META-02
+**Success Criteria** (what must be TRUE):
+  1. A subscriber can refresh and browse only their entitled standard and app-only `channel-linear` lineup, with each channel's identity, available presentation details, entitlement, and freshness visible.
+  2. A subscriber can tune an entitled linear channel and start, pause, resume, or stop its live stream.
+  3. Catalog, authorization, entitlement, stream-resolution, network, decoder, buffering, and unsupported-upstream failures remain distinct and actionable; cached channel presence never implies playback authorization.
+  4. Recoverable stream expiry, network interruption, sleep/wake, and stalls make bounded, cancellation-aware recovery attempts without infinite retry or synthesized listener activity.
+  5. While listening, a subscriber sees the active channel, best available artwork, and current program or song text; unavailable or stale metadata is explicit and does not interrupt healthy audio.
+**Plans**: TBD
+
+### Phase 3: Native Mac Listening Experience
+**Goal**: Subscribers can use a cohesive native macOS player and library while one shared playback session continues correctly across app and system control surfaces.
+**Mode:** mvp
+**Depends on**: Phase 2
+**Requirements**: LIBR-01, LIBR-02, LIBR-03, MAC-01, MAC-02, MAC-03, MAC-04, UI-01, UI-02, UI-03, UI-04, ACCS-01
+**Success Criteria** (what must be TRUE):
+  1. A subscriber can use one compact player window to see channel identity, current metadata, favorite state, and primary live-playback controls.
+  2. A subscriber can use a separate native library window to browse entitled channels and categories and reach favorites and recents.
+  3. Compact and library windows display the same session and playback state; opening or closing either never creates another player or interrupts healthy audio, and previous/next navigation selects a deterministic entitled channel and reveals it in the library.
+  4. A subscriber can add or remove favorites and return to an ordered list of successfully tuned recent channels, with neither feature retaining credentials, session material, or stream URLs.
+  5. Audio continues while backgrounded or with the library closed; media keys and system Now Playing reflect confirmed player and metadata state, system routing works normally, and essential player/library actions remain keyboard- and VoiceOver-usable.
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 4: Safe Skins & Accessible Recovery
+**Goal**: Subscribers can give the player a nostalgic local appearance while every skin remains declarative, bounded, accessible, and recoverable.
+**Mode:** mvp
+**Depends on**: Phase 3
+**Requirements**: ACCS-02, SKIN-01, SKIN-02, SKIN-03, SKIN-04, SKIN-05
+**Success Criteria** (what must be TRUE):
+  1. A subscriber can choose between at least two complete, tested bundled player skins.
+  2. A subscriber can import, validate, select, and remove a local user-created package that consists only of versioned declarative data and local assets.
+  3. A package that attempts executable code, remote content, active URLs, arbitrary-file access, or control of networking, playback, authentication, persistence, or accessibility semantics is rejected without altering the player.
+  4. A package with an unknown schema, unsafe/traversal/symlink path, disallowed file type, or excessive file, archive, decoded-asset, image, or processing budget is rejected safely.
+  5. A failed or invalid skin preserves the prior valid appearance and offers a built-in recovery path; custom appearance cannot remove semantic controls, usable hit targets, readable focus/state indicators, or the unskinned native fallback.
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 5: Public Release & Compatibility Support
+**Goal**: Subscribers and Apple-platform developers can use a maintained, diagnosable client and install a trusted public Sirius Mac release.
+**Mode:** mvp
+**Depends on**: Phase 4
+**Requirements**: CLNT-05, COMP-01, COMP-02, REL-01, REL-02, REL-03
+**Success Criteria** (what must be TRUE):
+  1. An Apple-platform developer can consult the public library's DocC documentation, semantic-versioning policy, sanitized contract fixtures, compatibility tests, and adapter-repair runbook when integrating or maintaining it.
+  2. A subscriber can open a compatibility view that identifies whether authentication, entitlement, catalog, stream resolution, metadata, or playback is currently failing.
+  3. A subscriber can explicitly review and export a support bundle containing only app/library versions and allow-listed diagnostic classifications, with no secrets or raw upstream payloads.
+  4. A subscriber can download an immutable GitHub Release artifact that is hardened, Developer-ID-signed, notarized, stapled, checksummed, and verified by Gatekeeper on a clean Mac.
+  5. A subscriber can install or upgrade the canonical immutable release through the project-owned Homebrew Cask and receives a passive update notice that directs Homebrew installations to `brew upgrade` without in-app downloading or installation.
+**Plans**: TBD
+**UI hint**: yes
+
+## Progress
+
+**Execution Order:**
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
+
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 1. Safe Interoperability Foundation | 0/TBD | Not started | - |
+| 2. Authorized Live Listening | 0/TBD | Not started | - |
+| 3. Native Mac Listening Experience | 0/TBD | Not started | - |
+| 4. Safe Skins & Accessible Recovery | 0/TBD | Not started | - |
+| 5. Public Release & Compatibility Support | 0/TBD | Not started | - |
