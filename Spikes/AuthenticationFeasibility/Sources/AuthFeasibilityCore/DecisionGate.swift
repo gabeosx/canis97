@@ -16,6 +16,24 @@ public enum RunOutcome: String, CaseIterable, Sendable {
     public var isTerminalStop: Bool { self != .pass }
 }
 
+/// A deliberately narrow run ledger: it can only remember that the first stop closed the run.
+/// It has no retry count, queue, timer, fallback path, or operation hook.
+public struct TerminalRunLedger: Sendable {
+    public private(set) var terminalOutcome: RunOutcome?
+
+    public init() {}
+
+    public var isTerminal: Bool { terminalOutcome != nil }
+
+    @discardableResult
+    public mutating func record(_ outcome: RunOutcome) -> CandidatePath {
+        guard terminalOutcome == nil else { return .unsupported }
+        guard outcome.isTerminalStop else { return .unsupported }
+        terminalOutcome = outcome
+        return .unsupported
+    }
+}
+
 public struct ProofRun: Equatable, Sendable {
     public let label: String
     public let path: CandidatePath
