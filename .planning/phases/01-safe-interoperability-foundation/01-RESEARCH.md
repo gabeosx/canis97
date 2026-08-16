@@ -202,6 +202,7 @@ This is a proposed Phase 1 structure, not a description of existing files. [ASSU
 **Implementation rules:**
 
 - The client’s public sign-in operation returns a semantic success or semantic outcome; it never exposes `URLRequest`, `HTTPURLResponse`, cookie containers, raw JSON, header maps, or response bytes. [VERIFIED: .planning/REQUIREMENTS.md:25-26]
+- The public boundary also defines typed async catalog, metadata, and live-stream-resolution domain APIs, capability values, and errors required by CLNT-02. Phase 1 implementations report semantic unavailable without making a provider request; catalog fetching, metadata loops, stream resolution, and playback remain assigned to Phase 2. [VERIFIED: .planning/REQUIREMENTS.md:25] [VERIFIED: .planning/ROADMAP.md:36-48]
 - The library takes injected transport, clock, credential-source, and diagnostics collaborators only at the seams where deterministic tests or app-owned secrets require them. [VERIFIED: .planning/REQUIREMENTS.md:27]
 - The URLSession-backed transport is an internal live implementation configured with `.ephemeral`, and its request policy allows only the verified direct SiriusXM host(s) selected during the manual spike. Do not hard-code any host until evidence exists. [CITED: https://developer.apple.com/documentation/foundation/urlsessionconfiguration/ephemeral] [ASSUMED]
 
@@ -397,22 +398,21 @@ The test name and injected transport are proposed project code, not established 
 | A4 | The manual cooldown can be chosen conservatively in the plan rather than locked in research. | Manual smoke-test protocol | A provider or maintainer policy may require a longer/no-repeat period. |
 | A5 | The proposed session test names and injected transport type are suitable initial project code. | Code Examples | Names may change; tests must still prove one in-flight attempt and zero retry after stop conditions. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Does SiriusXM offer a first-party, app-bound browser-return contract for this use case?**
    - What we know: Apple supports callback-based web authentication, but public SiriusXM help confirms varied consumer sign-in methods rather than a documented third-party app callback. [CITED: https://developer.apple.com/documentation/authenticationservices/authenticating-a-user-through-a-web-service] [CITED: https://www.siriusxm.com/help/one-time-verification]
-   - What's unclear: Whether a clean, supportable first-party return can be used without browser state extraction.
-   - Recommendation: Treat browser return as unsupported unless the human-operated feasibility test finds explicit, expected first-party return evidence.
+   - Safe planning disposition: The contract remains unknown and browser return is unsupported by default. Only the Plan 01-06 allow-listed evidence gate may change that disposition, and only when it receives exact authorized first-party evidence for a fixed app-bound return without browser-state extraction. No such evidence is claimed here.
 
 2. **Can an honest native direct-to-SiriusXM path produce a confirmed entitled result without any stop condition?**
    - What we know: SiriusXM presently supports multiple authentication factors/forms; the project may not bypass any control. [CITED: https://listenercare.siriusxm.com/prweb/autoredirect/app/ExternalKM/help/SupportCenter/article/KC-234216/Why-is-a-password-optional%3F] [VERIFIED: .planning/phases/01-safe-interoperability-foundation/01-CONTEXT.md]
-   - What's unclear: The authorized wire protocol, required challenge handling, and entitlement evidence.
-   - Recommendation: Investigate only after browser-return rejection, with one manual attempt at a time; stop on all locked signals.
+   - Safe planning disposition: The authorized native contract remains unknown and native direct is unsupported by default. Plan 01-06 may consider it only after browser return is ruled out and may select it only from exact authorized, non-secret evidence for an honest direct contract and strict entitlement predicate; it does not authorize a native live sign-in. Every terminal, ambiguous, or access-control classification remains unsupported.
 
 3. **What specific safe semantic outcome proves entitlement?**
    - What we know: AUTH-01 requires entitlement as an explicit outcome, and the manual gate requires a confirmed authenticated-and-entitled response. [VERIFIED: .planning/REQUIREMENTS.md:12] [VERIFIED: .planning/phases/01-safe-interoperability-foundation/01-CONTEXT.md]
-   - What's unclear: A non-sensitive, stable upstream indication of entitlement.
-   - Recommendation: Define a narrow adapter-local predicate only after a successful authorized observation; expose only the boolean/capability result publicly.
+   - Safe planning disposition: The predicate remains unknown, so no response can be treated as authenticated-and-entitled by default. Only exact authorized evidence accepted through Plan 01-06 may define a narrow adapter-local predicate; until then the result is unsupported, and the public surface exposes only the semantic capability/error rather than upstream evidence.
+
+These questions are resolved for planning by the same fail-closed rule: unknown remains unsupported until the bounded Plan 01-06 evidence gate records exact authorized evidence. This section does not assert that browser-return, native-direct, or entitlement evidence exists.
 
 ## Environment Availability
 
@@ -452,7 +452,7 @@ The test name and injected transport are proposed project code, not established 
 | SECR-02 | Ephemeral configuration and direct-host policy; session is not serializable/persisted. | unit | `swift test --package-path Packages/SiriusXMClient --filter EphemeralSessionTests` [ASSUMED] Proposed suite. | ❌ Wave 0 |
 | SECR-03 | Canary credential/token/URL data cannot appear in diagnostic event, fixture, test failure, or exported evidence. | unit / fixture | `swift test --package-path Packages/SiriusXMClient --filter RedactionTests` [ASSUMED] Proposed suite. | ❌ Wave 0 |
 | CLNT-01 | External consumer compiles using only public SwiftPM product symbols. | compile / integration | `swift test --package-path Packages/SiriusXMClient --filter PublicConsumerTests` [ASSUMED] Proposed suite. | ❌ Wave 0 |
-| CLNT-02 | Public surface returns domain models/outcomes rather than wire data. | compile / API review | `swift test --package-path Packages/SiriusXMClient --filter PublicConsumerTests` [ASSUMED] Proposed suite. | ❌ Wave 0 |
+| CLNT-02 | Independent consumer compiles and awaits typed authentication, entitlement, catalog, metadata, and live-stream-resolution domain APIs; the three content operations report typed unavailable without transport and expose no wire data. | compile / API review | `swift test --package-path Packages/SiriusXMClient --filter PublicConsumerTests` [ASSUMED] Proposed suite. | ❌ Wave 0 |
 | CLNT-03 | Internal adapter types cannot be imported by consumer test. | compile / API review | `swift test --package-path Packages/SiriusXMClient --filter PublicConsumerTests` [ASSUMED] Proposed suite. | ❌ Wave 0 |
 | CLNT-04 | Scripted transport, clock, credential source, and diagnostics make state tests deterministic. | unit | `swift test --package-path Packages/SiriusXMClient --filter SessionCoordinatorTests` [ASSUMED] Proposed suite. | ❌ Wave 0 |
 
@@ -503,7 +503,7 @@ The config quote is `"security_enforcement": true` and `"security_asvs_level": 1
 ## Planner-Ready Phase Decomposition
 
 1. **Wave 0 — Package and test foundation:** Create the local SwiftPM library product, source/test targets, public-consumer compile test, and a no-network scripted transport. This establishes CLNT-01 and the test harness before protocol work. [VERIFIED: .planning/REQUIREMENTS.md:24-27]
-2. **Wave 1 — Stable semantic boundary:** Add public authentication/entitlement capabilities and typed outcomes/errors, injected collaborators, one-attempt session actor, internal adapter protocol, redacted diagnostics, and synthetic contract fixtures. Verify every fail-closed state with Swift Testing. [VERIFIED: .planning/REQUIREMENTS.md:12-13,20,25-27]
+2. **Wave 1 — Stable semantic boundary:** Add public authentication/entitlement capabilities and typed outcomes/errors plus endpoint-free catalog, metadata, and live-stream-resolution APIs/capabilities/errors whose Phase 1 implementations report unavailable without provider work; add injected collaborators, one-attempt session actor, internal adapter protocol, redacted diagnostics, and synthetic contract fixtures. Verify every fail-closed state with Swift Testing. [VERIFIED: .planning/REQUIREMENTS.md:12-13,20,25-27]
 3. **Wave 2 — Native security boundary:** Add the app-owned `SecItem` credential store, post-success persistence only, idempotent sign-out cleanup, dedicated unsupported-authentication presentation model, and Keychain/redaction canary tests. Do not add catalog/playback UI. [VERIFIED: .planning/REQUIREMENTS.md:14,18-20] [VERIFIED: .planning/phases/01-safe-interoperability-foundation/01-CONTEXT.md]
 4. **Wave 3 — Human compatibility checkpoint:** Execute the strictly manual evidence procedure: browser-return feasibility first, then native direct feasibility only if browser return cannot meet the contract. Select exactly one path or explicitly publish unsupported state. [VERIFIED: .planning/phases/01-safe-interoperability-foundation/01-CONTEXT.md]
 5. **Phase gate — Two-run proof:** If the selected path completes two separate human-initiated authenticated-and-entitled runs with clean sign-out, record only safe evidence and unlock Phase 2 planning/execution. Otherwise retain unsupported compatibility UI and halt Phases 2–5 authorization-dependent work. [VERIFIED: .planning/phases/01-safe-interoperability-foundation/01-CONTEXT.md]
