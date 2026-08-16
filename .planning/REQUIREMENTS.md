@@ -7,6 +7,14 @@
 
 Requirements for the initial public release. Each requirement maps to exactly one roadmap phase.
 
+### Authentication Feasibility
+
+- [ ] **FEAS-01**: Maintainer can determine whether SiriusXM offers a clean first-party, app-bound browser authentication return without inspecting browser cookies, storage, tokens, profiles, or developer-tools session data.
+- [ ] **FEAS-02**: If browser return is safely ruled out, maintainer can evaluate one minimal honest native authentication path without spoofing a browser or client identity, bypassing access controls, or retaining a fallback path.
+- [ ] **FEAS-03**: Account owner can perform two separate manually initiated proof runs through the sole selected path, each reaching explicit authenticated-and-entitled state and clean sign-out, with a conservative human-controlled cooldown between runs.
+- [ ] **FEAS-04**: Any challenge, CAPTCHA, MFA requirement, HTTP 403 or 429, rate-limit signal, unexpected redirect, suspected bot response, protected-control behavior, or ambiguous entitlement evidence immediately stops evaluation and records no secrets or raw sensitive response data.
+- [ ] **FEAS-05**: Phase 0 produces exactly one sanitized feasibility decision—`GO browser-return`, `GO native-direct`, or `NO-GO unsupported`—and Phase 1 cannot execute without a GO decision backed by both proof runs.
+
 ### Authentication
 
 - [ ] **AUTH-01**: Subscriber can sign in directly against SiriusXM and receives explicit success, rejection, challenge, unsupported-flow, and entitlement outcomes.
@@ -134,6 +142,11 @@ Every v1 requirement maps to exactly one delivery phase in `.planning/ROADMAP.md
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
+| FEAS-01 | Phase 0 | Pending |
+| FEAS-02 | Phase 0 | Pending |
+| FEAS-03 | Phase 0 | Pending |
+| FEAS-04 | Phase 0 | Pending |
+| FEAS-05 | Phase 0 | Pending |
 | AUTH-01 | Phase 1 | Pending |
 | AUTH-02 | Phase 1 | Pending |
 | AUTH-03 | Phase 1 | Pending |
@@ -179,11 +192,11 @@ Every v1 requirement maps to exactly one delivery phase in `.planning/ROADMAP.md
 | REL-03 | Phase 5 | Pending |
 
 **Coverage:**
-- v1 requirements: 43 total
-- Mapped to phases: 43
+- v1 requirements: 48 total
+- Mapped to phases: 48
 - Unmapped: 0 ✓
 - Duplicate mappings: 0 ✓
 
 ---
 *Requirements defined: 2026-08-16*
-*Last updated: 2026-08-16 after initial definition*
+*Last updated: 2026-08-16 after adding the Phase 0 authentication feasibility gate*

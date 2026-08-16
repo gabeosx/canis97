@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 1
-current_phase_name: Safe Interoperability Foundation
-status: executing
-stopped_at: Phase 1 context gathered
-last_updated: "2026-08-16T21:13:08.596Z"
+current_phase: 0
+current_phase_name: Authentication Feasibility Gate
+status: planning
+stopped_at: Phase 0 context gathered
+last_updated: "2026-08-16T21:25:30.804Z"
 last_activity: 2026-08-16
-last_activity_desc: Initial MVP roadmap created; all 43 v1 requirements mapped.
+last_activity_desc: Authentication feasibility gate added before production implementation.
 progress:
-  total_phases: 1
+  total_phases: 6
   completed_phases: 0
   total_plans: 8
   completed_plans: 0
@@ -23,14 +23,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-16)
 
 **Core value:** Subscribers can reliably start and control a live SiriusXM stream from a delightful native Mac player, even as the unsupported SiriusXM integration evolves underneath it.
-**Current focus:** Phase 1 — Safe Interoperability Foundation
+**Current focus:** Phase 0 — Authentication Feasibility Gate
 
 ## Current Position
 
-Phase: 1 of 5 (Safe Interoperability Foundation)
+Phase: 0 prerequisite of 5 product phases (Authentication Feasibility Gate)
 Plan: TBD
-Status: Ready to execute
-Last activity: 2026-08-16 — Initial MVP roadmap created; all 43 v1 requirements mapped.
+Status: Ready to plan
+Last activity: 2026-08-16 — Authentication feasibility gate added before production implementation.
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -62,6 +62,8 @@ Progress: [░░░░░░░░░░] 0%
 Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecting current work:
 
 - Phase 1: Validate only authorized, direct SiriusXM interoperability; changed or prohibited access-control flows return an explicit unsupported result and never trigger a bypass.
+- Phase 0: Prove exactly one safe authentication path before any production implementation; browser-return is evaluated first, with one honest native-direct path considered only if browser return is ruled out.
+- Phase 0: The account owner performs exactly two live proof runs; automation never inspects browser state or persists secrets, and any challenge or access-control signal stops the probe.
 - Phase 1: Keep credentials in the app-owned Keychain adapter and preserve only typed, replaceable SiriusXM behavior behind `SiriusXMClient`.
 - Phase 3: One playback coordinator owns the active player across both native windows and system media controls.
 - Phase 4: Skins are declarative local data/assets only and must preserve accessible native semantics and recovery.
@@ -72,8 +74,13 @@ None yet.
 
 ### Blockers/Concerns
 
-- Phase 1: The current authorized SiriusXM flow is volatile; prove compatibility using sanitized, authorized observations only. If safe authorization cannot work, surface the explicit unsupported result and halt that capability.
+- Phase 0: Authentication feasibility is a hard gate. A `NO-GO unsupported` result ends production implementation; only `GO browser-return` or `GO native-direct` unlocks Phase 1.
+- Phase 1: Blocked until Phase 0 records a GO result. The current authorized SiriusXM flow remains volatile and must use only sanitized, account-owner-authorized observations.
 - Phase 5: Verify signing, notarization, stapling, immutable release, Gatekeeper, and Homebrew Cask behavior against the current release toolchain before publishing.
+
+### Roadmap Evolution
+
+- Phase 0 added: Authentication Feasibility Gate added as prerequisite; Phase 1 requires GO
 
 ## Deferred Items
 
@@ -83,6 +90,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-16T19:45:58.998Z
-Stopped at: Phase 1 context gathered
-Resume file: .planning/phases/01-safe-interoperability-foundation/01-CONTEXT.md
+Last session: 2026-08-16T21:25:30.804Z
+Stopped at: Phase 0 context gathered
+Resume file: .planning/phases/00-authentication-feasibility-gate/00-CONTEXT.md

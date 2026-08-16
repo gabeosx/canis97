@@ -8,11 +8,13 @@ Sirius Mac moves from a safe, repairable proof of authorized SiriusXM interopera
 
 **Phase Numbering:**
 
+- Phase 0: prerequisite feasibility work that must finish before product implementation
 - Integer phases (1, 2, 3): Planned milestone work
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
 Decimal phases appear between their surrounding integers in numeric order.
 
+- [ ] **Phase 0: Authentication Feasibility Gate** - Maintainers obtain a safe, evidence-backed GO or NO-GO decision before production investment.
 - [ ] **Phase 1: Safe Interoperability Foundation** - Subscribers get a fail-closed, private authorization foundation and a reusable client boundary.
 - [ ] **Phase 2: Authorized Live Listening** - Subscribers can browse entitled linear channels and listen reliably with truthful playback and metadata states.
 - [ ] **Phase 3: Native Mac Listening Experience** - Subscribers control one shared listening session through native windows, local library features, and macOS media controls.
@@ -21,11 +23,29 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 ## Phase Details
 
+### Phase 0: Authentication Feasibility Gate
+
+**Goal**: Determine whether exactly one safe SiriusXM authentication path can complete two account-owner authorized-and-entitled proof runs with clean sign-out, before building the production application foundation.
+**Mode:** mvp
+**Depends on**: Nothing (prerequisite phase)
+**Requirements**: FEAS-01, FEAS-02, FEAS-03, FEAS-04, FEAS-05
+**Success Criteria** (what must be TRUE):
+
+  1. Public first-party evidence and a bounded account-owner check either establish a clean app-bound browser return or rule it out without reading authenticated browser state.
+  2. Only when browser return is ruled out, a minimal honest native path is evaluated without browser/client spoofing, alternate methods, automatic retry, or access-control workarounds.
+  3. A supported candidate completes two separate account-owner initiated sign-in → authenticated-and-entitled → clean sign-out runs, with one attempt in flight and a conservative human-controlled cooldown.
+  4. Every protected, challenged, rate-limited, redirected, suspicious, or ambiguous outcome stops immediately, retains no secret evidence, and produces `NO-GO unsupported`.
+  5. A sanitized feasibility artifact contains exactly one decision: `GO browser-return`, `GO native-direct`, or `NO-GO unsupported`; only a GO decision permits Phase 1 execution.
+
+**Plans**: TBD
+
+**Scope fence:** Phase 0 may create only a minimal isolated feasibility harness and sanitized evidence contract. It does not build the production app shell, public client API, Keychain persistence, catalog, playback, skins, or release infrastructure.
+
 ### Phase 1: Safe Interoperability Foundation
 
 **Goal**: Subscribers can establish or end an authorized SiriusXM session without exposing secrets or weakening access controls, through a reusable Apple-platform client boundary.
 **Mode:** mvp
-**Depends on**: Nothing (first phase)
+**Depends on**: Phase 0 (GO result required)
 **Requirements**: AUTH-01, AUTH-02, AUTH-03, SECR-01, SECR-02, SECR-03, CLNT-01, CLNT-02, CLNT-03, CLNT-04
 **Success Criteria** (what must be TRUE):
 
@@ -36,6 +56,8 @@ Decimal phases appear between their surrounding integers in numeric order.
   5. A native Apple-platform developer can consume the `SiriusXMClient` SwiftPM product and use typed async capabilities without depending on SiriusXM endpoints, cookies, headers, or raw schemas.
 
 **Plans**: 8 plans
+
+**Execution gate:** Do not execute any Phase 1 plan unless Phase 0 completed with `GO browser-return` or `GO native-direct` after both required proof runs. A `NO-GO unsupported` result ends production implementation. Existing Phase 1 plans are preserved but must consume the Phase 0 decision rather than repeat feasibility work.
 
 Plans:
 **Wave 1**
@@ -134,10 +156,11 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
+Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
+| 0. Authentication Feasibility Gate | 0/TBD | Not started | - |
 | 1. Safe Interoperability Foundation | 0/8 | Not started | - |
 | 2. Authorized Live Listening | 0/TBD | Not started | - |
 | 3. Native Mac Listening Experience | 0/TBD | Not started | - |
