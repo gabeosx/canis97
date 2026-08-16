@@ -25,22 +25,22 @@
 ## Coverage interpretation
 
 - `INTEGRATE` means Phase 1 implements and verifies the semantic capability whether the final compatibility result is supported or explicitly unsupported.
-- Authentication support is not presumed. Exactly one evidence-selected path may be implemented; absent adequate evidence, `authentication-initiation` terminates in the explicit unsupported outcome.
-- Catalog, stream, playback, and later application capabilities remain unreachable until both manual viability runs pass unambiguously.
+- Authentication support is not presumed by Phase 1. It begins only after Phase 0's deterministic artifact chain yields one exact GO+unlocked path; missing, malformed, mismatched, or NO-GO state blocks before production files.
+- Catalog, stream, playback, and later application capabilities remain unreachable until Phase 0 GO is consumed and Phase 1 production composition passes synthetic acceptance.
 
 ## Plan realization
 
-- `authentication-initiation` — owning plans: 01-01, 01-05, 01-06, 01-07. Plan 01-07 compiles only the Plan 01-06 result; unsupported has no live adapter and supported has one evidence-defined surface.
+- `authentication-initiation` — owning plans: 01-01, 01-05, 01-06, 01-07. Plan 01-01 gates all production work on deterministic Phase 0 GO; Plan 01-07 compiles only the matching Phase 0 path and retains unavailable as the non-selectable fail-closed default.
 - `explicit-authentication-outcome-classification` — owning plans: 01-02, 01-05, 01-07. Known semantic results remain distinct and every unknown/control-protected/ambiguous result is terminal unsupported.
-- `entitlement-confirmation` — owning plans: 01-02, 01-07, 01-08. Entitlement uses one strict evidence-defined semantic predicate; both manual proof runs must confirm authenticated and entitled.
-- `session-establishment` — owning plans: 01-02, 01-03, 01-07, 01-08. Session material is actor-owned and ephemeral; live proof is permitted only for a supported selected path.
-- `sign-out-and-local-credential-clear` — owning plans: 01-04, 01-07, 01-08. Memory clears before Keychain deletion; each proof run ends with confirmed clean sign-out.
+- `entitlement-confirmation` — owning plans: 01-02, 01-07, 01-08. Entitlement uses the Phase 0-proven strict semantic predicate and Phase 1 verifies it with synthetic production acceptance rather than repeating live proof.
+- `session-establishment` — owning plans: 01-02, 01-03, 01-07, 01-08. Session material is actor-owned and ephemeral; Phase 1 acceptance uses scripted transport and performs no live proof.
+- `sign-out-and-local-credential-clear` — owning plans: 01-04, 01-07, 01-08. Memory clears before Keychain deletion and production acceptance proves ordering/failure semantics synthetically.
 - `stop-and-unsupported-handling` — owning plans: 01-02, 01-05, 01-06, 01-07, 01-08. Every locked stop signal ends the attempt, records unsupported safely, and blocks Phases 2–5.
 - `redacted-authentication-diagnostics` — owning plans: 01-03, 01-05, 01-06, 01-07, 01-08. Only allow-listed classifications cross test, UI, evidence, and summary boundaries.
 
 ## Continuation contract
 
-- Plan 01-06 outputs exactly one selected result: browser-return, native-direct, or unsupported.
-- Plan 01-07 implements only that result. Missing exact supported-path evidence halts before callback, host, endpoint, or request implementation.
-- Plan 01-08 performs no live authentication for unsupported. For a supported result, the account owner alone performs two separate runs with a conservative human-controlled cooldown, explicit authenticated-and-entitled evidence, and clean sign-out.
-- Only Phase continuation: unlocked from two unambiguous passes permits authorization-dependent work in Phases 2–5. Every other result is Phase continuation: blocked.
+- Plan 01-01 blocks before any production file unless Phase 0 evidence, selection, owner result, and decision freshly derive byte-identical exact `GO browser-return|GO native-direct` plus `unlocked`.
+- Plan 01-06 revalidates that chain and records only the matching browser-return/native-direct production handoff; it performs no evidence review or live action.
+- Plan 01-07 implements only that result. Missing exact selected-path evidence halts with the unavailable default unchanged.
+- Plan 01-08 performs package/app synthetic acceptance only and records that live proof was not repeated. Phase 2 readiness requires the already validated Phase 0 GO plus passing Phase 1 production tests.

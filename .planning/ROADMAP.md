@@ -37,7 +37,24 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Every protected, challenged, rate-limited, redirected, suspicious, or ambiguous outcome stops immediately, retains no secret evidence, and produces `NO-GO unsupported`.
   5. A sanitized feasibility artifact contains exactly one decision: `GO browser-return`, `GO native-direct`, or `NO-GO unsupported`; only a GO decision permits Phase 1 execution.
 
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 00-01-PLAN.md — Build the isolated offline safety, evidence, proof, and decision tracer.
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 00-02-PLAN.md — Qualify public first-party evidence and derive exactly one candidate or unsupported.
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 00-03-PLAN.md — Compile only the selected disposable candidate, or normalize safely to no candidate.
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 00-04-PLAN.md — Apply the owner-only two-run proof and derive the terminal GO/NO-GO gate.
 
 **Scope fence:** Phase 0 may create only a minimal isolated feasibility harness and sanitized evidence contract. It does not build the production app shell, public client API, Keychain persistence, catalog, playback, skins, or release infrastructure.
 
@@ -76,7 +93,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 01-06-PLAN.md — Record exactly one evidence-selected authentication result without agent-operated live auth.
+- [ ] 01-06-PLAN.md — Revalidate and consume the sole Phase 0 GO path without repeating feasibility or live proof.
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
@@ -84,7 +101,7 @@ Plans:
 
 **Wave 6** *(blocked on Wave 5 completion)*
 
-- [ ] 01-08-PLAN.md — Apply the two separate account-owner proof runs and hard continuation gate.
+- [ ] 01-08-PLAN.md — Complete production synthetic authentication/cleanup acceptance and record Phase 2 readiness without repeating live proof.
 
 ### Phase 2: Authorized Live Listening
 
@@ -160,7 +177,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 0. Authentication Feasibility Gate | 0/TBD | Not started | - |
+| 0. Authentication Feasibility Gate | 0/4 | Planned | - |
 | 1. Safe Interoperability Foundation | 0/8 | Not started | - |
 | 2. Authorized Live Listening | 0/TBD | Not started | - |
 | 3. Native Mac Listening Experience | 0/TBD | Not started | - |
