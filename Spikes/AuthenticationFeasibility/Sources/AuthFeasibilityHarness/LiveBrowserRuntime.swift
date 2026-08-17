@@ -21,6 +21,12 @@ public final class LiveBrowserRuntime {
     public var events: [SafeProbeEvent] { semanticClient.events + proofEvents }
     public var isClosed: Bool { semanticClient.isClosed }
     public var canSerializeCompleteProof: Bool { preflight.canSerializeComplete }
+    public private(set) var renewalStatus: RenewalStatus = .pending {
+        didSet { onRenewalStatusChanged?(renewalStatus) }
+    }
+    /// Receives only a `RenewalStatus` closed semantic state. It must never be
+    /// used to surface browser, provider, or session details.
+    public var onRenewalStatusChanged: ((RenewalStatus) -> Void)?
 
     public func startOwnerOperatedRun(onWebViewCreated: @escaping (WKWebView) -> Void) throws {
         try webLoginSession.startOwnerOperatedRun(
@@ -61,6 +67,7 @@ public final class LiveBrowserRuntime {
     }
 
     public func recordRenewal(_ proof: RenewalProof) -> SafeProbeEvent {
+        renewalStatus = RenewalStatus(proof: proof)
         switch proof {
         case .renewed:
             return recordProofEvent(.renewed)
@@ -96,6 +103,7 @@ public final class LiveBrowserRuntime {
 
     public func stop(for reason: SafeTerminalReason) -> SafeProbeEvent {
         webLoginSession.stop()
+        renewalStatus = .terminalStop
         return semanticClient.stop(for: reason)
     }
 

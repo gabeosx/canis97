@@ -144,6 +144,17 @@ func unsupportedClosureIsCanonical() throws {
     #expect(decision.continuation == .blocked)
 }
 
+@Test("renewal pending is a canonical blocked incomplete result, never browser complete")
+func renewalPendingBundleIsCanonicalAndClosed() throws {
+    let bundle = ArtifactBundle.canonicalRenewalPending()
+    try bundle.validate()
+
+    #expect(try BrowserProbeResult.parse(BrowserProbeResult.renewalPending.canonicalText) == .renewalPending)
+    #expect(try NativeDirectApproval.parse(NativeDirectApproval.notApplicable.canonicalText) == .notApplicable)
+    #expect(try Decision.parse(bundle.decision).value == "INCOMPLETE renewal-pending")
+    #expect(!bundle.evidence.contains("browser-complete"))
+}
+
 private func isInvalid<T>(_ operation: () throws -> T) -> Bool {
     do {
         _ = try operation()

@@ -78,6 +78,7 @@ private struct AuthFeasibilityHarnessLauncher {
 private final class BrowserHarnessApplication: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let runtime: LiveBrowserRuntime
     private var window: NSWindow?
+    private let renewalStatusLabel = NSTextField(labelWithString: RenewalStatus.pending.ownerVisibleText)
 
     init(configuration: LaunchConfiguration) throws {
         runtime = try LiveBrowserRuntime(
@@ -98,11 +99,33 @@ private final class BrowserHarnessApplication: NSObject, NSApplicationDelegate, 
         window.isReleasedWhenClosed = false
         window.delegate = self
         self.window = window
+        renewalStatusLabel.alignment = .center
+        renewalStatusLabel.setAccessibilityLabel("Renewal status")
+        renewalStatusLabel.setAccessibilityValue(RenewalStatus.pending.ownerVisibleText)
+        runtime.onRenewalStatusChanged = { [weak self] status in
+            self?.renewalStatusLabel.stringValue = status.ownerVisibleText
+            self?.renewalStatusLabel.setAccessibilityValue(status.ownerVisibleText)
+        }
 
         do {
             try runtime.startOwnerOperatedRun { [weak self] browser in
                 guard let self, let window = self.window else { return }
-                window.contentView = browser
+                let content = NSStackView(views: [browser, self.renewalStatusLabel])
+                content.orientation = .vertical
+                content.spacing = 8
+                content.edgeInsets = NSEdgeInsets(top: 8, left: 8, bottom: 8, right: 8)
+                browser.translatesAutoresizingMaskIntoConstraints = false
+                self.renewalStatusLabel.translatesAutoresizingMaskIntoConstraints = false
+                content.addConstraint(NSLayoutConstraint(
+                    item: browser,
+                    attribute: .height,
+                    relatedBy: .greaterThanOrEqual,
+                    toItem: nil,
+                    attribute: .notAnAttribute,
+                    multiplier: 1,
+                    constant: 620
+                ))
+                window.contentView = content
                 window.makeKeyAndOrderFront(nil)
                 NSApp.activate(ignoringOtherApps: true)
             }

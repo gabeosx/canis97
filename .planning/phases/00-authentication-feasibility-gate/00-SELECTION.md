@@ -1,4 +1,4 @@
-Schema: selection-v1
-Evidence revision: offline-tracer-v1
+Schema: selection-v2
+Evidence revision: phase-0-empirical-v2
 Selected candidate: unsupported
 Live attempt permitted: prohibited

@@ -30,6 +30,14 @@ func ownerEndedObservationIsRenewalPending() {
     #expect(observer.observe(.ownerEnded) == .renewalPending)
 }
 
+@Test("owner renewal status has only closed non-secret labels")
+func renewalStatusUsesClosedOwnerLabels() {
+    #expect(RenewalStatus(proof: .renewalPending).ownerVisibleText == "Renewal pending")
+    #expect(RenewalStatus(proof: .renewed).ownerVisibleText == "Renewal verified")
+    #expect(RenewalStatus(proof: .terminal(.ambiguous)).ownerVisibleText == "Terminal stop")
+    #expect(RenewalStatus(proof: .notApplicable).ownerVisibleText == "Terminal stop")
+}
+
 @Test("protected renewal behavior latches a terminal result without retry")
 func protectedRenewalBehaviorStopsOnce() {
     let observer = RenewalObserver(eligibility: .qualified) { true }

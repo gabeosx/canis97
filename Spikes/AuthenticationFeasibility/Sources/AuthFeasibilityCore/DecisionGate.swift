@@ -213,7 +213,11 @@ public enum DecisionGate {
         switch selection.path {
         case .unsupported:
             guard ownerResult.runs.isEmpty else { throw ContractError.invalidArtifact }
-            return Decision(.unsupported, evidenceRevision: evidence.revision, selectedPath: .unsupported)
+            return Decision(
+                evidence.browser == .renewalPending ? .renewalPending : .unsupported,
+                evidenceRevision: evidence.revision,
+                selectedPath: .unsupported
+            )
         case .browserReturn:
             return decisionForSupportedPath(.browserReturn, evidence: evidence, ownerResult: ownerResult)
         case .nativeDirect:
@@ -265,6 +269,27 @@ public struct ArtifactBundle: Sendable {
 
     public static func canonicalUnsupported(reason: ClosureReason) -> ArtifactBundle {
         let evidence = EvidenceRecord.canonicalUnsupported(reason: reason)
+        let selection = try! CandidateSelection.derive(evidence)
+        let owner = OwnerResult.zeroRunUnsupported(revision: evidence.revision)
+        let decision = try! DecisionGate.derive(evidence: evidence, selection: selection, ownerResult: owner)
+        return ArtifactBundle(
+            evidence: evidence.canonicalText,
+            selection: selection.canonicalText,
+            ownerResult: owner.canonicalText,
+            decision: decision.canonicalText
+        )
+    }
+
+    /// A bounded owner observation that ended before a legitimate replacement
+    /// was seen. This is incomplete evidence, not a terminal feasibility result.
+    public static func canonicalRenewalPending() -> ArtifactBundle {
+        let evidence = EvidenceRecord(
+            revision: "phase-0-empirical-v2",
+            roundedDate: "1970-01-01",
+            browser: .renewalPending,
+            native: .unavailable,
+            candidateCount: 0
+        )
         let selection = try! CandidateSelection.derive(evidence)
         let owner = OwnerResult.zeroRunUnsupported(revision: evidence.revision)
         let decision = try! DecisionGate.derive(evidence: evidence, selection: selection, ownerResult: owner)

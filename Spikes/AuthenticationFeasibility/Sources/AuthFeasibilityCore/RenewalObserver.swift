@@ -7,6 +7,34 @@ public enum RenewalProof: Equatable, Sendable {
     case terminal(SafeTerminalReason)
 }
 
+/// The only renewal detail presented to an owner during a bounded observation
+/// window. It is deliberately a closed vocabulary: it cannot carry provider,
+/// account, transport, time, or session material.
+public enum RenewalStatus: Equatable, Sendable {
+    case pending
+    case verified
+    case terminalStop
+
+    public init(proof: RenewalProof) {
+        switch proof {
+        case .renewalPending:
+            self = .pending
+        case .renewed:
+            self = .verified
+        case .notApplicable, .terminal:
+            self = .terminalStop
+        }
+    }
+
+    public var ownerVisibleText: String {
+        switch self {
+        case .pending: "Renewal pending"
+        case .verified: "Renewal verified"
+        case .terminalStop: "Terminal stop"
+        }
+    }
+}
+
 /// Semantic observations supplied by the established ordinary flow. No token,
 /// cookie, expiry, clock, request, response, or provider identifier is retained.
 public enum RenewalObservation: Equatable, Sendable {

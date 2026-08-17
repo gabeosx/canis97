@@ -18,12 +18,13 @@ public enum Continuation: String, Sendable {
 public enum FeasibilityDecision: String, CaseIterable, Sendable {
     case browserReturn = "GO browser-return"
     case nativeDirect = "GO native-direct"
+    case renewalPending = "INCOMPLETE renewal-pending"
     case unsupported = "NO-GO unsupported"
 
     public var continuation: Continuation {
         switch self {
         case .browserReturn, .nativeDirect: .unlocked
-        case .unsupported: .blocked
+        case .renewalPending, .unsupported: .blocked
         }
     }
 }
@@ -74,13 +75,14 @@ public struct Decision: Equatable, Sendable {
         switch decision {
         case .browserReturn: .browserReturn
         case .nativeDirect: .nativeDirect
-        case .unsupported: .unsupported
+        case .renewalPending, .unsupported: .unsupported
         }
     }
 }
 
 public enum EvidenceState: String, Sendable {
     case complete
+    case renewalPending = "renewal-pending"
     case ruledOut = "ruled-out"
     case unavailable
 }
@@ -197,6 +199,10 @@ public struct EvidenceRecord: Equatable, Sendable {
                   ArtifactFields.isCleanFirstPartyReference(browserReference, host: firstPartyHost) else {
                 throw ContractError.invalidArtifact
             }
+        case .renewalPending:
+            guard candidateCount == 0, native != .complete, browserReference == "none" else {
+                throw ContractError.invalidArtifact
+            }
         case .ruledOut, .unavailable:
             guard browserReference == "none" else { throw ContractError.invalidArtifact }
         }
@@ -207,6 +213,8 @@ public struct EvidenceRecord: Equatable, Sendable {
                   ArtifactFields.isCleanFirstPartyReference(nativeReference, host: firstPartyHost) else {
                 throw ContractError.invalidArtifact
             }
+        case .renewalPending:
+            throw ContractError.invalidArtifact
         case .ruledOut, .unavailable:
             guard nativeReference == "none" else { throw ContractError.invalidArtifact }
         }
@@ -214,6 +222,70 @@ public struct EvidenceRecord: Equatable, Sendable {
         guard (candidateCount == 0) == (browser != .complete && native != .complete) else {
             throw ContractError.invalidArtifact
         }
+    }
+}
+
+/// Canonical result of a bounded browser observation. It intentionally records
+/// only the closed result, never activity, session, provider, or account data.
+public struct BrowserProbeResult: Equatable, Sendable {
+    public let outcome: String
+
+    public static let renewalPending = BrowserProbeResult(outcome: "renewal-pending")
+
+    public var canonicalText: String {
+        [
+            "Schema: browser-probe-v2",
+            "Outcome: \(outcome)",
+            "Phase 1 continuation: blocked",
+            "",
+        ].joined(separator: "\n")
+    }
+
+    public static func parse(_ text: String) throws -> BrowserProbeResult {
+        let fields = try ArtifactFields.parse(text, ordered: ["Schema", "Outcome", "Phase 1 continuation"])
+        guard fields["Schema"] == "browser-probe-v2",
+              fields["Outcome"] == "renewal-pending",
+              fields["Phase 1 continuation"] == "blocked" else {
+            throw ContractError.invalidArtifact
+        }
+        let result = BrowserProbeResult.renewalPending
+        guard result.canonicalText == text else { throw ContractError.invalidArtifact }
+        return result
+    }
+}
+
+/// The native password boundary cannot be shown while browser renewal evidence
+/// is incomplete. This record makes that closed disposition explicit.
+public struct NativeDirectApproval: Equatable, Sendable {
+    public static let notApplicable = NativeDirectApproval()
+
+    public init() {}
+
+    public var canonicalText: String {
+        [
+            "Schema: native-direct-approval-v1",
+            "Browser result: renewal-pending",
+            "Native direct: not-applicable",
+            "Disclosure presented: no",
+            "Phase 1 continuation: blocked",
+            "",
+        ].joined(separator: "\n")
+    }
+
+    public static func parse(_ text: String) throws -> NativeDirectApproval {
+        let fields = try ArtifactFields.parse(text, ordered: [
+            "Schema", "Browser result", "Native direct", "Disclosure presented", "Phase 1 continuation",
+        ])
+        guard fields["Schema"] == "native-direct-approval-v1",
+              fields["Browser result"] == "renewal-pending",
+              fields["Native direct"] == "not-applicable",
+              fields["Disclosure presented"] == "no",
+              fields["Phase 1 continuation"] == "blocked" else {
+            throw ContractError.invalidArtifact
+        }
+        let approval = NativeDirectApproval.notApplicable
+        guard approval.canonicalText == text else { throw ContractError.invalidArtifact }
+        return approval
     }
 }
 

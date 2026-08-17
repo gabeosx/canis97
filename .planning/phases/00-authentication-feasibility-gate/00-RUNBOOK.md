@@ -35,6 +35,21 @@ non-dispositive and does not loosen any other gate.
    runs and legitimate renewal in at least one. Renewal-pending and ordinary
    no-clean-return remain incomplete.
 
+## Renewal Status Window
+
+During a later bounded observation window, read only the harness’s renewal
+status label. It has exactly three possible values:
+
+- `Renewal pending` — no legitimate replacement was observed before the owner
+  ended the bounded window; this remains incomplete.
+- `Renewal verified` — the established ordinary flow observed a legitimate
+  replacement.
+- `Terminal stop` — the current proof stopped and must not be retried.
+
+Do not inspect traffic, browser developer tools, cookies, tokens, headers,
+storage, account information, request/response material, URLs, or clocks. The
+harness does not force renewal, alter time, poll candidates, or infer fields.
+
 ## Stop Rules
 
 The first CAPTCHA, MFA, challenge, protection, access-control signal,
@@ -49,7 +64,6 @@ is recorded.
 Return exactly one of the following, with no account or provider details:
 
 - `not-applicable`
-- `browser-complete`
 - `browser-incomplete`
 - `renewal-still-pending`
 - `strict-webkit-ruleout`

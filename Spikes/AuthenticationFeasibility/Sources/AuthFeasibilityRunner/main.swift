@@ -136,6 +136,27 @@ func validateLiveResult(_ arguments: Arguments) throws {
     FileHandle.standardOutput.write(Data("valid\n".utf8))
 }
 
+func recordBrowserRenewalPending(_ arguments: Arguments) throws {
+    let probe = BrowserProbeResult.renewalPending
+    let nativeApproval = NativeDirectApproval.notApplicable
+    let bundle = ArtifactBundle.canonicalRenewalPending()
+    try bundle.validate()
+
+    let targets = [
+        (try arguments.value(named: "--probe"), probe.canonicalText),
+        (try arguments.value(named: "--evidence"), bundle.evidence),
+        (try arguments.value(named: "--selection"), bundle.selection),
+        (try arguments.value(named: "--owner-result"), bundle.ownerResult),
+        (try arguments.value(named: "--decision"), bundle.decision),
+        (try arguments.value(named: "--native-approval"), nativeApproval.canonicalText),
+    ].map { (URL(fileURLWithPath: $0.0), $0.1) }
+
+    for (target, content) in targets {
+        try content.write(to: target, atomically: true, encoding: .utf8)
+    }
+    FileHandle.standardOutput.write(Data("recorded\n".utf8))
+}
+
 func validateNativeApproval(_ arguments: Arguments) throws {
     guard arguments.contains("--owner-approved") else { throw RunnerError.invalidArguments }
     let contract = try AuthExperimentContract.parse(readArtifact(try arguments.value(named: "--contract")))
@@ -167,12 +188,19 @@ func run() throws {
         try validateExperimentApproval(parsed)
     case "validate-browser-launch-gate":
         try validateBrowserLaunchGate(parsed)
+    case "record-browser-renewal-pending":
+        try recordBrowserRenewalPending(parsed)
     case "record-browser-not-applicable", "record-native-not-applicable":
         try closeUnsupported(parsed)
     case "validate-live-result":
         try validateLiveResult(parsed)
     case "validate-native-approval":
-        try validateNativeApproval(parsed)
+        if parsed.values.count == 1 {
+            _ = try NativeDirectApproval.parse(readArtifact(try parsed.positional(0)))
+            FileHandle.standardOutput.write(Data("valid\n".utf8))
+        } else {
+            try validateNativeApproval(parsed)
+        }
     case "validate-evidence":
         _ = try EvidenceRecord.parse(readArtifact(try parsed.positional(0)))
     case "derive-selection":

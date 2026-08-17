@@ -1,5 +1,5 @@
-Schema: decision-v1
-Evidence revision: offline-tracer-v1
+Schema: decision-v2
+Evidence revision: phase-0-empirical-v2
 Selected path: unsupported
-Feasibility decision: NO-GO unsupported
+Feasibility decision: INCOMPLETE renewal-pending
 Phase 1 continuation: blocked

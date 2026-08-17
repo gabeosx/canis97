@@ -1,8 +1,8 @@
-Schema: owner-result-v1
-Evidence revision: offline-tracer-v1
+Schema: owner-result-v2
+Evidence revision: phase-0-empirical-v2
 Selected path: unsupported
 Run count: 0
 Run 1: none
 Cooldown: not-applicable
 Run 2: none
-Cleanup: confirmed
+Cleanup: verified
