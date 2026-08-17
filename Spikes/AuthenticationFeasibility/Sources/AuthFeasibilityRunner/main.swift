@@ -159,7 +159,16 @@ func recordBrowserRenewalPending(_ arguments: Arguments) throws {
 
 func validateNativeApproval(_ arguments: Arguments) throws {
     if arguments.values.count == 3 {
-        try validateNativeLaunchGate(arguments)
+        let contract = try AuthExperimentContract.parse(readArtifact(try arguments.positional(0)))
+        let browserProbe = try BrowserProbeResult.parse(readArtifact(try arguments.positional(1)))
+        let nativeApproval = try NativeDirectApproval.parse(readArtifact(try arguments.positional(2)))
+        _ = try evaluateNativeLaunchGate(
+            toolchainArtifact: ToolchainGate.artifact(for: .currentSDKReady),
+            contract: contract,
+            browserProbe: browserProbe,
+            nativeApproval: nativeApproval
+        )
+        FileHandle.standardOutput.write(Data("not-applicable\n".utf8))
     } else {
         guard arguments.contains("--owner-approved") else { throw RunnerError.invalidArguments }
         let contract = try AuthExperimentContract.parse(readArtifact(try arguments.value(named: "--contract")))
@@ -176,17 +185,46 @@ func validateNativeApproval(_ arguments: Arguments) throws {
     }
 }
 
+func evaluateNativeLaunchGate(
+    toolchainArtifact: String,
+    contract: AuthExperimentContract,
+    browserProbe: BrowserProbeResult,
+    nativeApproval: NativeDirectApproval
+) throws -> NativeLaunchGate {
+    try NativeLaunchGate.evaluate(
+        toolchainArtifact: toolchainArtifact,
+        contract: contract,
+        browserProbe: browserProbe,
+        nativeApproval: nativeApproval
+    )
+}
+
 func validateNativeLaunchGate(_ arguments: Arguments) throws {
-    let contract = try AuthExperimentContract.parse(readArtifact(try arguments.positional(0)))
-    let browserProbe = try BrowserProbeResult.parse(readArtifact(try arguments.positional(1)))
-    let nativeApproval = try NativeDirectApproval.parse(readArtifact(try arguments.positional(2)))
-    _ = try NativeLaunchGate.evaluate(
-        toolchainArtifact: ToolchainGate.artifact(for: .currentSDKReady),
+    let toolchainArtifact = try readArtifact(try arguments.positional(0))
+    let contract = try AuthExperimentContract.parse(readArtifact(try arguments.positional(1)))
+    let browserProbe = try BrowserProbeResult.parse(readArtifact(try arguments.positional(2)))
+    let nativeApproval = try NativeDirectApproval.parse(readArtifact(try arguments.positional(3)))
+    _ = try evaluateNativeLaunchGate(
+        toolchainArtifact: toolchainArtifact,
         contract: contract,
         browserProbe: browserProbe,
         nativeApproval: nativeApproval
     )
     FileHandle.standardOutput.write(Data("not-applicable\n".utf8))
+}
+
+func recordNativeNotApplicable(_ arguments: Arguments) throws {
+    try validateNativeLaunchGate(arguments)
+    try writeArtifact(
+        [
+            "Schema: native-probe-v2",
+            "Outcome: not-applicable",
+            "Phase 1 continuation: blocked",
+            "",
+        ].joined(separator: "\n"),
+        to: arguments.value(named: "--output")
+    )
+    FileHandle.standardOutput.write(Data("recorded\n".utf8))
 }
 
 func run() throws {
@@ -207,8 +245,10 @@ func run() throws {
         try validateBrowserLaunchGate(parsed)
     case "record-browser-renewal-pending":
         try recordBrowserRenewalPending(parsed)
-    case "record-browser-not-applicable", "record-native-not-applicable":
+    case "record-browser-not-applicable":
         try closeUnsupported(parsed)
+    case "record-native-not-applicable":
+        try recordNativeNotApplicable(parsed)
     case "validate-live-result":
         try validateLiveResult(parsed)
     case "validate-native-approval":
