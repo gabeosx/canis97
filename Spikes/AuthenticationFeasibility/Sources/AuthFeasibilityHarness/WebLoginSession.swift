@@ -64,6 +64,7 @@ public final class WebLoginSession: NSObject, WKNavigationDelegate {
 
     /// Creates the nonpersistent WebKit view only after the account owner explicitly starts a run.
     public func startOwnerOperatedRun(
+        onWebViewCreated: @escaping (WKWebView) -> Void,
         onAppBoundReturn: @escaping (AppBoundReturnResult) -> Void,
         onTerminal: @escaping (BrowserTerminalReason) -> Void
     ) throws {
@@ -78,6 +79,7 @@ public final class WebLoginSession: NSObject, WKNavigationDelegate {
         returnHandler = onAppBoundReturn
         terminalHandler = onTerminal
         state = .ownerOperating
+        onWebViewCreated(browser)
         browser.load(URLRequest(url: Self.entryURL))
     }
 

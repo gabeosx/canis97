@@ -1,5 +1,6 @@
 import AuthFeasibilityCore
 import Foundation
+import WebKit
 
 /// Coordinates one owner-started browser session and one semantic client. It never reads
 /// browser state: the sole handoff is the one-time `AppBoundReturnResult` callback.
@@ -21,8 +22,9 @@ public final class LiveBrowserRuntime {
     public var isClosed: Bool { semanticClient.isClosed }
     public var canSerializeCompleteProof: Bool { preflight.canSerializeComplete }
 
-    public func startOwnerOperatedRun() throws {
+    public func startOwnerOperatedRun(onWebViewCreated: @escaping (WKWebView) -> Void) throws {
         try webLoginSession.startOwnerOperatedRun(
+            onWebViewCreated: onWebViewCreated,
             onAppBoundReturn: { [weak self] result in
                 self?.consume(result)
             },

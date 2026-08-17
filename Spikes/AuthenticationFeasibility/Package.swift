@@ -88,12 +88,22 @@ var targets: [Target] = [
 ]
 
 if browserExperimentEnabled {
-    products.append(.library(name: "AuthFeasibilityHarness", targets: ["AuthFeasibilityHarness"]))
+    products.append(.executable(name: "AuthFeasibilityHarness", targets: ["AuthFeasibilityHarnessLauncher"]))
     targets.append(
         .target(
             name: "AuthFeasibilityHarness",
             dependencies: ["AuthFeasibilityCore"],
             linkerSettings: [.linkedFramework("WebKit")]
+        )
+    )
+    targets.append(
+        .executableTarget(
+            name: "AuthFeasibilityHarnessLauncher",
+            dependencies: ["AuthFeasibilityCore", "AuthFeasibilityHarness"],
+            linkerSettings: [
+                .linkedFramework("AppKit"),
+                .linkedFramework("WebKit"),
+            ]
         )
     )
 }
