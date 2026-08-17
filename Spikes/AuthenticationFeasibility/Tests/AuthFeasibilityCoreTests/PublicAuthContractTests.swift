@@ -40,7 +40,7 @@ func contractParsingFailsClosed() throws {
     #expect(isPublicContractInvalid { try AuthExperimentContract.parse(conflicting) })
 
     let nonFirstParty = canonical.replacingOccurrences(
-        of: "Browser entry URL: https://www.siriusxm.com/",
+        of: "Browser entry URL: https://www.siriusxm.com/player",
         with: "Browser entry URL: https://example.invalid/"
     )
     #expect(isPublicContractInvalid { try AuthExperimentContract.parse(nonFirstParty) })

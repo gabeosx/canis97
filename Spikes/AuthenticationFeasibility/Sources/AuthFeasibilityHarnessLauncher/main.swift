@@ -81,13 +81,14 @@ private struct AuthFeasibilityHarnessLauncher {
 private final class BrowserHarnessApplication: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let runtime: LiveBrowserRuntime
     private let bridgeOutput: URL
+    private let pageStatusOutput: URL
     private var window: NSWindow?
     private var importTask: Task<Void, Never>?
     private var shutdownStarted = false
     private var shutdownFinished = false
     private let renewalStatusLabel = NSTextField(labelWithString: RenewalStatus.pending.ownerVisibleText)
     private let proofStatusLabel = NSTextField(labelWithString: "Waiting for an app-bound return")
-    private let sessionStatusLabel = NSTextField(labelWithString: "Sign in, then import the logged-in WebView session")
+    private let sessionStatusLabel = NSTextField(labelWithString: BrowserPageStatus.loading.ownerVisibleText)
     private lazy var importSessionButton = NSButton(
         title: "Use Logged-In Session",
         target: self,
@@ -102,6 +103,9 @@ private final class BrowserHarnessApplication: NSObject, NSApplicationDelegate, 
         bridgeOutput = configuration.output
             .deletingLastPathComponent()
             .appendingPathComponent("00-WEB-SESSION-BRIDGE.md")
+        pageStatusOutput = configuration.output
+            .deletingLastPathComponent()
+            .appendingPathComponent("00-WEB-PAGE-STATUS.md")
         super.init()
     }
 
@@ -129,6 +133,12 @@ private final class BrowserHarnessApplication: NSObject, NSApplicationDelegate, 
         sessionStatusLabel.alignment = .center
         sessionStatusLabel.maximumNumberOfLines = 2
         sessionStatusLabel.setAccessibilityLabel("Web session import status")
+        runtime.onPageStatusChanged = { [weak self] status in
+            guard let self else { return }
+            sessionStatusLabel.stringValue = status.ownerVisibleText
+            sessionStatusLabel.setAccessibilityValue(status.ownerVisibleText)
+            try? status.canonicalText.write(to: pageStatusOutput, atomically: true, encoding: .utf8)
+        }
         importSessionButton.setAccessibilityLabel("Use logged-in SiriusXM session")
 
         do {
@@ -182,7 +192,7 @@ private final class BrowserHarnessApplication: NSObject, NSApplicationDelegate, 
                 sessionStatusLabel.stringValue = "Could not write sanitized bridge result"
                 sessionStatusLabel.setAccessibilityValue("Bridge result write failed")
             }
-            importSessionButton.isEnabled = result == .noFirstPartySession
+            importSessionButton.isEnabled = result == .authCookieMissing || result == .authCookieMalformed
             importTask = nil
         }
     }

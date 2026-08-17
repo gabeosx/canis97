@@ -1,6 +1,6 @@
 Schema: auth-experiment-v1
 Review revision: empirical-proof-v2
-Browser entry URL: https://www.siriusxm.com/
+Browser entry URL: https://www.siriusxm.com/player
 Browser entry state: established
 Browser entry provenance: public-first-party
 Navigation state: established
@@ -37,4 +37,4 @@ Native tune/key state: established
 Native tune/key provenance: sanitized-preliminary
 Native sign-out state: established
 Native sign-out provenance: sanitized-preliminary
-Digest: 573f6ba270924112
+Digest: 42872ea46ed2e041

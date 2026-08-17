@@ -73,7 +73,7 @@ public struct BrowserExperimentEvidence: Equatable, Sendable {
 
     public static func ready() -> BrowserExperimentEvidence {
         BrowserExperimentEvidence(
-            entryURL: "https://www.siriusxm.com/",
+            entryURL: "https://www.siriusxm.com/player",
             entrySurface: .publicFirstParty,
             ordinaryNavigation: .publicFirstParty,
             appBoundReturn: .sanitizedPreliminary,
@@ -267,7 +267,7 @@ public struct AuthExperimentContract: Equatable, Sendable {
               let host = components.host?.lowercased(), host == "www.siriusxm.com" || host == "siriusxm.com",
               components.port == nil, components.user == nil, components.password == nil,
               components.query == nil, components.fragment == nil,
-              components.path == "/" else {
+              components.path == "/player" else {
             return false
         }
         return true

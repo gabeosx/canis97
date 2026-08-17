@@ -31,6 +31,9 @@ public final class LiveBrowserRuntime {
     /// Receives only a `RenewalStatus` closed semantic state. It must never be
     /// used to surface browser, provider, or session details.
     public var onRenewalStatusChanged: ((RenewalStatus) -> Void)?
+    public var onPageStatusChanged: ((BrowserPageStatus) -> Void)? {
+        didSet { webLoginSession.onPageStatusChanged = onPageStatusChanged }
+    }
 
     public func startOwnerOperatedRun(onWebViewCreated: @escaping (WKWebView) -> Void) throws {
         try webLoginSession.startOwnerOperatedRun(
@@ -55,10 +58,14 @@ public final class LiveBrowserRuntime {
     }
 
     public func importAuthenticatedWebSession() async -> WebSessionBridgeResult {
-        guard let session = await webLoginSession.extractFirstPartySession() else {
-            return .noFirstPartySession
+        switch await webLoginSession.extractFirstPartySession() {
+        case let .session(session):
+            return await nativeSessionVerifier.verify(session)
+        case .authCookieMissing:
+            return .authCookieMissing
+        case .authCookieMalformed:
+            return .authCookieMalformed
         }
-        return await nativeSessionVerifier.verify(session)
     }
 
     public func recordAuthentication() -> SafeProbeEvent {

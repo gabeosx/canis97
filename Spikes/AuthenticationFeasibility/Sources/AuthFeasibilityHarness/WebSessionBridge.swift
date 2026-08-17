@@ -1,32 +1,36 @@
 import Foundation
 
 /// The only transferable browser-authentication material. It is in-memory,
-/// single-consumption, non-codable, and contains first-party SiriusXM cookies only.
+/// single-consumption, non-codable, and contains the current player access token.
 @MainActor
 public final class VolatileWebSession {
-    private var cookies: [HTTPCookie]?
+    private var accessToken: String?
 
-    init(cookies: [HTTPCookie]) {
-        self.cookies = cookies
+    init(accessToken: String) {
+        self.accessToken = accessToken
     }
 
-    func consumeCookies() -> [HTTPCookie]? {
-        defer {
-            cookies?.removeAll(keepingCapacity: false)
-            cookies = nil
-        }
-        return cookies
+    func consume() -> String? {
+        defer { accessToken = nil }
+        return accessToken
     }
 
     deinit {
-        cookies?.removeAll(keepingCapacity: false)
-        cookies = nil
+        accessToken = nil
     }
+}
+
+enum WebSessionExtraction {
+    case session(VolatileWebSession)
+    case authCookieMissing
+    case authCookieMalformed
 }
 
 public enum WebSessionBridgeResult: String, Equatable, Sendable {
     case verified
-    case noFirstPartySession = "no-first-party-session"
+    case authCookieMissing = "auth-cookie-missing"
+    case authCookieMalformed = "auth-cookie-malformed"
+    case alreadyConsumed = "session-already-consumed"
     case rejected
     case protectedControl = "protected-control"
     case rateLimited = "rate-limited"
@@ -47,7 +51,9 @@ public enum WebSessionBridgeResult: String, Equatable, Sendable {
     public var ownerVisibleText: String {
         switch self {
         case .verified: "Web session imported and verified natively"
-        case .noFirstPartySession: "No SiriusXM session found — finish signing in first"
+        case .authCookieMissing: "Player login cookie absent — the WebView is not signed in"
+        case .authCookieMalformed: "Player login cookie found, but its session token is invalid"
+        case .alreadyConsumed: "Web session was already consumed"
         case .rejected: "Imported session was rejected"
         case .protectedControl: "Protected response — stopped"
         case .rateLimited: "Rate limit encountered — stopped"
@@ -58,14 +64,29 @@ public enum WebSessionBridgeResult: String, Equatable, Sendable {
     }
 }
 
-enum FirstPartyCookieFilter {
-    static func filter(_ cookies: [HTTPCookie], now: Date = Date()) -> [HTTPCookie] {
-        cookies.filter { cookie in
+enum SiriusXMAuthCookieExtractor {
+    @MainActor
+    static func extract(from cookies: [HTTPCookie], now: Date = Date()) -> WebSessionExtraction {
+        let candidates = cookies.filter { cookie in
             let domain = cookie.domain.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
             let isFirstParty = domain == "siriusxm.com" || domain.hasSuffix(".siriusxm.com")
             let isCurrent = cookie.expiresDate.map { $0 > now } ?? true
-            return isFirstParty && isCurrent && cookie.isSecure
+            return cookie.name == "AUTH_TOKEN" && isFirstParty && isCurrent
         }
+        guard candidates.count == 1 else {
+            return candidates.isEmpty ? .authCookieMissing : .authCookieMalformed
+        }
+        let encodedValue = candidates[0].value
+        let decodedValue = encodedValue.removingPercentEncoding ?? encodedValue
+        guard let data = decodedValue.data(using: .utf8),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let session = root["session"] as? [String: Any],
+              let accessToken = session["accessToken"] as? String,
+              (20...8192).contains(accessToken.utf8.count),
+              !accessToken.contains(where: { $0.isWhitespace }) else {
+            return .authCookieMalformed
+        }
+        return .session(VolatileWebSession(accessToken: accessToken))
     }
 }
 
@@ -75,23 +96,19 @@ struct WebSessionHTTPResponse: Sendable {
 }
 
 struct WebSessionTransport: Sendable {
-    let send: @MainActor @Sendable ([HTTPCookie], URLRequest) async throws -> WebSessionHTTPResponse
+    let send: @MainActor @Sendable (URLRequest) async throws -> WebSessionHTTPResponse
 
-    static let live = WebSessionTransport { cookies, request in
+    static let live = WebSessionTransport { request in
         let configuration = URLSessionConfiguration.ephemeral
         configuration.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
         configuration.timeoutIntervalForRequest = 20
         configuration.timeoutIntervalForResource = 25
         configuration.urlCredentialStorage = nil
-        configuration.httpShouldSetCookies = true
-        guard let cookieStorage = configuration.httpCookieStorage else {
-            throw URLError(.cannotCreateFile)
-        }
-        cookies.forEach(cookieStorage.setCookie)
+        configuration.httpShouldSetCookies = false
+        configuration.httpCookieStorage = nil
 
         let urlSession = URLSession(configuration: configuration)
         defer {
-            cookieStorage.removeCookies(since: .distantPast)
             urlSession.invalidateAndCancel()
         }
         let (data, response) = try await urlSession.data(for: request)
@@ -107,7 +124,7 @@ struct WebSessionTransport: Sendable {
 @MainActor
 struct NativeWebSessionVerifier: Sendable {
     private static let endpoint = URL(
-        string: "https://player.siriusxm.com/rest/v2/experience/modules/resume?OAtrial=false"
+        string: "https://api.edge-gateway.siriusxm.com/identity/v1/identities/status"
     )!
 
     private let transport: WebSessionTransport
@@ -117,23 +134,17 @@ struct NativeWebSessionVerifier: Sendable {
     }
 
     func verify(_ session: VolatileWebSession) async -> WebSessionBridgeResult {
-        guard var cookies = session.consumeCookies(), !cookies.isEmpty else {
-            return .noFirstPartySession
-        }
-        defer { cookies.removeAll(keepingCapacity: false) }
+        guard let accessToken = session.consume() else { return .alreadyConsumed }
 
         do {
             var request = URLRequest(url: Self.endpoint)
-            request.httpMethod = "POST"
+            request.httpMethod = "GET"
             request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.setValue("application/json", forHTTPHeaderField: "Accept")
             request.setValue("SiriusMac/0.1 (macOS; native session bridge)", forHTTPHeaderField: "User-Agent")
-            request.httpBody = try Self.requestBody()
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
 
-            let response = try await transport.send(cookies, request)
-            let bodyCount = request.httpBody?.count ?? 0
-            request.httpBody?.resetBytes(in: 0..<bodyCount)
+            let response = try await transport.send(request)
             return Self.classify(response)
         } catch is CancellationError {
             return .cancelled
@@ -144,37 +155,9 @@ struct NativeWebSessionVerifier: Sendable {
         }
     }
 
-    private static func requestBody() throws -> Data {
-        let payload: [String: Any] = [
-            "moduleList": [
-                "modules": [[
-                    "moduleRequest": [
-                        "resultTemplate": "web",
-                        "deviceInfo": [
-                            "osVersion": ProcessInfo.processInfo.operatingSystemVersionString,
-                            "platform": "Mac",
-                            "sxmAppVersion": "0.1.0",
-                            "appRegion": "US",
-                            "deviceModel": "SiriusMac",
-                            "clientDeviceId": UUID().uuidString,
-                            "player": "native",
-                            "clientDeviceType": "native",
-                        ],
-                    ],
-                ]],
-            ],
-        ]
-        return try JSONSerialization.data(withJSONObject: payload)
-    }
-
     static func classify(_ response: WebSessionHTTPResponse) -> WebSessionBridgeResult {
         switch response.statusCode {
-        case 200...299:
-            guard let root = try? JSONSerialization.jsonObject(with: response.body) as? [String: Any] else {
-                return .ambiguous
-            }
-            let envelope = (root["ModuleListResponse"] as? [String: Any]) ?? root
-            return (envelope["status"] as? NSNumber)?.intValue == 1 ? .verified : .rejected
+        case 200...299: return .verified
         case 401: return .rejected
         case 403: return .protectedControl
         case 429: return .rateLimited

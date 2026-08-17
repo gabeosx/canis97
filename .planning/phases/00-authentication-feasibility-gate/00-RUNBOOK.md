@@ -9,7 +9,7 @@ runbook records that preparation; it does not launch a browser, contact
 SiriusXM, or establish feasibility.
 
 The current approved construction is bound to contract digest
-`573f6ba270924112`. Open third-party callback documentation remains
+`42872ea46ed2e041`. Open third-party callback documentation remains
 non-dispositive and does not loosen any other gate.
 
 ## Owner Boundary
@@ -17,9 +17,11 @@ non-dispositive and does not loosen any other gate.
 - Only the account owner may start the live surface, operate it, enter
   credentials, handle provider controls, confirm audible playback, request
   sign-out, and choose the cooldown between runs.
-- Automation must never type, inspect, infer, record, screenshot, or export
-  credentials, cookies, tokens, headers, account data, browser storage,
-  provider responses, stream URLs, or playback keys.
+- Automation must never type, record, screenshot, or export credentials,
+  account data, provider responses, stream URLs, or playback keys. After the
+  owner explicitly requests import, the harness may read the current player's
+  `AUTH_TOKEN` cookie and transfer its access token directly into one ephemeral
+  native verification request; neither value may be persisted or logged.
 - The executor stops before live presentation and accepts only a fixed,
   account-detail-free result class after the owner is finished.
 
@@ -46,8 +48,8 @@ status label. It has exactly three possible values:
   replacement.
 - `Terminal stop` — the current proof stopped and must not be retried.
 
-Do not inspect traffic, browser developer tools, cookies, tokens, headers,
-storage, account information, request/response material, URLs, or clocks. The
+Do not inspect traffic, browser developer tools, account information,
+request/response material, stream URLs, or clocks. The
 harness does not force renewal, alter time, poll candidates, or infer fields.
 
 ## Stop Rules

@@ -15,6 +15,10 @@ func browserConstructionRequiresExactApproval() throws {
 
     #expect(session.state == .awaitingOwnerStart)
     #expect(session.observedEvent(for: URL(string: "https://www.siriusxm.com/library")!) == .ordinaryFirstPartyNavigation)
+    #expect(session.observedEvent(for: URL(string: "https://cdn.example.com/frame")!, isMainFrame: false) == .ordinarySecureSubframeNavigation)
+    #expect(session.observedEvent(for: URL(string: "about:blank")!, isMainFrame: false) == .ordinarySecureSubframeNavigation)
+    #expect(session.observedEvent(for: URL(string: "blob:https://www.siriusxm.com/id")!, isMainFrame: false) == .ordinarySecureSubframeNavigation)
+    #expect(session.observedEvent(for: URL(string: "http://cdn.example.com/frame")!, isMainFrame: false) == .terminal(.unexpectedNavigation))
     #expect(session.observedEvent(for: URL(string: "siriusmac-auth://browser-return")!) == .matchedAppBoundReturn)
     #expect(session.observedEvent(for: URL(string: "siriusmac-auth://browser-return?code=secret")!) == .terminal(.unexpectedNavigation))
     #expect(session.observedEvent(for: URL(string: "siriusmac-auth://browser-return#fragment")!) == .terminal(.unexpectedNavigation))

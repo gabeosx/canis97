@@ -10,6 +10,7 @@ public enum BrowserTerminalReason: Equatable, Sendable {
 
 public enum BrowserObservation: Equatable, Sendable {
     case ordinaryFirstPartyNavigation
+    case ordinarySecureSubframeNavigation
     case matchedAppBoundReturn
     case terminal(BrowserTerminalReason)
 }
@@ -20,6 +21,46 @@ public enum WebLoginSessionState: Equatable, Sendable {
     case returnMatched
     case terminal(BrowserTerminalReason)
     case stopped
+}
+
+public enum BrowserPageStatus: Equatable, Sendable {
+    case loading
+    case rendered
+    case applicationNotRendered
+    case navigationFailed(Int)
+    case blockedOffProvenanceMainFrame
+    case blockedUnexpectedNavigation
+    case webContentProcessTerminated
+
+    public var ownerVisibleText: String {
+        switch self {
+        case .loading: "Loading SiriusXM player…"
+        case .rendered: "Player loaded — sign in, then use the logged-in session"
+        case .applicationNotRendered: "Player HTML loaded, but its application did not render"
+        case let .navigationFailed(code): "SiriusXM player navigation failed (WebKit code \(code))"
+        case .blockedOffProvenanceMainFrame: "Blocked an off-provenance main-frame navigation"
+        case .blockedUnexpectedNavigation: "Blocked an unexpected navigation"
+        case .webContentProcessTerminated: "WebKit player process terminated"
+        }
+    }
+
+    public var canonicalText: String {
+        let outcome = switch self {
+        case .loading: "loading"
+        case .rendered: "rendered"
+        case .applicationNotRendered: "application-not-rendered"
+        case let .navigationFailed(code): "navigation-failed-\(code)"
+        case .blockedOffProvenanceMainFrame: "blocked-off-provenance-main-frame"
+        case .blockedUnexpectedNavigation: "blocked-unexpected-navigation"
+        case .webContentProcessTerminated: "web-content-process-terminated"
+        }
+        return [
+            "Schema: web-page-status-v1",
+            "Outcome: \(outcome)",
+            "Sensitive data: none",
+            "",
+        ].joined(separator: "\n")
+    }
 }
 
 /// Volatile, single-consumption material emitted only by a matched app-bound return.
@@ -45,8 +86,8 @@ public final class AppBoundReturnResult {
 /// It holds a web view only for one explicit run. Session extraction is explicit,
 /// owner-triggered, first-party-only, in-memory, and never persisted or logged.
 @MainActor
-public final class WebLoginSession: NSObject, WKNavigationDelegate {
-    private static let entryURL = URL(string: "https://www.siriusxm.com/")!
+public final class WebLoginSession: NSObject, WKNavigationDelegate, WKUIDelegate {
+    private let entryURL: URL
 
     public private(set) var state: WebLoginSessionState = .awaitingOwnerStart
 
@@ -55,6 +96,7 @@ public final class WebLoginSession: NSObject, WKNavigationDelegate {
     private var webView: WKWebView?
     private var returnHandler: ((AppBoundReturnResult) -> Void)?
     private var terminalHandler: ((BrowserTerminalReason) -> Void)?
+    public var onPageStatusChanged: ((BrowserPageStatus) -> Void)?
 
     public init(contract: AuthExperimentContract, approval: ExperimentApproval) throws {
         try contract.validate()
@@ -62,6 +104,10 @@ public final class WebLoginSession: NSObject, WKNavigationDelegate {
             throw ContractError.invalidArtifact
         }
         try approval.validate(against: contract)
+        guard let entryURL = URL(string: contract.browser.entryURL) else {
+            throw ContractError.invalidArtifact
+        }
+        self.entryURL = entryURL
         super.init()
     }
 
@@ -78,12 +124,14 @@ public final class WebLoginSession: NSObject, WKNavigationDelegate {
 
         let browser = WKWebView(frame: .zero, configuration: configuration)
         browser.navigationDelegate = self
+        browser.uiDelegate = self
         webView = browser
         returnHandler = onAppBoundReturn
         terminalHandler = onTerminal
         state = .ownerOperating
         onWebViewCreated(browser)
-        browser.load(URLRequest(url: Self.entryURL))
+        onPageStatusChanged?(.loading)
+        browser.load(URLRequest(url: entryURL))
     }
 
     /// This is a policy classifier, not a browser-state query. It has no access to cookies,
@@ -91,6 +139,12 @@ public final class WebLoginSession: NSObject, WKNavigationDelegate {
     public func observedEvent(for url: URL, isMainFrame: Bool = true) -> BrowserObservation {
         if Self.isAppBoundReturn(url) {
             return isMainFrame ? .matchedAppBoundReturn : .terminal(.unexpectedNavigation)
+        }
+        if !isMainFrame {
+            let allowedSubframeSchemes = ["https", "about", "blob", "data"]
+            return url.scheme.map(allowedSubframeSchemes.contains) == true
+                ? .ordinarySecureSubframeNavigation
+                : .terminal(.unexpectedNavigation)
         }
         guard url.scheme == "https", let host = url.host?.lowercased() else {
             return .terminal(.unexpectedNavigation)
@@ -109,22 +163,82 @@ public final class WebLoginSession: NSObject, WKNavigationDelegate {
         guard state != .stopped else { return }
         webView?.stopLoading()
         webView?.navigationDelegate = nil
+        webView?.uiDelegate = nil
         webView = nil
         returnHandler = nil
         terminalHandler = nil
         state = .stopped
     }
 
-    public func extractFirstPartySession() async -> VolatileWebSession? {
-        guard state == .ownerOperating, let webView else { return nil }
+    func extractFirstPartySession() async -> WebSessionExtraction {
+        guard state == .ownerOperating, let webView else { return .authCookieMissing }
         let cookies = await withCheckedContinuation { continuation in
             webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { cookies in
                 continuation.resume(returning: cookies)
             }
         }
-        let firstPartyCookies = FirstPartyCookieFilter.filter(cookies)
-        guard !firstPartyCookies.isEmpty else { return nil }
-        return VolatileWebSession(cookies: firstPartyCookies)
+        return SiriusXMAuthCookieExtractor.extract(from: cookies)
+    }
+
+    /// Keeps target=_blank and window.open login transitions inside the same
+    /// ephemeral WebKit data store so the resulting player cookie is extractable.
+    public func webView(
+        _ webView: WKWebView,
+        createWebViewWith configuration: WKWebViewConfiguration,
+        for navigationAction: WKNavigationAction,
+        windowFeatures: WKWindowFeatures
+    ) -> WKWebView? {
+        guard navigationAction.targetFrame == nil,
+              let url = navigationAction.request.url else {
+            return nil
+        }
+        switch observedEvent(for: url) {
+        case .ordinaryFirstPartyNavigation, .ordinarySecureSubframeNavigation:
+            webView.load(navigationAction.request)
+        case .matchedAppBoundReturn:
+            state = .returnMatched
+            let result = AppBoundReturnResult(returnURL: url)
+            let handler = returnHandler
+            returnHandler = nil
+            handler?(result)
+        case let .terminal(reason):
+            terminate(reason)
+        }
+        return nil
+    }
+
+    public func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        onPageStatusChanged?(.loading)
+    }
+
+    public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        Task { @MainActor [weak self, weak webView] in
+            try? await Task.sleep(for: .seconds(2))
+            guard let self, let webView, self.state == .ownerOperating else { return }
+            let script = "document.querySelector('#root')?.childElementCount > 0"
+            let rendered = (try? await webView.evaluateJavaScript(script)) as? Bool == true
+            self.onPageStatusChanged?(rendered ? .rendered : .applicationNotRendered)
+        }
+    }
+
+    public func webView(
+        _ webView: WKWebView,
+        didFailProvisionalNavigation navigation: WKNavigation!,
+        withError error: any Error
+    ) {
+        onPageStatusChanged?(.navigationFailed((error as NSError).code))
+    }
+
+    public func webView(
+        _ webView: WKWebView,
+        didFail navigation: WKNavigation!,
+        withError error: any Error
+    ) {
+        onPageStatusChanged?(.navigationFailed((error as NSError).code))
+    }
+
+    public func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        onPageStatusChanged?(.webContentProcessTerminated)
     }
 
     public func webView(
@@ -139,7 +253,7 @@ public final class WebLoginSession: NSObject, WKNavigationDelegate {
         }
 
         switch observedEvent(for: url, isMainFrame: navigationAction.targetFrame?.isMainFrame == true) {
-        case .ordinaryFirstPartyNavigation:
+        case .ordinaryFirstPartyNavigation, .ordinarySecureSubframeNavigation:
             decisionHandler(.allow)
         case .matchedAppBoundReturn:
             state = .returnMatched
@@ -156,8 +270,17 @@ public final class WebLoginSession: NSObject, WKNavigationDelegate {
 
     private func terminate(_ reason: BrowserTerminalReason) {
         let handler = terminalHandler
+        switch reason {
+        case .offProvenanceNavigation:
+            onPageStatusChanged?(.blockedOffProvenanceMainFrame)
+        case .unexpectedNavigation:
+            onPageStatusChanged?(.blockedUnexpectedNavigation)
+        case .cancelled:
+            break
+        }
         webView?.stopLoading()
         webView?.navigationDelegate = nil
+        webView?.uiDelegate = nil
         webView = nil
         returnHandler = nil
         terminalHandler = nil
