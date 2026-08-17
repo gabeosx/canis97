@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 00
 current_phase_name: authentication-feasibility-gate
 status: executing
-stopped_at: Completed 00-09-PLAN.md
-last_updated: "2026-08-17T18:16:17.604Z"
+stopped_at: Completed 00-10-PLAN.md
+last_updated: "2026-08-17T18:46:26.809Z"
 last_activity: 2026-08-17
 last_activity_desc: Phase 00 execution started
 progress:
   total_phases: 2
   completed_phases: 0
   total_plans: 17
-  completed_plans: 5
+  completed_plans: 6
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-08-16)
 ## Current Position
 
 Phase: 00 (authentication-feasibility-gate) — EXECUTING
-Plan: 6 of 9
+Plan: 7 of 9
 Status: Ready to execute
 Last activity: 2026-08-17 — Phase 00 execution started
 
-Progress: [███░░░░░░░] 29%
+Progress: [████░░░░░░] 35%
 
 ## Performance Metrics
 
@@ -67,6 +67,7 @@ Progress: [███░░░░░░░] 29%
 | Phase 00 P07 | 8min | 2 tasks | 2 files |
 | Phase 00 P08 | 9m | 2 tasks | 6 files |
 | Phase 00-authentication-feasibility-gate P09 | 8min | 2 tasks | 10 files |
+| Phase 00-authentication-feasibility-gate P10 | 6min | 2 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -99,6 +100,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: Keep AV/key material behind a MainActor runtime and clear it after every bounded proof result.
 - [Phase ?]: Treat renewal-pending as incomplete after cleanup, never as GO or NO-GO.
 - [Phase ?]: Require fixed-order sign-out and verified cleanup before a browser proof can serialize complete.
+- [Phase ?]: The owner-retracted browser-complete signal is excluded; renewal-still-pending is the sole persisted browser outcome.
+- [Phase ?]: Native-direct is not applicable without strict WebKit rule-out, so no credential disclosure is presented.
 
 ### Pending Todos
 
@@ -122,6 +125,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-17T18:16:17.589Z
-Stopped at: Completed 00-09-PLAN.md
+Last session: 2026-08-17T18:46:26.791Z
+Stopped at: Completed 00-10-PLAN.md
 Resume file: None
