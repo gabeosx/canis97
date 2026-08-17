@@ -1,8 +1,8 @@
 ---
 phase: 00-authentication-feasibility-gate
-reviewed: 2026-08-17T00:00:00Z
+reviewed: 2026-08-17T22:24:47Z
 depth: standard
-files_reviewed: 29
+files_reviewed: 28
 files_reviewed_list:
   - Spikes/AuthenticationFeasibility/Package.swift
   - Spikes/AuthenticationFeasibility/Scripts/verify-current-xcode.sh
@@ -10,6 +10,7 @@ files_reviewed_list:
   - Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityCore/CandidateSelection.swift
   - Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityCore/CleanupCoordinator.swift
   - Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityCore/DecisionGate.swift
+  - Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityCore/EntitlementContract.swift
   - Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityCore/EvidenceContract.swift
   - Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityCore/PublicAuthContract.swift
   - Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityCore/RenewalObserver.swift
@@ -18,120 +19,86 @@ files_reviewed_list:
   - Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityCore/ToolchainGate.swift
   - Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityHarness/LiveBrowserRuntime.swift
   - Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityHarness/WebLoginSession.swift
+  - Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityHarness/WebSessionBridge.swift
   - Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityHarnessLauncher/main.swift
   - Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityRunner/main.swift
-  - Spikes/AuthenticationFeasibility/Tests/AuthFeasibilityCoreTests/AuthorizedPlaybackProbeTests.swift
-  - Spikes/AuthenticationFeasibility/Tests/AuthFeasibilityCoreTests/BrowserProofPreflightTests.swift
   - Spikes/AuthenticationFeasibility/Tests/AuthFeasibilityCoreTests/BrowserReturnContractTests.swift
   - Spikes/AuthenticationFeasibility/Tests/AuthFeasibilityCoreTests/CandidateSelectionTests.swift
-  - Spikes/AuthenticationFeasibility/Tests/AuthFeasibilityCoreTests/CleanupCoordinatorTests.swift
   - Spikes/AuthenticationFeasibility/Tests/AuthFeasibilityCoreTests/ContractTracerTests.swift
   - Spikes/AuthenticationFeasibility/Tests/AuthFeasibilityCoreTests/DecisionGateTests.swift
   - Spikes/AuthenticationFeasibility/Tests/AuthFeasibilityCoreTests/FinalizationGateTests.swift
   - Spikes/AuthenticationFeasibility/Tests/AuthFeasibilityCoreTests/NativeDirectPreflightTests.swift
   - Spikes/AuthenticationFeasibility/Tests/AuthFeasibilityCoreTests/NativeFallbackGateTests.swift
   - Spikes/AuthenticationFeasibility/Tests/AuthFeasibilityCoreTests/PublicAuthContractTests.swift
-  - Spikes/AuthenticationFeasibility/Tests/AuthFeasibilityCoreTests/RenewalObserverTests.swift
   - Spikes/AuthenticationFeasibility/Tests/AuthFeasibilityCoreTests/StopConditionTests.swift
+  - script/build_and_run.sh
 findings:
-  critical: 5
-  warning: 3
+  critical: 3
+  warning: 2
   info: 0
-  total: 8
+  total: 5
 status: issues_found
 ---
 
 # Phase 00: Code Review Report
 
-**Reviewed:** 2026-08-17T00:00:00Z
+**Reviewed:** 2026-08-17T22:24:47Z
 **Depth:** standard
-**Files Reviewed:** 29
+**Files Reviewed:** 28
 **Status:** issues_found
 
 ## Summary
 
-The Phase 0 scope has material fail-closed defects: an arbitrary custom-scheme navigation can be accepted as the app-bound return, the owner-ended renewal observation can later be upgraded to renewed, and cleanup can be marked verified without performing or awaiting the promised cleanup. The Phase 1 quartet rederivation itself is substantially stricter, but these defects make upstream browser/proof evidence unreliable.
-
-`swift test` could not be completed in this review environment because the selected Command Line Tools compiler and SDK versions disagree and the sandbox cannot write the user Clang module cache. This is an environment/toolchain failure, not counted as a source finding.
+The offline parsing and canonical-byte checks are generally strict, but the live proof path is not the producer of the evidence that authorizes Phase 1. The runner accepts caller-authored success claims, while the app UI never connects its authenticated-session result to an entitlement verification. Sign-out validation also ignores a token that the extraction path accepts. These defects permit a false Phase 1 GO and undermine the stated fail-closed boundaries.
 
 ## Narrative Findings (AI reviewer)
 
 ## Critical Issues
 
-### CR-01: App-bound return accepts query-bearing and non-main-frame navigations
+### CR-01: Phase 1 GO is derived from an untrusted, self-asserted owner-result file
 
-**File:** `Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityHarness/WebLoginSession.swift:126-135`
+**File:** `Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityRunner/main.swift:169`
 
-**Also affects:** `Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityHarness/WebLoginSession.swift:153-160`, `Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityCore/SemanticProofClient.swift:30-37`
+**Issue:** `finalize-phase` reads `--owner-result` directly from a caller-selected path and passes it to `V3Finalization`. `OwnerResultV3.parse` verifies only fixed strings, and `V3Finalization.derive` turns two such strings into `GO browser-return` (`DecisionGate.swift:316-403`). No value is emitted by `LiveBrowserRuntime`, no run identity binds the claimed lines to a completed browser run, and no entitlement/cleanup result is carried into the finalizer. A user or invoking process can therefore write a syntactically canonical two-run file and obtain an accepted v3 Phase 1 GO without performing either proof run.
 
-**Issue:** The callback matcher accepts `siriusmac-auth://browser-return?code=...` because neither matcher rejects a query. `decidePolicyFor` also makes no main-frame check before creating `AppBoundReturnResult`. Consequently, any navigation action matching only the scheme/host/path—including a query-bearing OAuth-style callback or an iframe/subframe action—can consume the one-time return and emit `.cleanAppBoundReturn`. This breaks the declared secret-free, exact callback boundary and can turn an untrusted navigation into proof progress.
+**Fix:** Remove `--owner-result` as an authorization input. Have the live runtime create the only finalizable proof record after its preflight reaches `.complete`, bind it to a fresh per-run identifier and the approved contract/entitlement artifact, and make `finalize-phase` consume and validate that sealed record. If a durable artifact is required, write it from the runtime through a private, single-purpose API and reject records not tied to the current run and cleanup result.
 
-**Fix:** Require an exact, query-free return shape in one shared matcher and only accept it for the main frame. For example, reject when `url.query != nil` (and reject any other unexpected URL component), then guard `navigationAction.targetFrame?.isMainFrame == true` before invoking the return handler. Add regression tests for query, fragment, userinfo, and subframe callback attempts.
+### CR-02: The launched browser flow verifies authentication only, never entitlement, yet allows the run to be finished
 
-### CR-02: Owner-ended renewal observation is not latched and can later become renewed
+**File:** `Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityHarnessLauncher/main.swift:186`
 
-**File:** `Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityCore/RenewalObserver.swift:62-75`
+**Issue:** The “Use Logged-In Session” action calls `LiveBrowserRuntime.importAuthenticatedWebSession`, which invokes only `NativeWebSessionVerifier` (`LiveBrowserRuntime.swift:122-130`). On any nonempty 2xx profile response, the launcher enables “Verify Sign-Out & Finish Run” (`main.swift:203-205`). Neither `recordAuthentication()` nor `recordEntitlement()` is invoked by this flow, and the separate `InstrumentedBrowserRun` that does call `NativeEntitlementVerifier` has no caller. Consequently a valid login with no subscription can progress through the operator-facing completion flow, while the actual entitlement predicate is never evaluated.
 
-**Issue:** `.ownerEnded` returns `.renewalPending` but does not persist that result. A subsequent call with `.ordinaryProviderReplacement` invokes `verifyAuthenticatedReplacement` and can return `.renewed`. That reopens provider observation after the owner has ended the bounded observation window, contradicting the one-opportunity/no-retry contract and allowing renewal-pending evidence to be upgraded after it was retracted.
+**Fix:** Make the import action drive one runtime-owned sequence: consume the token once, record successful authentication, call `NativeEntitlementVerifier` using the approved entitlement contract, record entitlement only for `.entitled`, and enable the finishing control only after that sequence succeeds. Remove or wire in `InstrumentedBrowserRun`; do not retain a second uncalled verification implementation.
 
-**Fix:** Store a closed pending result (for example, a `resolvedProof` that includes `.renewalPending`) before returning it, and return that stored result for every later observation. Add a test asserting that `.ownerEnded` followed by `.ordinaryProviderReplacement` remains `.renewalPending` and never invokes the verifier.
+### CR-03: Sign-out proof ignores valid first-party token cookies on subdomains
 
-### CR-03: Cleanup can claim verified without doing the required teardown, and app exit bypasses cleanup entirely
+**File:** `Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityHarness/WebSessionBridge.swift:103`
 
-**File:** `Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityHarness/LiveBrowserRuntime.swift:90-96`
+**Issue:** Session extraction accepts an unexpired `AUTH_TOKEN` from `siriusxm.com` *or any* `*.siriusxm.com` domain (`lines 122-127`). The sign-out checker, however, considers only the apex `siriusxm.com` cookie (`lines 106-110`). If the live usable token is host-only on `player.siriusxm.com` (or another first-party subdomain), it can remain after attempted sign-out while `signOutPresence()` returns `.absent`; `verifySignOutAndClean()` then reports verified cleanup. This is a false sign-out/cleanup confirmation.
 
-**Also affects:** `Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityHarness/LiveBrowserRuntime.swift:143-150`, `Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityHarnessLauncher/main.swift:137-145`
-
-**Issue:** `BrowserRuntimeCleanupParticipant.perform` returns `true` for sign-out, ephemeral-client cancellation, playback teardown, volatile-state clearing, and absence verification without performing or verifying any of them. `cleanUp()` therefore feeds `.cleanupVerified` into preflight based on no-op steps. Separately, both application termination paths call only `runtime.cancel()` and immediately terminate; they never await `runtime.cleanUp()`. This can create a verified cleanup proof despite an unverified session/runtime teardown, and closing the window skips the coordinator altogether.
-
-**Fix:** Give each volatile collaborator an explicit idempotent teardown/absence-verification operation, invoke it in the participant for its corresponding step, and return `false` when verification cannot be established. Route window close/application termination through an orderly shutdown state that awaits the coordinator before terminating (or records a closed cleanup failure if macOS termination cannot wait). Add tests that fail each concrete hook and verify no complete proof can be serialized.
-
-### CR-04: Playback proof treats item allocation as authorization and audibility
-
-**File:** `Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityCore/AuthorizedPlaybackProbe.swift:59-70`
-
-**Issue:** `prepareExpectedAuthorization()` creates an `AVPlayerItem` and returns `.ready` whenever `currentItem` is non-nil. That is true immediately after allocation even if the asset is unplayable, authorization/content-key handling fails, or no audio is ever rendered; the code does not load/observe playable or item status and never starts playback. `prove` can therefore return `.authorizedAndAudible` solely from the caller-provided enum and owner boolean, producing a false positive for the core feasibility condition.
-
-**Fix:** Make preparation asynchronous and fail closed until the asset and item have reached the required authorized/playable status; bind it to the actual authorized playback path and only accept owner confirmation after bounded playback has begun. Map item/asset failures to a terminal/incomplete result and cover unplayable, failed-key, and no-audio cases in tests.
-
-### CR-05: An unconfirmed playback proof can repeatedly recreate volatile playback work
-
-**File:** `Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityCore/AuthorizedPlaybackProbe.swift:94-112`
-
-**Issue:** When preparation succeeds but the owner does not confirm audibility, `prove` returns `.incomplete` without latching it. The next call repeats `prepareExpectedAuthorization()`, creating another content-key session/player after the first owner-retracted attempt. This violates the class's stated “exactly one bounded proof” and “no retry” guarantees, and can repeatedly exercise volatile authorization material.
-
-**Fix:** Add a consumed/proof result state that is set for every first eligible attempt, including `.incomplete`, and return it before calling the runtime again. Test two `.notConfirmed` calls and assert the runtime preparation count is one.
+**Fix:** Use one shared, exact first-party AUTH_TOKEN predicate for extraction and sign-out checking, including the same expiry policy and all accepted SiriusXM subdomains. Treat more than one matching cookie, an unsupported domain/path, or any remaining matching token as non-absent and block finalization.
 
 ## Warnings
 
-### WR-01: Concurrent cleanup calls can execute teardown steps twice
+### WR-01: Quartet installation is not atomic across its four public artifact paths
 
-**File:** `Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityCore/CleanupCoordinator.swift:33-50`
+**File:** `Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityRunner/main.swift:158`
 
-**Issue:** Although the coordinator is `@MainActor`, `await participant.perform(step)` yields the actor. A second `cleanUp()` call can enter while `proof` is still `nil` and start the entire step sequence concurrently. Double sign-out/browser teardown conflicts with the single canonical cleanup order and makes the cached proof unreliable.
+**Issue:** `atomicallyInstall` stages and validates a quartet, but then replaces each target one at a time. A crash, permission error, or interrupted process after an early replacement leaves a mixed old/new quartet. The post-write validation cannot run in those cases, so consumers see an inconsistent phase state.
 
-**Fix:** Track an in-flight cleanup task/state before the first suspension and have later callers await the same result. Add a test participant that suspends on the first step and assert concurrent callers execute every step once.
+**Fix:** Publish the quartet as one immutable run directory and atomically replace a single current-manifest/directory reference after validation, or use one canonical bundle file as the sole commit point. Preserve the prior complete quartet until that final atomic swap succeeds.
 
-### WR-02: Browser-launch failures exit successfully
+### WR-02: Browser-runtime tests can be silently excluded by mutable planning artifacts
 
-**File:** `Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityHarnessLauncher/main.swift:33-35`
+**File:** `Spikes/AuthenticationFeasibility/Package.swift:75`
 
-**Also affects:** `Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityHarnessLauncher/main.swift:132-134`
+**Issue:** The harness target is included only when three `.planning` files byte-match embedded values. The browser tests are then conditionally compiled behind `canImport(AuthFeasibilityHarness)` (`BrowserReturnContractTests.swift:5`). On a normal changed, unavailable, or locally absent gate artifact, `swift test` can skip the browser-state and return-boundary tests rather than fail, making a passing test run insufficient evidence for this security-critical source.
 
-**Issue:** Invalid arguments or a failed launch gate print a generic message and return from `main`, yielding exit status 0. If startup later fails, the app calls `NSApp.terminate` and also exits successfully. Automation or the owner workflow can therefore treat a browser run as successfully launched when no valid run occurred.
-
-**Fix:** Terminate with a nonzero status after a launch/preflight failure and arrange for startup failures to propagate a nonzero outcome. Keep successful owner cancellation distinct from launch failure.
-
-### WR-03: Finalization accepts noncanonical supersession artifacts with trailing content
-
-**File:** `Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityRunner/main.swift:97-114`
-
-**Issue:** `validateSupersessionForFinalization` uses `hasPrefix(expected)` rather than exact equality. A supersession artifact with arbitrary appended fields or stale/conflicting authority data is accepted despite the finalization flow claiming machine-field validation and canonical inputs.
-
-**Fix:** Require `text == expected` (or parse a closed ordered schema and compare its canonical rendering) and add a test that appending one line causes finalization validation to fail.
+**Fix:** Keep the harness executable launch-gated, but always compile the harness target and its deterministic tests with injected fake transports/fixtures. Add an explicit test assertion or CI check that reports when the browser test suite was not compiled.
 
 ---
 
-_Reviewed: 2026-08-17T00:00:00Z_
+_Reviewed: 2026-08-17T22:24:47Z_
 _Reviewer: the agent (gsd-code-reviewer)_
 _Depth: standard_
