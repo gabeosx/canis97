@@ -3,14 +3,29 @@ import Testing
 
 @Test("unsupported entitlement closes with no owner runs")
 func unsupportedEntitlementDerivesBlockedNoGoWithoutRuns() throws {
+    let owner = try V3Finalization.ownerResult(
+        entitlement: .unsupported,
+        browserProbe: .unsupported,
+        suppliedOwnerResult: nil
+    )
+    #expect(owner == .zeroRunUnsupported)
+
     let result = try V3Finalization.derive(
         entitlement: .unsupported,
         browserProbe: .unsupported,
-        ownerResult: .zeroRunUnsupported
+        ownerResult: owner
     )
 
     #expect(result.decision == "NO-GO unsupported")
     #expect(result.continuation == .blocked)
+
+    #expect(throws: ContractError.self) {
+        _ = try V3Finalization.ownerResult(
+            entitlement: .supported,
+            browserProbe: .supported,
+            suppliedOwnerResult: nil
+        )
+    }
 }
 
 @Test("supported entitlement requires a complete canonical v3 quartet before Phase 1 GO")

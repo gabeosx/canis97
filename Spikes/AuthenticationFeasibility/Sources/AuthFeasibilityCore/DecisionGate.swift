@@ -361,6 +361,27 @@ public struct V3FinalizationResult: Equatable, Sendable {
 /// Corrected finish-line derivation. It never looks at a profile result as
 /// entitlement and intentionally owns none of renewal, tuning, or playback.
 public enum V3Finalization {
+    /// The unsupported branch is deliberately ownerless: it has no runtime
+    /// proof to parse, and its sole canonical owner result is zero runs.
+    public static func ownerResult(
+        entitlement: EntitlementContractStatus,
+        browserProbe: BrowserProbeV3,
+        suppliedOwnerResult: OwnerResultV3?
+    ) throws -> OwnerResultV3 {
+        switch entitlement {
+        case .unsupported:
+            guard browserProbe.outcome == .unsupported else {
+                throw ContractError.invalidArtifact
+            }
+            return .zeroRunUnsupported
+        case .supported:
+            guard let suppliedOwnerResult else {
+                throw ContractError.invalidArtifact
+            }
+            return suppliedOwnerResult
+        }
+    }
+
     public static func derive(
         entitlement: EntitlementContractStatus,
         browserProbe: BrowserProbeV3,

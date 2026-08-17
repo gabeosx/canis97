@@ -5,6 +5,9 @@ MODE="${1:-run}"
 APP_NAME="AuthFeasibilityHarness"
 BUNDLE_ID="com.siriusmac.auth-feasibility-harness"
 MIN_SYSTEM_VERSION="26.0"
+DEVELOPER_DIR_PATH="/Applications/Xcode.app/Contents/Developer"
+CLANG_CACHE_PATH="/tmp/sirius-auth-clang-cache"
+SWIFTPM_CACHE_PATH="/tmp/sirius-auth-swiftpm-cache"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PACKAGE_DIR="$ROOT_DIR/Spikes/AuthenticationFeasibility"
@@ -16,11 +19,15 @@ APP_BINARY="$APP_MACOS/$APP_NAME"
 INFO_PLIST="$APP_CONTENTS/Info.plist"
 PROBE_OUTPUT="$ROOT_DIR/.planning/phases/00-authentication-feasibility-gate/00-BROWSER-PROBE.md"
 
-pkill -x "$APP_NAME" >/dev/null 2>&1 || true
+if [[ "$MODE" != "--build-only" && "$MODE" != "build-only" ]]; then
+  pkill -x "$APP_NAME" >/dev/null 2>&1 || true
+fi
 
-DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+CLANG_MODULE_CACHE_PATH="$CLANG_CACHE_PATH" \
+SWIFTPM_MODULECACHE_OVERRIDE="$SWIFTPM_CACHE_PATH" \
+DEVELOPER_DIR="$DEVELOPER_DIR_PATH" \
   swift build --package-path "$PACKAGE_DIR" --product "$APP_NAME"
-BUILD_BINARY="$(DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift build --package-path "$PACKAGE_DIR" --show-bin-path)/$APP_NAME"
+BUILD_BINARY="$(CLANG_MODULE_CACHE_PATH="$CLANG_CACHE_PATH" SWIFTPM_MODULECACHE_OVERRIDE="$SWIFTPM_CACHE_PATH" DEVELOPER_DIR="$DEVELOPER_DIR_PATH" swift build --package-path "$PACKAGE_DIR" --show-bin-path)/$APP_NAME"
 
 rm -rf "$APP_BUNDLE"
 mkdir -p "$APP_MACOS"
@@ -48,11 +55,17 @@ cat >"$INFO_PLIST" <<PLIST
 </plist>
 PLIST
 
+[[ -x "$APP_BINARY" ]]
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$INFO_PLIST")" == "$APP_NAME" ]]
+echo "$APP_BUNDLE"
+
 open_app() {
   /usr/bin/open -n "$APP_BUNDLE" --args --live-browser --output "$PROBE_OUTPUT"
 }
 
 case "$MODE" in
+  --build-only|build-only)
+    ;;
   run)
     open_app
     ;;
@@ -73,7 +86,7 @@ case "$MODE" in
     pgrep -x "$APP_NAME" >/dev/null
     ;;
   *)
-    echo "usage: $0 [run|--debug|--logs|--telemetry|--verify]" >&2
+    echo "usage: $0 [run|--build-only|--debug|--logs|--telemetry|--verify]" >&2
     exit 2
     ;;
 esac

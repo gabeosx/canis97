@@ -169,7 +169,21 @@ func atomicallyInstall(_ bundle: V3ArtifactBundle, targets: [URL]) throws {
 func finalizePhase(_ arguments: Arguments) throws {
     let entitlement = try EntitlementContract.parse(readArtifact(try arguments.value(named: "--entitlement-contract")))
     let browserProbe = try BrowserProbeV3.parse(readArtifact(try arguments.value(named: "--browser-probe")))
-    let owner = try OwnerResultV3.parse(readArtifact(try arguments.value(named: "--owner-result")))
+    let owner: OwnerResultV3
+    switch entitlement.status {
+    case .unsupported:
+        owner = try V3Finalization.ownerResult(
+            entitlement: entitlement.status,
+            browserProbe: browserProbe,
+            suppliedOwnerResult: nil
+        )
+    case .supported:
+        owner = try V3Finalization.ownerResult(
+            entitlement: entitlement.status,
+            browserProbe: browserProbe,
+            suppliedOwnerResult: try OwnerResultV3.parse(readArtifact(try arguments.value(named: "--owner-result")))
+        )
+    }
     let bundle = try V3ArtifactBundle.derive(
         entitlement: entitlement.status,
         browserProbe: browserProbe,
