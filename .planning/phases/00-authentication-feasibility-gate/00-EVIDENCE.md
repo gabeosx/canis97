@@ -6,4 +6,4 @@ Browser reference: none
 Native direct: unavailable
 Native reference: none
 Candidate count: 0
-Closure reason: invalid-artifact
+Closure reason: unsupported-selection
