@@ -37,7 +37,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Every protected, challenged, rate-limited, redirected, suspicious, or ambiguous outcome stops immediately, retains no secret evidence, and produces `NO-GO unsupported`.
   5. A sanitized feasibility artifact contains exactly one decision: `GO browser-return`, `GO native-direct`, or `NO-GO unsupported`; only a GO decision permits Phase 1 execution.
 
-**Plans**: 2/9 plans executed
+**Plans**: 3/9 plans executed
 
 Plans:
 **Wave 1**
@@ -50,7 +50,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 00-07-PLAN.md — Resolve the public provider contract and obtain digest-bound owner approval or close unsupported.
+- [x] 00-07-PLAN.md — Resolve the public provider contract and obtain digest-bound owner approval or close unsupported.
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
@@ -199,7 +199,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 0. Authentication Feasibility Gate | 2/9 | In Progress|  |
+| 0. Authentication Feasibility Gate | 3/9 | In Progress|  |
 | 1. Safe Interoperability Foundation | 0/8 | Not started | - |
 | 2. Authorized Live Listening | 0/TBD | Not started | - |
 | 3. Native Mac Listening Experience | 0/TBD | Not started | - |
