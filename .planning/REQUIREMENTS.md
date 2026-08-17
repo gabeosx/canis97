@@ -9,11 +9,11 @@ Requirements for the initial public release. Each requirement maps to exactly on
 
 ### Authentication Feasibility
 
-- [x] **FEAS-01**: Maintainer can determine whether SiriusXM offers a clean first-party, app-bound browser authentication return without inspecting browser cookies, storage, tokens, profiles, or developer-tools session data.
-- [x] **FEAS-02**: If browser return is safely ruled out, maintainer can evaluate one minimal honest native authentication path without spoofing a browser or client identity, bypassing access controls, or retaining a fallback path.
-- [x] **FEAS-03**: Account owner can perform two separate manually initiated proof runs through the sole selected path, each reaching explicit authenticated-and-entitled state and clean sign-out, with a conservative human-controlled cooldown between runs.
-- [x] **FEAS-04**: Any challenge, CAPTCHA, MFA requirement, HTTP 403 or 429, rate-limit signal, unexpected redirect, suspected bot response, protected-control behavior, or ambiguous entitlement evidence immediately stops evaluation and records no secrets or raw sensitive response data.
-- [x] **FEAS-05**: Phase 0 produces exactly one sanitized feasibility decision—`GO browser-return`, `GO native-direct`, or `NO-GO unsupported`—and Phase 1 cannot execute without a GO decision backed by both proof runs.
+- [ ] **FEAS-01**: Maintainer can determine whether SiriusXM offers a clean first-party, app-bound browser authentication return without inspecting browser cookies, storage, tokens, profiles, or developer-tools session data.
+- [ ] **FEAS-02**: If browser return is safely ruled out, maintainer can evaluate one minimal honest native authentication path without spoofing a browser or client identity, bypassing access controls, or retaining a fallback path.
+- [ ] **FEAS-03**: Account owner can perform two separate manually initiated proof runs through the sole selected path, each reaching explicit authenticated-and-entitled state and clean sign-out, with a conservative human-controlled cooldown between runs.
+- [ ] **FEAS-04**: Any challenge, CAPTCHA, MFA requirement, HTTP 403 or 429, rate-limit signal, unexpected redirect, suspected bot response, protected-control behavior, or ambiguous entitlement evidence immediately stops evaluation and records no secrets or raw sensitive response data.
+- [ ] **FEAS-05**: Phase 0 produces exactly one sanitized feasibility decision—`GO browser-return`, `GO native-direct`, or `NO-GO unsupported`—and Phase 1 cannot execute without a GO decision backed by both proof runs.
 
 ### Authentication
 
@@ -142,11 +142,11 @@ Every v1 requirement maps to exactly one delivery phase in `.planning/ROADMAP.md
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FEAS-01 | Phase 0 | Complete |
-| FEAS-02 | Phase 0 | Complete |
-| FEAS-03 | Phase 0 | Complete |
-| FEAS-04 | Phase 0 | Complete |
-| FEAS-05 | Phase 0 | Complete |
+| FEAS-01 | Phase 0 | Gaps Found |
+| FEAS-02 | Phase 0 | Gaps Found |
+| FEAS-03 | Phase 0 | Gaps Found |
+| FEAS-04 | Phase 0 | Gaps Found |
+| FEAS-05 | Phase 0 | Gaps Found |
 | AUTH-01 | Phase 1 | Pending |
 | AUTH-02 | Phase 1 | Pending |
 | AUTH-03 | Phase 1 | Pending |
