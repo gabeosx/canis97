@@ -90,12 +90,7 @@ func requirePhaseOneGo(_ arguments: Arguments) throws {
         ownerResult: try readArtifact(try arguments.positional(2)),
         decision: try readArtifact(try arguments.positional(3))
     )
-    try bundle.validate()
-    let decision = try Decision.parse(bundle.decision)
-    guard decision.continuation == .unlocked,
-          decision.value == FeasibilityDecision.browserReturn.rawValue || decision.value == FeasibilityDecision.nativeDirect.rawValue else {
-        throw RunnerError.failed
-    }
+    try PhaseOneGate.require(bundle)
     FileHandle.standardOutput.write(Data("phase-one-go\n".utf8))
 }
 

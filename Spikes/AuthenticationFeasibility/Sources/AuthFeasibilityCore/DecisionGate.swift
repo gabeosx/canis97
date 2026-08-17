@@ -283,6 +283,20 @@ public enum FinalizationGate {
     }
 }
 
+/// The sole Phase 1 authorization boundary. It reparses and rederives the
+/// complete quartet before accepting either canonical GO decision.
+public enum PhaseOneGate {
+    public static func require(_ bundle: ArtifactBundle) throws {
+        try bundle.validate()
+        let decision = try Decision.parse(bundle.decision)
+        guard decision.continuation == .unlocked,
+              decision.value == FeasibilityDecision.browserReturn.rawValue ||
+              decision.value == FeasibilityDecision.nativeDirect.rawValue else {
+            throw ContractError.invalidArtifact
+        }
+    }
+}
+
 public struct ArtifactBundle: Sendable {
     public let evidence: String
     public let selection: String
