@@ -2,6 +2,7 @@ import AppKit
 import AuthFeasibilityCore
 import AuthFeasibilityHarness
 import Foundation
+import Darwin
 
 private enum LauncherError: Error {
     case invalidArguments
@@ -11,6 +12,7 @@ private enum LauncherError: Error {
 private struct LaunchConfiguration {
     let contract: AuthExperimentContract
     let approval: ExperimentApproval
+    let output: URL
 }
 
 @main
@@ -32,6 +34,7 @@ private struct AuthFeasibilityHarnessLauncher {
             application.run()
         } catch {
             FileHandle.standardError.write(Data("launch gate failed\n".utf8))
+            exit(1)
         }
     }
 
@@ -70,7 +73,7 @@ private struct AuthFeasibilityHarnessLauncher {
             approval: approval
         )
 
-        return LaunchConfiguration(contract: contract, approval: approval)
+        return LaunchConfiguration(contract: contract, approval: approval, output: output)
     }
 }
 
@@ -78,7 +81,10 @@ private struct AuthFeasibilityHarnessLauncher {
 private final class BrowserHarnessApplication: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let runtime: LiveBrowserRuntime
     private var window: NSWindow?
+    private var shutdownStarted = false
+    private var shutdownFinished = false
     private let renewalStatusLabel = NSTextField(labelWithString: RenewalStatus.pending.ownerVisibleText)
+    private let proofStatusLabel = NSTextField(labelWithString: "Waiting for an app-bound return")
 
     init(configuration: LaunchConfiguration) throws {
         runtime = try LiveBrowserRuntime(
@@ -106,11 +112,14 @@ private final class BrowserHarnessApplication: NSObject, NSApplicationDelegate, 
             self?.renewalStatusLabel.stringValue = status.ownerVisibleText
             self?.renewalStatusLabel.setAccessibilityValue(status.ownerVisibleText)
         }
+        proofStatusLabel.alignment = .center
+        proofStatusLabel.setAccessibilityLabel("Proof status")
+        proofStatusLabel.setAccessibilityValue("Waiting for an app-bound return")
 
         do {
             try runtime.startOwnerOperatedRun { [weak self] browser in
                 guard let self, let window = self.window else { return }
-                let content = NSStackView(views: [browser, self.renewalStatusLabel])
+                let content = NSStackView(views: [browser, self.proofStatusLabel, self.renewalStatusLabel])
                 content.orientation = .vertical
                 content.spacing = 8
                 content.edgeInsets = NSEdgeInsets(top: 8, left: 8, bottom: 8, right: 8)
@@ -130,18 +139,44 @@ private final class BrowserHarnessApplication: NSObject, NSApplicationDelegate, 
                 NSApp.activate(ignoringOtherApps: true)
             }
         } catch {
-            NSApp.terminate(nil)
+            FileHandle.standardError.write(Data("browser startup failed\n".utf8))
+            exit(1)
         }
     }
 
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if shutdownFinished { return .terminateNow }
+        guard !shutdownStarted else { return .terminateLater }
+        shutdownStarted = true
+        proofStatusLabel.stringValue = "Verifying cleanup"
+        proofStatusLabel.setAccessibilityValue("Verifying cleanup")
+
+        Task { @MainActor [weak self] in
+            guard let self else {
+                sender.reply(toApplicationShouldTerminate: false)
+                return
+            }
+            let proof = await runtime.cleanUp()
+            guard proof == .verified else {
+                shutdownStarted = false
+                proofStatusLabel.stringValue = "Cleanup failed — window remains open"
+                proofStatusLabel.setAccessibilityValue("Cleanup failed")
+                sender.reply(toApplicationShouldTerminate: false)
+                return
+            }
+            shutdownFinished = true
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
-        _ = runtime.cancel()
         window?.contentView = nil
         window = nil
     }
 
-    func windowWillClose(_ notification: Notification) {
-        _ = runtime.cancel()
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
         NSApp.terminate(nil)
+        return false
     }
 }

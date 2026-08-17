@@ -16,6 +16,10 @@ func browserConstructionRequiresExactApproval() throws {
     #expect(session.state == .awaitingOwnerStart)
     #expect(session.observedEvent(for: URL(string: "https://www.siriusxm.com/library")!) == .ordinaryFirstPartyNavigation)
     #expect(session.observedEvent(for: URL(string: "siriusmac-auth://browser-return")!) == .matchedAppBoundReturn)
+    #expect(session.observedEvent(for: URL(string: "siriusmac-auth://browser-return?code=secret")!) == .terminal(.unexpectedNavigation))
+    #expect(session.observedEvent(for: URL(string: "siriusmac-auth://browser-return#fragment")!) == .terminal(.unexpectedNavigation))
+    #expect(session.observedEvent(for: URL(string: "siriusmac-auth://user@browser-return")!) == .terminal(.unexpectedNavigation))
+    #expect(session.observedEvent(for: URL(string: "siriusmac-auth://browser-return")!, isMainFrame: false) == .terminal(.unexpectedNavigation))
     #expect(session.observedEvent(for: URL(string: "https://example.invalid/")!) == .terminal(.offProvenanceNavigation))
 
     var changed = contract

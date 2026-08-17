@@ -49,7 +49,7 @@ public enum RenewalObservation: Equatable, Sendable {
 public final class RenewalObserver {
     private let eligibility: BrowserProofEligibility
     private let verifyAuthenticatedReplacement: () -> Bool
-    private var terminalProof: RenewalProof?
+    private var resolvedProof: RenewalProof?
 
     public init(
         eligibility: BrowserProofEligibility,
@@ -61,23 +61,22 @@ public final class RenewalObserver {
 
     public func observe(_ observation: RenewalObservation) -> RenewalProof {
         guard eligibility.permitsVolatileWork else { return .notApplicable }
-        if let terminalProof { return terminalProof }
+        if let resolvedProof { return resolvedProof }
 
         switch observation {
         case .ordinaryProviderReplacement:
-            return verifyAuthenticatedReplacement() ? .renewed : closeTerminal(.ambiguous)
+            return close(verifyAuthenticatedReplacement() ? .renewed : .terminal(.ambiguous))
         case .ownerEnded:
-            return .renewalPending
+            return close(.renewalPending)
         case .protectedBehavior:
-            return closeTerminal(.protectedControl)
+            return close(.terminal(.protectedControl))
         case .ambiguous:
-            return closeTerminal(.ambiguous)
+            return close(.terminal(.ambiguous))
         }
     }
 
-    private func closeTerminal(_ reason: SafeTerminalReason) -> RenewalProof {
-        let proof = RenewalProof.terminal(reason)
-        terminalProof = proof
+    private func close(_ proof: RenewalProof) -> RenewalProof {
+        resolvedProof = proof
         return proof
     }
 }

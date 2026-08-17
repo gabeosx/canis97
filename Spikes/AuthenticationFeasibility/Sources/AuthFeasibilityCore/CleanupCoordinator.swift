@@ -25,6 +25,7 @@ public protocol VolatileCleanupParticipant: AnyObject {
 public final class CleanupCoordinator {
     private let participant: any VolatileCleanupParticipant
     private var proof: CleanupProof?
+    private var inFlight: Task<CleanupProof, Never>?
 
     public init(participant: any VolatileCleanupParticipant) {
         self.participant = participant
@@ -32,22 +33,27 @@ public final class CleanupCoordinator {
 
     public func cleanUp() async -> CleanupProof {
         if let proof { return proof }
+        if let inFlight { return await inFlight.value }
 
-        for step in [
-            CleanupStep.signOut,
-            .cancelEphemeralClient,
-            .tearDownBrowser,
-            .tearDownPlayback,
-            .clearVolatileState,
-            .verifyLocalAbsence,
-        ] {
-            guard await participant.perform(step) else {
-                proof = .failed
-                return .failed
+        let participant = self.participant
+        let task = Task { @MainActor in
+            for step in [
+                CleanupStep.signOut,
+                .cancelEphemeralClient,
+                .tearDownBrowser,
+                .tearDownPlayback,
+                .clearVolatileState,
+                .verifyLocalAbsence,
+            ] {
+                guard await participant.perform(step) else { return CleanupProof.failed }
             }
+            return CleanupProof.verified
         }
-        proof = .verified
-        return .verified
+        inFlight = task
+        let result = await task.value
+        proof = result
+        inFlight = nil
+        return result
     }
 }
 

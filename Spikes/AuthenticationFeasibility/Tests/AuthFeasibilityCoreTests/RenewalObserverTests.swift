@@ -24,10 +24,15 @@ func renewalRequiresVerifiedReplacement() {
 
 @Test("owner-ended renewal observation remains pending and never becomes a terminal decision")
 func ownerEndedObservationIsRenewalPending() {
-    let observer = RenewalObserver(eligibility: .qualified) { true }
+    var verificationCount = 0
+    let observer = RenewalObserver(eligibility: .qualified) {
+        verificationCount += 1
+        return true
+    }
 
     #expect(observer.observe(.ownerEnded) == .renewalPending)
-    #expect(observer.observe(.ownerEnded) == .renewalPending)
+    #expect(observer.observe(.ordinaryProviderReplacement) == .renewalPending)
+    #expect(verificationCount == 0)
 }
 
 @Test("owner renewal status has only closed non-secret labels")

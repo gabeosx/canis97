@@ -110,7 +110,7 @@ func validateSupersessionForFinalization(_ text: String) throws {
         "Post-finalization authority: newly-byte-derived-and-validated-canonical-quartet",
         "",
     ].joined(separator: "\n")
-    guard text.hasPrefix(expected) else { throw RunnerError.failed }
+    guard text == expected else { throw RunnerError.failed }
 }
 
 func finalizePhase(_ arguments: Arguments) throws {

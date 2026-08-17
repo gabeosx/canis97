@@ -49,6 +49,8 @@ public final class WebLoginSession: NSObject, WKNavigationDelegate {
 
     public private(set) var state: WebLoginSessionState = .awaitingOwnerStart
 
+    var hasVolatileBrowserState: Bool { webView != nil || returnHandler != nil || terminalHandler != nil }
+
     private var webView: WKWebView?
     private var returnHandler: ((AppBoundReturnResult) -> Void)?
     private var terminalHandler: ((BrowserTerminalReason) -> Void)?
@@ -85,9 +87,9 @@ public final class WebLoginSession: NSObject, WKNavigationDelegate {
 
     /// This is a policy classifier, not a browser-state query. It has no access to cookies,
     /// storage, profiles, credentials, scripts, developer tools, or accessibility data.
-    public func observedEvent(for url: URL) -> BrowserObservation {
+    public func observedEvent(for url: URL, isMainFrame: Bool = true) -> BrowserObservation {
         if Self.isAppBoundReturn(url) {
-            return .matchedAppBoundReturn
+            return isMainFrame ? .matchedAppBoundReturn : .terminal(.unexpectedNavigation)
         }
         guard url.scheme == "https", let host = url.host?.lowercased() else {
             return .terminal(.unexpectedNavigation)
@@ -123,7 +125,7 @@ public final class WebLoginSession: NSObject, WKNavigationDelegate {
             return
         }
 
-        switch observedEvent(for: url) {
+        switch observedEvent(for: url, isMainFrame: navigationAction.targetFrame?.isMainFrame == true) {
         case .ordinaryFirstPartyNavigation:
             decisionHandler(.allow)
         case .matchedAppBoundReturn:
@@ -156,6 +158,7 @@ public final class WebLoginSession: NSObject, WKNavigationDelegate {
             (url.path.isEmpty || url.path == "/") &&
             url.user == nil &&
             url.password == nil &&
+            url.query == nil &&
             url.fragment == nil
     }
 }

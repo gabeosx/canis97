@@ -11,7 +11,10 @@ public final class LiveBrowserRuntime {
     private var preflight = BrowserProofPreflight()
     private var proofEvents: [SafeProbeEvent] = []
     private lazy var cleanupCoordinator = CleanupCoordinator(
-        participant: BrowserRuntimeCleanupParticipant(webLoginSession: webLoginSession)
+        participant: BrowserRuntimeCleanupParticipant(
+            webLoginSession: webLoginSession,
+            semanticClient: semanticClient
+        )
     )
 
     public init(contract: AuthExperimentContract, approval: ExperimentApproval) throws {
@@ -135,19 +138,34 @@ public final class LiveBrowserRuntime {
 @MainActor
 private final class BrowserRuntimeCleanupParticipant: VolatileCleanupParticipant {
     private let webLoginSession: WebLoginSession
+    private let semanticClient: SemanticProofClient
 
-    init(webLoginSession: WebLoginSession) {
+    init(webLoginSession: WebLoginSession, semanticClient: SemanticProofClient) {
         self.webLoginSession = webLoginSession
+        self.semanticClient = semanticClient
     }
 
     func perform(_ step: CleanupStep) async -> Bool {
         switch step {
+        case .signOut:
+            guard semanticClient.canSignOutSafely else { return true }
+            return semanticClient.signOut() == .signedOut
+        case .cancelEphemeralClient:
+            if !semanticClient.isClosed { _ = semanticClient.cancel() }
+            return semanticClient.isClosed
         case .tearDownBrowser:
             webLoginSession.stop()
-        case .signOut, .cancelEphemeralClient, .tearDownPlayback, .clearVolatileState, .verifyLocalAbsence:
-            break
+            return !webLoginSession.hasVolatileBrowserState
+        case .tearDownPlayback:
+            // This browser runtime has no playback object. Absence is the verified state.
+            return true
+        case .clearVolatileState:
+            webLoginSession.stop()
+            if !semanticClient.isClosed { _ = semanticClient.cancel() }
+            return !webLoginSession.hasVolatileBrowserState && semanticClient.isClosed
+        case .verifyLocalAbsence:
+            return !webLoginSession.hasVolatileBrowserState && semanticClient.isClosed
         }
-        return true
     }
 }
 

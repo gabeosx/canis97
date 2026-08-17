@@ -40,7 +40,7 @@ public enum PlaybackProof: Equatable, Sendable {
 /// must clear all state when asked.
 @MainActor
 public protocol AuthorizedPlaybackRuntime: AnyObject {
-    func prepareExpectedAuthorization() -> PlaybackReadiness
+    func prepareExpectedAuthorization() async -> PlaybackReadiness
     func clearVolatileState()
 }
 
@@ -56,17 +56,30 @@ public final class AVContentKeyPlaybackRuntime: AuthorizedPlaybackRuntime {
         self.asset = asset
     }
 
-    public func prepareExpectedAuthorization() -> PlaybackReadiness {
+    public func prepareExpectedAuthorization() async -> PlaybackReadiness {
         clearVolatileState()
 
-        let keySession = AVContentKeySession(keySystem: .fairPlayStreaming)
-        keySession.addContentKeyRecipient(asset)
-        let item = AVPlayerItem(asset: asset)
-        let player = AVPlayer(playerItem: item)
+        do {
+            guard try await asset.load(.isPlayable) else { return .failed(.unknown) }
 
-        contentKeySession = keySession
-        self.player = player
-        return player.currentItem == nil ? .failed(.unknown) : .ready
+            let keySession = AVContentKeySession(keySystem: .fairPlayStreaming)
+            keySession.addContentKeyRecipient(asset)
+            let item = AVPlayerItem(asset: asset)
+            let player = AVPlayer(playerItem: item)
+
+            contentKeySession = keySession
+            self.player = player
+            player.play()
+
+            for _ in 0..<50 {
+                if item.status == .failed { return .failed(.protectedControl) }
+                if player.timeControlStatus == .playing { return .ready }
+                try await Task.sleep(for: .milliseconds(100))
+            }
+            return .failed(.unknown)
+        } catch {
+            return .failed(.unknown)
+        }
     }
 
     public func clearVolatileState() {
@@ -84,7 +97,7 @@ public final class AVContentKeyPlaybackRuntime: AuthorizedPlaybackRuntime {
 public final class AuthorizedPlaybackProbe {
     private let eligibility: BrowserProofEligibility
     private let runtime: any AuthorizedPlaybackRuntime
-    private var terminalProof: PlaybackProof?
+    private var resolvedProof: PlaybackProof?
 
     public init(eligibility: BrowserProofEligibility, runtime: any AuthorizedPlaybackRuntime) {
         self.eligibility = eligibility
@@ -94,27 +107,26 @@ public final class AuthorizedPlaybackProbe {
     public func prove(
         expectedAuthorization: ExpectedAuthorization,
         ownerConfirmation: OwnerAudibleConfirmation
-    ) -> PlaybackProof {
+    ) async -> PlaybackProof {
         guard eligibility.permitsVolatileWork else { return .notApplicable }
-        if let terminalProof { return terminalProof }
+        if let resolvedProof { return resolvedProof }
         guard expectedAuthorization == .expected else {
-            return closeTerminal(.protectedControl)
+            return close(.terminal(.protectedControl))
         }
 
-        let readiness = runtime.prepareExpectedAuthorization()
+        let readiness = await runtime.prepareExpectedAuthorization()
         switch readiness {
         case .ready:
             runtime.clearVolatileState()
-            return ownerConfirmation == .audible ? .authorizedAndAudible : .incomplete
+            return close(ownerConfirmation == .audible ? .authorizedAndAudible : .incomplete)
         case let .failed(reason):
             runtime.clearVolatileState()
-            return closeTerminal(reason)
+            return close(.terminal(reason))
         }
     }
 
-    private func closeTerminal(_ reason: SafeTerminalReason) -> PlaybackProof {
-        let proof = PlaybackProof.terminal(reason)
-        terminalProof = proof
+    private func close(_ proof: PlaybackProof) -> PlaybackProof {
+        resolvedProof = proof
         return proof
     }
 }

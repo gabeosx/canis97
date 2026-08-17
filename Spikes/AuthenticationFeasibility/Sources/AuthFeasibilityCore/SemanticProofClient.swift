@@ -33,6 +33,7 @@ public final class EphemeralSiriusXMProbeClient {
             (url.path.isEmpty || url.path == "/") &&
             url.user == nil &&
             url.password == nil &&
+            url.query == nil &&
             url.fragment == nil
     }
 }
@@ -57,6 +58,11 @@ public final class SemanticProofClient {
 
     public var isClosed: Bool {
         if case .closed = state { return true }
+        return false
+    }
+
+    public var canSignOutSafely: Bool {
+        if case .entitled = state { return true }
         return false
     }
 
