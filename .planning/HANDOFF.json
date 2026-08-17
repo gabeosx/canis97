@@ -1,0 +1,101 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-08-17T14:20:29.787Z",
+  "phase": "00",
+  "phase_name": "authentication-feasibility-gate",
+  "phase_dir": ".planning/phases/00-authentication-feasibility-gate",
+  "plan": 4,
+  "task": 3,
+  "total_tasks": 3,
+  "status": "paused",
+  "completed_tasks": [
+    {
+      "id": 1,
+      "name": "Execute original documentation-only Phase 0 plans",
+      "status": "done",
+      "commit": "614a9b8"
+    },
+    {
+      "id": 2,
+      "name": "Verify original Phase 0 implementation",
+      "status": "done",
+      "commit": "4033118"
+    },
+    {
+      "id": 3,
+      "name": "Perform owner-authorized empirical SiriusXM authentication capture and native replay",
+      "status": "done",
+      "progress": "Captured the login/session/playback protocol, proved the issued access token works from an honest native-style client, closed the dedicated browser, and deleted all raw secret-bearing artifacts."
+    }
+  ],
+  "remaining_tasks": [
+    {
+      "id": 4,
+      "name": "Re-discuss Phase 0 using the empirical findings and supersede the documentation-only premise",
+      "status": "not_started"
+    },
+    {
+      "id": 5,
+      "name": "Plan a disposable native WKWebView authentication and session-handoff proof",
+      "status": "not_started"
+    },
+    {
+      "id": 6,
+      "name": "Execute two owner-operated WKWebView proof runs, or select native-direct only if WKWebView is genuinely unsupported",
+      "status": "not_started"
+    },
+    {
+      "id": 7,
+      "name": "Reconcile Phase 1 plans with the single proven authentication path",
+      "status": "not_started"
+    }
+  ],
+  "blockers": [
+    {
+      "description": "Phase 0 was planned around public documentation even though SiriusXM intentionally publishes no third-party authentication contract; its NO-GO conclusion does not answer the project question.",
+      "type": "technical",
+      "workaround": "Supersede the old evidence premise with the completed owner-authorized empirical capture and a real WKWebView proof."
+    },
+    {
+      "description": "Chromium login plus native token replay proves session portability but does not prove SiriusXM accepts the actual macOS WKWebView runtime.",
+      "type": "human_action",
+      "workaround": "Build a disposable WKWebView POC and ask the account owner to complete the login manually when it is ready."
+    }
+  ],
+  "async_jobs": [],
+  "human_actions_pending": [
+    {
+      "action": "Complete two manual SiriusXM logins inside the disposable native WKWebView POC when prompted.",
+      "context": "The account owner must operate authentication; automation must not enter credentials, handle challenges, or evade bot controls.",
+      "blocking": true
+    }
+  ],
+  "decisions": [
+    {
+      "decision": "The prior Phase 0 NO-GO is superseded and must not gate the project.",
+      "rationale": "It was derived from an incorrect public-documentation-only premise and never tested the intended owner-operated browser or native flows.",
+      "phase": "00"
+    },
+    {
+      "decision": "Prefer a purpose-scoped WKWebView login followed by native URLSession requests if the real WKWebView proof succeeds.",
+      "rationale": "The browser-issued session is portable to an honest native client, and this path avoids exposing the subscriber password to Sirius Mac.",
+      "phase": "00"
+    },
+    {
+      "decision": "Use native-direct password authentication only if the real WKWebView flow is unsupported.",
+      "rationale": "Direct authentication is empirically viable, but the project will implement only one sign-in path and should minimize credential handling.",
+      "phase": "00"
+    },
+    {
+      "decision": "Retain only sanitized protocol metadata; never persist raw HAR, cookies, tokens, authorization headers, response bodies, stream URLs, playback keys, or credentials.",
+      "rationale": "The capture contains reusable account secrets and is unnecessary after the protocol shape is understood.",
+      "phase": "00"
+    }
+  ],
+  "uncommitted_files": [
+    ".planning/config.json (pre-existing workflow-state change; exclude from handoff commit)",
+    ".gsd/ (pre-existing untracked workflow data; exclude from handoff commit)"
+  ],
+  "next_action": "Run $gsd-resume-work, acknowledge the blocking constraints, then run $gsd-discuss-phase 0 to replace the documentation-only Phase 0 premise before replanning.",
+  "context_notes": "Empirical findings: POST device/v2/devices; POST session/v1/sessions/anonymous; GET identity/v1/identities/status; POST identity/v1/identities/authenticate/password with handle/password; POST session/v1/sessions/authenticated; Bearer-authenticated account/profile/subscription APIs; POST playback/play/v1/tuneSource; Bearer-authenticated playback key retrieval. A captured authenticated access token returned HTTP 200 from a standalone native-style request using an honest SiriusMacAuthPOC user agent, and native tuneSource, master manifest, child manifest, and key-document retrieval succeeded. SiriusXM stores AUTH_TOKEN, DEVICE_GRANT, and LOGICAL_CLOCK as first-party JavaScript-readable cookies, making WKHTTPCookieStore handoff plausible. Unknowns: actual WKWebView compatibility, session refresh-token mechanics, and AVFoundation handling of the authenticated AES-128 key URI. The dedicated browser was closed and every /private/tmp/sxm-* raw artifact was deleted."
+}
