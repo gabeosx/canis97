@@ -158,18 +158,35 @@ func recordBrowserRenewalPending(_ arguments: Arguments) throws {
 }
 
 func validateNativeApproval(_ arguments: Arguments) throws {
-    guard arguments.contains("--owner-approved") else { throw RunnerError.invalidArguments }
-    let contract = try AuthExperimentContract.parse(readArtifact(try arguments.value(named: "--contract")))
-    let ruleOut = try EvidenceRecord.parse(readArtifact(try arguments.value(named: "--rule-out")))
-    let nativePurpose = try readArtifact(try arguments.value(named: "--native-purpose"))
-    try contract.native.validate()
-    guard nativePurpose == contract.canonicalText,
-          ruleOut.browser == .ruledOut,
-          ruleOut.native != .complete,
-          ruleOut.candidateCount == 0 else {
-        throw RunnerError.failed
+    if arguments.values.count == 3 {
+        try validateNativeLaunchGate(arguments)
+    } else {
+        guard arguments.contains("--owner-approved") else { throw RunnerError.invalidArguments }
+        let contract = try AuthExperimentContract.parse(readArtifact(try arguments.value(named: "--contract")))
+        let ruleOut = try EvidenceRecord.parse(readArtifact(try arguments.value(named: "--rule-out")))
+        let nativePurpose = try readArtifact(try arguments.value(named: "--native-purpose"))
+        try contract.native.validate()
+        guard nativePurpose == contract.canonicalText,
+              ruleOut.browser == .ruledOut,
+              ruleOut.native != .complete,
+              ruleOut.candidateCount == 0 else {
+            throw RunnerError.failed
+        }
+        FileHandle.standardOutput.write(Data("valid\n".utf8))
     }
-    FileHandle.standardOutput.write(Data("valid\n".utf8))
+}
+
+func validateNativeLaunchGate(_ arguments: Arguments) throws {
+    let contract = try AuthExperimentContract.parse(readArtifact(try arguments.positional(0)))
+    let browserProbe = try BrowserProbeResult.parse(readArtifact(try arguments.positional(1)))
+    let nativeApproval = try NativeDirectApproval.parse(readArtifact(try arguments.positional(2)))
+    _ = try NativeLaunchGate.evaluate(
+        toolchainArtifact: ToolchainGate.artifact(for: .currentSDKReady),
+        contract: contract,
+        browserProbe: browserProbe,
+        nativeApproval: nativeApproval
+    )
+    FileHandle.standardOutput.write(Data("not-applicable\n".utf8))
 }
 
 func run() throws {
@@ -201,6 +218,8 @@ func run() throws {
         } else {
             try validateNativeApproval(parsed)
         }
+    case "validate-native-launch-gate":
+        try validateNativeLaunchGate(parsed)
     case "validate-evidence":
         _ = try EvidenceRecord.parse(readArtifact(try parsed.positional(0)))
     case "derive-selection":

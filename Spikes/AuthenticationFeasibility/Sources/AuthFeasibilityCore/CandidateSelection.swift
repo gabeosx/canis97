@@ -74,6 +74,29 @@ public enum NativeRuntimeSelection: String, Equatable, Sendable {
     case notEligible = "not-eligible"
 }
 
+/// Resolves the native-direct boundary from canonical, secret-free artifacts.
+/// The current branch has a renewal-pending browser outcome, so it can only
+/// produce `notApplicable`; it never creates a second live-path selection.
+public enum NativeLaunchGate: Equatable, Sendable {
+    case notApplicable
+
+    public static func evaluate(
+        toolchainArtifact: String,
+        contract: AuthExperimentContract,
+        browserProbe: BrowserProbeResult,
+        nativeApproval: NativeDirectApproval
+    ) throws -> NativeLaunchGate {
+        guard toolchainArtifact == ToolchainGate.artifact(for: .currentSDKReady),
+              browserProbe == .renewalPending,
+              nativeApproval == .notApplicable else {
+            throw ContractError.invalidArtifact
+        }
+
+        try contract.validate()
+        return .notApplicable
+    }
+}
+
 public struct CandidateLatch: Sendable {
     public private(set) var selectedPath: CandidatePath?
 
