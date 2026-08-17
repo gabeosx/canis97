@@ -59,7 +59,7 @@ func evidenceRevisionTwoFailsClosed() {
 }
 
 @Test("GO cannot derive from unvalidated evidence or from two runs without renewal proof")
-func decisionDerivationRequiresValidatedEmpiricalProof() {
+func decisionDerivationRequiresValidatedEmpiricalProof() throws {
     let invalidEvidence = EvidenceRecord(
         revision: "offline-tracer-v1",
         roundedDate: "2026-02-30",
@@ -68,7 +68,7 @@ func decisionDerivationRequiresValidatedEmpiricalProof() {
         native: .unavailable,
         candidateCount: 1
     )
-    let invalidSelection = CandidateSelection.derive(invalidEvidence)
+    let invalidSelection = Selection(path: .browserReturn, evidenceRevision: invalidEvidence.revision)
     let invalidOwner = OwnerResult(
         evidenceRevision: invalidEvidence.revision,
         selectedPath: .browserReturn,
@@ -88,7 +88,7 @@ func decisionDerivationRequiresValidatedEmpiricalProof() {
         native: .unavailable,
         candidateCount: 1
     )
-    let validSelection = CandidateSelection.derive(validEvidence)
+    let validSelection = try CandidateSelection.derive(validEvidence)
     let noRenewal = OwnerResult(
         evidenceRevision: validEvidence.revision,
         selectedPath: .browserReturn,
@@ -103,7 +103,7 @@ func decisionDerivationRequiresValidatedEmpiricalProof() {
 
 @Test("decision artifacts accept one exact decision and compatible continuation")
 func decisionSchemaIsStrict() throws {
-    let valid = Decision(.unsupported, evidenceRevision: "offline-tracer-v1", selectedPath: .unsupported).canonicalText
+    let valid = Decision(.unsupported, evidenceRevision: "empirical-proof-v2", selectedPath: .unsupported).canonicalText
     #expect(try Decision.parse(valid).continuation == .blocked)
 
     let duplicate = valid.replacingOccurrences(of: "Phase 1 continuation: blocked\n", with: "Phase 1 continuation: blocked\nPhase 1 continuation: blocked\n")

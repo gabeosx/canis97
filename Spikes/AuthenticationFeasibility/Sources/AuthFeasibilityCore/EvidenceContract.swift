@@ -43,7 +43,7 @@ public struct Decision: Equatable, Sendable {
 
     public var canonicalText: String {
         [
-            "Schema: decision-v1",
+            "Schema: decision-v2",
             "Evidence revision: \(evidenceRevision)",
             "Selected path: \(selectedPath.rawValue)",
             "Feasibility decision: \(value)",
@@ -53,11 +53,11 @@ public struct Decision: Equatable, Sendable {
     }
 
     public static func parse(_ text: String) throws -> Decision {
-        let fields = try ArtifactFields.parse(text, allowed: [
+        let fields = try ArtifactFields.parse(text, ordered: [
             "Schema", "Evidence revision", "Selected path", "Feasibility decision", "Phase 1 continuation",
         ])
-        guard fields["Schema"] == "decision-v1",
-              let revision = fields["Evidence revision"], ArtifactFields.isOpaque(revision),
+        guard fields["Schema"] == "decision-v2",
+              let revision = fields["Evidence revision"], ArtifactFields.isRevisionTwo(revision),
               let pathValue = fields["Selected path"], let path = CandidatePath(rawValue: pathValue),
               let decisionValue = fields["Feasibility decision"], let decision = FeasibilityDecision(rawValue: decisionValue),
               let continuationValue = fields["Phase 1 continuation"], let continuation = Continuation(rawValue: continuationValue),
@@ -65,7 +65,9 @@ public struct Decision: Equatable, Sendable {
               decisionPath(decision) == path else {
             throw ContractError.invalidArtifact
         }
-        return Decision(decision, evidenceRevision: revision, selectedPath: path)
+        let parsed = Decision(decision, evidenceRevision: revision, selectedPath: path)
+        guard parsed.canonicalText == text else { throw ContractError.invalidArtifact }
+        return parsed
     }
 
     private static func decisionPath(_ decision: FeasibilityDecision) -> CandidatePath {
@@ -122,7 +124,7 @@ public struct EvidenceRecord: Equatable, Sendable {
 
     public static func canonicalUnsupported(reason: ClosureReason) -> EvidenceRecord {
         EvidenceRecord(
-            revision: "offline-tracer-v1",
+            revision: "phase-0-empirical-v2",
             roundedDate: "1970-01-01",
             browser: .unavailable,
             native: .unavailable,
@@ -133,7 +135,7 @@ public struct EvidenceRecord: Equatable, Sendable {
 
     public var canonicalText: String {
         [
-            "Schema: evidence-v1",
+            "Schema: evidence-v2",
             "Harness revision: \(revision)",
             "Rounded date: \(roundedDate)",
             "Browser return: \(browser.rawValue)",
@@ -147,11 +149,11 @@ public struct EvidenceRecord: Equatable, Sendable {
     }
 
     public static func parse(_ text: String, firstPartyHost: String = "siriusxm.com") throws -> EvidenceRecord {
-        let fields = try ArtifactFields.parse(text, allowed: [
+        let fields = try ArtifactFields.parse(text, ordered: [
             "Schema", "Harness revision", "Rounded date", "Browser return", "Browser reference", "Native direct", "Native reference", "Candidate count", "Closure reason",
         ])
-        guard fields["Schema"] == "evidence-v1",
-              let revision = fields["Harness revision"], ArtifactFields.isOpaque(revision),
+        guard fields["Schema"] == "evidence-v2",
+              let revision = fields["Harness revision"], ArtifactFields.isRevisionTwo(revision),
               let date = fields["Rounded date"], ArtifactFields.isRoundedDate(date),
               let browserValue = fields["Browser return"], let browser = EvidenceState(rawValue: browserValue),
               let browserReference = fields["Browser reference"],
@@ -173,13 +175,20 @@ public struct EvidenceRecord: Equatable, Sendable {
             closureReason: closeValue
         )
         try record.validate(firstPartyHost: firstPartyHost)
+        guard record.canonicalText == text else { throw ContractError.invalidArtifact }
         return record
     }
 
     public func validate(firstPartyHost: String = "siriusxm.com") throws {
-        guard ArtifactFields.isOpaque(revision), ArtifactFields.isRoundedDate(roundedDate),
+        guard ArtifactFields.isRevisionTwo(revision), ArtifactFields.isRoundedDate(roundedDate),
               ArtifactFields.isClosureReasonOrNone(closureReason), (0...1).contains(candidateCount) else {
             throw ContractError.invalidArtifact
+        }
+
+        if closureReason != "none" {
+            guard candidateCount == 0, browser != .complete, native != .complete else {
+                throw ContractError.invalidArtifact
+            }
         }
 
         switch browser {
@@ -209,25 +218,25 @@ public struct EvidenceRecord: Equatable, Sendable {
 }
 
 enum ArtifactFields {
-    static func parse(_ text: String, allowed: Set<String>) throws -> [String: String] {
+    static func parse(_ text: String, ordered: [String]) throws -> [String: String] {
         guard text.hasSuffix("\n") else { throw ContractError.invalidArtifact }
         var fields: [String: String] = [:]
         let lines = text.dropLast().split(separator: "\n", omittingEmptySubsequences: false)
-        guard !lines.isEmpty else { throw ContractError.invalidArtifact }
-        for line in lines {
+        guard lines.count == ordered.count else { throw ContractError.invalidArtifact }
+        for (line, expectedKey) in zip(lines, ordered) {
             guard !line.isEmpty, let separator = line.firstIndex(of: ":") else {
                 throw ContractError.invalidArtifact
             }
             let key = String(line[..<separator])
             let valueStart = line.index(after: separator)
-            guard line.indices.contains(valueStart), line[valueStart] == " ", allowed.contains(key) else {
+            guard line.indices.contains(valueStart), line[valueStart] == " ", key == expectedKey else {
                 throw ContractError.invalidArtifact
             }
             let value = String(line[line.index(after: valueStart)...])
             guard !value.isEmpty, fields[key] == nil else { throw ContractError.invalidArtifact }
             fields[key] = value
         }
-        guard Set(fields.keys) == allowed else { throw ContractError.invalidArtifact }
+        guard fields.count == ordered.count else { throw ContractError.invalidArtifact }
         return fields
     }
 
@@ -237,11 +246,18 @@ enum ArtifactFields {
     }
 
     static func isRoundedDate(_ value: String) -> Bool {
-        guard value.count == 10 else { return false }
-        let characters = Array(value)
-        return characters.enumerated().allSatisfy { index, character in
-            (index == 4 || index == 7) ? character == "-" : character.isNumber
-        }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.isLenient = false
+        guard let date = formatter.date(from: value) else { return false }
+        return formatter.string(from: date) == value
+    }
+
+    static func isRevisionTwo(_ value: String) -> Bool {
+        isOpaque(value) && value.hasSuffix("-v2")
     }
 
     static func isClosureReasonOrNone(_ value: String) -> Bool {

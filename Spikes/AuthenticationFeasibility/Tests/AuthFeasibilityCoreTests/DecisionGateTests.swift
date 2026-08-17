@@ -4,31 +4,33 @@ import Testing
 @Test("only two ordered same-path complete proof runs unlock a decision")
 func exactTwoRunProofIsRequired() throws {
     let evidence = EvidenceRecord(
-        revision: "offline-tracer-v1",
+        revision: "empirical-proof-v2",
         roundedDate: "1970-01-01",
         browser: .complete,
-        browserReference: "synthetic-reference",
+        browserReference: "https://www.siriusxm.com",
         native: .unavailable,
         candidateCount: 1
     )
-    let selection = CandidateSelection.derive(evidence)
+    let selection = try CandidateSelection.derive(evidence)
     #expect(selection.path == .browserReturn)
 
-    let oneStop = OwnerResult(
+    let incomplete = OwnerResult(
         evidenceRevision: evidence.revision,
         selectedPath: .browserReturn,
-        runs: [ProofRun(label: "run-1", path: .browserReturn, outcome: .challenge)],
-        cooldown: "not-applicable"
+        runs: [
+            ProofRun.complete(label: "run-1", path: .browserReturn, renewed: false),
+            ProofRun.complete(label: "run-2", path: .browserReturn, renewed: false),
+        ],
+        cooldown: "owner-confirmed"
     )
-    let blocked = try DecisionGate.derive(evidence: evidence, selection: selection, ownerResult: oneStop)
-    #expect(blocked.value == "NO-GO unsupported")
+    #expect(isInvalid { try DecisionGate.derive(evidence: evidence, selection: selection, ownerResult: incomplete) })
 
     let complete = OwnerResult(
         evidenceRevision: evidence.revision,
         selectedPath: .browserReturn,
         runs: [
-            ProofRun(label: "run-1", path: .browserReturn, outcome: .pass),
-            ProofRun(label: "run-2", path: .browserReturn, outcome: .pass),
+            ProofRun.complete(label: "run-1", path: .browserReturn, renewed: false),
+            ProofRun.complete(label: "run-2", path: .browserReturn, renewed: true),
         ],
         cooldown: "owner-confirmed"
     )
@@ -40,8 +42,8 @@ func exactTwoRunProofIsRequired() throws {
         evidenceRevision: evidence.revision,
         selectedPath: .browserReturn,
         runs: [
-            ProofRun(label: "run-2", path: .browserReturn, outcome: .pass),
-            ProofRun(label: "run-1", path: .nativeDirect, outcome: .pass),
+            ProofRun.complete(label: "run-2", path: .browserReturn, renewed: false),
+            ProofRun.complete(label: "run-1", path: .nativeDirect, renewed: true),
         ],
         cooldown: "not-applicable"
     )

@@ -13,7 +13,7 @@ public struct Selection: Equatable, Sendable {
 
     public var canonicalText: String {
         [
-            "Schema: selection-v1",
+            "Schema: selection-v2",
             "Evidence revision: \(evidenceRevision)",
             "Selected candidate: \(path.rawValue)",
             "Live attempt permitted: \(liveAttemptPermitted)",
@@ -22,21 +22,24 @@ public struct Selection: Equatable, Sendable {
     }
 
     public static func parse(_ text: String) throws -> Selection {
-        let fields = try ArtifactFields.parse(text, allowed: [
+        let fields = try ArtifactFields.parse(text, ordered: [
             "Schema", "Evidence revision", "Selected candidate", "Live attempt permitted",
         ])
-        guard fields["Schema"] == "selection-v1",
-              let revision = fields["Evidence revision"], ArtifactFields.isOpaque(revision),
+        guard fields["Schema"] == "selection-v2",
+              let revision = fields["Evidence revision"], ArtifactFields.isRevisionTwo(revision),
               let value = fields["Selected candidate"], let path = CandidatePath(rawValue: value),
               fields["Live attempt permitted"] == (path == .unsupported ? "prohibited" : "owner-only") else {
             throw ContractError.invalidArtifact
         }
-        return Selection(path: path, evidenceRevision: revision)
+        let parsed = Selection(path: path, evidenceRevision: revision)
+        guard parsed.canonicalText == text else { throw ContractError.invalidArtifact }
+        return parsed
     }
 }
 
 public enum CandidateSelection {
-    public static func derive(_ evidence: EvidenceRecord) -> Selection {
+    public static func derive(_ evidence: EvidenceRecord) throws -> Selection {
+        try evidence.validate()
         let path: CandidatePath
         if evidence.candidateCount != 1 {
             path = .unsupported
@@ -51,7 +54,8 @@ public enum CandidateSelection {
     }
 
     public static func validate(_ selection: Selection, against evidence: EvidenceRecord) throws {
-        guard selection == derive(evidence) else { throw ContractError.invalidArtifact }
+        let derived = try derive(evidence)
+        guard selection == derived else { throw ContractError.invalidArtifact }
     }
 }
 
@@ -60,9 +64,9 @@ public struct CandidateLatch: Sendable {
 
     public init() {}
 
-    public mutating func latch(_ evidence: EvidenceRecord) -> CandidatePath {
+    public mutating func latch(_ evidence: EvidenceRecord) throws -> CandidatePath {
         guard selectedPath == nil else { return .unsupported }
-        let selected = CandidateSelection.derive(evidence).path
+        let selected = try CandidateSelection.derive(evidence).path
         selectedPath = selected
         return selected
     }

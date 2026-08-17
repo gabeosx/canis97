@@ -65,6 +65,34 @@ func closeUnsupported(_ arguments: Arguments) throws {
     for (temporary, target) in zip(temporaryURLs, targets) {
         try replace(temporary, target: target)
     }
+    FileHandle.standardOutput.write(Data("closed\n".utf8))
+}
+
+func validateBundle(_ arguments: Arguments) throws {
+    let bundle = ArtifactBundle(
+        evidence: try readArtifact(try arguments.positional(0)),
+        selection: try readArtifact(try arguments.positional(1)),
+        ownerResult: try readArtifact(try arguments.positional(2)),
+        decision: try readArtifact(try arguments.positional(3))
+    )
+    try bundle.validate()
+    FileHandle.standardOutput.write(Data("valid\n".utf8))
+}
+
+func requirePhaseOneGo(_ arguments: Arguments) throws {
+    let bundle = ArtifactBundle(
+        evidence: try readArtifact(try arguments.positional(0)),
+        selection: try readArtifact(try arguments.positional(1)),
+        ownerResult: try readArtifact(try arguments.positional(2)),
+        decision: try readArtifact(try arguments.positional(3))
+    )
+    try bundle.validate()
+    let decision = try Decision.parse(bundle.decision)
+    guard decision.continuation == .unlocked,
+          decision.value == FeasibilityDecision.browserReturn.rawValue || decision.value == FeasibilityDecision.nativeDirect.rawValue else {
+        throw RunnerError.failed
+    }
+    FileHandle.standardOutput.write(Data("phase-one-go\n".utf8))
 }
 
 func run() throws {
@@ -92,6 +120,10 @@ func run() throws {
         _ = try Decision.parse(readArtifact(try parsed.positional(0)))
     case "close-unsupported":
         try closeUnsupported(parsed)
+    case "validate-bundle":
+        try validateBundle(parsed)
+    case "require-phase-one-go":
+        try requirePhaseOneGo(parsed)
     default:
         throw RunnerError.invalidArguments
     }

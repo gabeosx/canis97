@@ -4,25 +4,34 @@ import Testing
 @Test("candidate selection blocks zero, multiple, and native-before-rule-out evidence")
 func candidateSelectionIsBrowserFirstAndSingular() throws {
     let zero = EvidenceRecord(
-        revision: "offline-tracer-v1",
+        revision: "empirical-proof-v2",
         roundedDate: "1970-01-01",
         browser: .unavailable,
         native: .unavailable,
         candidateCount: 0
     )
-    #expect(CandidateSelection.derive(zero).path == .unsupported)
+    #expect(try CandidateSelection.derive(zero).path == .unsupported)
 
     let nativeBeforeRuleOut = EvidenceRecord(
-        revision: "offline-tracer-v1",
+        revision: "empirical-proof-v2",
         roundedDate: "1970-01-01",
         browser: .unavailable,
         native: .complete,
         nativeReference: "not-a-reference",
         candidateCount: 1
     )
-    #expect(CandidateSelection.derive(nativeBeforeRuleOut).path == .unsupported)
+    #expect(isInvalid { try CandidateSelection.derive(nativeBeforeRuleOut) })
 
     var latch = CandidateLatch()
-    #expect(latch.latch(zero) == .unsupported)
-    #expect(latch.latch(zero) == .unsupported)
+    #expect(try latch.latch(zero) == .unsupported)
+    #expect(try latch.latch(zero) == .unsupported)
+}
+
+private func isInvalid<T>(_ operation: () throws -> T) -> Bool {
+    do {
+        _ = try operation()
+        return false
+    } catch {
+        return true
+    }
 }

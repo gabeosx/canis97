@@ -38,14 +38,61 @@ public struct ProofRun: Equatable, Sendable {
     public let label: String
     public let path: CandidatePath
     public let outcome: RunOutcome
+    public let authentication: String
+    public let entitlement: String
+    public let tuneKey: String
+    public let audiblePlayback: String
+    public let signedOut: String
+    public let cleanup: String
+    public let renewal: String
 
-    public init(label: String, path: CandidatePath, outcome: RunOutcome) {
+    public init(
+        label: String,
+        path: CandidatePath,
+        outcome: RunOutcome,
+        authentication: String = "not-observed",
+        entitlement: String = "not-observed",
+        tuneKey: String = "not-observed",
+        audiblePlayback: String = "not-observed",
+        signedOut: String = "not-observed",
+        cleanup: String = "not-observed",
+        renewal: String = "not-observed"
+    ) {
         self.label = label
         self.path = path
         self.outcome = outcome
+        self.authentication = authentication
+        self.entitlement = entitlement
+        self.tuneKey = tuneKey
+        self.audiblePlayback = audiblePlayback
+        self.signedOut = signedOut
+        self.cleanup = cleanup
+        self.renewal = renewal
     }
 
-    var canonicalValue: String { "\(label)|\(path.rawValue)|\(outcome.rawValue)" }
+    public static func complete(label: String, path: CandidatePath, renewed: Bool) -> ProofRun {
+        ProofRun(
+            label: label,
+            path: path,
+            outcome: .pass,
+            authentication: "complete",
+            entitlement: "complete",
+            tuneKey: "authorized",
+            audiblePlayback: "audible",
+            signedOut: "complete",
+            cleanup: "verified",
+            renewal: renewed ? "renewed" : "not-observed"
+        )
+    }
+
+    var canonicalValue: String {
+        [label, path.rawValue, outcome.rawValue, authentication, entitlement, tuneKey, audiblePlayback, signedOut, cleanup, renewal]
+            .joined(separator: "|")
+    }
+
+    func isComplete(allowingRenewal renewalValue: String) -> Bool {
+        outcome == .pass && authentication == "complete" && entitlement == "complete" && tuneKey == "authorized" && audiblePlayback == "audible" && signedOut == "complete" && cleanup == "verified" && renewal == renewalValue
+    }
 }
 
 public struct OwnerResult: Equatable, Sendable {
@@ -55,7 +102,7 @@ public struct OwnerResult: Equatable, Sendable {
     public let cooldown: String
     public let cleanup: String
 
-    public init(evidenceRevision: String, selectedPath: CandidatePath, runs: [ProofRun], cooldown: String, cleanup: String = "confirmed") {
+    public init(evidenceRevision: String, selectedPath: CandidatePath, runs: [ProofRun], cooldown: String, cleanup: String = "verified") {
         self.evidenceRevision = evidenceRevision
         self.selectedPath = selectedPath
         self.runs = runs
@@ -71,7 +118,7 @@ public struct OwnerResult: Equatable, Sendable {
         let runOne = runs.indices.contains(0) ? runs[0].canonicalValue : "none"
         let runTwo = runs.indices.contains(1) ? runs[1].canonicalValue : "none"
         return [
-            "Schema: owner-result-v1",
+            "Schema: owner-result-v2",
             "Evidence revision: \(evidenceRevision)",
             "Selected path: \(selectedPath.rawValue)",
             "Run count: \(runs.count)",
@@ -84,54 +131,62 @@ public struct OwnerResult: Equatable, Sendable {
     }
 
     public static func parse(_ text: String) throws -> OwnerResult {
-        let fields = try ArtifactFields.parse(text, allowed: [
+        let fields = try ArtifactFields.parse(text, ordered: [
             "Schema", "Evidence revision", "Selected path", "Run count", "Run 1", "Cooldown", "Run 2", "Cleanup",
         ])
-        guard fields["Schema"] == "owner-result-v1",
-              let revision = fields["Evidence revision"], ArtifactFields.isOpaque(revision),
+        guard fields["Schema"] == "owner-result-v2",
+              let revision = fields["Evidence revision"], ArtifactFields.isRevisionTwo(revision),
               let pathValue = fields["Selected path"], let path = CandidatePath(rawValue: pathValue),
               let countValue = fields["Run count"], let count = Int(countValue), (0...2).contains(count),
               let runOneValue = fields["Run 1"], let cooldown = fields["Cooldown"],
-              let runTwoValue = fields["Run 2"], fields["Cleanup"] == "confirmed" else {
+              let runTwoValue = fields["Run 2"], fields["Cleanup"] == "verified" else {
             throw ContractError.invalidArtifact
         }
         let values = [runOneValue, runTwoValue]
         let runs = try values.enumerated().compactMap { index, value -> ProofRun? in
             if value == "none" { return nil }
             let pieces = value.split(separator: "|", omittingEmptySubsequences: false)
-            guard pieces.count == 3,
+            guard pieces.count == 10,
                   let runPath = CandidatePath(rawValue: String(pieces[1])),
                   let outcome = RunOutcome(rawValue: String(pieces[2])) else {
                 throw ContractError.invalidArtifact
             }
             let label = String(pieces[0])
             guard label == "run-\(index + 1)" else { throw ContractError.invalidArtifact }
-            return ProofRun(label: label, path: runPath, outcome: outcome)
+            return ProofRun(
+                label: label,
+                path: runPath,
+                outcome: outcome,
+                authentication: String(pieces[3]),
+                entitlement: String(pieces[4]),
+                tuneKey: String(pieces[5]),
+                audiblePlayback: String(pieces[6]),
+                signedOut: String(pieces[7]),
+                cleanup: String(pieces[8]),
+                renewal: String(pieces[9])
+            )
         }
         guard runs.count == count else { throw ContractError.invalidArtifact }
         let result = OwnerResult(evidenceRevision: revision, selectedPath: path, runs: runs, cooldown: cooldown)
         try result.validate()
+        guard result.canonicalText == text else { throw ContractError.invalidArtifact }
         return result
     }
 
     public func validate() throws {
-        guard ArtifactFields.isOpaque(evidenceRevision), cleanup == "confirmed" else {
+        guard ArtifactFields.isRevisionTwo(evidenceRevision), cleanup == "verified" else {
             throw ContractError.invalidArtifact
         }
         if selectedPath == .unsupported {
             guard runs.isEmpty, cooldown == "not-applicable" else { throw ContractError.invalidArtifact }
             return
         }
-        if runs.count == 1 {
-            guard runs[0].path == selectedPath, runs[0].outcome.isTerminalStop,
-                  cooldown == "not-applicable" else { throw ContractError.invalidArtifact }
-            return
-        }
         guard runs.count == 2,
               runs[0].label == "run-1", runs[1].label == "run-2",
               runs[0].path == selectedPath, runs[1].path == selectedPath,
-              runs[0].outcome == .pass, runs[1].outcome == .pass,
-              cooldown == "owner-confirmed" else {
+              runs[0].isComplete(allowingRenewal: "renewed") || runs[0].isComplete(allowingRenewal: "not-observed"),
+              runs[1].isComplete(allowingRenewal: "renewed") || runs[1].isComplete(allowingRenewal: "not-observed"),
+              runs.contains(where: { $0.renewal == "renewed" }), cooldown == "owner-confirmed" else {
             throw ContractError.invalidArtifact
         }
     }
@@ -139,7 +194,7 @@ public struct OwnerResult: Equatable, Sendable {
 
 public enum DecisionGate {
     public static func incompleteEvidenceDecision() -> Decision {
-        Decision(.unsupported, evidenceRevision: "offline-tracer-v1", selectedPath: .unsupported)
+        Decision(.unsupported, evidenceRevision: "phase-0-empirical-v2", selectedPath: .unsupported)
     }
 
     public static func derive(
@@ -147,6 +202,7 @@ public enum DecisionGate {
         selection: Selection,
         ownerResult: OwnerResult
     ) throws -> Decision {
+        try evidence.validate()
         try CandidateSelection.validate(selection, against: evidence)
         guard ownerResult.evidenceRevision == evidence.revision,
               ownerResult.selectedPath == selection.path else {
@@ -173,7 +229,7 @@ public enum DecisionGate {
         if ownerResult.runs.count == 2 {
             return Decision(path, evidenceRevision: evidence.revision, selectedPath: ownerResult.selectedPath)
         }
-        return Decision(.unsupported, evidenceRevision: evidence.revision, selectedPath: ownerResult.selectedPath)
+        return Decision(.unsupported, evidenceRevision: evidence.revision, selectedPath: .unsupported)
     }
 
     public static func validate(_ decision: Decision, evidence: EvidenceRecord, selection: Selection, ownerResult: OwnerResult) throws {
@@ -202,15 +258,14 @@ public struct ArtifactBundle: Sendable {
         let parsedSelection = try Selection.parse(selection)
         let parsedOwnerResult = try OwnerResult.parse(ownerResult)
         let parsedDecision = try Decision.parse(decision)
+        try parsedEvidence.validate(firstPartyHost: firstPartyHost)
         try CandidateSelection.validate(parsedSelection, against: parsedEvidence)
-        guard parsedSelection.canonicalText == selection else { throw ContractError.invalidArtifact }
         try DecisionGate.validate(parsedDecision, evidence: parsedEvidence, selection: parsedSelection, ownerResult: parsedOwnerResult)
-        guard parsedDecision.canonicalText == decision else { throw ContractError.invalidArtifact }
     }
 
     public static func canonicalUnsupported(reason: ClosureReason) -> ArtifactBundle {
         let evidence = EvidenceRecord.canonicalUnsupported(reason: reason)
-        let selection = CandidateSelection.derive(evidence)
+        let selection = try! CandidateSelection.derive(evidence)
         let owner = OwnerResult.zeroRunUnsupported(revision: evidence.revision)
         let decision = try! DecisionGate.derive(evidence: evidence, selection: selection, ownerResult: owner)
         return ArtifactBundle(
