@@ -1,42 +1,62 @@
-# Phase 0 Owner Runbook
+# Phase 0 Owner-Operated Browser Proof Runbook
 
-## Selected Feasibility State
+## Checkpoint Status
 
-Live operation: prohibited
+The bounded browser experiment is eligible for presentation only after the
+offline current-SDK, experiment-contract, exact owner-approval, conditional
+source-graph, full synthetic-suite, and browser-preflight gates pass. This
+runbook records that preparation; it does not launch a browser, contact
+SiriusXM, or establish feasibility.
 
-The canonical selection is `unsupported`. No browser-return or native-direct
-candidate is present, and no owner action, authentication attempt, proof run,
-cooldown, or checkpoint is permitted for this state.
+The current approved construction is bound to contract digest
+`573f6ba270924112`. Open third-party callback documentation remains
+non-dispositive and does not loosen any other gate.
 
-## Deterministic Closure
+## Owner Boundary
 
-The four canonical artifacts are the complete Phase 0 record. They must be
-validated and freshly derived by the offline feasibility harness before they
-can be consumed:
+- Only the account owner may start the live surface, operate it, enter
+  credentials, handle provider controls, confirm audible playback, request
+  sign-out, and choose the cooldown between runs.
+- Automation must never type, inspect, infer, record, screenshot, or export
+  credentials, cookies, tokens, headers, account data, browser storage,
+  provider responses, stream URLs, or playback keys.
+- The executor stops before live presentation and accepts only a fixed,
+  account-detail-free result class after the owner is finished.
 
-1. Validate the evidence artifact.
-2. Derive selection from that evidence and require byte equality with the
-   stored selection.
-3. Validate the zero-run owner result.
-4. Derive decision from the evidence, selection, and owner result and require
-   byte equality with the stored decision.
+## Fixed Browser Protocol
 
-Any missing, malformed, conflicting, or non-canonical artifact must be
-replaced through the harness's `close-unsupported` operation. The canonical
-unsupported closure is idempotent and never starts live work.
+1. Complete one normal owner-operated browser proof run and confirm audible
+   playback only if it was actually heard.
+2. Request sign-out and wait for verified local cleanup before considering a
+   second run.
+3. Choose and observe a cooldown yourself, then start exactly one distinct
+   second run.
+4. A complete browser proof requires the ordered semantic milestones in both
+   runs and legitimate renewal in at least one. Renewal-pending and ordinary
+   no-clean-return remain incomplete.
 
-## Unsupported Branch Rules
+## Stop Rules
 
-- Do not create, compile, retain, or review a browser or native candidate.
-- Do not open a browser, authenticate, enter credentials, inspect account or
-  browser state, or contact a provider.
-- Do not collect tokens, cookies, callback values, account identifiers, raw
-  provider values, request/response data, or precise timing.
-- Do not retry, poll, schedule, or substitute another method.
-- Record the candidate safety review as `candidate-review=skipped-unsupported`.
+The first CAPTCHA, MFA, challenge, protection, access-control signal,
+rate-limit, redirect anomaly, suspicion, unknown state, or ambiguity is
+terminal. Do not repeat, retry, switch paths, alter identity or headers, or
+attempt a workaround. Native-direct is not exposed unless a later validator
+proves strict WebKit-specific rule-out and a separate owner disclosure decision
+is recorded.
 
-## Terminal Outcome
+## Allowed Resume Signals
 
-The sole terminal outcome is `NO-GO unsupported`. Phase 1 continuation is
-blocked. A new path can be considered only by a future, separately planned
-evidence review; this runbook does not authorize discovery or live probing.
+Return exactly one of the following, with no account or provider details:
+
+- `not-applicable`
+- `browser-complete`
+- `browser-incomplete`
+- `renewal-still-pending`
+- `strict-webkit-ruleout`
+- `terminal-stop`
+
+## Phase Boundary
+
+This checkpoint does not produce `GO`, `NO-GO`, native approval, a replacement
+decision, or a Phase 1 unlock. Those require later canonical semantic evidence
+and validators.

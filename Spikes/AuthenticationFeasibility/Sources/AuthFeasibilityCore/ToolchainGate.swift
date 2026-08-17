@@ -45,3 +45,20 @@ public enum ToolchainGate {
         }
     }
 }
+
+/// Validates the complete offline conjunction that permits presentation of the
+/// owner-operated browser checkpoint. This gate deliberately accepts only
+/// canonical, non-secret artifacts; it performs no provider or browser work.
+public enum BrowserLaunchGate {
+    public static func validate(
+        toolchainArtifact: String,
+        contract: AuthExperimentContract,
+        approval: ExperimentApproval
+    ) throws {
+        guard toolchainArtifact == ToolchainGate.artifact(for: .currentSDKReady),
+              try CandidateSelection.experimentReadiness(for: contract) == .browserExperimentReady else {
+            throw ContractError.invalidArtifact
+        }
+        try approval.validate(against: contract)
+    }
+}

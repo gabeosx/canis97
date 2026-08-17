@@ -25,6 +25,37 @@ func toolchainGateEmitsOnlyClosedArtifacts() {
     #expect(!ToolchainGate.artifact(for: .environmentPending).contains("/Applications"))
 }
 
+@Test("browser launch requires the exact current toolchain, ready contract, and bound approval")
+func browserLaunchGateRequiresEveryOfflinePrerequisite() throws {
+    let toolchain = ToolchainGate.artifact(for: .currentSDKReady)
+    let contract = AuthExperimentContract.readyForBrowserExperiment()
+    let approval = try ExperimentApproval.record(for: contract)
+
+    try BrowserLaunchGate.validate(
+        toolchainArtifact: toolchain,
+        contract: contract,
+        approval: approval
+    )
+
+    #expect(throws: ContractError.self) {
+        try BrowserLaunchGate.validate(
+            toolchainArtifact: ToolchainGate.artifact(for: .environmentPending),
+            contract: contract,
+            approval: approval
+        )
+    }
+
+    var incomplete = contract
+    incomplete.browser.renewalExpectation = .open
+    #expect(throws: ContractError.self) {
+        try BrowserLaunchGate.validate(
+            toolchainArtifact: toolchain,
+            contract: incomplete,
+            approval: approval
+        )
+    }
+}
+
 @Test("shell preflight fails closed for each command failure and records the real environment")
 func shellPreflightWritesOnlyClosedStatuses() throws {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent("auth-feasibility-toolchain-\(UUID().uuidString)")

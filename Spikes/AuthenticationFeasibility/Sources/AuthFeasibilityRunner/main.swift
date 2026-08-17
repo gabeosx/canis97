@@ -120,12 +120,14 @@ func validateExperimentApproval(_ arguments: Arguments) throws {
 }
 
 func validateBrowserLaunchGate(_ arguments: Arguments) throws {
-    let contract = try AuthExperimentContract.parse(readArtifact(try arguments.value(named: "--contract")))
-    let approval = try ExperimentApproval.parse(readArtifact(try arguments.value(named: "--approval")))
-    guard try CandidateSelection.experimentReadiness(for: contract) == .browserExperimentReady else {
-        throw RunnerError.failed
-    }
-    try approval.validate(against: contract)
+    let toolchainArtifact = try readArtifact(try arguments.positional(0))
+    let contract = try AuthExperimentContract.parse(readArtifact(try arguments.positional(1)))
+    let approval = try ExperimentApproval.parse(readArtifact(try arguments.positional(2)))
+    try BrowserLaunchGate.validate(
+        toolchainArtifact: toolchainArtifact,
+        contract: contract,
+        approval: approval
+    )
     FileHandle.standardOutput.write(Data("valid\n".utf8))
 }
 
