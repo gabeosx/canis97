@@ -23,7 +23,13 @@ public enum SafeProbeEvent: Equatable, Sendable {
     case authenticated
     case entitled
     case noCleanReturn(SanitizedNavigationProvenance)
+    case tuneKeyAuthorized
+    case audiblePlayback
+    case renewed
+    case renewalPending
     case terminal(SafeTerminalReason)
     case cancelled
     case signedOut
+    case cleanupVerified
+    case cleanupFailed
 }

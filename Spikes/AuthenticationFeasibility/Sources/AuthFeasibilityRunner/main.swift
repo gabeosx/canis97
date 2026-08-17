@@ -119,6 +119,36 @@ func validateExperimentApproval(_ arguments: Arguments) throws {
     FileHandle.standardOutput.write(Data("valid\n".utf8))
 }
 
+func validateBrowserLaunchGate(_ arguments: Arguments) throws {
+    let contract = try AuthExperimentContract.parse(readArtifact(try arguments.value(named: "--contract")))
+    let approval = try ExperimentApproval.parse(readArtifact(try arguments.value(named: "--approval")))
+    guard try CandidateSelection.experimentReadiness(for: contract) == .browserExperimentReady else {
+        throw RunnerError.failed
+    }
+    try approval.validate(against: contract)
+    FileHandle.standardOutput.write(Data("valid\n".utf8))
+}
+
+func validateLiveResult(_ arguments: Arguments) throws {
+    _ = try OwnerResult.parse(readArtifact(try arguments.positional(0)))
+    FileHandle.standardOutput.write(Data("valid\n".utf8))
+}
+
+func validateNativeApproval(_ arguments: Arguments) throws {
+    guard arguments.contains("--owner-approved") else { throw RunnerError.invalidArguments }
+    let contract = try AuthExperimentContract.parse(readArtifact(try arguments.value(named: "--contract")))
+    let ruleOut = try EvidenceRecord.parse(readArtifact(try arguments.value(named: "--rule-out")))
+    let nativePurpose = try readArtifact(try arguments.value(named: "--native-purpose"))
+    try contract.native.validate()
+    guard nativePurpose == contract.canonicalText,
+          ruleOut.browser == .ruledOut,
+          ruleOut.native != .complete,
+          ruleOut.candidateCount == 0 else {
+        throw RunnerError.failed
+    }
+    FileHandle.standardOutput.write(Data("valid\n".utf8))
+}
+
 func run() throws {
     let arguments = Array(CommandLine.arguments.dropFirst())
     guard let command = arguments.first else { return }
@@ -133,6 +163,14 @@ func run() throws {
         try recordExperimentApproval(parsed)
     case "validate-experiment-approval":
         try validateExperimentApproval(parsed)
+    case "validate-browser-launch-gate":
+        try validateBrowserLaunchGate(parsed)
+    case "record-browser-not-applicable", "record-native-not-applicable":
+        try closeUnsupported(parsed)
+    case "validate-live-result":
+        try validateLiveResult(parsed)
+    case "validate-native-approval":
+        try validateNativeApproval(parsed)
     case "validate-evidence":
         _ = try EvidenceRecord.parse(readArtifact(try parsed.positional(0)))
     case "derive-selection":

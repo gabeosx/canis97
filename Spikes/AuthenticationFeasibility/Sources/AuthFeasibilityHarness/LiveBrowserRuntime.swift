@@ -7,13 +7,19 @@ import Foundation
 public final class LiveBrowserRuntime {
     private let webLoginSession: WebLoginSession
     private let semanticClient = SemanticProofClient()
+    private var preflight = BrowserProofPreflight()
+    private var proofEvents: [SafeProbeEvent] = []
+    private lazy var cleanupCoordinator = CleanupCoordinator(
+        participant: BrowserRuntimeCleanupParticipant(webLoginSession: webLoginSession)
+    )
 
     public init(contract: AuthExperimentContract, approval: ExperimentApproval) throws {
         webLoginSession = try WebLoginSession(contract: contract, approval: approval)
     }
 
-    public var events: [SafeProbeEvent] { semanticClient.events }
+    public var events: [SafeProbeEvent] { semanticClient.events + proofEvents }
     public var isClosed: Bool { semanticClient.isClosed }
+    public var canSerializeCompleteProof: Bool { preflight.canSerializeComplete }
 
     public func startOwnerOperatedRun() throws {
         try webLoginSession.startOwnerOperatedRun(
@@ -37,16 +43,48 @@ public final class LiveBrowserRuntime {
     }
 
     public func recordAuthentication() -> SafeProbeEvent {
-        semanticClient.recordAuthentication()
+        consumePreflight(semanticClient.recordAuthentication())
     }
 
     public func recordEntitlement() -> SafeProbeEvent {
-        semanticClient.recordEntitlement()
+        consumePreflight(semanticClient.recordEntitlement())
+    }
+
+    public func recordTuneKeyAuthorization() -> SafeProbeEvent {
+        recordProofEvent(.tuneKeyAuthorized)
+    }
+
+    public func recordAudiblePlayback() -> SafeProbeEvent {
+        recordProofEvent(.audiblePlayback)
+    }
+
+    public func recordRenewal(_ proof: RenewalProof) -> SafeProbeEvent {
+        switch proof {
+        case .renewed:
+            return recordProofEvent(.renewed)
+        case .renewalPending:
+            return recordProofEvent(.renewalPending)
+        case .notApplicable:
+            return stop(for: .ambiguous)
+        case let .terminal(reason):
+            return stop(for: reason)
+        }
     }
 
     public func signOut() -> SafeProbeEvent {
         webLoginSession.stop()
-        return semanticClient.signOut()
+        return consumePreflight(semanticClient.signOut())
+    }
+
+    /// Cleanup is explicitly awaited and its closed result is fed back into the
+    /// preflight. The runtime has no API to inspect browser or provider state.
+    public func cleanUp() async -> CleanupProof {
+        if semanticClient.events.last == .entitled {
+            _ = signOut()
+        }
+        let proof = await cleanupCoordinator.cleanUp()
+        _ = preflight.consume(proof == .verified ? .cleanupVerified : .cleanupFailed)
+        return proof
     }
 
     public func cancel() -> SafeProbeEvent {
@@ -65,8 +103,41 @@ public final class LiveBrowserRuntime {
             _ = semanticClient.stop(for: .ambiguous)
             return
         }
-        _ = semanticClient.consumeMatchedAppBoundReturn(returnURL)
+        _ = consumePreflight(semanticClient.consumeMatchedAppBoundReturn(returnURL))
         webLoginSession.stop()
+    }
+
+    @discardableResult
+    private func consumePreflight(_ event: SafeProbeEvent) -> SafeProbeEvent {
+        _ = preflight.consume(event)
+        return event
+    }
+
+    private func recordProofEvent(_ event: SafeProbeEvent) -> SafeProbeEvent {
+        if case let .terminal(reason) = preflight.consume(event) {
+            return stop(for: reason)
+        }
+        proofEvents.append(event)
+        return event
+    }
+}
+
+@MainActor
+private final class BrowserRuntimeCleanupParticipant: VolatileCleanupParticipant {
+    private let webLoginSession: WebLoginSession
+
+    init(webLoginSession: WebLoginSession) {
+        self.webLoginSession = webLoginSession
+    }
+
+    func perform(_ step: CleanupStep) async -> Bool {
+        switch step {
+        case .tearDownBrowser:
+            webLoginSession.stop()
+        case .signOut, .cancelEphemeralClient, .tearDownPlayback, .clearVolatileState, .verifyLocalAbsence:
+            break
+        }
+        return true
     }
 }
 
