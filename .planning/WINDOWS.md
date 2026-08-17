@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 4
+open_count: 5
 waived_count: 0
 fixed_count: 1
-total_count: 5
-last_updated: 2026-08-17T18:05:17.770Z
+total_count: 6
+last_updated: 2026-08-17T19:15:53.911Z
 ---
 
 # Broken Windows Ledger
@@ -20,6 +20,7 @@ last_updated: 2026-08-17T18:05:17.770Z
 | 3 | 00 | deviation | Spikes/AuthenticationFeasibility/Tests/AuthFeasibilityCoreTests/BrowserReturnContractTests.swift |  | Added Foundation import required for BrowserReturnContractTests compilation. | open |  | 2026-08-17T18:05:17.613Z |  |
 | 4 | 00 | deviation | Spikes/AuthenticationFeasibility/Tests/AuthFeasibilityCoreTests/BrowserReturnContractTests.swift |  | Conditionalized harness-only tests so blocked source graphs remain buildable. | open |  | 2026-08-17T18:05:17.692Z |  |
 | 5 | 00 | deviation | Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityCore/RunProtocol.swift |  | Added the missing closed event contract referenced by the plan. | open |  | 2026-08-17T18:05:17.770Z |  |
+| 6 | 00 | deviation | .planning/phases/01-safe-interoperability-foundation/01-01-PLAN.md |  | Approved cross-plan wiring added an executable fail-closed Phase 1 preflight. | open |  | 2026-08-17T19:15:53.911Z |  |
 
 ````json
 [
@@ -81,6 +82,18 @@ last_updated: 2026-08-17T18:05:17.770Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-17T18:05:17.770Z",
+    "resolved_at": null
+  },
+  {
+    "id": 6,
+    "kind": "deviation",
+    "phase": "00",
+    "file": ".planning/phases/01-safe-interoperability-foundation/01-01-PLAN.md",
+    "line": null,
+    "description": "Approved cross-plan wiring added an executable fail-closed Phase 1 preflight.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-17T19:15:53.911Z",
     "resolved_at": null
   }
 ]

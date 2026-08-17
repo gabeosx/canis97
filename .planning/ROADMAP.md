@@ -37,7 +37,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Every protected, challenged, rate-limited, redirected, suspicious, or ambiguous outcome stops immediately, retains no secret evidence, and produces `NO-GO unsupported`.
   5. A sanitized feasibility artifact contains exactly one decision: `GO browser-return`, `GO native-direct`, or `NO-GO unsupported`; only a GO decision permits Phase 1 execution.
 
-**Plans**: 8/9 plans executed
+**Plans**: 9/9 plans executed
 
 Plans:
 **Wave 1**
@@ -74,7 +74,7 @@ Plans:
 
 **Wave 9** *(blocked on Wave 8 completion)*
 
-- [ ] 00-13-PLAN.md — Atomically regenerate and validate the canonical Phase 0 quartet and enforce the Phase 1 gate.
+- [x] 00-13-PLAN.md — Atomically regenerate and validate the canonical Phase 0 quartet and enforce the Phase 1 gate.
 
 **Historical execution note:** The user selected replan-from-scratch on 2026-08-17. Plans and summaries 00-01 through 00-04 remain immutable historical records only and are not the active inventory. See `00-SUPERSESSION.md`; Plans 00-05 through 00-13 are the sole active replacement set, and Phase 1 remains blocked until their finalization contract succeeds.
 
@@ -199,7 +199,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 0. Authentication Feasibility Gate | 8/9 | In Progress|  |
+| 0. Authentication Feasibility Gate | 9/9 | In Progress|  |
 | 1. Safe Interoperability Foundation | 0/8 | Not started | - |
 | 2. Authorized Live Listening | 0/TBD | Not started | - |
 | 3. Native Mac Listening Experience | 0/TBD | Not started | - |
