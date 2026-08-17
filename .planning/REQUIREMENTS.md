@@ -9,7 +9,7 @@ Requirements for the initial public release. Each requirement maps to exactly on
 
 ### Authentication Feasibility
 
-- [x] **FEAS-01**: Maintainer can determine whether SiriusXM offers a clean first-party, app-bound browser authentication return without inspecting browser cookies, storage, tokens, profiles, or developer-tools session data.
+- [x] **FEAS-01**: After the owner explicitly clicks a control in this app's nonpersistent `WKWebView`, the maintainer may select only the one current first-party `AUTH_TOKEN` cookie, decode only `session.accessToken`, and pass it once in volatile memory to an exact SiriusXM HTTPS verifier. Broad cookie/storage enumeration, arbitrary JavaScript extraction, developer tools, shared-browser state, persistence, diagnostics, fixtures, and raw artifacts remain prohibited.
 - [x] **FEAS-02**: If browser return is safely ruled out, maintainer can evaluate one minimal honest native authentication path without spoofing a browser or client identity, bypassing access controls, or retaining a fallback path.
 - [x] **FEAS-03**: Account owner can perform two separate manually initiated proof runs through the sole selected path, each reaching explicit authenticated-and-entitled state and clean sign-out, with a conservative human-controlled cooldown between runs.
 - [x] **FEAS-04**: Any challenge, CAPTCHA, MFA requirement, HTTP 403 or 429, rate-limit signal, unexpected redirect, suspected bot response, protected-control behavior, or ambiguous entitlement evidence immediately stops evaluation and records no secrets or raw sensitive response data.

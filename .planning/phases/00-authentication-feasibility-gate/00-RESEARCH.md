@@ -415,3 +415,9 @@ These questions are resolved as empirical and fail-closed procedures, not as cla
 
 **Research date:** 2026-08-16
 **Valid until:** Apple/SwiftPM platform findings: 30 days; SiriusXM contract discovery: revisit immediately before any human-operated attempt.
+
+## Authority Correction — Plan 00-14
+
+This section supersedes only the earlier absolute prohibition on WebKit state. After an owner presses the explicit in-app control following sign-in in this app-owned nonpersistent `WKWebView`, code may select the single current first-party cookie named `AUTH_TOKEN`, decode only `session.accessToken`, retain it in a non-Codable single-consumption object, and send it only to the exact HTTPS native verifier. The correction does not authorize broad cookie/storage enumeration, JavaScript extraction, developer tools, Chrome/shared-browser state, persistence, diagnostics, fixtures, raw artifacts, retries, or any CAPTCHA/MFA/DRM/subscription/device/anti-bot/rate-limit workaround.
+
+`/profile/v4/profiles/me` remains an authentication-only verifier. It cannot establish subscription entitlement. Entitlement is supported only when separately bounded public first-party evidence names an exact HTTPS request and an allow-listed subscription predicate; otherwise the canonical result is `no-public-bounded-entitlement-predicate`. Renewal and playback are historical Phase 0 context, not part of this corrected authentication-and-entitlement closure predicate.

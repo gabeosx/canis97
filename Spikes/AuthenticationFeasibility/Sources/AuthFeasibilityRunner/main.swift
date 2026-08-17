@@ -257,6 +257,11 @@ func validateNativeLaunchGate(_ arguments: Arguments) throws {
     FileHandle.standardOutput.write(Data("not-applicable\n".utf8))
 }
 
+func validateEntitlementContract(_ arguments: Arguments) throws {
+    _ = try EntitlementContract.parse(readArtifact(try arguments.positional(0)))
+    FileHandle.standardOutput.write(Data("valid\n".utf8))
+}
+
 func recordNativeNotApplicable(_ arguments: Arguments) throws {
     try validateNativeLaunchGate(arguments)
     try writeArtifact(
@@ -277,6 +282,8 @@ func run() throws {
     let parsed = Arguments(values: Array(arguments.dropFirst()))
 
     switch command {
+    case "validate-entitlement-contract":
+        try validateEntitlementContract(parsed)
     case "validate-auth-experiment-contract":
         _ = try AuthExperimentContract.parse(readArtifact(try parsed.positional(0)))
     case "derive-experiment-readiness":
