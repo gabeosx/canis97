@@ -2,12 +2,13 @@ import AuthFeasibilityCore
 import Foundation
 import WebKit
 
-/// Coordinates one owner-started browser session and one semantic client. It never reads
-/// browser state: the sole handoff is the one-time `AppBoundReturnResult` callback.
+/// Coordinates one owner-started browser session and an explicit owner-triggered,
+/// in-memory transfer of first-party WebKit session cookies to an ephemeral native client.
 @MainActor
 public final class LiveBrowserRuntime {
     private let webLoginSession: WebLoginSession
     private let semanticClient = SemanticProofClient()
+    private let nativeSessionVerifier = NativeWebSessionVerifier()
     private var preflight = BrowserProofPreflight()
     private var proofEvents: [SafeProbeEvent] = []
     private lazy var cleanupCoordinator = CleanupCoordinator(
@@ -51,6 +52,13 @@ public final class LiveBrowserRuntime {
     public func recordNoCleanReturn() -> SafeProbeEvent {
         webLoginSession.stop()
         return semanticClient.recordNoCleanReturn(provenance: .firstPartyNavigation)
+    }
+
+    public func importAuthenticatedWebSession() async -> WebSessionBridgeResult {
+        guard let session = await webLoginSession.extractFirstPartySession() else {
+            return .noFirstPartySession
+        }
+        return await nativeSessionVerifier.verify(session)
     }
 
     public func recordAuthentication() -> SafeProbeEvent {

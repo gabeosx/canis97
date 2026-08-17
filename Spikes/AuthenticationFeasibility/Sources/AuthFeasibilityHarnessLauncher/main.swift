@@ -80,17 +80,28 @@ private struct AuthFeasibilityHarnessLauncher {
 @MainActor
 private final class BrowserHarnessApplication: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let runtime: LiveBrowserRuntime
+    private let bridgeOutput: URL
     private var window: NSWindow?
+    private var importTask: Task<Void, Never>?
     private var shutdownStarted = false
     private var shutdownFinished = false
     private let renewalStatusLabel = NSTextField(labelWithString: RenewalStatus.pending.ownerVisibleText)
     private let proofStatusLabel = NSTextField(labelWithString: "Waiting for an app-bound return")
+    private let sessionStatusLabel = NSTextField(labelWithString: "Sign in, then import the logged-in WebView session")
+    private lazy var importSessionButton = NSButton(
+        title: "Use Logged-In Session",
+        target: self,
+        action: #selector(importLoggedInSession)
+    )
 
     init(configuration: LaunchConfiguration) throws {
         runtime = try LiveBrowserRuntime(
             contract: configuration.contract,
             approval: configuration.approval
         )
+        bridgeOutput = configuration.output
+            .deletingLastPathComponent()
+            .appendingPathComponent("00-WEB-SESSION-BRIDGE.md")
         super.init()
     }
 
@@ -115,11 +126,21 @@ private final class BrowserHarnessApplication: NSObject, NSApplicationDelegate, 
         proofStatusLabel.alignment = .center
         proofStatusLabel.setAccessibilityLabel("Proof status")
         proofStatusLabel.setAccessibilityValue("Waiting for an app-bound return")
+        sessionStatusLabel.alignment = .center
+        sessionStatusLabel.maximumNumberOfLines = 2
+        sessionStatusLabel.setAccessibilityLabel("Web session import status")
+        importSessionButton.setAccessibilityLabel("Use logged-in SiriusXM session")
 
         do {
             try runtime.startOwnerOperatedRun { [weak self] browser in
                 guard let self, let window = self.window else { return }
-                let content = NSStackView(views: [browser, self.proofStatusLabel, self.renewalStatusLabel])
+                let content = NSStackView(views: [
+                    browser,
+                    self.sessionStatusLabel,
+                    self.importSessionButton,
+                    self.proofStatusLabel,
+                    self.renewalStatusLabel,
+                ])
                 content.orientation = .vertical
                 content.spacing = 8
                 content.edgeInsets = NSEdgeInsets(top: 8, left: 8, bottom: 8, right: 8)
@@ -141,6 +162,28 @@ private final class BrowserHarnessApplication: NSObject, NSApplicationDelegate, 
         } catch {
             FileHandle.standardError.write(Data("browser startup failed\n".utf8))
             exit(1)
+        }
+    }
+
+    @objc private func importLoggedInSession() {
+        guard importTask == nil else { return }
+        importSessionButton.isEnabled = false
+        sessionStatusLabel.stringValue = "Importing first-party session in memory…"
+        sessionStatusLabel.setAccessibilityValue("Importing session")
+
+        importTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            let result = await runtime.importAuthenticatedWebSession()
+            do {
+                try result.canonicalText.write(to: bridgeOutput, atomically: true, encoding: .utf8)
+                sessionStatusLabel.stringValue = result.ownerVisibleText
+                sessionStatusLabel.setAccessibilityValue(result.ownerVisibleText)
+            } catch {
+                sessionStatusLabel.stringValue = "Could not write sanitized bridge result"
+                sessionStatusLabel.setAccessibilityValue("Bridge result write failed")
+            }
+            importSessionButton.isEnabled = result == .noFirstPartySession
+            importTask = nil
         }
     }
 
@@ -171,6 +214,7 @@ private final class BrowserHarnessApplication: NSObject, NSApplicationDelegate, 
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        importTask?.cancel()
         window?.contentView = nil
         window = nil
     }

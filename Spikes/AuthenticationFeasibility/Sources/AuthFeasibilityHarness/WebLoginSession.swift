@@ -42,7 +42,8 @@ public final class AppBoundReturnResult {
 }
 
 /// The sole AppKit/WebKit boundary for the owner-operated browser experiment.
-/// It holds a web view only for one explicit run and never queries browser state.
+/// It holds a web view only for one explicit run. Session extraction is explicit,
+/// owner-triggered, first-party-only, in-memory, and never persisted or logged.
 @MainActor
 public final class WebLoginSession: NSObject, WKNavigationDelegate {
     private static let entryURL = URL(string: "https://www.siriusxm.com/")!
@@ -112,6 +113,18 @@ public final class WebLoginSession: NSObject, WKNavigationDelegate {
         returnHandler = nil
         terminalHandler = nil
         state = .stopped
+    }
+
+    public func extractFirstPartySession() async -> VolatileWebSession? {
+        guard state == .ownerOperating, let webView else { return nil }
+        let cookies = await withCheckedContinuation { continuation in
+            webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { cookies in
+                continuation.resume(returning: cookies)
+            }
+        }
+        let firstPartyCookies = FirstPartyCookieFilter.filter(cookies)
+        guard !firstPartyCookies.isEmpty else { return nil }
+        return VolatileWebSession(cookies: firstPartyCookies)
     }
 
     public func webView(
