@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 5
+open_count: 6
 waived_count: 0
 fixed_count: 1
-total_count: 6
-last_updated: 2026-08-17T19:15:53.911Z
+total_count: 7
+last_updated: 2026-08-17T22:18:30.328Z
 ---
 
 # Broken Windows Ledger
@@ -21,6 +21,7 @@ last_updated: 2026-08-17T19:15:53.911Z
 | 4 | 00 | deviation | Spikes/AuthenticationFeasibility/Tests/AuthFeasibilityCoreTests/BrowserReturnContractTests.swift |  | Conditionalized harness-only tests so blocked source graphs remain buildable. | open |  | 2026-08-17T18:05:17.692Z |  |
 | 5 | 00 | deviation | Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityCore/RunProtocol.swift |  | Added the missing closed event contract referenced by the plan. | open |  | 2026-08-17T18:05:17.770Z |  |
 | 6 | 00 | deviation | .planning/phases/01-safe-interoperability-foundation/01-01-PLAN.md |  | Approved cross-plan wiring added an executable fail-closed Phase 1 preflight. | open |  | 2026-08-17T19:15:53.911Z |  |
+| 7 | 00 | deviation | Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityRunner/main.swift |  | Removed the impossible owner-artifact dependency from zero-run finalization. | open |  | 2026-08-17T22:18:30.328Z |  |
 
 ````json
 [
@@ -94,6 +95,18 @@ last_updated: 2026-08-17T19:15:53.911Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-17T19:15:53.911Z",
+    "resolved_at": null
+  },
+  {
+    "id": 7,
+    "kind": "deviation",
+    "phase": "00",
+    "file": "Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityRunner/main.swift",
+    "line": null,
+    "description": "Removed the impossible owner-artifact dependency from zero-run finalization.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-17T22:18:30.328Z",
     "resolved_at": null
   }
 ]
