@@ -97,6 +97,16 @@ public enum NativeLaunchGate: Equatable, Sendable {
     }
 }
 
+/// Declares the current source-graph state without introducing any native
+/// credential or provider runtime. A future eligible branch requires a new
+/// owner authorization and must replace, rather than join, the live path.
+public enum NativeBranchClosure: Equatable, Sendable {
+    case notApplicable
+
+    public static let current: NativeBranchClosure = .notApplicable
+    public static let runtimeSourcePermitted = false
+}
+
 public struct CandidateLatch: Sendable {
     public private(set) var selectedPath: CandidatePath?
 
