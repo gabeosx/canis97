@@ -9,6 +9,98 @@ func incompleteEvidenceProducesBlockedDecision() {
     #expect(decision.continuation == .blocked)
 }
 
+@Test("revision two evidence rejects historical revisions, impossible dates, closure conflicts, and reordered bytes")
+func evidenceRevisionTwoFailsClosed() {
+    let validBrowserEvidence = EvidenceRecord(
+        revision: "empirical-proof-v2",
+        roundedDate: "2026-08-17",
+        browser: .complete,
+        browserReference: "https://www.siriusxm.com",
+        native: .unavailable,
+        candidateCount: 1
+    )
+
+    #expect(validBrowserEvidence.canonicalText.contains("Schema: evidence-v2"))
+
+    let staleRevision = EvidenceRecord(
+        revision: "offline-tracer-v1",
+        roundedDate: "2026-08-17",
+        browser: .complete,
+        browserReference: "https://www.siriusxm.com",
+        native: .unavailable,
+        candidateCount: 1
+    )
+    #expect(isInvalid { try staleRevision.validate() })
+
+    let impossibleDate = EvidenceRecord(
+        revision: "empirical-proof-v2",
+        roundedDate: "2026-02-30",
+        browser: .complete,
+        browserReference: "https://www.siriusxm.com",
+        native: .unavailable,
+        candidateCount: 1
+    )
+    #expect(isInvalid { try impossibleDate.validate() })
+
+    let terminalConflict = EvidenceRecord(
+        revision: "empirical-proof-v2",
+        roundedDate: "2026-08-17",
+        browser: .complete,
+        browserReference: "https://www.siriusxm.com",
+        native: .unavailable,
+        candidateCount: 1,
+        closureReason: "invalid-artifact"
+    )
+    #expect(isInvalid { try terminalConflict.validate() })
+
+    let reordered = validBrowserEvidence.canonicalText
+        .replacingOccurrences(of: "Rounded date: 2026-08-17\nBrowser return: complete", with: "Browser return: complete\nRounded date: 2026-08-17")
+    #expect(isInvalid { try EvidenceRecord.parse(reordered) })
+}
+
+@Test("GO cannot derive from unvalidated evidence or from two runs without renewal proof")
+func decisionDerivationRequiresValidatedEmpiricalProof() {
+    let invalidEvidence = EvidenceRecord(
+        revision: "offline-tracer-v1",
+        roundedDate: "2026-02-30",
+        browser: .complete,
+        browserReference: "https://www.siriusxm.com",
+        native: .unavailable,
+        candidateCount: 1
+    )
+    let invalidSelection = CandidateSelection.derive(invalidEvidence)
+    let invalidOwner = OwnerResult(
+        evidenceRevision: invalidEvidence.revision,
+        selectedPath: .browserReturn,
+        runs: [
+            ProofRun(label: "run-1", path: .browserReturn, outcome: .pass),
+            ProofRun(label: "run-2", path: .browserReturn, outcome: .pass),
+        ],
+        cooldown: "owner-confirmed"
+    )
+    #expect(isInvalid { try DecisionGate.derive(evidence: invalidEvidence, selection: invalidSelection, ownerResult: invalidOwner) })
+
+    let validEvidence = EvidenceRecord(
+        revision: "empirical-proof-v2",
+        roundedDate: "2026-08-17",
+        browser: .complete,
+        browserReference: "https://www.siriusxm.com",
+        native: .unavailable,
+        candidateCount: 1
+    )
+    let validSelection = CandidateSelection.derive(validEvidence)
+    let noRenewal = OwnerResult(
+        evidenceRevision: validEvidence.revision,
+        selectedPath: .browserReturn,
+        runs: [
+            ProofRun(label: "run-1", path: .browserReturn, outcome: .pass),
+            ProofRun(label: "run-2", path: .browserReturn, outcome: .pass),
+        ],
+        cooldown: "owner-confirmed"
+    )
+    #expect(isInvalid { try DecisionGate.derive(evidence: validEvidence, selection: validSelection, ownerResult: noRenewal) })
+}
+
 @Test("decision artifacts accept one exact decision and compatible continuation")
 func decisionSchemaIsStrict() throws {
     let valid = Decision(.unsupported, evidenceRevision: "offline-tracer-v1", selectedPath: .unsupported).canonicalText
