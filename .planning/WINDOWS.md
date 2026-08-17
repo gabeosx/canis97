@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 1
+open_count: 4
 waived_count: 0
 fixed_count: 1
-total_count: 2
-last_updated: 2026-08-17T13:31:16.481Z
+total_count: 5
+last_updated: 2026-08-17T18:05:17.770Z
 ---
 
 # Broken Windows Ledger
@@ -17,6 +17,9 @@ last_updated: 2026-08-17T13:31:16.481Z
 |----|-------|------|------|------|-------------|--------|--------|-------------|-------------|
 | 1 | 00 | deviation | Spikes/AuthenticationFeasibility |  | SwiftPM local verification required host execution because sandbox compiler cache and manifest sandbox were unavailable. | fixed |  | 2026-08-17T13:22:15.472Z | 2026-08-17T13:22:31.501Z |
 | 2 | 00 | deviation | .planning/phases/00-authentication-feasibility-gate/00-03-SUMMARY.md |  | Offline SwiftPM verification required the installed Xcode toolchain because the sandboxed Command Line Tools environment could not write its compiler cache. | open |  | 2026-08-17T13:31:16.481Z |  |
+| 3 | 00 | deviation | Spikes/AuthenticationFeasibility/Tests/AuthFeasibilityCoreTests/BrowserReturnContractTests.swift |  | Added Foundation import required for BrowserReturnContractTests compilation. | open |  | 2026-08-17T18:05:17.613Z |  |
+| 4 | 00 | deviation | Spikes/AuthenticationFeasibility/Tests/AuthFeasibilityCoreTests/BrowserReturnContractTests.swift |  | Conditionalized harness-only tests so blocked source graphs remain buildable. | open |  | 2026-08-17T18:05:17.692Z |  |
+| 5 | 00 | deviation | Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityCore/RunProtocol.swift |  | Added the missing closed event contract referenced by the plan. | open |  | 2026-08-17T18:05:17.770Z |  |
 
 ````json
 [
@@ -42,6 +45,42 @@ last_updated: 2026-08-17T13:31:16.481Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-17T13:31:16.481Z",
+    "resolved_at": null
+  },
+  {
+    "id": 3,
+    "kind": "deviation",
+    "phase": "00",
+    "file": "Spikes/AuthenticationFeasibility/Tests/AuthFeasibilityCoreTests/BrowserReturnContractTests.swift",
+    "line": null,
+    "description": "Added Foundation import required for BrowserReturnContractTests compilation.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-17T18:05:17.613Z",
+    "resolved_at": null
+  },
+  {
+    "id": 4,
+    "kind": "deviation",
+    "phase": "00",
+    "file": "Spikes/AuthenticationFeasibility/Tests/AuthFeasibilityCoreTests/BrowserReturnContractTests.swift",
+    "line": null,
+    "description": "Conditionalized harness-only tests so blocked source graphs remain buildable.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-17T18:05:17.692Z",
+    "resolved_at": null
+  },
+  {
+    "id": 5,
+    "kind": "deviation",
+    "phase": "00",
+    "file": "Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityCore/RunProtocol.swift",
+    "line": null,
+    "description": "Added the missing closed event contract referenced by the plan.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-17T18:05:17.770Z",
     "resolved_at": null
   }
 ]

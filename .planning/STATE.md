@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 00
 current_phase_name: authentication-feasibility-gate
 status: executing
-stopped_at: Completed 00-07-PLAN.md
-last_updated: "2026-08-17T17:49:20.383Z"
+stopped_at: Completed 00-08-PLAN.md
+last_updated: "2026-08-17T18:05:07.141Z"
 last_activity: 2026-08-17
 last_activity_desc: Phase 00 execution started
 progress:
   total_phases: 2
   completed_phases: 0
   total_plans: 17
-  completed_plans: 3
+  completed_plans: 4
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-08-16)
 ## Current Position
 
 Phase: 00 (authentication-feasibility-gate) — EXECUTING
-Plan: 4 of 9
+Plan: 5 of 9
 Status: Ready to execute
 Last activity: 2026-08-17 — Phase 00 execution started
 
-Progress: [██░░░░░░░░] 18%
+Progress: [██░░░░░░░░] 24%
 
 ## Performance Metrics
 
@@ -65,6 +65,7 @@ Progress: [██░░░░░░░░] 18%
 | Phase 00 P05 | 15 min | 2 tasks | 11 files |
 | Phase 00-authentication-feasibility-gate P06 | 8min | 2 tasks | 4 files |
 | Phase 00 P07 | 8min | 2 tasks | 2 files |
+| Phase 00 P08 | 9m | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -91,6 +92,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: Open third-party callback documentation is non-dispositive; canonical ready bounds alone permit the bounded browser experiment.
 - [Phase ?]: Native-purpose qualification cannot select native-direct; exact digest-bound owner approval is required for browser experiment readiness.
 - [Phase ?]: Owner approved only the bounded WKWebView experiment contract with exact digest 573f6ba270924112; approval does not establish empirical authentication or unlock Phase 1.
+- [Phase ?]: Enable the browser target only when exact current-SDK, canonical contract, and digest-bound approval artifacts match; open callback documentation remains non-dispositive.
+- [Phase ?]: Create WKWebView only after explicit owner start with nonpersistent storage and no browser-state inspection surface.
+- [Phase ?]: Reduce a matched app-bound return to closed SafeProbeEvent outcomes and close unsafe paths without retry or fallback.
 
 ### Pending Todos
 
@@ -114,6 +118,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-17T17:49:20.366Z
-Stopped at: Completed 00-07-PLAN.md
+Last session: 2026-08-17T18:05:07.120Z
+Stopped at: Completed 00-08-PLAN.md
 Resume file: None
