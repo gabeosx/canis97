@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 00
 current_phase_name: authentication-feasibility-gate
 status: executing
-stopped_at: Completed 00-08-PLAN.md
-last_updated: "2026-08-17T18:05:07.141Z"
+stopped_at: Completed 00-09-PLAN.md
+last_updated: "2026-08-17T18:16:17.604Z"
 last_activity: 2026-08-17
 last_activity_desc: Phase 00 execution started
 progress:
   total_phases: 2
   completed_phases: 0
   total_plans: 17
-  completed_plans: 4
+  completed_plans: 5
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-08-16)
 ## Current Position
 
 Phase: 00 (authentication-feasibility-gate) — EXECUTING
-Plan: 5 of 9
+Plan: 6 of 9
 Status: Ready to execute
 Last activity: 2026-08-17 — Phase 00 execution started
 
-Progress: [██░░░░░░░░] 24%
+Progress: [███░░░░░░░] 29%
 
 ## Performance Metrics
 
@@ -66,6 +66,7 @@ Progress: [██░░░░░░░░] 24%
 | Phase 00-authentication-feasibility-gate P06 | 8min | 2 tasks | 4 files |
 | Phase 00 P07 | 8min | 2 tasks | 2 files |
 | Phase 00 P08 | 9m | 2 tasks | 6 files |
+| Phase 00-authentication-feasibility-gate P09 | 8min | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -95,6 +96,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: Enable the browser target only when exact current-SDK, canonical contract, and digest-bound approval artifacts match; open callback documentation remains non-dispositive.
 - [Phase ?]: Create WKWebView only after explicit owner start with nonpersistent storage and no browser-state inspection surface.
 - [Phase ?]: Reduce a matched app-bound return to closed SafeProbeEvent outcomes and close unsafe paths without retry or fallback.
+- [Phase ?]: Keep AV/key material behind a MainActor runtime and clear it after every bounded proof result.
+- [Phase ?]: Treat renewal-pending as incomplete after cleanup, never as GO or NO-GO.
+- [Phase ?]: Require fixed-order sign-out and verified cleanup before a browser proof can serialize complete.
 
 ### Pending Todos
 
@@ -118,6 +122,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-17T18:05:07.120Z
-Stopped at: Completed 00-08-PLAN.md
+Last session: 2026-08-17T18:16:17.589Z
+Stopped at: Completed 00-09-PLAN.md
 Resume file: None
