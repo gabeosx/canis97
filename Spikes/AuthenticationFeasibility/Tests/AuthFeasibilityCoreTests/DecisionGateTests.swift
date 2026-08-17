@@ -1,6 +1,20 @@
 import Testing
 @testable import AuthFeasibilityCore
 
+@Test("historical v2 owner evidence is rejected by the v3 gate")
+func historicalOwnerEvidenceCannotAuthorizePhaseOne() throws {
+    let historical = OwnerResult(
+        evidenceRevision: "phase-0-empirical-v2",
+        selectedPath: .unsupported,
+        runs: [],
+        cooldown: "not-applicable"
+    )
+
+    #expect(throws: ContractError.self) {
+        try OwnerResult.parse(historical.canonicalText)
+    }
+}
+
 @Test("only two ordered same-path complete proof runs unlock a decision")
 func exactTwoRunProofIsRequired() throws {
     let evidence = EvidenceRecord(

@@ -1,6 +1,18 @@
 import Testing
 @testable import AuthFeasibilityCore
 
+@Test("unsupported entitlement closes with no owner runs")
+func unsupportedEntitlementDerivesBlockedNoGoWithoutRuns() throws {
+    let result = try V3Finalization.derive(
+        entitlement: .unsupported,
+        browserProbe: .unsupported,
+        ownerResult: .zeroRunUnsupported
+    )
+
+    #expect(result.decision == "NO-GO unsupported")
+    #expect(result.continuation == .blocked)
+}
+
 @Test("finalization keeps unresolved prerequisites closed without creating a terminal decision")
 func prerequisiteIncompleteStatesRemainBlocked() {
     let incompleteStates: [FinalizationState] = [
