@@ -73,6 +73,21 @@ func nativePurposeContractDoesNotSelectRuntime() throws {
     #expect(CandidateSelection.nativeRuntimeSelection(for: contract) == .notEligible)
 }
 
+@Test("approval is issued only for ready bounds and is bound to exact canonical bytes")
+func approvalRequiresReadyConstructionAndExactDigest() throws {
+    let contract = AuthExperimentContract.readyForBrowserExperiment()
+    let approval = try ExperimentApproval.record(for: contract)
+    try approval.validate(against: contract)
+
+    var changedContract = contract
+    changedContract.browser.thirdPartyCallbackDocumentation = .publicFirstParty
+    #expect(isPublicContractInvalid { try approval.validate(against: changedContract) })
+
+    var incompleteContract = contract
+    incompleteContract.browser.renewalExpectation = .open
+    #expect(isPublicContractInvalid { try ExperimentApproval.record(for: incompleteContract) })
+}
+
 private func isPublicContractInvalid<T>(_ operation: () throws -> T) -> Bool {
     do {
         _ = try operation()
