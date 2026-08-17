@@ -180,6 +180,16 @@ public final class WebLoginSession: NSObject, WKNavigationDelegate, WKUIDelegate
         return SiriusXMAuthCookieExtractor.extract(from: cookies)
     }
 
+    func signOutPresence() async -> WebSessionSignOutPresence {
+        guard let webView else { return .absent }
+        let cookies = await withCheckedContinuation { continuation in
+            webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { cookies in
+                continuation.resume(returning: cookies)
+            }
+        }
+        return WebSessionSignOutChecker.classify(cookies: cookies)
+    }
+
     /// Keeps target=_blank and window.open login transitions inside the same
     /// ephemeral WebKit data store so the resulting player cookie is extractable.
     public func webView(
@@ -212,13 +222,10 @@ public final class WebLoginSession: NSObject, WKNavigationDelegate, WKUIDelegate
     }
 
     public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        Task { @MainActor [weak self, weak webView] in
-            try? await Task.sleep(for: .seconds(2))
-            guard let self, let webView, self.state == .ownerOperating else { return }
-            let script = "document.querySelector('#root')?.childElementCount > 0"
-            let rendered = (try? await webView.evaluateJavaScript(script)) as? Bool == true
-            self.onPageStatusChanged?(rendered ? .rendered : .applicationNotRendered)
-        }
+        guard state == .ownerOperating else { return }
+        // Navigation completion is the only page signal we need. Querying page
+        // JavaScript would expand this feasibility harness into a state extractor.
+        onPageStatusChanged?(.rendered)
     }
 
     public func webView(

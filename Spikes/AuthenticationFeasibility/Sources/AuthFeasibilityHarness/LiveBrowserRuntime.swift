@@ -2,6 +2,68 @@ import AuthFeasibilityCore
 import Foundation
 import WebKit
 
+public enum InstrumentedBrowserRunResult: Equatable, Sendable {
+    case awaitingOwnerSignOut
+    case complete
+    case incomplete
+    case terminal
+}
+
+/// One non-retryable synthetic tracer. Authentication and entitlement are
+/// deliberately distinct; a successful profile verification only advances to
+/// the separately bounded entitlement check.
+@MainActor
+public final class InstrumentedBrowserRun {
+    private enum State { case ready, inFlight, awaitingOwnerSignOut, complete, closed }
+
+    private var state: State = .ready
+    private let authenticationVerifier: NativeWebSessionVerifier
+    private let entitlementVerifier: NativeEntitlementVerifier
+    private let cleanup: CleanupCoordinator
+
+    init(
+        entitlementContract: EntitlementContract,
+        authenticationTransport: WebSessionTransport = .live,
+        entitlementTransport: WebSessionTransport = .live,
+        cleanup: CleanupCoordinator
+    ) throws {
+        authenticationVerifier = NativeWebSessionVerifier(transport: authenticationTransport)
+        entitlementVerifier = try NativeEntitlementVerifier(contract: entitlementContract, transport: entitlementTransport)
+        self.cleanup = cleanup
+    }
+
+    func use(_ session: VolatileWebSession) async -> InstrumentedBrowserRunResult {
+        guard state == .ready else { return .terminal }
+        state = .inFlight
+        guard let result = await session.consumeForRun({ accessToken in
+            let authentication = await authenticationVerifier.verify(accessToken: accessToken)
+            guard authentication == .authenticated else { return InstrumentedBrowserRunResult.terminal }
+            let entitlement = await entitlementVerifier.verify(accessToken: accessToken)
+            return entitlement == .entitled ? .awaitingOwnerSignOut : .terminal
+        }) else {
+            state = .closed
+            return .terminal
+        }
+        state = result == .awaitingOwnerSignOut ? .awaitingOwnerSignOut : .closed
+        return result
+    }
+
+    func finish(signOutPresence: WebSessionSignOutPresence) async -> InstrumentedBrowserRunResult {
+        guard state == .awaitingOwnerSignOut else { return .terminal }
+        guard signOutPresence == .absent else {
+            state = .closed
+            return .terminal
+        }
+        let proof = await cleanup.cleanUp()
+        guard proof == .verified else {
+            state = .closed
+            return .incomplete
+        }
+        state = .complete
+        return .complete
+    }
+}
+
 /// Coordinates one owner-started browser session and an explicit owner-triggered,
 /// in-memory transfer of first-party WebKit session cookies to an ephemeral native client.
 @MainActor
@@ -101,6 +163,16 @@ public final class LiveBrowserRuntime {
     public func signOut() -> SafeProbeEvent {
         webLoginSession.stop()
         return consumePreflight(semanticClient.signOut())
+    }
+
+    /// The owner performs sign-out in the provider surface. We then inspect only
+    /// the named first-party cookie's presence before allowing cleanup to finish.
+    public func verifySignOutAndClean() async -> CleanupProof {
+        guard await webLoginSession.signOutPresence() == .absent else {
+            _ = stop(for: .ambiguous)
+            return .failed
+        }
+        return await cleanUp()
     }
 
     /// Cleanup is explicitly awaited and its closed result is fed back into the

@@ -94,6 +94,11 @@ private final class BrowserHarnessApplication: NSObject, NSApplicationDelegate, 
         target: self,
         action: #selector(importLoggedInSession)
     )
+    private lazy var finishRunButton = NSButton(
+        title: "Verify Sign-Out & Finish Run",
+        target: self,
+        action: #selector(verifySignOutAndFinishRun)
+    )
 
     init(configuration: LaunchConfiguration) throws {
         runtime = try LiveBrowserRuntime(
@@ -140,6 +145,8 @@ private final class BrowserHarnessApplication: NSObject, NSApplicationDelegate, 
             try? status.canonicalText.write(to: pageStatusOutput, atomically: true, encoding: .utf8)
         }
         importSessionButton.setAccessibilityLabel("Use logged-in SiriusXM session")
+        finishRunButton.isEnabled = false
+        finishRunButton.setAccessibilityLabel("Verify sign-out and finish run")
 
         do {
             try runtime.startOwnerOperatedRun { [weak self] browser in
@@ -148,6 +155,7 @@ private final class BrowserHarnessApplication: NSObject, NSApplicationDelegate, 
                     browser,
                     self.sessionStatusLabel,
                     self.importSessionButton,
+                    self.finishRunButton,
                     self.proofStatusLabel,
                     self.renewalStatusLabel,
                 ])
@@ -192,12 +200,23 @@ private final class BrowserHarnessApplication: NSObject, NSApplicationDelegate, 
                 sessionStatusLabel.stringValue = "Could not write sanitized bridge result"
                 sessionStatusLabel.setAccessibilityValue("Bridge result write failed")
             }
-            switch result {
-            case .authCookieMissing, .authCookieMalformed, .httpStatus:
-                importSessionButton.isEnabled = true
-            default:
-                importSessionButton.isEnabled = false
-            }
+            importSessionButton.isEnabled = false
+            self.finishRunButton.isEnabled = result == .authenticated
+            importTask = nil
+        }
+    }
+
+    @objc private func verifySignOutAndFinishRun() {
+        guard importTask == nil else { return }
+        finishRunButton.isEnabled = false
+        proofStatusLabel.stringValue = "Verifying sign-out and local cleanup"
+        proofStatusLabel.setAccessibilityValue("Verifying sign-out and cleanup")
+        importTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            let proof = await runtime.verifySignOutAndClean()
+            let text = proof == .verified ? "Run cleanup verified" : "Run closed without completion"
+            proofStatusLabel.stringValue = text
+            proofStatusLabel.setAccessibilityValue(text)
             importTask = nil
         }
     }

@@ -1,3 +1,4 @@
+import AuthFeasibilityCore
 import Foundation
 
 /// The only transferable browser-authentication material. It is in-memory,
@@ -15,6 +16,15 @@ public final class VolatileWebSession {
         return accessToken
     }
 
+    /// Gives the one scoped owner of a run temporary access without making the
+    /// token storable or printable by the state machine. It is cleared whether
+    /// the operation succeeds, fails, or returns a terminal result.
+    func consumeForRun<Result>(_ operation: (String) async -> Result) async -> Result? {
+        guard let accessToken else { return nil }
+        defer { self.accessToken = nil }
+        return await operation(accessToken)
+    }
+
     deinit {
         accessToken = nil
     }
@@ -27,7 +37,7 @@ enum WebSessionExtraction {
 }
 
 public enum WebSessionBridgeResult: Equatable, Sendable {
-    case verified
+    case authenticated
     case authCookieMissing
     case authCookieMalformed
     case alreadyConsumed
@@ -35,12 +45,13 @@ public enum WebSessionBridgeResult: Equatable, Sendable {
     case protectedControl
     case rateLimited
     case serviceUnavailable
+    case malformed
     case httpStatus(Int)
     case cancelled
 
     private var canonicalOutcome: String {
         switch self {
-        case .verified: "verified"
+        case .authenticated: "authenticated"
         case .authCookieMissing: "auth-cookie-missing"
         case .authCookieMalformed: "auth-cookie-malformed"
         case .alreadyConsumed: "session-already-consumed"
@@ -48,6 +59,7 @@ public enum WebSessionBridgeResult: Equatable, Sendable {
         case .protectedControl: "protected-control"
         case .rateLimited: "rate-limited"
         case .serviceUnavailable: "service-unavailable"
+        case .malformed: "malformed"
         case let .httpStatus(code): "http-status-\(code)"
         case .cancelled: "cancelled"
         }
@@ -65,7 +77,7 @@ public enum WebSessionBridgeResult: Equatable, Sendable {
 
     public var ownerVisibleText: String {
         switch self {
-        case .verified: "Web session imported and verified natively"
+        case .authenticated: "Web session authenticated natively; entitlement still requires separate verification"
         case .authCookieMissing: "Player login cookie absent — the WebView is not signed in"
         case .authCookieMalformed: "Player login cookie found, but its session token is invalid"
         case .alreadyConsumed: "Web session was already consumed"
@@ -73,8 +85,33 @@ public enum WebSessionBridgeResult: Equatable, Sendable {
         case .protectedControl: "Protected response — stopped"
         case .rateLimited: "Rate limit encountered — stopped"
         case .serviceUnavailable: "SiriusXM session verification unavailable"
+        case .malformed: "Native session verification returned an unusable response"
         case let .httpStatus(code): "Native session check returned HTTP \(code)"
         case .cancelled: "Session import cancelled"
+        }
+    }
+}
+
+public enum WebSessionSignOutPresence: Equatable, Sendable {
+    case present
+    case absent
+    case ambiguous
+}
+
+/// Restricts sign-out verification to the one allowed cookie name and first-party
+/// domain. It intentionally returns only presence semantics and never exposes a value.
+enum WebSessionSignOutChecker {
+    @MainActor
+    static func classify(cookies: [HTTPCookie], now: Date = Date()) -> WebSessionSignOutPresence {
+        let matches = cookies.filter { cookie in
+            let domain = cookie.domain.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
+            let isCurrent = cookie.expiresDate.map { $0 > now } ?? true
+            return cookie.name == "AUTH_TOKEN" && domain == "siriusxm.com" && isCurrent
+        }
+        return switch matches.count {
+        case 0: .absent
+        case 1: .present
+        default: .ambiguous
         }
     }
 }
@@ -122,7 +159,7 @@ struct WebSessionTransport: Sendable {
         configuration.httpShouldSetCookies = false
         configuration.httpCookieStorage = nil
 
-        let urlSession = URLSession(configuration: configuration)
+        let urlSession = URLSession(configuration: configuration, delegate: RedirectRejectingDelegate(), delegateQueue: nil)
         defer {
             urlSession.invalidateAndCancel()
         }
@@ -131,6 +168,18 @@ struct WebSessionTransport: Sendable {
             throw URLError(.badServerResponse)
         }
         return WebSessionHTTPResponse(statusCode: response.statusCode, body: data)
+    }
+}
+
+private final class RedirectRejectingDelegate: NSObject, URLSessionTaskDelegate {
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping @Sendable (URLRequest?) -> Void
+    ) {
+        completionHandler(nil)
     }
 }
 
@@ -150,6 +199,10 @@ struct NativeWebSessionVerifier: Sendable {
 
     func verify(_ session: VolatileWebSession) async -> WebSessionBridgeResult {
         guard let accessToken = session.consume() else { return .alreadyConsumed }
+        return await verify(accessToken: accessToken)
+    }
+
+    func verify(accessToken: String) async -> WebSessionBridgeResult {
 
         do {
             var request = URLRequest(url: Self.endpoint)
@@ -172,12 +225,97 @@ struct NativeWebSessionVerifier: Sendable {
 
     static func classify(_ response: WebSessionHTTPResponse) -> WebSessionBridgeResult {
         switch response.statusCode {
-        case 200...299: return .verified
+        case 200...299: return response.body.isEmpty ? .malformed : .authenticated
         case 401: return .rejected
         case 403: return .protectedControl
         case 429: return .rateLimited
         case 500...599: return .serviceUnavailable
         default: return .httpStatus(response.statusCode)
         }
+    }
+}
+
+public enum EntitlementVerificationResult: Equatable, Sendable {
+    case entitled
+    case notEntitled
+    case malformed
+    case rejected
+    case protectedControl
+    case rateLimited
+    case serviceUnavailable
+    case httpStatus(Int)
+    case cancelled
+}
+
+/// A narrowly constructed verifier for a public, byte-canonical entitlement
+/// contract. It cannot be created from an unsupported result and has no path to
+/// infer entitlement from a profile request.
+@MainActor
+struct NativeEntitlementVerifier: Sendable {
+    private let requestDefinition: EntitlementRequest
+    private let successPredicate: EntitlementPredicate
+    private let denialPredicate: EntitlementPredicate
+    private let transport: WebSessionTransport
+
+    init(contract: EntitlementContract, transport: WebSessionTransport = .live) throws {
+        guard contract.status == .supported,
+              let request = contract.request,
+              let success = contract.successPredicate,
+              let denial = contract.denialPredicate else {
+            throw ContractError.invalidArtifact
+        }
+        requestDefinition = request
+        successPredicate = success
+        denialPredicate = denial
+        self.transport = transport
+    }
+
+    func verify(accessToken: String) async -> EntitlementVerificationResult {
+        guard let url = URL(string: "https://\(requestDefinition.host)\(requestDefinition.path)") else {
+            return .malformed
+        }
+        do {
+            var request = URLRequest(url: url)
+            request.httpMethod = requestDefinition.method
+            request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+            request.setValue("SiriusMac/0.1 (macOS; entitlement verifier)", forHTTPHeaderField: "User-Agent")
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+            let response = try await transport.send(request)
+            return classify(response)
+        } catch is CancellationError {
+            return .cancelled
+        } catch let error as URLError where error.code == .cancelled {
+            return .cancelled
+        } catch {
+            return .serviceUnavailable
+        }
+    }
+
+    private func classify(_ response: WebSessionHTTPResponse) -> EntitlementVerificationResult {
+        switch response.statusCode {
+        case 200...299:
+            guard let object = try? JSONSerialization.jsonObject(with: response.body) as? [String: Any],
+                  let value = stringValue(for: successPredicate.field, in: object) else {
+                return .malformed
+            }
+            if value == successPredicate.value { return .entitled }
+            if value == denialPredicate.value { return .notEntitled }
+            return .malformed
+        case 401: return .rejected
+        case 403: return .protectedControl
+        case 429: return .rateLimited
+        case 500...599: return .serviceUnavailable
+        default: return .httpStatus(response.statusCode)
+        }
+    }
+
+    private func stringValue(for field: String, in object: [String: Any]) -> String? {
+        var value: Any = object
+        for component in field.split(separator: ".") {
+            guard let dictionary = value as? [String: Any], let next = dictionary[String(component)] else { return nil }
+            value = next
+        }
+        return value as? String
     }
 }

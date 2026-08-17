@@ -54,7 +54,7 @@ func nativeSessionVerificationIsSingleConsumption() async throws {
         #expect(request.value(forHTTPHeaderField: "Authorization")?.hasPrefix("Bearer ") == true)
         return WebSessionHTTPResponse(
             statusCode: 200,
-            body: Data()
+            body: Data("{}".utf8)
         )
     })
 
@@ -106,6 +106,35 @@ func signOutPresenceIsClosedAndNameScoped() throws {
     #expect(WebSessionSignOutChecker.classify(cookies: []) == .absent)
     #expect(WebSessionSignOutChecker.classify(cookies: [current]) == .present)
     #expect(WebSessionSignOutChecker.classify(cookies: [current, current]) == .ambiguous)
+}
+
+@Test("instrumented run requires separate entitlement then sign-out absence and cleanup")
+@MainActor
+func instrumentedRunUsesOneTokenAcrossTheClosedSequence() async throws {
+    let contract = try EntitlementContract.parse([
+        "Schema: entitlement-contract-v1", "Status: supported", "Method: GET",
+        "Host: api.edge-gateway.siriusxm.com", "Path: /subscription/v1/status",
+        "Public provenance URL: https://www.siriusxm.com/player", "Retrieved on: 2026-08-17",
+        "Success field: subscription.status", "Success value: active",
+        "Denial field: subscription.status", "Denial value: inactive",
+        "Malformed rule: missing-or-non-string-field", "",
+    ].joined(separator: "\n"))
+    let cleanup = CleanupCoordinator(participant: PassingCleanupParticipant())
+    let run = try InstrumentedBrowserRun(
+        entitlementContract: contract,
+        authenticationTransport: WebSessionTransport { _ in .init(statusCode: 200, body: Data("{}".utf8)) },
+        entitlementTransport: WebSessionTransport { _ in .init(statusCode: 200, body: Data(#"{"subscription":{"status":"active"}}"#.utf8)) },
+        cleanup: cleanup
+    )
+
+    #expect(await run.use(VolatileWebSession(accessToken: String(repeating: "t", count: 24))) == .awaitingOwnerSignOut)
+    #expect(await run.finish(signOutPresence: .absent) == .complete)
+    #expect(await run.use(VolatileWebSession(accessToken: String(repeating: "t", count: 24))) == .terminal)
+}
+
+@MainActor
+private final class PassingCleanupParticipant: VolatileCleanupParticipant {
+    func perform(_ step: CleanupStep) async -> Bool { true }
 }
 
 private func cookie(
