@@ -358,6 +358,13 @@ public struct ExperimentApproval: Equatable, Sendable {
         self.contractDigest = contract.digest
     }
 
+    public static func record(for contract: AuthExperimentContract) throws -> ExperimentApproval {
+        guard try CandidateSelection.experimentReadiness(for: contract) == .browserExperimentReady else {
+            throw ContractError.invalidArtifact
+        }
+        return ExperimentApproval(contract: contract)
+    }
+
     public var canonicalText: String {
         [
             "Schema: experiment-approval-v1",

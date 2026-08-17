@@ -23,6 +23,10 @@ struct Arguments {
         }
         return values[index]
     }
+
+    func contains(_ flag: String) -> Bool {
+        values.contains(flag)
+    }
 }
 
 func readArtifact(_ path: String) throws -> String {
@@ -95,12 +99,40 @@ func requirePhaseOneGo(_ arguments: Arguments) throws {
     FileHandle.standardOutput.write(Data("phase-one-go\n".utf8))
 }
 
+func deriveExperimentReadiness(_ arguments: Arguments) throws {
+    let contract = try AuthExperimentContract.parse(readArtifact(try arguments.value(named: "--contract")))
+    let readiness = try CandidateSelection.experimentReadiness(for: contract)
+    try writeArtifact(readiness.canonicalText(contractDigest: contract.digest), to: arguments.value(named: "--output"))
+}
+
+func recordExperimentApproval(_ arguments: Arguments) throws {
+    guard arguments.contains("--owner-approved") else { throw RunnerError.invalidArguments }
+    let contract = try AuthExperimentContract.parse(readArtifact(try arguments.value(named: "--contract")))
+    let approval = try ExperimentApproval.record(for: contract)
+    try writeArtifact(approval.canonicalText, to: arguments.value(named: "--output"))
+}
+
+func validateExperimentApproval(_ arguments: Arguments) throws {
+    let contract = try AuthExperimentContract.parse(readArtifact(try arguments.value(named: "--contract")))
+    let approval = try ExperimentApproval.parse(readArtifact(try arguments.value(named: "--approval")))
+    try approval.validate(against: contract)
+    FileHandle.standardOutput.write(Data("valid\n".utf8))
+}
+
 func run() throws {
     let arguments = Array(CommandLine.arguments.dropFirst())
     guard let command = arguments.first else { return }
     let parsed = Arguments(values: Array(arguments.dropFirst()))
 
     switch command {
+    case "validate-auth-experiment-contract":
+        _ = try AuthExperimentContract.parse(readArtifact(try parsed.positional(0)))
+    case "derive-experiment-readiness":
+        try deriveExperimentReadiness(parsed)
+    case "record-experiment-approval":
+        try recordExperimentApproval(parsed)
+    case "validate-experiment-approval":
+        try validateExperimentApproval(parsed)
     case "validate-evidence":
         _ = try EvidenceRecord.parse(readArtifact(try parsed.positional(0)))
     case "derive-selection":
