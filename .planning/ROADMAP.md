@@ -37,24 +37,46 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Every protected, challenged, rate-limited, redirected, suspicious, or ambiguous outcome stops immediately, retains no secret evidence, and produces `NO-GO unsupported`.
   5. A sanitized feasibility artifact contains exactly one decision: `GO browser-return`, `GO native-direct`, or `NO-GO unsupported`; only a GO decision permits Phase 1 execution.
 
-**Plans**: 4/4 plans executed
+**Plans**: 9 replacement plans (0/9 executed)
 
 Plans:
 **Wave 1**
 
-- [x] 00-01-PLAN.md — Build the isolated offline safety, evidence, proof, and decision tracer.
+- [ ] 00-05-PLAN.md — Establish the safe terminal tracer, exact toolchain preflight, and canonical empirical proof contract.
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [x] 00-02-PLAN.md — Qualify public first-party evidence and derive exactly one candidate or unsupported.
+- [ ] 00-06-PLAN.md — Define and enforce the public-first-party provider contract for browser and conditional native qualification.
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [x] 00-03-PLAN.md — Compile only the selected disposable candidate, or normalize safely to no candidate.
+- [ ] 00-07-PLAN.md — Resolve the public provider contract and obtain digest-bound owner approval or close unsupported.
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [x] 00-04-PLAN.md — Apply the owner-only two-run proof and derive the terminal GO/NO-GO gate.
+- [ ] 00-08-PLAN.md — Build the qualified app-bound browser-return construction and semantic handoff.
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [ ] 00-09-PLAN.md — Complete bounded playback, renewal, sign-out, cleanup, and synthetic browser preflight.
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [ ] 00-10-PLAN.md — Run the owner-controlled browser proof and decide whether the qualified native boundary may be exposed.
+
+**Wave 7** *(blocked on Wave 6 completion)*
+
+- [ ] 00-11-PLAN.md — Enforce one-live-path replacement and conditionally compose the approved native-direct runtime.
+
+**Wave 8** *(blocked on Wave 7 completion)*
+
+- [ ] 00-12-PLAN.md — Close the ineligible native branch or run the owner-controlled native proof.
+
+**Wave 9** *(blocked on Wave 8 completion)*
+
+- [ ] 00-13-PLAN.md — Atomically regenerate and validate the canonical Phase 0 quartet and enforce the Phase 1 gate.
+
+**Historical execution note:** The user selected replan-from-scratch on 2026-08-17. Plans and summaries 00-01 through 00-04 remain immutable historical records only and are not the active inventory. See `00-SUPERSESSION.md`; Plans 00-05 through 00-13 are the sole active replacement set, and Phase 1 remains blocked until their finalization contract succeeds.
 
 **Scope fence:** Phase 0 may create only a minimal isolated feasibility harness and sanitized evidence contract. It does not build the production app shell, public client API, Keychain persistence, catalog, playback, skins, or release infrastructure.
 
@@ -177,7 +199,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 0. Authentication Feasibility Gate | 4/4 | In Progress|  |
+| 0. Authentication Feasibility Gate | 0/9 replacement | Planned | - |
 | 1. Safe Interoperability Foundation | 0/8 | Not started | - |
 | 2. Authorized Live Listening | 0/TBD | Not started | - |
 | 3. Native Mac Listening Experience | 0/TBD | Not started | - |

@@ -4,148 +4,135 @@ slug: authentication-feasibility-gate
 status: planned
 nyquist_compliant: true
 wave_0_complete: false
-created: 2026-08-16
-updated: 2026-08-16
+created: 2026-08-17
+updated: 2026-08-17
 ---
 
 # Phase 00 — Validation Strategy
 
-> Every automated check is synthetic, static, or build-only. No automated command opens a browser, contacts SiriusXM, inspects browser/session state, invokes the candidate, uses account data, waits a cooldown, retries, or polls.
+> Validation contract for replacement plans 00-05 through 00-13. Live provider operations are never automated; every automated branch uses synthetic/public inputs and must prove that ineligible states have no protected-surface constructor.
 
-## Test Infrastructure
+## Test Architecture
 
-| Property | Value |
-|---|---|
-| **Framework** | Swift Testing in an isolated dependency-free SwiftPM package |
-| **Config file** | `Spikes/AuthenticationFeasibility/Package.swift` — Plan 00-01 creates it |
-| **Quick run command** | `swift test --package-path Spikes/AuthenticationFeasibility` |
-| **Full suite command** | `swift test --package-path Spikes/AuthenticationFeasibility` |
-| **Estimated runtime** | ~10 seconds |
+| Layer | Framework | Role |
+|---|---|---|
+| Command-line safety core | Swift Testing via SwiftPM | Canonical evidence, experiment readiness, candidate, finalization, and stop-state invariants under Command Line Tools. |
+| Toolchain preflight | Shell plus Swift parser tests | Exact selected Xcode 26.6/macOS 26.5 SDK/framework-import readiness without a fixed installation path. |
+| Conditional macOS harness | Swift Testing with current Xcode SDK | Browser-return, AVFoundation, native-direct, source-graph, and cleanup tests only when exact current-SDK readiness validates. |
+| Incomplete/terminal branches | Command-line Swift tests | Proves no GUI/live source or command exists and distinguishes fixed incomplete status from canonical terminal `NO-GO unsupported`. |
+| Owner protocol | Blocking decision/action checkpoints | Bounded-experiment approval and the two live proof runs; pre/post automation validates only closed artifacts. |
+| Supersession authority | Shell field checks plus finalizer tests | Proves 00-01..00-04 remain historical, 00-05..00-13 are active, Phase 1 stays blocked during execution, and authority changes only after a newly generated quartet validates. |
 
-## Sampling Rate
-
-- After every autonomous task: run the task’s exact `<automated>` command below.
-- After every wave: run `swift test --package-path Spikes/AuthenticationFeasibility` plus the wave’s artifact validator/static gate.
-- Before any human checkpoint: the preceding automated gate must pass. Unsupported branches bypass candidate/live checkpoints rather than weakening their precondition.
-- Before `$gsd-verify-work`: run the full synthetic suite and `auth-feasibility validate-decision` against `00-DECISION.md`.
-- Maximum automated feedback latency: 10 seconds after the SwiftPM package exists.
-
-The two proof runs are manual owner actions, not test sampling. They never run in tests, CI, timers, retry loops, browser automation, or agent-operated tools.
-
-## Per-Task Verification Map
-
-| Task ID | Plan | Wave | Requirements | Threat refs | Automated command | Human-only behavior |
-|---|---:|---:|---|---|---|---|
-| 00-01-01 | 01 | 1 | FEAS-01, FEAS-05 | T-00-01, T-00-05 | `swift package --package-path Spikes/AuthenticationFeasibility describe && swift test --package-path Spikes/AuthenticationFeasibility --filter ContractTracerTests` | None |
-| 00-01-02 | 01 | 1 | FEAS-02, FEAS-03, FEAS-04, FEAS-05 | T-00-02, T-00-03, T-00-04 | `swift test --package-path Spikes/AuthenticationFeasibility && ! rg -n 'URLSession\|ASWebAuthenticationSession\|WKWebView\|HTTPCookieStorage\|User-Agent\|URLCredentialStorage\|http://\|https://' Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityCore` | None |
-| 00-02-01 | 02 | 2 | FEAS-01, FEAS-02, FEAS-04 | T-00-01, T-00-02, T-00-04 | `swift test --package-path Spikes/AuthenticationFeasibility` | Account owner reviews public first-party evidence only and returns one closed classification plus public URLs. |
-| 00-02-02 | 02 | 2 | FEAS-01, FEAS-02, FEAS-05 | T-00-02, T-00-05 | Strict `validate-evidence` → `derive-selection` → byte comparison → `validate-selection` command from Plan 00-02 Task 02. | None |
-| 00-03-01 | 03 | 3 | FEAS-01, FEAS-02, FEAS-04 | T-00-01..T-00-05 | Strict full-chain validation, fresh selection/decision derivation and byte comparison, canonical unsupported closure, and branch command from Plan 00-03 Task 01; browser selection additionally requires offline `xcodebuild -version`. | None; partial closure is invalid and only a fully validated unsupported chain bypasses the checkpoint. |
-| 00-03-02 | 03 | 3 | FEAS-02, FEAS-03, FEAS-04 | T-00-01..T-00-05 | Full synthetic suite/build plus exact selected-source cardinality command from Plan 00-03 Task 02. | None; this task builds but never invokes the candidate. |
-| 00-03-03 | 03 | 3 | FEAS-02, FEAS-04 | T-00-01..T-00-05 | Full synthetic suite/build and exact runbook disposition command from Plan 00-03 Task 03. | For supported selection only, owner reviews source/runbook safety without authenticating; unsupported bypasses the pause. |
-| 00-04-01 | 04 | 4 | FEAS-03, FEAS-04, FEAS-05 | T-00-03..T-00-05 | Strict evidence/selection derivation plus conditional proof-ready-or-validated-zero-run-owner-result command from Plan 00-04 Task 01. | None; unsupported writes and validates zero-run owner result. |
-| 00-04-02 | 04 | 4 | FEAS-03, FEAS-04 | T-00-01, T-00-03, T-00-04 | Branch-aware command from Plan 00-04 Task 02: unsupported requires no proof-ready and validates the zero-run owner result; supported requires proof-ready. | For supported selection only, owner performs exactly run-1, cooldown, run-2 or stops once; unsupported bypasses the task. |
-| 00-04-03 | 04 | 4 | FEAS-03, FEAS-04, FEAS-05 | T-00-01, T-00-03..T-00-05 | Strict `validate-owner-result` → `derive-decision` → byte comparison → `validate-decision` command from Plan 00-04 Task 03. | None |
-
-## Exact Automated Command Reconciliation
-
-The following blocks are copied verbatim from each task's `<automated>` element and are the canonical validation commands. This prevents the task map from drifting while keeping long shell programs outside Markdown table cells.
-
-### 00-01-01
-
-```sh
-swift package --package-path Spikes/AuthenticationFeasibility describe &amp;&amp; swift test --package-path Spikes/AuthenticationFeasibility --filter ContractTracerTests
-```
-
-### 00-01-02
-
-```sh
-swift test --package-path Spikes/AuthenticationFeasibility &amp;&amp; ! rg -n 'URLSession|ASWebAuthenticationSession|WKWebView|HTTPCookieStorage|User-Agent|URLCredentialStorage|http://|https://' Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityCore
-```
-
-### 00-02-01
+Quick command-line loop:
 
 ```sh
 swift test --package-path Spikes/AuthenticationFeasibility
 ```
 
-### 00-02-02
+Conditional current-SDK loop:
 
 ```sh
-evidence=.planning/phases/00-authentication-feasibility-gate/00-EVIDENCE.md; selection=.planning/phases/00-authentication-feasibility-gate/00-SELECTION.md; owner=.planning/phases/00-authentication-feasibility-gate/00-OWNER-RESULT.md; decision_file=.planning/phases/00-authentication-feasibility-gate/00-DECISION.md; derived_selection=$(mktemp) || exit 1; derived_decision=$(mktemp) || { rm -f "$derived_selection"; exit 1; }; trap 'rm -f "$derived_selection" "$derived_decision"' EXIT; closed=0; if ! swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility validate-evidence "$evidence" || ! swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility derive-selection --evidence "$evidence" --output "$derived_selection" || ! cmp -s "$derived_selection" "$selection" || ! swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility validate-selection "$selection"; then swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility close-unsupported --reason invalid-artifact --evidence "$evidence" --selection "$selection" --owner-result "$owner" --decision "$decision_file" &amp;&amp; closed=1; fi &amp;&amp; swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility validate-evidence "$evidence" &amp;&amp; swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility derive-selection --evidence "$evidence" --output "$derived_selection" &amp;&amp; cmp -s "$derived_selection" "$selection" &amp;&amp; swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility validate-selection "$selection" &amp;&amp; { [ "$closed" -eq 0 ] || { swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility validate-owner-result "$owner" &amp;&amp; swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility derive-decision --selection "$selection" --evidence "$evidence" --owner-result "$owner" --output "$derived_decision" &amp;&amp; cmp -s "$derived_decision" "$decision_file" &amp;&amp; swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility validate-decision "$decision_file"; }; } &amp;&amp; [ "$(rg -c '^Selected candidate:' "$selection")" -eq 1 ] &amp;&amp; [ "$(rg -c '^Live attempt permitted:' "$selection")" -eq 1 ]
+bash Spikes/AuthenticationFeasibility/Scripts/verify-current-xcode.sh --require-ready-or-closed
+xcrun swift test --package-path Spikes/AuthenticationFeasibility
 ```
 
-### 00-03-01
+No validation command opens provider content, accepts account input, performs a live request, retries, polls, schedules work, or controls the human cooldown.
 
-```sh
-evidence=.planning/phases/00-authentication-feasibility-gate/00-EVIDENCE.md; selection=.planning/phases/00-authentication-feasibility-gate/00-SELECTION.md; owner=.planning/phases/00-authentication-feasibility-gate/00-OWNER-RESULT.md; decision_file=.planning/phases/00-authentication-feasibility-gate/00-DECISION.md; runbook=.planning/phases/00-authentication-feasibility-gate/00-RUNBOOK.md; derived_selection=$(mktemp) || exit 1; derived_decision=$(mktemp) || { rm -f "$derived_selection"; exit 1; }; trap 'rm -f "$derived_selection" "$derived_decision"' EXIT; closed=0; if ! swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility validate-evidence "$evidence" || ! swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility derive-selection --evidence "$evidence" --output "$derived_selection" || ! cmp -s "$derived_selection" "$selection" || ! swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility validate-selection "$selection"; then swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility close-unsupported --reason invalid-artifact --evidence "$evidence" --selection "$selection" --owner-result "$owner" --decision "$decision_file" &amp;&amp; closed=1; fi &amp;&amp; if [ "$closed" -eq 0 ]; then selected=$(sed -n 's/^Selected candidate: //p' "$selection"); case "$selected" in unsupported) swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility close-unsupported --reason unsupported-selection --evidence "$evidence" --selection "$selection" --owner-result "$owner" --decision "$decision_file" &amp;&amp; closed=1;; browser-return) if ! xcodebuild -version &gt;/dev/null; then swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility close-unsupported --reason browser-tooling-unavailable --evidence "$evidence" --selection "$selection" --owner-result "$owner" --decision "$decision_file" &amp;&amp; closed=1; fi;; native-direct) true;; *) false;; esac; fi &amp;&amp; swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility validate-evidence "$evidence" &amp;&amp; swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility derive-selection --evidence "$evidence" --output "$derived_selection" &amp;&amp; cmp -s "$derived_selection" "$selection" &amp;&amp; swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility validate-selection "$selection" &amp;&amp; { [ "$closed" -eq 0 ] || { swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility validate-owner-result "$owner" &amp;&amp; swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility derive-decision --selection "$selection" --evidence "$evidence" --owner-result "$owner" --output "$derived_decision" &amp;&amp; cmp -s "$derived_decision" "$decision_file" &amp;&amp; swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility validate-decision "$decision_file"; }; } &amp;&amp; selected=$(sed -n 's/^Selected candidate: //p' "$selection") &amp;&amp; case "$selected" in unsupported) [ ! -e Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityBrowserCandidate/BrowserCandidate.swift ] &amp;&amp; [ ! -e Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityNativeCandidate/NativeCandidate.swift ] &amp;&amp; rg -q '^Live operation: prohibited$' "$runbook";; browser-return) xcodebuild -version &gt;/dev/null;; native-direct) true;; *) false;; esac
-```
+## Task-to-Verification Map
 
-### 00-03-02
+| Wave | Task | Type | Automated verification | Human/conditional assertion | Threat refs |
+|---:|---|---|---|---|---|
+| 1 | 00-05-01 | tracer/TDD | `supersession=.planning/phases/00-authentication-feasibility-gate/00-SUPERSESSION.md; test -r "$supersession" && rg -q '^Schema: phase-0-supersession-v1$' "$supersession" && rg -q '^Status: replacement-planned$' "$supersession" && rg -q '^Active plan range: 00-05\.\.00-13$' "$supersession" && rg -q '^Replacement execution complete: no$' "$supersession" && rg -q '^Phase 1 continuation: blocked$' "$supersession" && swift test --package-path Spikes/AuthenticationFeasibility --filter ToolchainGateTests` | Supersession authorizes only the replacement set; toolchain gaps produce environment-pending/incomplete, not a provider NO-GO. | T-00-05-01, T-00-05-04, T-00-05-SC |
+| 1 | 00-05-02 | TDD | `supersession=.planning/phases/00-authentication-feasibility-gate/00-SUPERSESSION.md; test -r "$supersession" && rg -q '^Status: replacement-planned$' "$supersession" && rg -q '^Active plan range: 00-05\.\.00-13$' "$supersession" && rg -q '^Replacement execution complete: no$' "$supersession" && rg -q '^Phase 1 continuation: blocked$' "$supersession" && swift test --package-path Spikes/AuthenticationFeasibility --filter ContractTracerTests` | Historical quartet cannot be copied or hand-edited into replacement authority. | T-00-05-03, T-00-05-04 |
+| 2 | 00-06-01 | TDD | `swift test --package-path Spikes/AuthenticationFeasibility --filter PublicAuthContractTests` | Closed safe-construction/native-purpose schema accepts no raw, secret-bearing, or browser-state evidence and treats documentation-open as non-dispositive. | T-00-06-01, T-00-06-02, T-00-06-04 |
+| 2 | 00-06-02 | TDD | `swift test --package-path Spikes/AuthenticationFeasibility --filter PublicAuthContractTests` | Exact safe construction may create a browser experiment even with open third-party docs; native purpose qualification alone cannot select. | T-00-06-02 through T-00-06-04 |
+| 3 | 00-07-01 | auto | `swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility validate-auth-experiment-contract .planning/phases/00-authentication-feasibility-gate/00-PUBLIC-AUTH-CONTRACT.md && swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility derive-experiment-readiness .planning/phases/00-authentication-feasibility-gate/00-TOOLCHAIN.md .planning/phases/00-authentication-feasibility-gate/00-PUBLIC-AUTH-CONTRACT.md` | Safe bounds plus documentation-open produce experiment-ready; missing safety inputs produce incomplete and no owner/live command. | T-00-07-01 through T-00-07-04 |
+| 3 | 00-07-02 | checkpoint:decision | `swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility validate-experiment-approval .planning/phases/00-authentication-feasibility-gate/00-PUBLIC-AUTH-CONTRACT.md .planning/phases/00-authentication-feasibility-gate/00-PUBLIC-AUTH-CONTRACT-APPROVAL.md` | Owner approves/rejects exact construction, provenance, semantic observation, and stop bounds; incomplete records `not-presented`. | T-00-07-01 through T-00-07-03 |
+| 4 | 00-08-01 | TDD | `bash Spikes/AuthenticationFeasibility/Scripts/verify-current-xcode.sh --check-conditional .planning/phases/00-authentication-feasibility-gate/00-TOOLCHAIN.md .planning/phases/00-authentication-feasibility-gate/00-PUBLIC-AUTH-CONTRACT.md .planning/phases/00-authentication-feasibility-gate/00-PUBLIC-AUTH-CONTRACT-APPROVAL.md && xcrun swift test --package-path Spikes/AuthenticationFeasibility --filter BrowserReturnContractTests` | Experiment-ready configuration has one owner-operated WKWebView; every blocked row has no GUI/browser source. | T-00-08-01, T-00-08-02, T-00-08-SC |
+| 4 | 00-08-02 | TDD | `bash Spikes/AuthenticationFeasibility/Scripts/verify-current-xcode.sh --check-conditional .planning/phases/00-authentication-feasibility-gate/00-TOOLCHAIN.md .planning/phases/00-authentication-feasibility-gate/00-PUBLIC-AUTH-CONTRACT.md .planning/phases/00-authentication-feasibility-gate/00-PUBLIC-AUTH-CONTRACT-APPROVAL.md && xcrun swift test --package-path Spikes/AuthenticationFeasibility --filter BrowserReturnContractTests` | Explicit return material collapses to semantics; no browser store/state is enumerated, and no-clean-return remains incomplete absent D-09 proof. | T-00-08-02 through T-00-08-04 |
+| 5 | 00-09-01 | TDD | `bash Spikes/AuthenticationFeasibility/Scripts/verify-current-xcode.sh --require-ready-or-closed && xcrun swift test --package-path Spikes/AuthenticationFeasibility --filter AuthorizedPlaybackProbeTests && xcrun swift test --package-path Spikes/AuthenticationFeasibility --filter RenewalObserverTests` | Blocked is incomplete/not-applicable; renewal absence is incomplete, never terminal. | T-00-09-01 through T-00-09-03 |
+| 5 | 00-09-02 | TDD | `bash Spikes/AuthenticationFeasibility/Scripts/verify-current-xcode.sh --require-ready-or-closed && xcrun swift test --package-path Spikes/AuthenticationFeasibility --filter CleanupCoordinatorTests && xcrun swift test --package-path Spikes/AuthenticationFeasibility --filter BrowserProofPreflightTests` | Every exit reaches idempotent cleanup; blocked branches perform no provider work. | T-00-09-02 through T-00-09-04 |
+| 6 | 00-10-01 | checkpoint:human-action | `bash Spikes/AuthenticationFeasibility/Scripts/verify-current-xcode.sh --require-ready-or-closed && swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility validate-browser-launch-gate .planning/phases/00-authentication-feasibility-gate/00-TOOLCHAIN.md .planning/phases/00-authentication-feasibility-gate/00-PUBLIC-AUTH-CONTRACT.md .planning/phases/00-authentication-feasibility-gate/00-PUBLIC-AUTH-CONTRACT-APPROVAL.md && swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility validate-live-result --candidate browser-return .planning/phases/00-authentication-feasibility-gate/00-BROWSER-PROBE.md` | Owner alone performs ready runs; no-clean-return/renewal gaps are incomplete, locked protected classes terminal, and D-09 rule-out exact. | T-00-10-01 through T-00-10-03 |
+| 6 | 00-10-02 | checkpoint:decision | `swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility validate-native-approval .planning/phases/00-authentication-feasibility-gate/00-PUBLIC-AUTH-CONTRACT.md .planning/phases/00-authentication-feasibility-gate/00-BROWSER-PROBE.md .planning/phases/00-authentication-feasibility-gate/00-NATIVE-DIRECT-APPROVAL.md` | Decision appears only for strict WebKit rule-out plus native-purpose-qualified allowable sanitized evidence. | T-00-10-02, T-00-10-04 |
+| 7 | 00-11-01 | TDD | `bash Spikes/AuthenticationFeasibility/Scripts/verify-current-xcode.sh --require-ready-or-closed && swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility validate-native-approval .planning/phases/00-authentication-feasibility-gate/00-PUBLIC-AUTH-CONTRACT.md .planning/phases/00-authentication-feasibility-gate/00-BROWSER-PROBE.md .planning/phases/00-authentication-feasibility-gate/00-NATIVE-DIRECT-APPROVAL.md && xcrun swift test --package-path Spikes/AuthenticationFeasibility --filter NativeFallbackGateTests` | Eligible source graph contains native-direct only; incomplete and terminal rows contain no native source. | T-00-11-01, T-00-11-03 |
+| 7 | 00-11-02 | TDD | `bash Spikes/AuthenticationFeasibility/Scripts/verify-current-xcode.sh --require-ready-or-closed && xcrun swift test --package-path Spikes/AuthenticationFeasibility --filter NativeDirectPreflightTests` | Missing safe purpose-contract value blocks before request; authorized synthetic path clears volatile input. | T-00-11-02 through T-00-11-04 |
+| 8 | 00-12-01 | auto | `bash Spikes/AuthenticationFeasibility/Scripts/verify-current-xcode.sh --require-ready-or-closed && swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility validate-native-launch-gate .planning/phases/00-authentication-feasibility-gate/00-TOOLCHAIN.md .planning/phases/00-authentication-feasibility-gate/00-PUBLIC-AUTH-CONTRACT.md .planning/phases/00-authentication-feasibility-gate/00-BROWSER-PROBE.md .planning/phases/00-authentication-feasibility-gate/00-NATIVE-DIRECT-APPROVAL.md` | Every ineligible row produces precise incomplete/not-applicable or terminal NO-GO without credential UI. | T-00-12-02, T-00-12-03 |
+| 8 | 00-12-02 | checkpoint:human-action | `swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility validate-live-result --candidate native-direct .planning/phases/00-authentication-feasibility-gate/00-NATIVE-PROBE.md` | Owner alone performs the eligible two-run protocol; first unsafe state stops. | T-00-12-01, T-00-12-03, T-00-12-04 |
+| 9 | 00-13-01 | TDD | `swift test --package-path Spikes/AuthenticationFeasibility --filter FinalizationGateTests` | Exhaustive table covers prerequisite/no-return/renewal/native-contract incomplete, browser/native GO, and locked terminal NO-GO. | T-00-13-01 through T-00-13-03 |
+| 9 | 00-13-02 | auto | `evidence=.planning/phases/00-authentication-feasibility-gate/00-EVIDENCE.md; selection=.planning/phases/00-authentication-feasibility-gate/00-SELECTION.md; owner=.planning/phases/00-authentication-feasibility-gate/00-OWNER-RESULT.md; decision_file=.planning/phases/00-authentication-feasibility-gate/00-DECISION.md; supersession=.planning/phases/00-authentication-feasibility-gate/00-SUPERSESSION.md; swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility validate-bundle "$evidence" "$selection" "$owner" "$decision_file" && rg -q '^Status: replacement-finalized$' "$supersession" && rg -q '^Replacement execution complete: yes$' "$supersession" && rg -Fxq 'Current status authority: canonical-quartet+00-SUPERSESSION.md' "$supersession" && decision=$(sed -n 's/^Feasibility decision: //p' "$decision_file") && continuation=$(sed -n 's/^Phase 1 continuation: //p' "$decision_file") && supersession_continuation=$(sed -n 's/^Phase 1 continuation: //p' "$supersession") && case "$decision:$continuation:$supersession_continuation" in 'GO browser-return:unlocked:unlocked'|'GO native-direct:unlocked:unlocked') swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility require-phase-one-go "$evidence" "$selection" "$owner" "$decision_file";; 'NO-GO unsupported:blocked:blocked') ! swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility require-phase-one-go "$evidence" "$selection" "$owner" "$decision_file";; *) false;; esac` | A newly generated canonical quartet closes supersession and transfers current authority; GO passes the independent Phase 1 gate, NO-GO fails it closed, and every incomplete class leaves replacement-planned/blocked. | T-00-13-01 through T-00-13-04 |
 
-```sh
-swift test --package-path Spikes/AuthenticationFeasibility &amp;&amp; swift build --package-path Spikes/AuthenticationFeasibility &amp;&amp; selected=$(sed -n 's/^Selected candidate: //p' .planning/phases/00-authentication-feasibility-gate/00-SELECTION.md) &amp;&amp; case "$selected" in unsupported) [ ! -e Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityBrowserCandidate/BrowserCandidate.swift ] &amp;&amp; [ ! -e Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityNativeCandidate/NativeCandidate.swift ];; browser-return) [ -f Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityBrowserCandidate/BrowserCandidate.swift ] &amp;&amp; [ ! -e Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityNativeCandidate/NativeCandidate.swift ];; native-direct) [ -f Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityNativeCandidate/NativeCandidate.swift ] &amp;&amp; [ ! -e Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityBrowserCandidate/BrowserCandidate.swift ];; *) false;; esac
-```
+## Conditional Branch Matrix
 
-### 00-03-03
+| Toolchain | Browser experiment contract | Experiment approval | Browser result | Native purpose contract | Native approval | Native result | Expected behavior | Live surfaces permitted |
+|---|---|---|---|---|---|---|---|---|
+| unavailable/mismatch | any | not-presented | absent | any | not-applicable | absent | incomplete `environment-pending`; Phase 1 blocked | none |
+| ready | safe bounds missing | not-presented | absent | any | not-applicable | absent | incomplete `browser-experiment-incomplete`; Phase 1 blocked | none |
+| ready | experiment-ready + documentation-open | rejected | absent | any | not-applicable | absent | canonical `NO-GO unsupported` for explicit owner rejection | none |
+| ready | experiment-ready + documentation-open | approved | complete | any | not-applicable | not-applicable | `GO browser-return` | owner browser proof only |
+| ready | experiment-ready + documentation-open | approved | no-clean-return without D-09 proof | any | not-applicable | absent | incomplete; no native unlock or terminal decision | owner browser proof only |
+| ready | experiment-ready + documentation-open | approved | renewal-pending | any | not-applicable | absent | incomplete; no terminal decision | owner browser proof only |
+| ready | experiment-ready + documentation-open | approved | protected/challenged/rate/403/429/bot/access-control/suspicious/ambiguous | any | not-applicable | absent | canonical `NO-GO unsupported` | no further live activity |
+| ready | experiment-ready + documentation-open | approved | strict-webkit-ruleout | incomplete | not-applicable | absent | incomplete; no native surface | none |
+| ready | experiment-ready + documentation-open | approved | strict-webkit-ruleout | purpose-qualified | rejected | not-applicable | canonical `NO-GO unsupported` | no native surface |
+| ready | experiment-ready + documentation-open | approved | strict-webkit-ruleout | purpose-qualified | approved | complete | `GO native-direct` | owner native proof only |
+| ready | experiment-ready + documentation-open | approved | strict-webkit-ruleout | purpose-qualified | approved | renewal-pending | incomplete; no terminal decision | owner native proof only |
+| ready | experiment-ready + documentation-open | approved | strict-webkit-ruleout | purpose-qualified | approved | terminal-stop | canonical `NO-GO unsupported` | no further live activity |
 
-```sh
-swift test --package-path Spikes/AuthenticationFeasibility &amp;&amp; swift build --package-path Spikes/AuthenticationFeasibility &amp;&amp; rg -q '^Live operation: (owner-only|prohibited)$' .planning/phases/00-authentication-feasibility-gate/00-RUNBOOK.md
-```
+Any row not listed above is contradictory/unknown and must fail validation without creating a candidate or decision.
 
-### 00-04-01
+## Wave 0 Test Requirements
 
-```sh
-evidence=.planning/phases/00-authentication-feasibility-gate/00-EVIDENCE.md; selection=.planning/phases/00-authentication-feasibility-gate/00-SELECTION.md; owner=.planning/phases/00-authentication-feasibility-gate/00-OWNER-RESULT.md; decision_file=.planning/phases/00-authentication-feasibility-gate/00-DECISION.md; proof=.planning/phases/00-authentication-feasibility-gate/00-PROOF-READY.md; runbook=.planning/phases/00-authentication-feasibility-gate/00-RUNBOOK.md; derived_selection=$(mktemp) || exit 1; derived_decision=$(mktemp) || { rm -f "$derived_selection"; exit 1; }; trap 'rm -f "$derived_selection" "$derived_decision"' EXIT; swift test --package-path Spikes/AuthenticationFeasibility || exit 1; swift build --package-path Spikes/AuthenticationFeasibility || exit 1; closed=0; if ! swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility validate-evidence "$evidence" || ! swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility derive-selection --evidence "$evidence" --output "$derived_selection" || ! cmp -s "$derived_selection" "$selection" || ! swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility validate-selection "$selection"; then swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility close-unsupported --reason invalid-artifact --evidence "$evidence" --selection "$selection" --owner-result "$owner" --decision "$decision_file" &amp;&amp; closed=1; fi &amp;&amp; swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility validate-evidence "$evidence" &amp;&amp; swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility derive-selection --evidence "$evidence" --output "$derived_selection" &amp;&amp; cmp -s "$derived_selection" "$selection" &amp;&amp; swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility validate-selection "$selection" &amp;&amp; selected=$(sed -n 's/^Selected candidate: //p' "$selection") &amp;&amp; case "$selected" in unsupported) if ! swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility validate-owner-result "$owner" || ! swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility derive-decision --selection "$selection" --evidence "$evidence" --owner-result "$owner" --output "$derived_decision" || ! cmp -s "$derived_decision" "$decision_file" || ! swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility validate-decision "$decision_file"; then swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility close-unsupported --reason unsupported-selection --evidence "$evidence" --selection "$selection" --owner-result "$owner" --decision "$decision_file"; fi &amp;&amp; [ ! -e "$proof" ] &amp;&amp; swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility validate-owner-result "$owner" &amp;&amp; swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility derive-decision --selection "$selection" --evidence "$evidence" --owner-result "$owner" --output "$derived_decision" &amp;&amp; cmp -s "$derived_decision" "$decision_file" &amp;&amp; swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility validate-decision "$decision_file" &amp;&amp; rg -q '^Live operation: prohibited$' "$runbook";; browser-return|native-direct) [ "$closed" -eq 0 ] &amp;&amp; test -r "$proof" &amp;&amp; rg -q '^Live operation: owner-only$' "$runbook";; *) false;; esac
-```
+- [ ] `00-SUPERSESSION.md` validates as replacement-planned with active range 00-05..00-13, historical range 00-01..00-04, replacement incomplete, and Phase 1 blocked before any replacement task.
+- [ ] `ToolchainGateTests.swift` invokes `verify-current-xcode.sh` with injected and real command results and covers exact versions, selected-tool discovery, framework imports, every failure point, artifact canonicalization, and environment-pending incomplete routing.
+- [ ] `ContractTracerTests.swift` covers revision migration, canonical bytes, exact decision set, two-run cardinality/order, renewal, cooldown, cleanup, terminal stops, and unchanged Phase 1 signature.
+- [ ] `PublicAuthContractTests.swift` covers safe construction with documentation-open, missing/unsafe bounds, sanitized-preliminary provenance, native purpose qualification, duplicate, conflicting, raw/private, non-first-party-entry, and unrecognized input.
+- [ ] `BrowserReturnContractTests.swift` proves explicit in-memory app-bound return behavior, ordinary no-clean-return, no authenticated-browser state query/enumeration API, and no GUI/live target, command, constructor, or provider activity for blocked branches.
+- [ ] `AuthorizedPlaybackProbeTests.swift`, `RenewalObserverTests.swift`, `CleanupCoordinatorTests.swift`, and `BrowserProofPreflightTests.swift` cover the fixed full run and every incomplete/terminal cleanup path.
+- [ ] `NativeFallbackGateTests.swift` covers every predicate flip, native purpose-contract requirement, source-graph replacement, and no-selector invariant.
+- [ ] `NativeDirectPreflightTests.swift` covers ineligible source absence, owner-only volatile input, allowable-sanitized purpose-operation binding, stop handling, and full-chain parity.
+- [ ] `FinalizationGateTests.swift` covers the complete conditional branch matrix, sensitive-field rejection, atomic/canonical artifacts, and Phase 1 GO/NO-GO/incomplete behavior.
+- [ ] Synthetic fixtures contain no provider endpoint, account value, callback value, response content, authorization material, media URL, key material, or precise time.
 
-### 00-04-02
+## Manual Checkpoints
 
-```sh
-evidence=.planning/phases/00-authentication-feasibility-gate/00-EVIDENCE.md; selection=.planning/phases/00-authentication-feasibility-gate/00-SELECTION.md; owner=.planning/phases/00-authentication-feasibility-gate/00-OWNER-RESULT.md; decision_file=.planning/phases/00-authentication-feasibility-gate/00-DECISION.md; proof=.planning/phases/00-authentication-feasibility-gate/00-PROOF-READY.md; derived_selection=$(mktemp) || exit 1; derived_decision=$(mktemp) || { rm -f "$derived_selection"; exit 1; }; trap 'rm -f "$derived_selection" "$derived_decision"' EXIT; swift test --package-path Spikes/AuthenticationFeasibility || exit 1; closed=0; if ! swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility validate-evidence "$evidence" || ! swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility derive-selection --evidence "$evidence" --output "$derived_selection" || ! cmp -s "$derived_selection" "$selection" || ! swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility validate-selection "$selection"; then swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility close-unsupported --reason invalid-artifact --evidence "$evidence" --selection "$selection" --owner-result "$owner" --decision "$decision_file" &amp;&amp; closed=1; fi &amp;&amp; selected=$(sed -n 's/^Selected candidate: //p' "$selection") &amp;&amp; case "$selected" in unsupported) if ! swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility validate-owner-result "$owner" || ! swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility derive-decision --selection "$selection" --evidence "$evidence" --owner-result "$owner" --output "$derived_decision" || ! cmp -s "$derived_decision" "$decision_file" || ! swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility validate-decision "$decision_file"; then swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility close-unsupported --reason unsupported-selection --evidence "$evidence" --selection "$selection" --owner-result "$owner" --decision "$decision_file"; fi &amp;&amp; [ ! -e "$proof" ] &amp;&amp; swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility validate-evidence "$evidence" &amp;&amp; swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility derive-selection --evidence "$evidence" --output "$derived_selection" &amp;&amp; cmp -s "$derived_selection" "$selection" &amp;&amp; swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility validate-owner-result "$owner" &amp;&amp; swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility derive-decision --selection "$selection" --evidence "$evidence" --owner-result "$owner" --output "$derived_decision" &amp;&amp; cmp -s "$derived_decision" "$decision_file" &amp;&amp; swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility validate-decision "$decision_file";; browser-return|native-direct) [ "$closed" -eq 0 ] &amp;&amp; test -r "$proof";; *) false;; esac
-```
-
-### 00-04-03
-
-```sh
-evidence=.planning/phases/00-authentication-feasibility-gate/00-EVIDENCE.md; selection=.planning/phases/00-authentication-feasibility-gate/00-SELECTION.md; owner=.planning/phases/00-authentication-feasibility-gate/00-OWNER-RESULT.md; decision_file=.planning/phases/00-authentication-feasibility-gate/00-DECISION.md; derived_selection=$(mktemp) || exit 1; derived_decision=$(mktemp) || { rm -f "$derived_selection"; exit 1; }; trap 'rm -f "$derived_selection" "$derived_decision"' EXIT; closed=0; if ! swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility validate-evidence "$evidence" || ! swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility derive-selection --evidence "$evidence" --output "$derived_selection" || ! cmp -s "$derived_selection" "$selection" || ! swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility validate-selection "$selection" || ! swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility validate-owner-result "$owner" || ! swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility derive-decision --selection "$selection" --evidence "$evidence" --owner-result "$owner" --output "$derived_decision" || ! cmp -s "$derived_decision" "$decision_file" || ! swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility validate-decision "$decision_file"; then swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility close-unsupported --reason invalid-artifact --evidence "$evidence" --selection "$selection" --owner-result "$owner" --decision "$decision_file" &amp;&amp; closed=1; fi &amp;&amp; swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility validate-evidence "$evidence" &amp;&amp; swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility derive-selection --evidence "$evidence" --output "$derived_selection" &amp;&amp; cmp -s "$derived_selection" "$selection" &amp;&amp; swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility validate-selection "$selection" &amp;&amp; swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility validate-owner-result "$owner" &amp;&amp; swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility derive-decision --selection "$selection" --evidence "$evidence" --owner-result "$owner" --output "$derived_decision" &amp;&amp; cmp -s "$derived_decision" "$decision_file" &amp;&amp; swift run --package-path Spikes/AuthenticationFeasibility auth-feasibility validate-decision "$decision_file" &amp;&amp; [ "$(rg -c '^Feasibility decision:' "$decision_file")" -eq 1 ] &amp;&amp; [ "$(rg -c '^Phase 1 continuation:' "$decision_file")" -eq 1 ] &amp;&amp; decision=$(sed -n 's/^Feasibility decision: //p' "$decision_file") &amp;&amp; continuation=$(sed -n 's/^Phase 1 continuation: //p' "$decision_file") &amp;&amp; case "$decision:$continuation" in 'GO browser-return:unlocked'|'GO native-direct:unlocked') [ "$closed" -eq 0 ];; 'NO-GO unsupported:blocked') true;; *) false;; esac
-```
-
-
-## Wave 0 Requirements
-- [ ] `Spikes/AuthenticationFeasibility/Package.swift` — isolated core/executable/test targets with zero third-party dependencies and no product-target reference.
-- [ ] `ContractTracerTests.swift` — incomplete evidence, exact three-decision schema, decision/continuation consistency, unknown-key rejection, secret-canary exclusion, and no-default-live-command coverage.
-- [ ] `CandidateSelectionTests.swift` — zero/multiple candidate rejection, browser-first order, native-after-rule-out only, and no retained alternate.
-- [ ] `DecisionGateTests.swift` — exact two distinct ordered same-path proofs; 0/1/>2, duplicate, out-of-order, mixed-path, missing cooldown, missing entitlement, and missing sign-out rejection.
-- [ ] `StopConditionTests.swift` — every terminal stop/unknown/ambiguous class selects blocked NO-GO after one signal and offers no retry/fallback transition.
-- [ ] CLI contract tests cover strict evidence/selection/owner/decision validation, deterministic canonical selection/decision derivation, fresh-output byte equivalence, non-public evidence rejection, every ordered rename-failure point, rejection by both Phase 0 and Phase 1 complete-chain gates, and idempotent unsupported-closure retry.
-- [ ] Synthetic inputs contain no SiriusXM endpoint/host, provider identifier, credential, token, cookie, account value, callback URL, raw payload, precise time, or authenticated browser material.
-
-## Manual-Only Verifications
-
-| Gate | Requirements | Owner action | Automated pre/post gate |
+| Task | Gate | Owner action | Automated pre/post condition |
 |---|---|---|---|
-| Public evidence eligibility | FEAS-01, FEAS-02 | Review only public first-party references against every exact predicate; browser first, native only after explicit rule-out; return one closed token and public URLs. | Full suite before; `validate-selection` after. |
-| Candidate safety review | FEAS-02, FEAS-04 | Supported branch only: inspect the sole candidate and runbook without authenticating; unsupported bypasses. | Full suite/build/source-cardinality before and after. |
-| Two-run proof | FEAS-03, FEAS-04 | Supported branch only: operate run-1, confirm authenticated+entitled+sign-out, choose/complete cooldown, separately operate run-2; return exact success record or one stop token. | Full suite/selection/proof-ready before; `validate-decision` after. |
+| 00-07-02 | Experiment contract approval | Review first-party entry/provenance, sanitized expectation classes, app-bound observation allowlist, and terminal stop bounds; approve/reject the exact digest. | `validate-experiment-approval`; incomplete branch is `not-presented`. |
+| 00-10-01 | Browser proof | Eligible branch only: operate two browser runs, confirm audio, sign-out/cleanup, and cooldown. | `validate-browser-launch-gate` before; `validate-live-result` after. |
+| 00-10-02 | Native disclosure | Strict-rule-out plus native-purpose-qualified branch only: approve/reject the disclosed password boundary. | `validate-native-approval`; other branches are incomplete, not-applicable, or terminal NO-GO as classified. |
+| 00-12-02 | Native proof | Exact eligible branch only: operate two native runs, confirm audio, sign-out/cleanup, and cooldown. | `validate-native-launch-gate` before; `validate-live-result` after. |
 
-## Security Controls
+## Security Verification
 
-| Threat ref | Threat | Required control |
+| Plan | Threat focus | Required evidence |
 |---|---|---|
-| T-00-01 | Browser/account/callback/transport material leaks into source, log, proof, or decision. | No browser-state interface; interactive in-memory boundary; closed semantic artifacts and secret-canary tests. |
-| T-00-02 | Candidate impersonates another identity, guesses provider facts, or retains a fallback. | Public first-party exact evidence; system/default honest identity; exactly one conditional target. |
-| T-00-03 | Concurrency, retry, duplicate/partial proof, or automated cooldown creates false GO. | One in flight; owner-controlled cooldown; exact two ordered distinct same-path proofs; all other shapes block. |
-| T-00-04 | One protected, challenged, rate-limited, suspicious, unknown, or ambiguous state triggers continued probing. | First stop is terminal; cancel/invalidate; NO-GO; no retry threshold, tolerance, alternate path, or third run. |
-| T-00-05 | Malformed/secret-bearing/conflicting artifact unlocks Phase 1. | Strict allow-list, exact decision cardinality, consistent continuation, and fail-closed Phase 1 handoff. |
+| 00-05 | Status spoofing, toolchain spoofing, contract tampering, premature candidate creation | Exact supersession fields; exact-version/import tests; environment-pending distinction; no GUI target in command-line package. |
+| 00-06 | Construction-provenance spoofing, tampering, premature candidate creation | Strict schema, first-party entry/provenance, sanitized-expectation labels, documentation-open test, deterministic digest. |
+| 00-07 | Provenance spoofing and approval tampering | Canonical experiment contract and owner decision bound to exact bytes and observation bounds. |
+| 00-08 | Conditional-source elevation and browser disclosure | Source-graph absence tests, exact app-bound return tests, no authenticated-state query API. |
+| 00-09 | Playback/renewal disclosure and cleanup tampering | Bounded AV tests, legitimate renewal tests, one-attempt teardown and absence proof. |
+| 00-10 | Owner-boundary disclosure and fallback elevation | Launch conjunction, fixed resume classes, no decision prompt outside eligible rows. |
+| 00-11 | Native source elevation, credential disclosure, client spoofing | Full eligibility table, honest native purpose contract from allowable sanitized evidence, volatile-input clearing, one-live-path source graph. |
+| 00-12 | Unauthorized native launch and repeated attempts | Ineligible not-applicable/NO-GO proof, owner stop boundary, exact two-run validator. |
+| 00-13 | Supersession/artifact tampering, disclosure, Phase 1 elevation | Atomic fresh quartet generation, post-write byte validation, derived supersession closure, and unchanged `auth-feasibility` GO gate in all outcome classes. |
+
+## Feedback Cadence
+
+- After every task: run its focused command from the map above.
+- After every wave: run `swift test --package-path Spikes/AuthenticationFeasibility`; when the branch is current-SDK-ready, also run the full `xcrun swift test` suite.
+- Before either live checkpoint: full synthetic suite plus the exact conditional launch validator; no test may launch provider content.
+- Final phase gate: full suite, finalization truth table, canonical bundle validation, and unchanged Phase 1 gate in GO/NO-GO/incomplete cases.
+- Supersession gate: every fixed incomplete class retains replacement-planned/blocked; terminal GO/NO-GO changes status only after the newly generated quartet passes installed-byte validation.
 
 ## Validation Sign-Off
 
-- [x] Every planned task has an exact automated verification; human-only tasks have pre/post automated gates.
-- [x] No automated verification invokes a live candidate, browser, SiriusXM, account, retry, poll, timer, or cooldown.
-- [x] Wave 0 tests cover all FEAS requirements and all 11 spec-less edge candidates.
-- [x] Unsupported is a fully validated zero-live-run branch, not a missing test path.
-- [x] Full feedback loop targets under 10 seconds on the installed Swift 6.3.3 command-line toolchain.
-- [x] `nyquist_compliant: true` reflects exact plan/task reconciliation; `wave_0_complete` remains false until Plan 00-01 executes.
+- [x] Every current task in plans 00-05 through 00-13 maps to an automated command.
+- [x] All four human checkpoints have automated pre/post conditions and explicit ineligible branches.
+- [x] Toolchain/current-SDK absence is a tested canonical incomplete non-live state, not a provider-feasibility conclusion.
+- [x] Public first-party entry/provenance plus sanitized D-02 expectations and owner-approved bounds precede every browser/native source or launch action.
+- [x] Missing public third-party documentation is non-dispositive; missing safe inputs remain incomplete without endpoint inference, while locked terminal outcomes alone produce canonical `NO-GO unsupported`.
+- [x] Historical summaries/quartet cannot establish replacement completion; `00-SUPERSESSION.md` keeps Phase 1 blocked until Plan 00-13 atomically regenerates and validates the exact canonical quartet.
+- [x] FEAS-01 through FEAS-05, all 17 locked decisions, every plan threat register, and all conditional branches have mapped verification.
+- [x] `nyquist_compliant: true` reflects the replacement plans; `wave_0_complete` remains false until Plan 00-05 creates and passes the listed tests.
 
 **Approval:** ready for plan verification
