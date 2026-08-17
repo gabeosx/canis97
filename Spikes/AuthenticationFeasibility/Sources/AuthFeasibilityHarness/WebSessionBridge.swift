@@ -26,22 +26,37 @@ enum WebSessionExtraction {
     case authCookieMalformed
 }
 
-public enum WebSessionBridgeResult: String, Equatable, Sendable {
+public enum WebSessionBridgeResult: Equatable, Sendable {
     case verified
-    case authCookieMissing = "auth-cookie-missing"
-    case authCookieMalformed = "auth-cookie-malformed"
-    case alreadyConsumed = "session-already-consumed"
+    case authCookieMissing
+    case authCookieMalformed
+    case alreadyConsumed
     case rejected
-    case protectedControl = "protected-control"
-    case rateLimited = "rate-limited"
-    case serviceUnavailable = "service-unavailable"
-    case ambiguous
+    case protectedControl
+    case rateLimited
+    case serviceUnavailable
+    case httpStatus(Int)
     case cancelled
+
+    private var canonicalOutcome: String {
+        switch self {
+        case .verified: "verified"
+        case .authCookieMissing: "auth-cookie-missing"
+        case .authCookieMalformed: "auth-cookie-malformed"
+        case .alreadyConsumed: "session-already-consumed"
+        case .rejected: "rejected"
+        case .protectedControl: "protected-control"
+        case .rateLimited: "rate-limited"
+        case .serviceUnavailable: "service-unavailable"
+        case let .httpStatus(code): "http-status-\(code)"
+        case .cancelled: "cancelled"
+        }
+    }
 
     public var canonicalText: String {
         [
             "Schema: web-session-bridge-v1",
-            "Outcome: \(rawValue)",
+            "Outcome: \(canonicalOutcome)",
             "Credential persistence: none",
             "Phase 1 continuation: blocked",
             "",
@@ -58,7 +73,7 @@ public enum WebSessionBridgeResult: String, Equatable, Sendable {
         case .protectedControl: "Protected response — stopped"
         case .rateLimited: "Rate limit encountered — stopped"
         case .serviceUnavailable: "SiriusXM session verification unavailable"
-        case .ambiguous: "Session verification ambiguous — stopped"
+        case let .httpStatus(code): "Native session check returned HTTP \(code)"
         case .cancelled: "Session import cancelled"
         }
     }
@@ -124,7 +139,7 @@ struct WebSessionTransport: Sendable {
 @MainActor
 struct NativeWebSessionVerifier: Sendable {
     private static let endpoint = URL(
-        string: "https://api.edge-gateway.siriusxm.com/identity/v1/identities/status"
+        string: "https://api.edge-gateway.siriusxm.com/profile/v4/profiles/me"
     )!
 
     private let transport: WebSessionTransport
@@ -162,7 +177,7 @@ struct NativeWebSessionVerifier: Sendable {
         case 403: return .protectedControl
         case 429: return .rateLimited
         case 500...599: return .serviceUnavailable
-        default: return .ambiguous
+        default: return .httpStatus(response.statusCode)
         }
     }
 }

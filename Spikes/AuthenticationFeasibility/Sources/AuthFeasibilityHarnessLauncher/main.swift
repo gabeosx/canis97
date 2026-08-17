@@ -192,7 +192,12 @@ private final class BrowserHarnessApplication: NSObject, NSApplicationDelegate, 
                 sessionStatusLabel.stringValue = "Could not write sanitized bridge result"
                 sessionStatusLabel.setAccessibilityValue("Bridge result write failed")
             }
-            importSessionButton.isEnabled = result == .authCookieMissing || result == .authCookieMalformed
+            switch result {
+            case .authCookieMissing, .authCookieMalformed, .httpStatus:
+                importSessionButton.isEnabled = true
+            default:
+                importSessionButton.isEnabled = false
+            }
             importTask = nil
         }
     }

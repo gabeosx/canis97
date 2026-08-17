@@ -48,7 +48,7 @@ func nativeSessionVerificationIsSingleConsumption() async throws {
     let source = VolatileWebSession(accessToken: String(repeating: "t", count: 24))
     let verifier = NativeWebSessionVerifier(transport: WebSessionTransport { request in
         #expect(request.url?.host == "api.edge-gateway.siriusxm.com")
-        #expect(request.url?.path == "/identity/v1/identities/status")
+        #expect(request.url?.path == "/profile/v4/profiles/me")
         #expect(request.httpMethod == "GET")
         #expect(request.value(forHTTPHeaderField: "Authorization")?.hasPrefix("Bearer ") == true)
         return WebSessionHTTPResponse(
@@ -68,7 +68,7 @@ func nativeSessionVerificationClassifiesStops() {
     #expect(NativeWebSessionVerifier.classify(.init(statusCode: 403, body: Data())) == .protectedControl)
     #expect(NativeWebSessionVerifier.classify(.init(statusCode: 429, body: Data())) == .rateLimited)
     #expect(NativeWebSessionVerifier.classify(.init(statusCode: 200, body: Data("{}".utf8))) == .verified)
-    #expect(NativeWebSessionVerifier.classify(.init(statusCode: 302, body: Data())) == .ambiguous)
+    #expect(NativeWebSessionVerifier.classify(.init(statusCode: 302, body: Data())) == .httpStatus(302))
 }
 
 private func cookie(
