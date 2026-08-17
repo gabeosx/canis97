@@ -35,3 +35,36 @@ func browserConstructionRejectsDigestMismatch() throws {
         try WebLoginSession(contract: changed, approval: approval)
     }
 }
+
+@Test("a matched app-bound return is consumed once as closed semantic events")
+func explicitReturnIsCollapsedToSafeProofEvents() {
+    let client = SemanticProofClient()
+
+    #expect(client.consumeMatchedAppBoundReturn(URL(string: "siriusmac-auth://browser-return")!) == .cleanAppBoundReturn)
+    #expect(client.recordAuthentication() == .authenticated)
+    #expect(client.recordEntitlement() == .entitled)
+    #expect(client.signOut() == .signedOut)
+    #expect(client.events == [.cleanAppBoundReturn, .authenticated, .entitled, .signedOut])
+    #expect(client.isClosed)
+}
+
+@Test("no clean return stays incomplete while unsafe states are terminal")
+func incompleteAndTerminalBrowserOutcomesStayClosed() {
+    let incomplete = SemanticProofClient()
+    #expect(incomplete.recordNoCleanReturn(provenance: .firstPartyNavigation) == .noCleanReturn(.firstPartyNavigation))
+    #expect(!incomplete.isClosed)
+
+    let terminal = SemanticProofClient()
+    #expect(terminal.stop(for: .protectedControl) == .terminal(.protectedControl))
+    #expect(terminal.recordAuthentication() == .terminal(.protectedControl))
+    #expect(terminal.isClosed)
+}
+
+@Test("cancellation clears the semantic client without a retry path")
+func cancellationClosesTheEphemeralSemanticClient() {
+    let client = SemanticProofClient()
+
+    #expect(client.cancel() == .cancelled)
+    #expect(client.events == [.cancelled])
+    #expect(client.isClosed)
+}
