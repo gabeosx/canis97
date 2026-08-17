@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 00
 current_phase_name: authentication-feasibility-gate
 status: executing
-stopped_at: Completed 00-11-PLAN.md
-last_updated: "2026-08-17T18:54:39.585Z"
+stopped_at: Completed 00-12-PLAN.md
+last_updated: "2026-08-17T19:01:33.600Z"
 last_activity: 2026-08-17
 last_activity_desc: Phase 00 execution started
 progress:
   total_phases: 2
   completed_phases: 0
   total_plans: 17
-  completed_plans: 7
+  completed_plans: 8
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-08-16)
 ## Current Position
 
 Phase: 00 (authentication-feasibility-gate) — EXECUTING
-Plan: 8 of 9
+Plan: 9 of 9
 Status: Ready to execute
 Last activity: 2026-08-17 — Phase 00 execution started
 
-Progress: [████░░░░░░] 41%
+Progress: [█████░░░░░] 47%
 
 ## Performance Metrics
 
@@ -69,6 +69,7 @@ Progress: [████░░░░░░] 41%
 | Phase 00-authentication-feasibility-gate P09 | 8min | 2 tasks | 10 files |
 | Phase 00-authentication-feasibility-gate P10 | 6min | 2 tasks | 16 files |
 | Phase 00-authentication-feasibility-gate P11 | 3min | 2 tasks | 4 files |
+| Phase 00 P12 | 4min | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -105,6 +106,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: Native-direct is not applicable without strict WebKit rule-out, so no credential disclosure is presented.
 - [Phase ?]: Renewal-pending plus native-direct not-applicable resolves only to a closed, non-live native branch.
 - [Phase ?]: The current package graph retains no native credential or direct-runtime source or target.
+- [Phase ?]: Renewal-pending browser evidence plus native-direct not-applicable approval closes the native branch without live work.
+- [Phase ?]: Native launch validation must consume the supplied canonical toolchain artifact rather than an internal substitute.
 
 ### Pending Todos
 
@@ -128,6 +131,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-17T18:54:39.568Z
-Stopped at: Completed 00-11-PLAN.md
+Last session: 2026-08-17T19:01:33.584Z
+Stopped at: Completed 00-12-PLAN.md
 Resume file: None
