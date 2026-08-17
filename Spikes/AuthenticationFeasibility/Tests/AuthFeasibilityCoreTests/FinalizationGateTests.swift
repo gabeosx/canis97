@@ -13,6 +13,34 @@ func unsupportedEntitlementDerivesBlockedNoGoWithoutRuns() throws {
     #expect(result.continuation == .blocked)
 }
 
+@Test("supported entitlement requires a complete canonical v3 quartet before Phase 1 GO")
+func supportedEntitlementRequiresTwoCompleteV3Runs() throws {
+    let complete = OwnerResultV3(
+        runs: [.complete(label: "run-1"), .complete(label: "run-2")],
+        cooldown: "owner-confirmed"
+    )
+    let bundle = try V3ArtifactBundle.derive(entitlement: .supported, browserProbe: .supported, ownerResult: complete)
+    try bundle.validate()
+    try PhaseOneGate.require(bundle)
+
+    #expect(throws: ContractError.self) {
+        _ = try V3Finalization.derive(entitlement: .supported, browserProbe: .supported, ownerResult: .zeroRunUnsupported)
+    }
+    #expect(throws: ContractError.self) {
+        _ = try V3Finalization.derive(entitlement: .supported, browserProbe: .unsupported, ownerResult: complete)
+    }
+
+    let tampered = V3ArtifactBundle(
+        evidence: bundle.evidence,
+        selection: bundle.selection,
+        ownerResult: bundle.ownerResult,
+        decision: bundle.decision.replacingOccurrences(of: "GO browser-return", with: "NO-GO unsupported")
+    )
+    #expect(throws: ContractError.self) { try tampered.validate() }
+    #expect(!bundle.evidence.contains("token"))
+    #expect(!bundle.ownerResult.contains("cookie"))
+}
+
 @Test("finalization keeps unresolved prerequisites closed without creating a terminal decision")
 func prerequisiteIncompleteStatesRemainBlocked() {
     let incompleteStates: [FinalizationState] = [

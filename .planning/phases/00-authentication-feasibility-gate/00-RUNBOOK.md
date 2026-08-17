@@ -1,78 +1,36 @@
-# Phase 0 Owner-Operated Browser Proof Runbook
+# Phase 0 Owner-Operated Browser-Return Runbook
 
-## Checkpoint Status
+## Before Any Owner Activity
 
-The bounded browser experiment is eligible for presentation only after the
-offline current-SDK, experiment-contract, exact owner-approval, conditional
-source-graph, full synthetic-suite, and browser-preflight gates pass. This
-runbook records that preparation; it does not launch a browser, contact
-SiriusXM, or establish feasibility.
+The harness reports either `unsupported` entitlement or `supported` entitlement.
+No owner activity is permitted unless it reports `supported` and the synthetic
+DecisionGate and FinalizationGate suites pass. `unsupported` is finalized as
+`NO-GO unsupported` with zero browser runs; it opens no provider UI and makes
+no provider request.
 
-The current approved construction is bound to contract digest
-`42872ea46ed2e041`. Open third-party callback documentation remains
-non-dispositive and does not loosen any other gate.
+## Owner Steps
 
-## Owner Boundary
+1. When the app reports that run-1 is ready, start it yourself and complete the
+   normal SiriusXM sign-in surface. Do not share credentials or account details.
+2. Read only the app-reported semantic result: authentication, entitlement,
+   signed-out, and cleanup must all be complete. Any protected, challenged,
+   rate-limited, or ambiguous result ends the protocol.
+3. Confirm sign-out and cleanup in the app, then choose and confirm a cooldown.
+4. Start exactly one run-2. The app reports the same four semantic results.
+5. The app finalizes only after both ordered runs are complete. Do not inspect
+   traffic, cookies, developer tools, responses, stream URLs, or account data.
 
-- Only the account owner may start the live surface, operate it, enter
-  credentials, handle provider controls, confirm audible playback, request
-  sign-out, and choose the cooldown between runs.
-- Automation must never type, record, screenshot, or export credentials,
-  account data, provider responses, stream URLs, or playback keys. After the
-  owner explicitly requests import, the harness may read the current player's
-  `AUTH_TOKEN` cookie and transfer its access token directly into one ephemeral
-  native verification request; neither value may be persisted or logged.
-- The executor stops before live presentation and accepts only a fixed,
-  account-detail-free result class after the owner is finished.
+## App-Reported Outcomes
 
-## Fixed Browser Protocol
+- `GO browser-return` — two complete ordered v3 runs, owner-confirmed cooldown,
+  sign-out absence, and cleanup were validated mechanically.
+- `NO-GO unsupported` — entitlement was unsupported before owner activity, or a
+  terminal protected/ambiguous stop was recorded. Phase 1 remains blocked.
+- `incomplete` — a required semantic state is absent or contradictory. Do not
+  retry, switch paths, or attempt a workaround.
 
-1. Complete one normal owner-operated browser proof run and confirm audible
-   playback only if it was actually heard.
-2. Request sign-out and wait for verified local cleanup before considering a
-   second run.
-3. Choose and observe a cooldown yourself, then start exactly one distinct
-   second run.
-4. A complete browser proof requires the ordered semantic milestones in both
-   runs and legitimate renewal in at least one. Renewal-pending and ordinary
-   no-clean-return remain incomplete.
+## Explicit Exclusions
 
-## Renewal Status Window
-
-During a later bounded observation window, read only the harness’s renewal
-status label. It has exactly three possible values:
-
-- `Renewal pending` — no legitimate replacement was observed before the owner
-  ended the bounded window; this remains incomplete.
-- `Renewal verified` — the established ordinary flow observed a legitimate
-  replacement.
-- `Terminal stop` — the current proof stopped and must not be retried.
-
-Do not inspect traffic, browser developer tools, account information,
-request/response material, stream URLs, or clocks. The
-harness does not force renewal, alter time, poll candidates, or infer fields.
-
-## Stop Rules
-
-The first CAPTCHA, MFA, challenge, protection, access-control signal,
-rate-limit, redirect anomaly, suspicion, unknown state, or ambiguity is
-terminal. Do not repeat, retry, switch paths, alter identity or headers, or
-attempt a workaround. Native-direct is not exposed unless a later validator
-proves strict WebKit-specific rule-out and a separate owner disclosure decision
-is recorded.
-
-## Allowed Resume Signals
-
-Return exactly one of the following, with no account or provider details:
-
-- `not-applicable`
-- `browser-incomplete`
-- `renewal-still-pending`
-- `strict-webkit-ruleout`
-- `terminal-stop`
-
-## Phase Boundary
-
-This checkpoint does not produce `GO`, `NO-GO`, native approval, a replacement
-decision, or a Phase 1 unlock. Those require later canonical semantic evidence
-and validators.
+Renewal, tune/key authorization, audible playback, catalog access, and
+native-direct authentication are not owner steps or Phase 0 closure conditions.
+They are deferred to the owning later phases.

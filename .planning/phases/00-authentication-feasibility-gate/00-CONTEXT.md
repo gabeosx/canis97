@@ -6,7 +6,7 @@
 <domain>
 ## Phase Boundary
 
-Produce an empirical, trustworthy GO or NO-GO decision for exactly one safe SiriusXM authentication path on current macOS. The proof must establish that an owner-operated login can hand a legitimate session to native requests, survive one legitimate renewal, authorize entitled live playback through `AVPlayer`, and cleanly remove all session state.
+Produce an empirical, trustworthy GO or NO-GO decision for exactly one safe browser-return authentication path on current macOS. The corrected proof establishes profile authentication, a separately bounded entitlement result, visible sign-out absence, and verified cleanup in two ordered runs; it does not establish renewal, tune/key authorization, or audible playback.
 
 Phase 0 may build only a disposable macOS proof harness and sanitized decision artifacts. It does not build the production app shell, public `SiriusXMClient` API, Keychain persistence, catalog/library UI, durable playback coordinator, skins, updater, packaging, or release infrastructure. Those remain in later phases and cannot begin without a Phase 0 GO result.
 
@@ -24,9 +24,9 @@ Phase 0 may build only a disposable macOS proof harness and sanitized decision a
 ### Browser-return proof finish line
 
 - **D-04:** `GO browser-return` requires two separate owner-operated runs through the real current-macOS `WKWebView` harness.
-- **D-05:** Each run must complete owner-entered login, native session handoff, authenticated account and entitlement verification, tune/key authorization, confirmed audible `AVPlayer` playback, stop, sign-out, and cleanup.
-- **D-06:** Across the two runs, at least one run must perform a legitimate session renewal using only provider-issued renewal material and the observed SiriusXM mechanism. Do not mutate tokens, manipulate clocks, guess fields, or synthesize expiry.
-- **D-07:** If renewal cannot be safely identified or reached within a bounded owner-operated test, Phase 0 remains incomplete. Missing evidence blocks GO but does not become a false `NO-GO unsupported`.
+- **D-05:** Superseded by D-19 for browser-return. Tune/key authorization and audible playback are Phase 2 concerns, not owner-visible Phase 0 closure requirements.
+- **D-06:** Superseded by D-20. Renewal is not an owner observation or a GO condition.
+- **D-07:** Superseded by D-20. No renewal outcome may delay, qualify, or invalidate the corrected Phase 0 decision.
 - **D-08:** Only one attempt may be in flight. The owner controls and confirms a conservative cooldown between the two successful runs.
 
 ### Native-direct fallback threshold
@@ -34,22 +34,31 @@ Phase 0 may build only a disposable macOS proof harness and sanitized decision a
 - **D-09:** Native-direct evaluation is permitted only after a reproducible WebKit-specific incompatibility. Normal browser success plus one owner-operated WebKit failure must be corroborated by a secret-free local diagnostic that reproduces the same runtime limitation.
 - **D-10:** Credential rejection, account or subscription errors, CAPTCHA, MFA/challenge behavior, HTTP `403` or `429`, rate limiting, bot/access-control signals, ambiguous outcomes, and transient network failures never unlock native-direct fallback.
 - **D-11:** After WebKit is ruled out, present the sanitized failure and explicitly disclose that native-direct exposes the password to the disposable app. Native-direct work or live attempts require a separate owner approval; there is no automatic transition.
-- **D-12:** If approved, native-direct must meet the same full bar as browser-return: two owner-operated sign-ins, entitlement and tune/key authorization, confirmed audible `AVPlayer` playback in both runs, at least one legitimate renewal, sign-out, and cleanup.
+- **D-12:** Superseded by D-21. Native-direct remains not-applicable after a verified browser-return result; the corrected finish line does not reopen it.
 
 ### Human control, stop behavior, and evidence safety
 
 - **D-13:** The account owner enters credentials and operates every real authentication surface. Automation must not type, inspect, record, or infer credentials and must not solve or evade provider controls.
 - **D-14:** Any protected, challenged, rate-limited, suspicious, or ambiguous outcome stops the active evaluation immediately. It does not trigger retry, alternate-path execution, browser/client spoofing, or a workaround.
 - **D-15:** The durable feasibility bundle contains only allow-listed semantic outcomes, harness/build revision, rounded dates, opaque run labels, owner-confirmed cooldown, cleanup status, and the single final decision: `GO browser-return`, `GO native-direct`, or `NO-GO unsupported`.
-- **D-16:** Raw HAR data, request or response bodies, cookies, credentials, tokens, authorization headers, account identifiers, stream URLs, playback keys, WebKit storage, and other secret-bearing material are never planning artifacts and must be removed after each run.
-- **D-17:** A GO result requires both complete proof runs and verified cleanup. A technical login, token handoff, manifest retrieval, or audible stream by itself is insufficient.
+- **D-16:** Raw HAR data, request or response bodies, cookies, credentials, tokens, authorization headers, account identifiers, stream URLs, playback keys, WebKit storage, and other secret-bearing material are never planning artifacts or logs and must be removed after each run. D-18 is the sole narrow in-memory exception.
+- **D-17:** Superseded by D-19. Login or token handoff alone is insufficient: each new run separately proves profile authentication, bounded entitlement, visible sign-out absence, and verified cleanup.
+
+### Corrected Phase 0 Authority (Plans 00-14 through 00-16)
+
+- **D-18:** After the owner explicitly initiates the bounded import, the harness may select only the current first-party `AUTH_TOKEN` and consume it once in volatile memory for the approved authentication check. It must never enumerate other browser state, persist or log the value, or retain it after cleanup.
+- **D-19:** The corrected browser-return finish line is exactly two ordered `browser-probe-v3` runs: run-1, owner-confirmed cooldown, then run-2. Each has only authentication, separately bounded entitlement, visible sign-out absence, and verified cleanup. Profile success is authentication-only and can never establish entitlement.
+- **D-20:** Renewal is not an owner observation, artifact field, or GO condition. It is explicitly deferred from this phase.
+- **D-21:** Tune/key authorization, AVFoundation, and audible playback are Phase 2 ownership. Native-direct is not applicable after verified browser-return and does not supply an alternate Phase 0 closure path.
+- **D-22:** Historical v2 evidence and any prior owner observation count as zero current complete runs. `owner-result-v3` accepts only current canonical semantic fields and rejects stale or handwritten input.
+- **D-23:** No owner activity may begin before a supported entitlement contract and passing synthetic suite. Unsupported entitlement finalizes `NO-GO unsupported` with zero runs and no provider/UI work.
 
 ### Agent Discretion
 
 - Exact proof-harness target names, file organization, and internal type names.
 - The owner-facing sequence and status copy, provided credential entry stays entirely inside the SiriusXM surface for browser-return and every live transition requires explicit owner action.
-- The safe technical mechanism for semantic login completion, session transfer, renewal observation, authenticated HLS key loading, playback confirmation, and cleanup.
-- The exact bounded playback duration and cooldown guidance, provided the owner controls the cooldown and the run proves real audible playback.
+- The safe technical mechanism for narrow single-consumption session transfer, profile authentication, bounded entitlement classification, sign-out absence, and cleanup.
+- The exact owner-confirmed cooldown guidance; it must not add a playback, renewal, tune/key, or native-direct condition.
 - Safe closed vocabularies and deterministic synthetic fixtures that cannot contain provider or account secrets.
 
 </decisions>
@@ -99,7 +108,7 @@ Phase 0 may build only a disposable macOS proof harness and sanitized decision a
 ### Integration Points
 
 - Add a disposable current-macOS GUI proof harness beside the offline tracer; no WebKit, AppKit/SwiftUI, or AVFoundation harness exists yet.
-- The browser-return harness uses the SiriusXM web surface for owner credential entry, then hands only allow-listed session material to an ephemeral native client for entitlement, renewal, tune/key, and playback proof.
+- The browser-return harness uses the SiriusXM web surface for owner credential entry, then consumes only the named current first-party `AUTH_TOKEN` once in ephemeral memory for profile authentication and bounded entitlement classification before sign-out and cleanup.
 - The existing evidence schema's public-reference premise and canonical unsupported bundle are historical implementation details, not authoritative feasibility results; planning must revise or replace them.
 - The resulting sanitized decision bundle remains the hard input gate for every Phase 1 plan.
 
@@ -110,7 +119,7 @@ Phase 0 may build only a disposable macOS proof harness and sanitized decision a
 
 - The corrected phase is a real experiment, not a documentation eligibility review.
 - Prefer a purpose-scoped `WKWebView` because it keeps the subscriber password in the SiriusXM web surface while allowing a native session handoff.
-- Prove the session is useful end to end: account/entitlement, renewal, tune/key authorization, and audible native playback—not merely that a token exists.
+- Prove the corrected authentication-only closure: profile authentication plus separately bounded entitlement, visible sign-out absence, and cleanup—not merely that a token exists.
 - Preserve only sanitized protocol shapes and typed outcomes. The prior raw capture was deleted and must not be recreated as a durable artifact.
 
 </specifics>
@@ -119,7 +128,7 @@ Phase 0 may build only a disposable macOS proof harness and sanitized decision a
 ## Deferred Ideas
 
 - Production client APIs, Keychain persistence, full catalog behavior, durable playback/recovery architecture, macOS listening UI, skins, and release infrastructure remain in Phases 1–5.
-- Phase 0 proves one bounded channel playback path only; it does not implement the Phase 2 catalog, metadata, recovery, or general playback feature set.
+- Phase 0 proves no playback path. Phase 2 owns tune/key, playback, catalog, metadata, recovery, and the general listening feature set.
 
 </deferred>
 

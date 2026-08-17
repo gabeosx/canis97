@@ -73,24 +73,39 @@ func closeUnsupported(_ arguments: Arguments) throws {
 }
 
 func validateBundle(_ arguments: Arguments) throws {
-    let bundle = ArtifactBundle(
-        evidence: try readArtifact(try arguments.positional(0)),
-        selection: try readArtifact(try arguments.positional(1)),
-        ownerResult: try readArtifact(try arguments.positional(2)),
-        decision: try readArtifact(try arguments.positional(3))
-    )
-    try bundle.validate()
+    let evidence = try readArtifact(try arguments.positional(0))
+    if evidence.hasPrefix("Schema: evidence-v3\n") {
+        try V3ArtifactBundle(
+            evidence: evidence,
+            selection: try readArtifact(try arguments.positional(1)),
+            ownerResult: try readArtifact(try arguments.positional(2)),
+            decision: try readArtifact(try arguments.positional(3))
+        ).validate()
+    } else {
+        try ArtifactBundle(
+            evidence: evidence,
+            selection: try readArtifact(try arguments.positional(1)),
+            ownerResult: try readArtifact(try arguments.positional(2)),
+            decision: try readArtifact(try arguments.positional(3))
+        ).validate()
+    }
     FileHandle.standardOutput.write(Data("valid\n".utf8))
 }
 
 func requirePhaseOneGo(_ arguments: Arguments) throws {
-    let bundle = ArtifactBundle(
-        evidence: try readArtifact(try arguments.positional(0)),
-        selection: try readArtifact(try arguments.positional(1)),
-        ownerResult: try readArtifact(try arguments.positional(2)),
-        decision: try readArtifact(try arguments.positional(3))
-    )
-    try PhaseOneGate.require(bundle)
+    let evidence = try readArtifact(try arguments.positional(0))
+    if evidence.hasPrefix("Schema: evidence-v3\n") {
+        try PhaseOneGate.require(V3ArtifactBundle(
+            evidence: evidence,
+            selection: try readArtifact(try arguments.positional(1)),
+            ownerResult: try readArtifact(try arguments.positional(2)),
+            decision: try readArtifact(try arguments.positional(3))
+        ))
+    } else {
+        // Historical v2 bytes may be inspected only as blocked history; they
+        // can never satisfy the Phase 1 authorization boundary.
+        throw RunnerError.failed
+    }
     FileHandle.standardOutput.write(Data("phase-one-go\n".utf8))
 }
 
@@ -113,34 +128,61 @@ func validateSupersessionForFinalization(_ text: String) throws {
     guard text == expected else { throw RunnerError.failed }
 }
 
+func recordBrowserUnsupported(_ arguments: Arguments) throws {
+    let entitlement = try EntitlementContract.parse(readArtifact(try arguments.value(named: "--entitlement-contract")))
+    guard entitlement.status == .unsupported else { throw RunnerError.failed }
+    try writeArtifact(BrowserProbeV3.unsupported.canonicalText, to: arguments.value(named: "--output"))
+    FileHandle.standardOutput.write(Data("recorded\n".utf8))
+}
+
+func atomicallyInstall(_ bundle: V3ArtifactBundle, targets: [URL]) throws {
+    let contents = [bundle.evidence, bundle.selection, bundle.ownerResult, bundle.decision]
+    guard targets.count == contents.count else { throw RunnerError.failed }
+    let manager = FileManager.default
+    let stage = targets[0]
+        .deletingLastPathComponent()
+        .appendingPathComponent(".auth-feasibility-stage-\(UUID().uuidString)", isDirectory: true)
+    try manager.createDirectory(at: stage, withIntermediateDirectories: false)
+    defer { try? manager.removeItem(at: stage) }
+    let staged = try contents.enumerated().map { index, content -> URL in
+        let target = stage.appendingPathComponent("artifact-\(index)")
+        try content.write(to: target, atomically: false, encoding: .utf8)
+        return target
+    }
+    try V3ArtifactBundle(
+        evidence: try String(contentsOf: staged[0], encoding: .utf8),
+        selection: try String(contentsOf: staged[1], encoding: .utf8),
+        ownerResult: try String(contentsOf: staged[2], encoding: .utf8),
+        decision: try String(contentsOf: staged[3], encoding: .utf8)
+    ).validate()
+    for (temporary, target) in zip(staged, targets) {
+        try replace(temporary, target: target)
+    }
+    try V3ArtifactBundle(
+        evidence: try String(contentsOf: targets[0], encoding: .utf8),
+        selection: try String(contentsOf: targets[1], encoding: .utf8),
+        ownerResult: try String(contentsOf: targets[2], encoding: .utf8),
+        decision: try String(contentsOf: targets[3], encoding: .utf8)
+    ).validate()
+}
+
 func finalizePhase(_ arguments: Arguments) throws {
-    let toolchain = try readArtifact(try arguments.value(named: "--toolchain"))
-    let contract = try AuthExperimentContract.parse(readArtifact(try arguments.value(named: "--contract")))
-    let approval = try ExperimentApproval.parse(readArtifact(try arguments.value(named: "--approval")))
-    let browserProbe = try BrowserProbeResult.parse(readArtifact(try arguments.value(named: "--browser-probe")))
-    let nativeApproval = try NativeDirectApproval.parse(readArtifact(try arguments.value(named: "--native-approval")))
-    let nativeProbe = try readArtifact(try arguments.value(named: "--native-probe"))
-    let supersession = try readArtifact(try arguments.value(named: "--supersession"))
-
-    guard toolchain == ToolchainGate.artifact(for: .currentSDKReady),
-          nativeProbe == [
-              "Schema: native-probe-v2",
-              "Outcome: not-applicable",
-              "Phase 1 continuation: blocked",
-              "",
-          ].joined(separator: "\n") else {
-        throw RunnerError.failed
-    }
-    try BrowserLaunchGate.validate(toolchainArtifact: toolchain, contract: contract, approval: approval)
-    try validateSupersessionForFinalization(supersession)
-
-    guard browserProbe == .renewalPending, nativeApproval == .notApplicable else {
-        throw RunnerError.failed
-    }
-    guard FinalizationGate.derive(for: .browserRenewalPending) == .incomplete else {
-        throw RunnerError.failed
-    }
-    FileHandle.standardOutput.write(Data("incomplete:renewal-pending\n".utf8))
+    let entitlement = try EntitlementContract.parse(readArtifact(try arguments.value(named: "--entitlement-contract")))
+    let browserProbe = try BrowserProbeV3.parse(readArtifact(try arguments.value(named: "--browser-probe")))
+    let owner = try OwnerResultV3.parse(readArtifact(try arguments.value(named: "--owner-result")))
+    let bundle = try V3ArtifactBundle.derive(
+        entitlement: entitlement.status,
+        browserProbe: browserProbe,
+        ownerResult: owner
+    )
+    try bundle.validate()
+    try atomicallyInstall(bundle, targets: [
+        URL(fileURLWithPath: try arguments.value(named: "--evidence-output")),
+        URL(fileURLWithPath: try arguments.value(named: "--selection-output")),
+        URL(fileURLWithPath: try arguments.value(named: "--owner-result-output")),
+        URL(fileURLWithPath: try arguments.value(named: "--decision-output")),
+    ])
+    FileHandle.standardOutput.write(Data("finalized\n".utf8))
 }
 
 func deriveExperimentReadiness(_ arguments: Arguments) throws {
@@ -176,7 +218,7 @@ func validateBrowserLaunchGate(_ arguments: Arguments) throws {
 }
 
 func validateLiveResult(_ arguments: Arguments) throws {
-    _ = try OwnerResult.parse(readArtifact(try arguments.positional(0)))
+    _ = try OwnerResultV3.parse(readArtifact(try arguments.positional(0)))
     FileHandle.standardOutput.write(Data("valid\n".utf8))
 }
 
@@ -296,6 +338,8 @@ func run() throws {
         try validateBrowserLaunchGate(parsed)
     case "record-browser-renewal-pending":
         try recordBrowserRenewalPending(parsed)
+    case "record-browser-unsupported":
+        try recordBrowserUnsupported(parsed)
     case "record-browser-not-applicable":
         try closeUnsupported(parsed)
     case "record-native-not-applicable":
