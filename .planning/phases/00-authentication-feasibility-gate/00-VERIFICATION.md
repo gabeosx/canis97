@@ -1,66 +1,84 @@
 ---
 phase: 00-authentication-feasibility-gate
-verified: 2026-08-17T13:47:13Z
+verified: 2026-08-17T19:26:59Z
 status: gaps_found
 score: 1/5 must-haves verified
 behavior_unverified: 0
 overrides_applied: 0
+re_verification:
+  previous_status: gaps_found
+  previous_score: 1/5
+  gaps_closed:
+    - "Public selection and decision derivation now validate canonical evidence before use."
+    - "Closure reasons, invalid Gregorian dates, and non-canonical evidence/selection/owner/decision artifacts are rejected."
+    - "Terminal decisions now use selected path unsupported, and the Phase 1 plan executes the GO-only quartet preflight before production writes."
+  gaps_remaining:
+    - "No complete two-run, renewal-verified canonical proof exists; the authoritative result is incomplete:renewal-pending."
+    - "The live browser proof boundary is not fail-closed for callback shape, renewal-window closure, concrete cleanup, or actual playback authorization/audibility."
+  regressions: []
 gaps:
-  - truth: "Public first-party evidence can establish or safely rule out browser return before any candidate is selected."
+  - truth: "Public first-party evidence and a bounded account-owner check either establish a clean app-bound browser return or rule it out without reading authenticated browser state."
     status: failed
-    reason: "The public decision API and CLI-adjacent derivation can select and derive GO from an EvidenceRecord that was never validated; closure reasons and impossible dates are also accepted in candidate-bearing evidence."
+    reason: "The WKWebView callback accepts a query-bearing or subframe custom-scheme navigation as an app-bound return, and the live runtime has no wired path from the owner-operated session to a canonical proof artifact. The current artifact therefore records only renewal-pending, not a safe established/rule-out result."
     artifacts:
-      - path: "Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityCore/DecisionGate.swift"
-        issue: "DecisionGate.derive validates selection equality but never calls evidence.validate()."
-      - path: "Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityCore/EvidenceContract.swift"
-        issue: "closureReason is not mutually exclusive with a supported candidate and isRoundedDate accepts impossible dates."
+      - path: "Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityHarness/WebLoginSession.swift"
+        issue: "The matcher does not reject query components and the navigation delegate does not require a main-frame navigation."
+      - path: "Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityHarnessLauncher/main.swift"
+        issue: "Launches WebKit but never drives the runtime's authentication, entitlement, playback, renewal, sign-out, or artifact-recording path."
     missing:
-      - "Validate evidence at every public selection/decision boundary."
-      - "Make every closure reason terminally incompatible with a candidate and validate real Gregorian dates."
-  - truth: "Native-direct is reachable only after browser return is explicitly ruled out by a complete honest first-party contract, with no alternate path."
+      - "Require one exact, query-free, main-frame app-bound return in a shared callback matcher with regressions."
+      - "Wire an owner-operated, semantic-only proof result into canonical artifact creation without retaining browser state."
+  - truth: "A supported candidate completes two separate account-owner initiated sign-in → authenticated-and-entitled → clean sign-out runs, with one attempt in flight and a conservative human-controlled cooldown."
     status: failed
-    reason: "CandidateSelection.derive uses only candidate count and enum states, not EvidenceRecord.validate(), so fabricated incomplete or non-public browser/native evidence can produce a selected path and, with two semantic passes, GO."
+    reason: "The canonical owner result has selected path unsupported and zero runs; browser probe is renewal-pending. The retracted browser-complete signal is not present in the canonical evidence and cannot substitute for two renewal-complete runs."
     artifacts:
-      - path: "Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityCore/CandidateSelection.swift"
-        issue: "derive(_:) returns a supported path without validating references, closure state, or date."
+      - path: ".planning/phases/00-authentication-feasibility-gate/00-OWNER-RESULT.md"
+        issue: "Run count is 0 and selected path is unsupported."
+      - path: ".planning/phases/00-authentication-feasibility-gate/00-BROWSER-PROBE.md"
+        issue: "Outcome is renewal-pending, which finalization correctly classifies as incomplete."
+      - path: "Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityCore/RenewalObserver.swift"
+        issue: "ownerEnded is not latched; a later ordinary replacement can upgrade an ended observation to renewed."
+      - path: "Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityCore/AuthorizedPlaybackProbe.swift"
+        issue: "An unconfirmed proof is not latched and can recreate volatile playback work on a later call."
     missing:
-      - "Require validated canonical evidence before selection and add regressions for invalid references, terminal closure reasons, and invalid dates."
+      - "Obtain and serialize only an actual two-run, renewal-verified proof after the runtime boundaries are repaired; do not infer renewal from the earlier interaction."
+      - "Latch owner-ended and incomplete playback outcomes so no later observation retries or upgrades them."
   - truth: "Every protected, challenged, rate-limited, redirected, suspicious, or ambiguous outcome stops immediately, retains no secret evidence, and produces NO-GO unsupported."
     status: failed
-    reason: "A valid one-run terminal OwnerResult on a supported path derives NO-GO with selectedPath browser-return/native-direct; Decision.parse requires unsupported for NO-GO, so the produced decision cannot be validated as the required canonical blocked artifact."
+    reason: "The source has closed semantic stop enums and the stored artifacts contain no secret-pattern values, but the live boundary can accept an untrusted callback and can declare cleanup verified through no-op cleanup steps. It therefore cannot prove the required immediate safe stop and verified cleanup behavior."
     artifacts:
-      - path: "Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityCore/DecisionGate.swift"
-        issue: "decisionForSupportedPath returns Decision(.unsupported, selectedPath: ownerResult.selectedPath)."
+      - path: "Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityHarness/LiveBrowserRuntime.swift"
+        issue: "Five cleanup steps return true without performing or verifying sign-out, ephemeral-client cancellation, playback teardown, volatile-state clearing, or local absence."
+      - path: "Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityHarnessLauncher/main.swift"
+        issue: "Window close and application termination call cancel but do not await the cleanup coordinator."
+      - path: "Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityCore/AuthorizedPlaybackProbe.swift"
+        issue: "Allocation of AVPlayerItem is treated as authorized/audible readiness without observing playable status or actual playback."
     missing:
-      - "Emit NO-GO with selectedPath unsupported for every terminal result and test serialize/parse/full-chain validation for each stop class."
-  - truth: "A sanitized feasibility artifact contains exactly one canonical decision, and only a validated GO mechanically permits Phase 1 execution."
+      - "Implement and test concrete, idempotent teardown and absence-verification hooks; terminate only after their closed result is handled."
+      - "Use an actual authorized/playable playback transition before accepting owner audibility, and fail closed on media/key errors."
+  - truth: "A sanitized feasibility artifact contains exactly one decision: GO browser-return, GO native-direct, or NO-GO unsupported; only a GO decision permits Phase 1 execution."
     status: failed
-    reason: "ArtifactFields.parse accepts arbitrary field order; ArtifactBundle.validate canonical-compares only selection and decision, and the standalone validators only parse one artifact. Reordered evidence/owner artifacts remain acceptable in the full Phase 1 planned command. The GO-only Phase 1 check is a plan-task precondition, not an implemented execution-level gate."
+    reason: "The mechanical Phase 1 GO gate is present and rejects the current bundle as intended, but the authoritative decision is INCOMPLETE renewal-pending rather than either contractually final GO or NO-GO. The phase outcome is consequently not determined."
     artifacts:
-      - path: "Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityCore/EvidenceContract.swift"
-        issue: "Generic parser has no canonical-order check."
+      - path: ".planning/phases/00-authentication-feasibility-gate/00-DECISION.md"
+        issue: "Contains Feasibility decision: INCOMPLETE renewal-pending and Phase 1 continuation: blocked."
       - path: "Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityCore/DecisionGate.swift"
-        issue: "ArtifactBundle omits evidence and owner-result byte-canonical comparisons."
-      - path: ".planning/phases/01-safe-interoperability-foundation/01-01-PLAN.md"
-        issue: "GO validation is documented as a task precondition but no current executable workflow enforces it before Phase 1 work."
+        issue: "PhaseOneGate correctly rejects this non-GO bundle, but cannot turn incomplete evidence into a final feasibility decision."
     missing:
-      - "Reject every artifact unless parsed canonical text equals source, and compare all four canonical inputs in ArtifactBundle."
-      - "Install the complete-chain GO-only predicate as a real Phase 1 execution preflight."
+      - "Resolve the bounded browser proof through repaired runtime evidence to a valid final decision, or record a genuine terminal stop as canonical NO-GO unsupported."
 ---
 
 # Phase 00: Authentication Feasibility Gate Verification Report
 
 **Phase Goal:** Determine whether exactly one safe SiriusXM authentication path can complete two account-owner authorized-and-entitled proof runs with clean sign-out, before building the production application foundation.
 
-**Verified:** 2026-08-17T13:47:13Z
-
+**Verified:** 2026-08-17T19:26:59Z
 **Status:** gaps_found
-
-**Re-verification:** No — initial verification
+**Re-verification:** Yes — after corrective Plans 00-05 through 00-13
 
 ## MVP Mode Discrepancy
 
-ROADMAP marks this phase `mvp`, but its goal is not a valid user story. The centralized validator reports missing `As a …, I want to …, so that …` slots. Therefore a normal MVP User Flow Coverage table cannot be produced. This is a workflow-configuration warning; the technical verdict below is independently `gaps_found`.
+ROADMAP marks Phase 0 as `mvp`, but its goal is not a valid user story. The centralized validator reports that it lacks the required `As a …, I want to …, so that …` slots. Consequently, an MVP User Flow Coverage table cannot be validly generated. This configuration issue does not soften the result below: the ordinary goal-backward audit finds observable blockers.
 
 ## Goal Achievement
 
@@ -68,11 +86,11 @@ ROADMAP marks this phase `mvp`, but its goal is not a valid user story. The cent
 
 | # | Truth | Status | Evidence |
 | --- | --- | --- | --- |
-| 1 | Public first-party evidence safely establishes browser return or rules it out before selection. | ✗ FAILED | `DecisionGate.derive` does not call `evidence.validate()` (line 150); incomplete evidence can be made selection-consistent and reach GO. Closure state and impossible dates are also accepted. |
-| 2 | Native-direct is considered only after browser rule-out and a complete honest contract, with no retained alternate. | ✗ FAILED | `CandidateSelection.derive` (lines 39–51) selects from raw enum/count values; it does not validate public references or terminal closure state. |
-| 3 | A supported candidate requires exactly two ordered same-path semantic pass records, cooldown, and cleanup before GO. | ✓ VERIFIED | `OwnerResult.validate` requires two `run-1`/`run-2` same-path pass records and `owner-confirmed` cooldown (DecisionGate.swift:130–136). The current canonical state is unsupported with zero runs, so no owner action occurred. |
-| 4 | Any terminal/protected/ambiguous outcome produces a valid blocked NO-GO and retains no secret evidence. | ✗ FAILED | Stop enum and terminal ledger are closed, but a supported one-stop result derives an invalid NO-GO artifact: selected path remains supported although `Decision.parse` requires `unsupported`. |
-| 5 | Exactly one canonical sanitized decision controls a mechanical GO-only Phase 1 continuation gate. | ✗ FAILED | Current decision is canonical `NO-GO unsupported`/`blocked`, but reordered evidence/owner artifacts are accepted and no implemented executor preflight prevents Phase 1 work. |
+| 1 | Public first-party evidence safely establishes browser return or rules it out without authenticated-browser inspection. | ✗ FAILED | `WebLoginSession` is gated and nonpersistent, but its callback accepts query-bearing/subframe navigation; the launcher is not wired to persist a live semantic proof. |
+| 2 | Native-direct is evaluated only after strict browser rule-out, with no fallback path. | ✓ VERIFIED | `00-NATIVE-PROBE.md` is canonical `not-applicable`; `NativeLaunchGate` and `NativeDirectPreflightTests` keep the native runtime/credential source absent. |
+| 3 | Exactly two ordered, owner-initiated, complete proof runs with a cooldown and legitimate renewal are required before GO. | ✗ FAILED | Current `00-OWNER-RESULT.md` records zero runs and `00-BROWSER-PROBE.md` is `renewal-pending`; `finalize-phase` emits `incomplete:renewal-pending`. |
+| 4 | Protected, challenged, rate-limited, redirected, suspicious, or ambiguous outcomes stop immediately, leave no secret evidence, and produce valid NO-GO. | ✗ FAILED | Closed semantic types and secret-free canonical artifacts exist, but callback validation, concrete cleanup, app-exit cleanup, and playback readiness are unsafe/unproven in the live boundary. |
+| 5 | Exactly one final sanitized GO/NO-GO decision controls a mechanical Phase 1 continuation. | ✗ FAILED | `require-phase-one-go` is mechanically wired and rejects the incomplete bundle, but the only authoritative result is `INCOMPLETE renewal-pending`, not a final GO/NO-GO determination. |
 
 **Score:** 1/5 truths verified (0 present, behavior-unverified)
 
@@ -80,74 +98,73 @@ ROADMAP marks this phase `mvp`, but its goal is not a valid user story. The cent
 
 | Artifact | Expected | Status | Details |
 | --- | --- | --- | --- |
-| `Spikes/AuthenticationFeasibility/Package.swift` | Isolated dependency-free SwiftPM harness | ✓ VERIFIED | Substantive core/executable/test targets; no product coupling found. It does not declare the project macOS 26 baseline (warning). |
-| `EvidenceContract.swift` | Strict, canonical public-evidence contract | ✗ UNSAFE | Exists and is substantive, but accepts impossible dates, closure/candidate conflicts, and non-canonical field order. |
-| `CandidateSelection.swift` | Browser-first single selection | ✗ UNSAFE | Exists and is wired, but derives supported selections from unvalidated evidence. |
-| `DecisionGate.swift` | Fail-closed proof/decision state machine | ✗ UNSAFE | Exact two-run predicate exists, but invalid evidence can unlock GO and terminal-stop output is not a valid NO-GO decision. |
-| `main.swift` | Explicit offline validation CLI | ⚠️ PARTIAL | No default command or live operation; commands parse valid evidence, but individual validators do not prove canonical full-bundle integrity. |
-| `00-EVIDENCE.md` → `00-DECISION.md` | Canonical zero-live NO-GO record | ✓ VERIFIED (current record) | Full offline validation, fresh selection/decision derivation, and byte comparisons passed for the committed unsupported record. |
-| `00-RUNBOOK.md` | Prohibited-live terminal procedure | ✓ VERIFIED | Explicitly prohibits candidate creation, account/browser/provider actions, retries, and Phase 1 continuation. |
+| `EvidenceContract.swift` / `DecisionGate.swift` | Strict canonical proof bundle and GO gate | ✓ VERIFIED | Parsed values are revalidated and byte-canonical; 44 Swift tests pass. Earlier evidence-validation/canonicality gaps are closed. |
+| `WebLoginSession.swift` / `SemanticProofClient.swift` | Safe app-bound browser-return boundary | ✗ UNSAFE | Exists and is imported/wired, but accepts query-bearing/subframe callback shape. |
+| `LiveBrowserRuntime.swift` / launcher | Real semantic browser proof and cleanup | ✗ UNWIRED / UNSAFE | The launcher starts WebKit only; it does not drive or serialize the proof chain. Cleanup proof uses no-op participants and exit skips awaited cleanup. |
+| `AuthorizedPlaybackProbe.swift` / `RenewalObserver.swift` | One-attempt playback and renewal proof | ✗ UNSAFE | Playback allocation is mistaken for actual readiness; owner-ended renewal and unconfirmed playback are not latched. |
+| Canonical Phase 0 quartet | Final, sanitized feasibility result | ⚠️ INCOMPLETE | The files are canonical and secret-free, but expressly preserve the blocked renewal-pending state. |
+| `PhaseOneGate` / `01-01-PLAN.md` | GO-only production preflight | ✓ VERIFIED | Exact pre-write `require-phase-one-go` command is wired in Phase 1; it rejected the present incomplete quartet. |
 
 ### Key Link Verification
 
 | From | To | Via | Status | Details |
 | --- | --- | --- | --- | --- |
-| Runner | Core decision/evidence types | Swift import and command dispatch | ✓ WIRED | `main.swift` imports `AuthFeasibilityCore` and dispatches validation/derivation commands. |
-| Evidence | Selection | parse → derive → byte comparison in current validation command | ✓ WIRED (current record) | Verified by offline re-derivation. Not safe for non-canonical evidence because parse accepts reordered fields. |
-| Selection/owner result | Decision | parse → derive → byte comparison in current validation command | ✓ WIRED (current record) | Verified for current unsupported state; unsafe terminal-stop derivation remains. |
-| Phase 0 decision | Phase 1 execution | GO-only precondition | ⚠️ PARTIAL | `01-01-PLAN.md` documents the check; no implemented workflow-level preflight was found. |
+| Public contract + approval | `WebLoginSession` | constructor validation | ✓ WIRED | Contract and digest-bound approval are checked before WebKit is created. |
+| `WebLoginSession` | `SemanticProofClient` | one-time `AppBoundReturnResult` | ⚠️ PARTIAL | A handoff exists, but the callback matcher is too broad for the exact app-bound contract. |
+| Live browser session | canonical owner/proof artifacts | semantic progression and artifact writer | ✗ NOT_WIRED | The launcher has no calls to authentication/entitlement/tune/playback/renewal/sign-out/cleanup recording or canonical writer. `record-browser-renewal-pending` writes the current artifact offline. |
+| Phase 0 quartet | Phase 1 execution | `require-phase-one-go` | ✓ WIRED | Command was added as Task 01-01’s explicit precondition and failed against the current bundle. |
 
 ### Data-Flow Trace (Level 4)
 
-Not applicable. This phase deliberately has no UI, remote data source, or dynamic rendering. The persisted semantic artifact flow was traced instead: current `00-EVIDENCE.md` flows through the CLI to byte-identical `00-SELECTION.md` and `00-DECISION.md`.
+This phase has no dynamic UI data source. The relevant flow is its semantic proof flow. The current canonical bundle is generated by the offline renewal-pending writer, not by the WKWebView runtime; thus the live-to-artifact chain is disconnected. No raw credential, cookie, token, header, account, response, stream URL, or key pattern appears in the canonical artifacts.
 
 ### Behavioral Spot-Checks
 
 | Behavior | Command | Result | Status |
 | --- | --- | --- | --- |
-| Offline contract suite | `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --package-path Spikes/AuthenticationFeasibility` | 7 Swift Testing tests passed | ✓ PASS |
-| Current canonical unsupported chain | `validate-evidence → derive/compare selection → validate owner → derive/compare decision → validate decision` | All commands passed; `NO-GO unsupported` and `blocked` occur once each | ✓ PASS |
-| No live/browser transport surface | Static scan of `Spikes/AuthenticationFeasibility/Sources` | No URLSession, browser-auth, cookie, credential-storage, request, User-Agent, or HTTP URL API usage | ✓ PASS |
-| Invalid-evidence/closure/canonicality failure paths | Source and test audit | Existing suite passes despite omitting the required negative cases; its GO test uses `synthetic-reference`, which is invalid public evidence | ✗ FAIL |
-
-### Probe Execution
-
-SKIPPED — no declared or conventional Phase 00 probe scripts exist.
+| Offline contract suite | `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --package-path Spikes/AuthenticationFeasibility` | 44 Swift Testing tests passed | ✓ PASS |
+| Current finalization state | `swift run … auth-feasibility finalize-phase …` | `incomplete:renewal-pending` | ✓ PASS (blocked state) |
+| Phase 1 GO gate | `swift run … auth-feasibility require-phase-one-go <quartet>` | `validation failed` (nonzero) | ✓ PASS (fails closed) |
+| Post-owner-ended renewal latching | Source/test inspection | `.ownerEnded` returns pending without saving it; later replacement can return renewed; no regression covers that sequence | ✗ FAIL |
+| Exact callback/main-frame boundary | Source/test inspection | No query/fragment/userinfo/subframe rejection test; implementation lacks query/main-frame guards | ✗ FAIL |
+| Concrete cleanup and real playback proof | Source/test inspection | Cleanup participant returns true for no-op steps; playback only allocates an item and never observes playback/readiness | ✗ FAIL |
 
 ### Requirements Coverage
 
 | Requirement | Source Plan | Description | Status | Evidence |
-| --- | --- | --- | --- | --- |
-| FEAS-01 | 00-01, 00-02 | Qualify clean first-party app-bound browser return without browser-state inspection | ✗ BLOCKED | Present artifact safely selects unsupported, but unvalidated evidence/invalid date/closure states can generate GO. |
-| FEAS-02 | 00-01–00-03 | Browser-first then one honest native path, no spoofing/fallback | ✗ BLOCKED | No live/native code exists (good for current NO-GO), but selection is possible from unvalidated evidence. |
-| FEAS-03 | 00-01, 00-04 | Exact two owner proof runs before GO | ✓ SATISFIED for the current unsupported branch | No candidate/proof-ready artifact exists; the core requires exact two semantic passes for a supported GO. |
-| FEAS-04 | 00-01, 00-03, 00-04 | One protected/ambiguous outcome stops and preserves no secrets | ✗ BLOCKED | No live data surface found, but supported terminal output cannot validate as canonical NO-GO. |
-| FEAS-05 | 00-01, 00-02, 00-04 | One sanitized decision; Phase 1 only after valid GO | ✗ BLOCKED | Current NO-GO record is valid; non-canonical artifacts and absence of an execution-level preflight make the continuation control untrustworthy. |
+| --- | --- | --- | --- |
+| FEAS-01 | 00-05..00-10, 00-13 | Determine safe clean app-bound browser return without authenticated-browser inspection. | ✗ BLOCKED | Boundary is constrained but callback acceptance and live-to-artifact wiring do not establish a safe determination. |
+| FEAS-02 | 00-05..00-13 | Conditional honest native path only after browser rule-out. | ✓ SATISFIED for current branch | Native-direct is correctly `not-applicable`; no credential or direct-runtime source is present. |
+| FEAS-03 | 00-05, 00-09..00-13 | Two separate complete owner proof runs with cooldown. | ✗ BLOCKED | Canonical zero-run, renewal-pending state; safe runtime defects also prevent trustworthy future proof. |
+| FEAS-04 | 00-05..00-13 | Stop on protections/ambiguity and retain no secret response evidence. | ✗ BLOCKED | Persisted artifacts are clean, but no-op cleanup/callback/playback defects invalidate the claimed live stop and cleanup guarantees. |
+| FEAS-05 | 00-05, 00-13 | One final GO/NO-GO decision gates Phase 1. | ✗ BLOCKED | Preflight exists and rejects incomplete input, but final decision has not been reached. |
 
 ### Anti-Patterns Found
 
 | File | Line | Pattern | Severity | Impact |
-| --- | --- | --- | --- | --- |
-| `DecisionGate.swift` | 150 | Selection equality without evidence validation | 🛑 BLOCKER | Invalid evidence can unlock GO. |
-| `EvidenceContract.swift` | 179–207 | Closure reason independent of candidate state | 🛑 BLOCKER | Terminal preflight failure can coexist with a supported candidate. |
-| `EvidenceContract.swift` | 239–245 | Lexical-only date validation | 🛑 BLOCKER | Impossible audit dates are accepted. |
-| `EvidenceContract.swift`, `DecisionGate.swift` | 212–231; 200–208 | Non-canonical artifact acceptance | 🛑 BLOCKER | Hand-authored/reordered proof artifacts can pass the full chain. |
-| `DecisionGate.swift` | 173–176 | Terminal NO-GO has supported selected path | ⚠️ WARNING | The generated terminal decision fails its own parser. |
-| `DecisionGate.swift` | 98–128 | Parser compacting physical proof fields | ⚠️ WARNING | Narrower than required audit shape; add physical-slot regressions. |
-| `Package.swift` | 4–14 | No macOS 26 platform declaration | ⚠️ WARNING | Manifest advertises an older implicit compatibility baseline. |
+| --- | --- | --- | --- |
+| `WebLoginSession.swift` | 126–135, 153–160 | Callback accepts query-bearing/subframe app-bound return. | 🛑 BLOCKER | Untrusted navigation can advance proof progress. |
+| `RenewalObserver.swift` | 62–75 | Owner-ended pending observation is not latched. | 🛑 BLOCKER | A bounded observation can be reopened/upgraded after the owner ended it. |
+| `LiveBrowserRuntime.swift` | 143–150 | Cleanup reports success through no-op operations. | 🛑 BLOCKER | Cleanup can be serialized as verified without verified teardown. |
+| `AuthorizedPlaybackProbe.swift` | 59–70, 94–112 | AVPlayerItem allocation stands in for authorization/audibility; incomplete attempt can repeat. | 🛑 BLOCKER | Playback proof can be false-positive and volatile work can retry. |
+| `AuthFeasibilityHarnessLauncher/main.swift` | 137–145 | Termination bypasses awaited cleanup. | 🛑 BLOCKER | Window close does not prove cleanup. |
+| `CleanupCoordinator.swift` | 33–50 | Concurrent cleanup not coalesced. | ⚠️ WARNING | Teardown steps may run twice after an actor suspension. |
+| `AuthFeasibilityHarnessLauncher/main.swift` | 19–35, 132–134 | Launch failures exit successfully. | ⚠️ WARNING | Automation may mistake launch failure for a valid run. |
+| `AuthFeasibilityRunner/main.swift` | 97–114 | Supersession validation accepts trailing content. | ⚠️ WARNING | Finalization state accepts noncanonical append-only data. |
 
-No `TBD`, `FIXME`, `XXX`, `TODO`, `HACK`, placeholder output, or live/provider API surface was found in Phase 00 source.
+No unreferenced `TBD`, `FIXME`, or `XXX` markers were found in the Phase 0 implementation. The temporary-path matches in the shell preflight are normal `TMPDIR` use, not debt markers.
 
-### Prohibition Checks
+### Human Verification Required
 
-Static evidence supports the following only as non-authoritative judgment: the spike is not imported outside `Spikes/AuthenticationFeasibility`; no browser/account/network APIs or alternative candidate files exist; and the current artifacts contain only allow-listed semantic fields. These do not resolve the blockers above because a forged GO can still be derived through the unsafe contract paths.
+No further human confirmation can close these gaps now: the account owner already reported that renewal was not observed, and the earlier `browser-complete` signal was explicitly retracted. Renewal must be recorded by a repaired, bounded semantic path; it must not be inferred from memory or a repeated sign-in/play/stop/sign-out interaction.
 
 ### Gaps Summary
 
-The committed record is a safe current `NO-GO unsupported` outcome, and it correctly caused no SiriusXM, browser, account, or authentication activity during this verification. The phase goal is nevertheless not achieved: the required canonical gate is not fail-closed for malformed evidence, terminal closure state, dates, or artifact canonicality. Repair those boundaries and make the Phase 1 GO check an execution preflight, then re-verify. No later roadmap phase explicitly owns these Phase 00 gate repairs, so none are deferred.
+Corrective plans closed the prior artifact-validation and Phase 1-wiring failures. The current finalizer is now honestly fail-closed: it emits `incomplete:renewal-pending`, and the Phase 1 GO preflight rejects the bundle. That safety result is not phase completion. Phase 0 has neither the required two-run renewal proof nor a final GO/NO-GO feasibility decision, and the live browser proof implementation contains five blocking defects that must be repaired before a future run can count.
+
+No later roadmap phase explicitly owns these Phase 0 gate repairs; Phase 1 instead depends on a GO result. Nothing is deferred.
 
 ---
 
-_Verified: 2026-08-17T13:47:13Z_
-
+_Verified: 2026-08-17T19:26:59Z_
 _Verifier: the agent (gsd-verifier)_
