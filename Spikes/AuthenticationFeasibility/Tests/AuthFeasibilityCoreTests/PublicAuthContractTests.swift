@@ -12,10 +12,10 @@ func readyConstructionWithOpenDocumentation() throws {
 }
 
 @Test("missing construction facts are incomplete while unsafe facts fail closed")
-func incompleteAndUnsafeConstructionAreDistinct() {
+func incompleteAndUnsafeConstructionAreDistinct() throws {
     var incomplete = AuthExperimentContract.readyForBrowserExperiment()
     incomplete.browser.appBoundReturn = .open
-    #expect(try? CandidateSelection.experimentReadiness(for: incomplete) == .browserExperimentIncomplete)
+    #expect(try CandidateSelection.experimentReadiness(for: incomplete) == .browserExperimentIncomplete)
 
     var unsafe = AuthExperimentContract.readyForBrowserExperiment()
     unsafe.browser.stopBounds = .unsafe

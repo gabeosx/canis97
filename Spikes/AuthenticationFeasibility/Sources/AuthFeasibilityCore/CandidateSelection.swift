@@ -38,6 +38,17 @@ public struct Selection: Equatable, Sendable {
 }
 
 public enum CandidateSelection {
+    public static func experimentReadiness(for contract: AuthExperimentContract) throws -> ExperimentReadiness {
+        try contract.validate()
+        return contract.browser.hasAllSafeConstructionBounds ? .browserExperimentReady : .browserExperimentIncomplete
+    }
+
+    public static func nativeRuntimeSelection(for contract: AuthExperimentContract) -> NativeRuntimeSelection {
+        // A purpose contract only describes a possible later branch. It never proves
+        // WebKit rule-out or owner approval, so it cannot select a live runtime.
+        .notEligible
+    }
+
     public static func derive(_ evidence: EvidenceRecord) throws -> Selection {
         try evidence.validate()
         let path: CandidatePath
@@ -57,6 +68,10 @@ public enum CandidateSelection {
         let derived = try derive(evidence)
         guard selection == derived else { throw ContractError.invalidArtifact }
     }
+}
+
+public enum NativeRuntimeSelection: String, Equatable, Sendable {
+    case notEligible = "not-eligible"
 }
 
 public struct CandidateLatch: Sendable {
