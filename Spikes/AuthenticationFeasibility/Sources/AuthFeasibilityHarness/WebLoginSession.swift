@@ -46,12 +46,12 @@ public final class AppBoundReturnResult {
 @MainActor
 public final class WebLoginSession: NSObject, WKNavigationDelegate {
     private static let entryURL = URL(string: "https://www.siriusxm.com/")!
-    private static let appBoundReturnURL = URL(string: "siriusmac-auth://browser-return")!
 
     public private(set) var state: WebLoginSessionState = .awaitingOwnerStart
 
     private var webView: WKWebView?
     private var returnHandler: ((AppBoundReturnResult) -> Void)?
+    private var terminalHandler: ((BrowserTerminalReason) -> Void)?
 
     public init(contract: AuthExperimentContract, approval: ExperimentApproval) throws {
         try contract.validate()
@@ -63,7 +63,10 @@ public final class WebLoginSession: NSObject, WKNavigationDelegate {
     }
 
     /// Creates the nonpersistent WebKit view only after the account owner explicitly starts a run.
-    public func startOwnerOperatedRun(onAppBoundReturn: @escaping (AppBoundReturnResult) -> Void) throws {
+    public func startOwnerOperatedRun(
+        onAppBoundReturn: @escaping (AppBoundReturnResult) -> Void,
+        onTerminal: @escaping (BrowserTerminalReason) -> Void
+    ) throws {
         guard state == .awaitingOwnerStart else { throw ContractError.invalidArtifact }
 
         let configuration = WKWebViewConfiguration()
@@ -73,6 +76,7 @@ public final class WebLoginSession: NSObject, WKNavigationDelegate {
         browser.navigationDelegate = self
         webView = browser
         returnHandler = onAppBoundReturn
+        terminalHandler = onTerminal
         state = .ownerOperating
         browser.load(URLRequest(url: Self.entryURL))
     }
@@ -80,7 +84,7 @@ public final class WebLoginSession: NSObject, WKNavigationDelegate {
     /// This is a policy classifier, not a browser-state query. It has no access to cookies,
     /// storage, profiles, credentials, scripts, developer tools, or accessibility data.
     public func observedEvent(for url: URL) -> BrowserObservation {
-        if url == Self.appBoundReturnURL {
+        if Self.isAppBoundReturn(url) {
             return .matchedAppBoundReturn
         }
         guard url.scheme == "https", let host = url.host?.lowercased() else {
@@ -93,7 +97,7 @@ public final class WebLoginSession: NSObject, WKNavigationDelegate {
     }
 
     public func cancel() {
-        finish(.cancelled)
+        terminate(.cancelled)
     }
 
     public func stop() {
@@ -102,6 +106,7 @@ public final class WebLoginSession: NSObject, WKNavigationDelegate {
         webView?.navigationDelegate = nil
         webView = nil
         returnHandler = nil
+        terminalHandler = nil
         state = .stopped
     }
 
@@ -111,7 +116,7 @@ public final class WebLoginSession: NSObject, WKNavigationDelegate {
         decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void
     ) {
         guard let url = navigationAction.request.url else {
-            finish(.unexpectedNavigation)
+            terminate(.unexpectedNavigation)
             decisionHandler(.cancel)
             return
         }
@@ -127,16 +132,28 @@ public final class WebLoginSession: NSObject, WKNavigationDelegate {
             handler?(result)
             decisionHandler(.cancel)
         case let .terminal(reason):
-            finish(reason)
+            terminate(reason)
             decisionHandler(.cancel)
         }
     }
 
-    private func finish(_ reason: BrowserTerminalReason) {
+    private func terminate(_ reason: BrowserTerminalReason) {
+        let handler = terminalHandler
         webView?.stopLoading()
         webView?.navigationDelegate = nil
         webView = nil
         returnHandler = nil
+        terminalHandler = nil
         state = .terminal(reason)
+        handler?(reason)
+    }
+
+    private static func isAppBoundReturn(_ url: URL) -> Bool {
+        url.scheme == "siriusmac-auth" &&
+            url.host == "browser-return" &&
+            (url.path.isEmpty || url.path == "/") &&
+            url.user == nil &&
+            url.password == nil &&
+            url.fragment == nil
     }
 }

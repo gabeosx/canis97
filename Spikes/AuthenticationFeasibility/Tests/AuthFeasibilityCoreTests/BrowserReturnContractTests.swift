@@ -1,6 +1,8 @@
 import Foundation
 import Testing
 @testable import AuthFeasibilityCore
+
+#if canImport(AuthFeasibilityHarness)
 @testable import AuthFeasibilityHarness
 
 @Test("only an exact digest-bound approval can prepare the owner-operated browser")
@@ -35,6 +37,8 @@ func browserConstructionRejectsDigestMismatch() throws {
         try WebLoginSession(contract: changed, approval: approval)
     }
 }
+
+#endif
 
 @Test("a matched app-bound return is consumed once as closed semantic events")
 func explicitReturnIsCollapsedToSafeProofEvents() {
