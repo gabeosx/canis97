@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+@testable import AuthFeasibilityCore
 
 #if canImport(AuthFeasibilityHarness)
 @testable import AuthFeasibilityHarness
@@ -57,9 +58,9 @@ func nativeSessionVerificationIsSingleConsumption() async throws {
         )
     })
 
-    #expect(await verifier.verify(source) == .verified)
+    #expect(await verifier.verify(source) == .authenticated)
     #expect(await verifier.verify(source) == .alreadyConsumed)
-    #expect(!WebSessionBridgeResult.verified.canonicalText.contains("AUTH_TOKEN"))
+    #expect(!WebSessionBridgeResult.authenticated.canonicalText.contains("AUTH_TOKEN"))
 }
 
 @Test("protected and ambiguous native responses fail closed")
@@ -67,8 +68,44 @@ func nativeSessionVerificationIsSingleConsumption() async throws {
 func nativeSessionVerificationClassifiesStops() {
     #expect(NativeWebSessionVerifier.classify(.init(statusCode: 403, body: Data())) == .protectedControl)
     #expect(NativeWebSessionVerifier.classify(.init(statusCode: 429, body: Data())) == .rateLimited)
-    #expect(NativeWebSessionVerifier.classify(.init(statusCode: 200, body: Data("{}".utf8))) == .verified)
+    #expect(NativeWebSessionVerifier.classify(.init(statusCode: 200, body: Data("{}".utf8))) == .authenticated)
     #expect(NativeWebSessionVerifier.classify(.init(statusCode: 302, body: Data())) == .httpStatus(302))
+}
+
+@Test("a supported entitlement predicate is a separate native request")
+@MainActor
+func nativeEntitlementVerificationCannotPromoteProfileAuthentication() async throws {
+    let contract = try EntitlementContract.parse([
+        "Schema: entitlement-contract-v1",
+        "Status: supported",
+        "Method: GET",
+        "Host: api.edge-gateway.siriusxm.com",
+        "Path: /subscription/v1/status",
+        "Public provenance URL: https://www.siriusxm.com/player",
+        "Retrieved on: 2026-08-17",
+        "Success field: subscription.status",
+        "Success value: active",
+        "Denial field: subscription.status",
+        "Denial value: inactive",
+        "Malformed rule: missing-or-non-string-field",
+        "",
+    ].joined(separator: "\n"))
+    let verifier = try NativeEntitlementVerifier(contract: contract, transport: WebSessionTransport { request in
+        #expect(request.url?.path == "/subscription/v1/status")
+        return .init(statusCode: 200, body: Data(#"{"subscription":{"status":"active"}}"#.utf8))
+    })
+
+    #expect(await verifier.verify(accessToken: String(repeating: "t", count: 24)) == .entitled)
+    #expect(throws: ContractError.self) { try NativeEntitlementVerifier(contract: .parse(EntitlementContract.unsupportedCanonicalText)) }
+}
+
+@Test("sign-out presence check exposes no cookie value")
+@MainActor
+func signOutPresenceIsClosedAndNameScoped() throws {
+    let current = try cookie(name: "AUTH_TOKEN", domain: ".siriusxm.com", secure: true, expires: nil)
+    #expect(WebSessionSignOutChecker.classify(cookies: []) == .absent)
+    #expect(WebSessionSignOutChecker.classify(cookies: [current]) == .present)
+    #expect(WebSessionSignOutChecker.classify(cookies: [current, current]) == .ambiguous)
 }
 
 private func cookie(
