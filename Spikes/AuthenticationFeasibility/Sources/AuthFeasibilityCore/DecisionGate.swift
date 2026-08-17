@@ -244,6 +244,45 @@ public enum DecisionGate {
     }
 }
 
+/// The closed finalization table deliberately separates an unresolved proof
+/// state from a terminal feasibility decision. In particular, renewal-pending
+/// may never be serialized as either a GO or a terminal unsupported result.
+public enum FinalizationState: Equatable, Sendable {
+    case environmentPending
+    case safeConstructionIncomplete
+    case ordinaryBrowserNoCleanReturn
+    case browserRenewalPending
+    case nativePurposeIncomplete
+    case browserTerminal
+    case nativeTerminal
+    case browserComplete
+    case qualifiedNativeComplete
+}
+
+public enum FinalizationDisposition: Equatable, Sendable {
+    case incomplete
+    case terminal(FeasibilityDecision)
+}
+
+public enum FinalizationGate {
+    public static func derive(for state: FinalizationState) -> FinalizationDisposition {
+        switch state {
+        case .environmentPending,
+             .safeConstructionIncomplete,
+             .ordinaryBrowserNoCleanReturn,
+             .browserRenewalPending,
+             .nativePurposeIncomplete:
+            .incomplete
+        case .browserTerminal, .nativeTerminal:
+            .terminal(.unsupported)
+        case .browserComplete:
+            .terminal(.browserReturn)
+        case .qualifiedNativeComplete:
+            .terminal(.nativeDirect)
+        }
+    }
+}
+
 public struct ArtifactBundle: Sendable {
     public let evidence: String
     public let selection: String

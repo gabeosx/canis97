@@ -99,6 +99,55 @@ func requirePhaseOneGo(_ arguments: Arguments) throws {
     FileHandle.standardOutput.write(Data("phase-one-go\n".utf8))
 }
 
+func validateSupersessionForFinalization(_ text: String) throws {
+    let expected = [
+        "Schema: phase-0-supersession-v1",
+        "Replan selected on: 2026-08-17",
+        "Replan choice: replan-from-scratch",
+        "Status: replacement-planned",
+        "Historical plan range: 00-01..00-04",
+        "Active plan range: 00-05..00-13",
+        "Historical summaries authority: immutable-history-only",
+        "Existing quartet authority: historical-fail-closed-only",
+        "Replacement execution complete: no",
+        "Phase 1 continuation: blocked",
+        "Current status authority: 00-SUPERSESSION.md+00-05..00-13",
+        "Post-finalization authority: newly-byte-derived-and-validated-canonical-quartet",
+        "",
+    ].joined(separator: "\n")
+    guard text.hasPrefix(expected) else { throw RunnerError.failed }
+}
+
+func finalizePhase(_ arguments: Arguments) throws {
+    let toolchain = try readArtifact(try arguments.value(named: "--toolchain"))
+    let contract = try AuthExperimentContract.parse(readArtifact(try arguments.value(named: "--contract")))
+    let approval = try ExperimentApproval.parse(readArtifact(try arguments.value(named: "--approval")))
+    let browserProbe = try BrowserProbeResult.parse(readArtifact(try arguments.value(named: "--browser-probe")))
+    let nativeApproval = try NativeDirectApproval.parse(readArtifact(try arguments.value(named: "--native-approval")))
+    let nativeProbe = try readArtifact(try arguments.value(named: "--native-probe"))
+    let supersession = try readArtifact(try arguments.value(named: "--supersession"))
+
+    guard toolchain == ToolchainGate.artifact(for: .currentSDKReady),
+          nativeProbe == [
+              "Schema: native-probe-v2",
+              "Outcome: not-applicable",
+              "Phase 1 continuation: blocked",
+              "",
+          ].joined(separator: "\n") else {
+        throw RunnerError.failed
+    }
+    try BrowserLaunchGate.validate(toolchainArtifact: toolchain, contract: contract, approval: approval)
+    try validateSupersessionForFinalization(supersession)
+
+    guard browserProbe == .renewalPending, nativeApproval == .notApplicable else {
+        throw RunnerError.failed
+    }
+    guard FinalizationGate.derive(for: .browserRenewalPending) == .incomplete else {
+        throw RunnerError.failed
+    }
+    FileHandle.standardOutput.write(Data("incomplete:renewal-pending\n".utf8))
+}
+
 func deriveExperimentReadiness(_ arguments: Arguments) throws {
     let contract = try AuthExperimentContract.parse(readArtifact(try arguments.value(named: "--contract")))
     let readiness = try CandidateSelection.experimentReadiness(for: contract)
@@ -283,6 +332,8 @@ func run() throws {
         try validateBundle(parsed)
     case "require-phase-one-go":
         try requirePhaseOneGo(parsed)
+    case "finalize-phase":
+        try finalizePhase(parsed)
     default:
         throw RunnerError.invalidArguments
     }
