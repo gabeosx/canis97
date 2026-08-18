@@ -85,6 +85,150 @@ final class WebAuthenticationBridgeTests: XCTestCase {
         XCTAssertEqual(incompleteResult, .malformedCredential)
     }
 
+    func testConcurrentSelectionsReserveOneCookieReadAndOneCredentialTransfer() async throws {
+        let now = Date()
+        let cookie = try authCookie(expires: now.addingTimeInterval(60))
+        let store = SuspendingCookieStore(responses: [[cookie]], suspendFirstRead: true)
+        let recorder = CredentialRecorder()
+        let bridge = WebAuthenticationBridge(
+            cookieStore: store,
+            now: { now },
+            credentialConsumer: { credential in await recorder.record(credential) }
+        )
+
+        let firstSelection = Task { @MainActor in
+            await bridge.useLoggedInSession()
+        }
+        await store.waitUntilFirstReadSuspended()
+
+        let secondSelection = Task { @MainActor in
+            await bridge.useLoggedInSession()
+        }
+        let secondResult = await secondSelection.value
+        let readsBeforeResume = store.readCount
+
+        store.resumeFirstRead()
+        let firstResult = await firstSelection.value
+        let snapshot = await recorder.snapshot()
+
+        XCTAssertEqual(secondResult, .alreadyConsumed)
+        XCTAssertEqual(readsBeforeResume, 1)
+        XCTAssertEqual(firstResult, .credentialTransferred)
+        XCTAssertEqual(snapshot.count, 1)
+    }
+
+    func testPreCommitFailuresReleaseSelectionForAConfirmedRetry() async throws {
+        let now = Date()
+        let valid = try authCookie(expires: now.addingTimeInterval(60))
+        let ambiguous = [valid, valid]
+        let malformed = [try authCookie(value: "not-json", expires: now.addingTimeInterval(60))]
+        let scenarios: [([HTTPCookie], WebAuthenticationBridge.Result)] = [
+            ([], .authCookieMissing),
+            (ambiguous, .ambiguousCredentials),
+            (malformed, .malformedCredential),
+        ]
+
+        for (invalidCookies, expectedResult) in scenarios {
+            let store = SuspendingCookieStore(responses: [invalidCookies, [valid]])
+            let recorder = CredentialRecorder()
+            let bridge = WebAuthenticationBridge(
+                cookieStore: store,
+                now: { now },
+                credentialConsumer: { credential in await recorder.record(credential) }
+            )
+
+            let initialResult = await bridge.useLoggedInSession()
+            let retryResult = await bridge.useLoggedInSession()
+            let snapshot = await recorder.snapshot()
+
+            XCTAssertEqual(initialResult, expectedResult)
+            XCTAssertEqual(retryResult, .credentialTransferred)
+            XCTAssertEqual(snapshot.count, 1)
+        }
+    }
+
+    func testCancelledSelectionReleasesReservationWithoutDeliveringCredential() async throws {
+        let now = Date()
+        let valid = try authCookie(expires: now.addingTimeInterval(60))
+        let store = SuspendingCookieStore(responses: [[valid], [valid]], suspendFirstRead: true)
+        let recorder = CredentialRecorder()
+        let bridge = WebAuthenticationBridge(
+            cookieStore: store,
+            now: { now },
+            credentialConsumer: { credential in await recorder.record(credential) }
+        )
+
+        let cancelledSelection = Task { @MainActor in
+            await bridge.useLoggedInSession()
+        }
+        await store.waitUntilFirstReadSuspended()
+        cancelledSelection.cancel()
+        store.resumeFirstRead()
+
+        let cancelledResult = await cancelledSelection.value
+        let retryResult = await bridge.useLoggedInSession()
+        let snapshot = await recorder.snapshot()
+
+        XCTAssertEqual(cancelledResult, .cancelled)
+        XCTAssertEqual(retryResult, .credentialTransferred)
+        XCTAssertEqual(snapshot.count, 1)
+    }
+
+    func testCommittedSelectionStaysConsumedWhileTheCredentialConsumerSuspendsOrCallerCancels() async throws {
+        let now = Date()
+        let valid = try authCookie(expires: now.addingTimeInterval(60))
+        let recorder = SuspendingCredentialRecorder()
+        let bridge = WebAuthenticationBridge(
+            cookieStore: SuspendingCookieStore(responses: [[valid]]),
+            now: { now },
+            credentialConsumer: { credential in await recorder.recordAndSuspend(credential) }
+        )
+
+        let firstSelection = Task { @MainActor in
+            await bridge.useLoggedInSession()
+        }
+        await recorder.waitUntilFirstRecordSuspended()
+
+        let overlappingResult = await Task { @MainActor in
+            await bridge.useLoggedInSession()
+        }.value
+        firstSelection.cancel()
+        await recorder.resumeFirstRecord()
+        let firstResult = await firstSelection.value
+        let subsequentResult = await bridge.useLoggedInSession()
+        let snapshot = await recorder.snapshot()
+
+        XCTAssertEqual(overlappingResult, .alreadyConsumed)
+        XCTAssertEqual(firstResult, .credentialTransferred)
+        XCTAssertEqual(subsequentResult, .alreadyConsumed)
+        XCTAssertEqual(snapshot.count, 1)
+    }
+
+    func testExplicitNewAttemptBlocksSelectionUntilHandoffDisposalCompletes() async throws {
+        let now = Date()
+        let valid = try authCookie(expires: now.addingTimeInterval(60))
+        let disposer = SuspendingHandoffDisposer()
+        let bridge = WebAuthenticationBridge(
+            cookieStore: SuspendingCookieStore(responses: [[valid]]),
+            now: { now },
+            credentialConsumer: { _ in },
+            handoffDisposer: { await disposer.discardAndSuspend() }
+        )
+
+        let newAttempt = Task { @MainActor in
+            await bridge.beginUserOperatedSignIn()
+        }
+        await disposer.waitUntilDiscardSuspended()
+
+        let blockedSelection = await bridge.useLoggedInSession()
+        await disposer.resumeDiscard()
+        await disposer.waitUntilDiscardFinishes()
+        let rearmedSelection = await bridge.useLoggedInSession()
+
+        XCTAssertEqual(blockedSelection, .alreadyConsumed)
+        XCTAssertEqual(rearmedSelection, .credentialTransferred)
+    }
+
     func testSignOutDeletesEveryExactApexAndSubdomainMatchThenRescans() async throws {
         let now = Date()
         let store = TestCookieStore(cookies: [
@@ -191,5 +335,141 @@ private actor CredentialRecorder {
 
     func snapshot() -> (count: Int, descriptions: [String]) {
         (count, descriptions)
+    }
+}
+
+@MainActor
+private final class SuspendingCookieStore: WebAuthenticationCookieStore {
+    private var responses: [[HTTPCookie]]
+    private let suspendFirstRead: Bool
+    private var didSuspendFirstRead = false
+    private var firstReadContinuation: CheckedContinuation<[HTTPCookie], Never>?
+    private var firstReadStartedContinuation: CheckedContinuation<Void, Never>?
+    private(set) var readCount = 0
+
+    init(responses: [[HTTPCookie]], suspendFirstRead: Bool = false) {
+        self.responses = responses
+        self.suspendFirstRead = suspendFirstRead
+    }
+
+    func allCookies() async -> [HTTPCookie] {
+        readCount += 1
+        guard suspendFirstRead, !didSuspendFirstRead else {
+            return nextResponse()
+        }
+
+        didSuspendFirstRead = true
+        firstReadStartedContinuation?.resume()
+        firstReadStartedContinuation = nil
+        return await withCheckedContinuation { continuation in
+            firstReadContinuation = continuation
+        }
+    }
+
+    func delete(_ cookie: HTTPCookie) async throws {}
+
+    func waitUntilFirstReadSuspended() async {
+        guard didSuspendFirstRead, firstReadContinuation != nil else {
+            await withCheckedContinuation { continuation in
+                firstReadStartedContinuation = continuation
+            }
+            return
+        }
+    }
+
+    func resumeFirstRead() {
+        guard let firstReadContinuation else {
+            XCTFail("Expected the first cookie read to be suspended")
+            return
+        }
+
+        self.firstReadContinuation = nil
+        firstReadContinuation.resume(returning: nextResponse())
+    }
+
+    private func nextResponse() -> [HTTPCookie] {
+        guard !responses.isEmpty else { return [] }
+        return responses.removeFirst()
+    }
+}
+
+private actor SuspendingCredentialRecorder {
+    private var count = 0
+    private var descriptions: [String] = []
+    private var firstRecordContinuation: CheckedContinuation<Void, Never>?
+    private var firstRecordStartedContinuation: CheckedContinuation<Void, Never>?
+
+    func recordAndSuspend(_ credential: AuthenticationCredential) async {
+        count += 1
+        descriptions.append(credential.description)
+        firstRecordStartedContinuation?.resume()
+        firstRecordStartedContinuation = nil
+        await withCheckedContinuation { continuation in
+            firstRecordContinuation = continuation
+        }
+    }
+
+    func waitUntilFirstRecordSuspended() async {
+        guard firstRecordContinuation != nil else {
+            await withCheckedContinuation { continuation in
+                firstRecordStartedContinuation = continuation
+            }
+            return
+        }
+    }
+
+    func resumeFirstRecord() {
+        guard let firstRecordContinuation else {
+            XCTFail("Expected the credential consumer to be suspended")
+            return
+        }
+
+        self.firstRecordContinuation = nil
+        firstRecordContinuation.resume()
+    }
+
+    func snapshot() -> (count: Int, descriptions: [String]) {
+        (count, descriptions)
+    }
+}
+
+private actor SuspendingHandoffDisposer {
+    private var discardContinuation: CheckedContinuation<Void, Never>?
+    private var discardStartedContinuation: CheckedContinuation<Void, Never>?
+    private var discardFinishedContinuation: CheckedContinuation<Void, Never>?
+
+    func discardAndSuspend() async {
+        discardStartedContinuation?.resume()
+        discardStartedContinuation = nil
+        await withCheckedContinuation { continuation in
+            discardContinuation = continuation
+        }
+        discardFinishedContinuation?.resume()
+        discardFinishedContinuation = nil
+    }
+
+    func waitUntilDiscardSuspended() async {
+        guard discardContinuation != nil else {
+            await withCheckedContinuation { continuation in
+                discardStartedContinuation = continuation
+            }
+            return
+        }
+    }
+
+    func resumeDiscard() {
+        guard let discardContinuation else {
+            XCTFail("Expected volatile handoff disposal to be suspended")
+            return
+        }
+
+        self.discardContinuation = nil
+        discardContinuation.resume()
+    }
+
+    func waitUntilDiscardFinishes() async {
+        await withCheckedContinuation { continuation in
+            discardFinishedContinuation = continuation
+        }
     }
 }
