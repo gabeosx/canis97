@@ -30,7 +30,9 @@ final class AuthenticationPresentationModel {
         let identifier = startAttempt(at: .verifyingAuthentication)
         let flow = flow
         return Task { [weak self, flow] in
-            let result = await flow.useLoggedInSession()
+            let result = await flow.useLoggedInSession { [weak self] in
+                self?.state = .verifyingEntitlement
+            }
             self?.finishAttempt(identifier, with: result)
         }
     }
@@ -227,8 +229,79 @@ enum SafeAuthenticationDiagnostic: Equatable {
 
 protocol AuthenticationPresentationFlow: Sendable {
     func beginWebViewSignIn() async -> AuthenticationPresentationState
-    func useLoggedInSession() async -> AuthenticationPresentationState
+    func useLoggedInSession(
+        onEntitlementVerification: @MainActor @escaping @Sendable () -> Void
+    ) async -> AuthenticationPresentationState
     func signOut() async -> SignOutOutcome
+}
+
+protocol ClientAuthenticationFlow: Sendable {
+    func authenticate() async -> AuthenticationOutcome
+    func entitlementAvailability() async -> EntitlementAvailability
+    func signOut() async -> SignOutOutcome
+}
+
+extension SiriusXMClient: ClientAuthenticationFlow {
+    func entitlementAvailability() async -> EntitlementAvailability {
+        await entitlement()
+    }
+}
+
+@MainActor
+struct ComposedAuthenticationPresentationFlow: AuthenticationPresentationFlow {
+    let bridge: WebAuthenticationBridge
+    let client: any ClientAuthenticationFlow
+
+    init(bridge: WebAuthenticationBridge, client: any ClientAuthenticationFlow) {
+        self.bridge = bridge
+        self.client = client
+    }
+
+    func beginWebViewSignIn() async -> AuthenticationPresentationState {
+        bridge.beginUserOperatedSignIn()
+        return .waitingForWebView
+    }
+
+    func useLoggedInSession(
+        onEntitlementVerification: @MainActor @escaping @Sendable () -> Void
+    ) async -> AuthenticationPresentationState {
+        guard await bridge.useLoggedInSession() == .credentialTransferred else {
+            return .unsupported
+        }
+
+        switch await client.authenticate() {
+        case .authenticatedPendingEntitlement:
+            onEntitlementVerification()
+            return presentationState(for: await client.entitlementAvailability())
+        case .waitingForAuthenticationComposition, .unsupported:
+            return .unsupported
+        case .rejected:
+            return .rejected
+        case .challengeRequired:
+            return .challengeRequired
+        case .cancelled:
+            return .unsupported
+        }
+    }
+
+    func signOut() async -> SignOutOutcome {
+        await client.signOut()
+    }
+
+    private func presentationState(for entitlement: EntitlementAvailability) -> AuthenticationPresentationState {
+        switch entitlement {
+        case .entitled:
+            .entitled
+        case .authenticatedButNotEntitled:
+            .authenticatedButNotEntitled
+        case .rejected:
+            .rejected
+        case .challengeRequired:
+            .challengeRequired
+        case .unavailable, .unsupported, .cancelled:
+            .unsupported
+        }
+    }
 }
 
 private struct UncomposedAuthenticationPresentationFlow: AuthenticationPresentationFlow {
@@ -236,7 +309,9 @@ private struct UncomposedAuthenticationPresentationFlow: AuthenticationPresentat
         .waitingForWebView
     }
 
-    func useLoggedInSession() async -> AuthenticationPresentationState {
+    func useLoggedInSession(
+        onEntitlementVerification _: @MainActor @escaping @Sendable () -> Void
+    ) async -> AuthenticationPresentationState {
         .waitingForWebView
     }
 

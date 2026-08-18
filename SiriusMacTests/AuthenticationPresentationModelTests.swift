@@ -157,7 +157,9 @@ private actor AuthenticationFlowSpy: AuthenticationPresentationFlow {
         return beginResults.removeFirst()
     }
 
-    func useLoggedInSession() async -> AuthenticationPresentationState {
+    func useLoggedInSession(
+        onEntitlementVerification _: @MainActor @escaping @Sendable () -> Void
+    ) async -> AuthenticationPresentationState {
         loggedInSessionCallCount += 1
         return loggedInSessionResult
     }

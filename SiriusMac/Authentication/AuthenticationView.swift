@@ -1,8 +1,22 @@
 import SwiftUI
+import SiriusXMClient
 
 struct AuthenticationView: View {
-    @State private var model = AuthenticationPresentationModel()
-    @State private var bridge = WebAuthenticationBridge()
+    @State private var model: AuthenticationPresentationModel
+    @State private var bridge: WebAuthenticationBridge
+
+    init() {
+        let bridge = WebAuthenticationBridge()
+        let client = SiriusXMClient(
+            credentialSource: bridge,
+            credentialStore: KeychainCredentialStore(),
+            residueCleaner: bridge
+        )
+        _bridge = State(initialValue: bridge)
+        _model = State(initialValue: AuthenticationPresentationModel(
+            flow: ComposedAuthenticationPresentationFlow(bridge: bridge, client: client)
+        ))
+    }
 
     var body: some View {
         let copy = model.presentation(for: model.state)
@@ -58,14 +72,10 @@ struct AuthenticationView: View {
         case .waitingForWebView:
             HStack {
                 Button("Sign In") {
-                    bridge.beginUserOperatedSignIn()
                     _ = model.signIn()
                 }
                 Button("Use Logged-In Session") {
-                    Task {
-                        _ = await bridge.useLoggedInSession()
-                        _ = model.useLoggedInSession()
-                    }
+                    _ = model.useLoggedInSession()
                 }
             }
         case .authenticatedButNotEntitled,

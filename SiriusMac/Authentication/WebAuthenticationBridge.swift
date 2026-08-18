@@ -51,11 +51,6 @@ final class WebAuthenticationBridge {
         handoff = nil
     }
 
-    /// The app-facing, single-consumption client seam for the opaque credential.
-    var credentialSource: (any CredentialSource)? {
-        handoff
-    }
-
     static func makeConfiguration() -> WKWebViewConfiguration {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
@@ -112,6 +107,13 @@ final class WebAuthenticationBridge {
         didTransferCredential = true
         await credentialConsumer(credential)
         return .credentialTransferred
+    }
+}
+
+extension WebAuthenticationBridge: CredentialSource {
+    /// Provides the bridge's single-consumption handoff without exposing its material.
+    func credential() async -> AuthenticationCredential? {
+        await handoff?.credential()
     }
 }
 
