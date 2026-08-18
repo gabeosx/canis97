@@ -308,14 +308,17 @@ final class WebAuthenticationBridgeTests: XCTestCase {
         expires: Date,
         secure: Bool = true
     ) throws -> HTTPCookie {
-        try XCTUnwrap(HTTPCookie(properties: [
+        var properties: [HTTPCookiePropertyKey: Any] = [
             .name: "AUTH_TOKEN",
             .value: value.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? value,
             .domain: domain,
             .path: path,
             .expires: expires,
-            .secure: secure ? "TRUE" : "FALSE",
-        ]))
+        ]
+        if secure {
+            properties[.secure] = "TRUE"
+        }
+        return try XCTUnwrap(HTTPCookie(properties: properties))
     }
 }
 
