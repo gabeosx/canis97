@@ -15,6 +15,7 @@
 		B00100010000000000000002 /* AuthenticationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00100020000000000000002 /* AuthenticationView.swift */; };
 		B00100010000000000000003 /* UnsupportedAuthenticationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00100020000000000000003 /* UnsupportedAuthenticationView.swift */; };
 		B00100010000000000000004 /* AuthenticationPresentationModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00100020000000000000004 /* AuthenticationPresentationModelTests.swift */; };
+		C00100010000000000000001 /* WebAuthenticationBridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00100020000000000000001 /* WebAuthenticationBridgeTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -28,6 +29,7 @@
 		B00100020000000000000002 /* AuthenticationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationView.swift; sourceTree = "<group>"; };
 		B00100020000000000000003 /* UnsupportedAuthenticationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnsupportedAuthenticationView.swift; sourceTree = "<group>"; };
 		B00100020000000000000004 /* AuthenticationPresentationModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationPresentationModelTests.swift; sourceTree = "<group>"; };
+		C00100020000000000000001 /* WebAuthenticationBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebAuthenticationBridgeTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -38,7 +40,7 @@
 /* Begin PBXGroup section */
 		A00100040000000000000001 = {isa = PBXGroup; children = (A00100040000000000000002 /* SiriusMac */, A00100040000000000000003 /* SiriusMacTests */, A00100040000000000000004 /* Products */,); sourceTree = "<group>"; };
 		A00100040000000000000002 /* SiriusMac */ = {isa = PBXGroup; children = (A00100020000000000000001 /* SiriusMacApp.swift */, B00100040000000000000001 /* Authentication */, A00100040000000000000005 /* Security */,); path = SiriusMac; sourceTree = "<group>"; };
-		A00100040000000000000003 /* SiriusMacTests */ = {isa = PBXGroup; children = (B00100020000000000000004 /* AuthenticationPresentationModelTests.swift */, A00100020000000000000000006 /* KeychainCredentialStoreTests.swift */,); path = SiriusMacTests; sourceTree = "<group>"; };
+		A00100040000000000000003 /* SiriusMacTests */ = {isa = PBXGroup; children = (B00100020000000000000000004 /* AuthenticationPresentationModelTests.swift */, A00100020000000000000000000006 /* KeychainCredentialStoreTests.swift */, C00100020000000000000001 /* WebAuthenticationBridgeTests.swift */,); path = SiriusMacTests; sourceTree = "<group>"; };
 		A00100040000000000000005 /* Security */ = {isa = PBXGroup; children = (A00100020000000000000005 /* KeychainCredentialStore.swift */,); path = Security; sourceTree = "<group>"; };
 		B00100040000000000000001 /* Authentication */ = {isa = PBXGroup; children = (B00100020000000000000001 /* AuthenticationPresentationModel.swift */, B00100020000000000000002 /* AuthenticationView.swift */, B00100020000000000000003 /* UnsupportedAuthenticationView.swift */,); path = Authentication; sourceTree = "<group>"; };
 		A00100040000000000000004 /* Products */ = {isa = PBXGroup; children = (A00100020000000000000003 /* SiriusMac.app */, A00100020000000000000004 /* SiriusMacTests.xctest */,); name = Products; sourceTree = "<group>"; };
@@ -55,7 +57,7 @@
 
 /* Begin PBXSourcesBuildPhase section */
 		A00100070000000000000001 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A00100010000000000000001 /* SiriusMacApp.swift in Sources */, B00100010000000000000001 /* AuthenticationPresentationModel.swift in Sources */, B00100010000000000000002 /* AuthenticationView.swift in Sources */, B00100010000000000000003 /* UnsupportedAuthenticationView.swift in Sources */, A00100010000000000000004 /* KeychainCredentialStore.swift in Sources */,); runOnlyForDeploymentPostprocessing = 0; };
-		A00100070000000000000002 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (B00100010000000000000004 /* AuthenticationPresentationModelTests.swift in Sources */, A00100010000000000000000005 /* KeychainCredentialStoreTests.swift in Sources */,); runOnlyForDeploymentPostprocessing = 0; };
+		A00100070000000000000002 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (B00100010000000000000000004 /* AuthenticationPresentationModelTests.swift in Sources */, A00100010000000000000000000005 /* KeychainCredentialStoreTests.swift in Sources */, C00100010000000000000001 /* WebAuthenticationBridgeTests.swift in Sources */,); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
