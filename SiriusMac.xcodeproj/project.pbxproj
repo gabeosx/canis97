@@ -19,6 +19,7 @@
 		C00100010000000000000002 /* FirstPartyTokenCookiePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00100020000000000000002 /* FirstPartyTokenCookiePolicy.swift */; };
 		C00100010000000000000003 /* WebAuthenticationBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00100020000000000000000003 /* WebAuthenticationBridge.swift */; };
 		C00100010000000000000004 /* WebAuthenticationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00100020000000000000000004 /* WebAuthenticationView.swift */; };
+		D00100010000000000000001 /* SelectedAuthenticationCompositionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00100020000000000000000001 /* SelectedAuthenticationCompositionTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -36,6 +37,7 @@
 		C00100020000000000000002 /* FirstPartyTokenCookiePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiriusMac/Authentication/FirstPartyTokenCookiePolicy.swift; sourceTree = SOURCE_ROOT; };
 		C00100020000000000000000003 /* WebAuthenticationBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiriusMac/Authentication/WebAuthenticationBridge.swift; sourceTree = SOURCE_ROOT; };
 		C00100020000000000000000004 /* WebAuthenticationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiriusMac/Authentication/WebAuthenticationView.swift; sourceTree = SOURCE_ROOT; };
+		D00100020000000000000001 /* SelectedAuthenticationCompositionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiriusMacTests/SelectedAuthenticationCompositionTests.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -54,7 +56,7 @@
 
 /* Begin PBXNativeTarget section */
 		A00100050000000000000001 /* SiriusMac */ = {isa = PBXNativeTarget; buildConfigurationList = A00100060000000000000001 /* Build configuration list for PBXNativeTarget "SiriusMac" */; buildPhases = (A00100070000000000000001 /* Sources */, A00100030000000000000001 /* Frameworks */,); buildRules = (); dependencies = (); name = SiriusMac; packageProductDependencies = (A00100100000000000000001 /* SiriusXMClient */,); productName = SiriusMac; productReference = A00100020000000000000003 /* SiriusMac.app */; productType = "com.apple.product-type.application"; };
-		A00100050000000000000002 /* SiriusMacTests */ = {isa = PBXNativeTarget; buildConfigurationList = A00100060000000000000002 /* Build configuration list for PBXNativeTarget "SiriusMacTests" */; buildPhases = (A00100070000000000000002 /* Sources */, A00100030000000000000002 /* Frameworks */,); buildRules = (); dependencies = (A00100090000000000000001 /* PBXTargetDependency */,); name = SiriusMacTests; packageProductDependencies = (); productName = SiriusMacTests; productReference = A00100020000000000000004 /* SiriusMacTests.xctest */; productType = "com.apple.product-type.bundle.unit-test"; };
+		A00100050000000000000002 /* SiriusMacTests */ = {isa = PBXNativeTarget; buildConfigurationList = A00100060000000000000000002 /* Build configuration list for PBXNativeTarget "SiriusMacTests" */; buildPhases = (A00100070000000000000002 /* Sources */, A00100030000000000000002 /* Frameworks */,); buildRules = (); dependencies = (A00100090000000000000001 /* PBXTargetDependency */,); name = SiriusMacTests; packageProductDependencies = (); productName = SiriusMacTests; productReference = A00100020000000000000004 /* SiriusMacTests.xctest */; productType = "com.apple.product-type.bundle.unit-test"; };
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -63,7 +65,7 @@
 
 /* Begin PBXSourcesBuildPhase section */
 		A00100070000000000000001 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A00100010000000000000001 /* SiriusMacApp.swift in Sources */, B00100010000000000000001 /* AuthenticationPresentationModel.swift in Sources */, B00100010000000000000002 /* AuthenticationView.swift in Sources */, B00100010000000000000003 /* UnsupportedAuthenticationView.swift in Sources */, A00100010000000000000004 /* KeychainCredentialStore.swift in Sources */, C00100010000000000000002 /* FirstPartyTokenCookiePolicy.swift in Sources */, C00100010000000000000003 /* WebAuthenticationBridge.swift in Sources */, C00100010000000000000004 /* WebAuthenticationView.swift in Sources */,); runOnlyForDeploymentPostprocessing = 0; };
-		A00100070000000000000002 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (B00100010000000000000000004 /* AuthenticationPresentationModelTests.swift in Sources */, A00100010000000000000000000005 /* KeychainCredentialStoreTests.swift in Sources */, C00100010000000000000001 /* WebAuthenticationBridgeTests.swift in Sources */,); runOnlyForDeploymentPostprocessing = 0; };
+		A00100070000000000000002 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (B00100010000000000000000004 /* AuthenticationPresentationModelTests.swift in Sources */, A00100010000000000000000000005 /* KeychainCredentialStoreTests.swift in Sources */, C00100010000000000000001 /* WebAuthenticationBridgeTests.swift in Sources */, D00100010000000000000001 /* SelectedAuthenticationCompositionTests.swift in Sources */,); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
