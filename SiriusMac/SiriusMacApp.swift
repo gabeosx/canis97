@@ -29,6 +29,14 @@ final class CompatibilityPresentationModel {
         switch await client.authenticationAvailability() {
         case .waitingForAuthenticationComposition:
             return .waitingForAuthenticationComposition
+        case .authenticatedPendingEntitlement,
+             .rejected,
+             .challengeRequired,
+             .unsupported,
+             .cancelled:
+            // This walking skeleton intentionally stays in its unavailable state
+            // until Plan 01-05 installs the complete typed authentication UI.
+            return .waitingForAuthenticationComposition
         }
     }
 }
