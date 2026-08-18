@@ -18,17 +18,29 @@ struct SignOutTests {
         #expect(await signOut.value == .signedOut)
     }
 
-    @Test("each external cleaner runs once and successful sign-out is idempotent")
-    func cleansEachStoreOnce() async {
+    @Test("a fresh signed-out coordinator clears persisted local material")
+    func clearsPersistedMaterialFromFreshState() async {
+        let store = TrackingCredentialStore()
+        let cleaner = TrackingResidueCleaner()
+        let coordinator = makeActiveCoordinator(credentialStore: store, residueCleaner: cleaner)
+
+        #expect(await coordinator.snapshot == .signedOut)
+        #expect(await coordinator.signOut() == .signedOut)
+        #expect(await store.eraseCount == 1)
+        #expect(await cleaner.callCount == 1)
+    }
+
+    @Test("each explicit cleanup reruns idempotent external cleaners")
+    func rerunsCleanersForSequentialExplicitRequests() async {
         let store = TrackingCredentialStore()
         let cleaner = TrackingResidueCleaner()
         let coordinator = makeActiveCoordinator(credentialStore: store, residueCleaner: cleaner)
         #expect(await coordinator.attemptSession() == .active)
 
         #expect(await coordinator.signOut() == .signedOut)
-        #expect(await coordinator.signOut() == .alreadySignedOut)
-        #expect(await store.eraseCount == 1)
-        #expect(await cleaner.callCount == 1)
+        #expect(await coordinator.signOut() == .signedOut)
+        #expect(await store.eraseCount == 2)
+        #expect(await cleaner.callCount == 2)
     }
 
     @Test("partial and complete cleanup failures remain explicit after memory is retired")

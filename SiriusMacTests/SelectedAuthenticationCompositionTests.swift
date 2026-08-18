@@ -95,6 +95,30 @@ final class SelectedAuthenticationCompositionTests: XCTestCase {
         XCTAssertEqual(events, [.authenticate, .entitlement, .signOut, .authenticate, .entitlement])
     }
 
+    func testFreshCompositionClearsSyntheticKeychainAndBrowserResidueWithoutAuthentication() async throws {
+        let now = Date()
+        let keychain = KeychainCredentialStore(
+            service: "com.siriusmac.tests.\(UUID().uuidString)",
+            account: "fresh-cleanup"
+        )
+        let credential = AuthenticationCredential(volatileMaterial: Data("synthetic-credential".utf8))
+        try await keychain.save(credential)
+        defer { try? keychain.removeStoredCredential() }
+
+        let cookieStore = CompositionCookieStore(cookies: [try tokenCookie(expires: now.addingTimeInterval(60))])
+        let bridge = WebAuthenticationBridge(cookieStore: cookieStore, now: { now }, credentialConsumer: { _ in })
+        let client = SiriusXMClient(credentialSource: bridge, credentialStore: keychain, residueCleaner: bridge)
+        let model = AuthenticationPresentationModel(
+            flow: ComposedAuthenticationPresentationFlow(bridge: bridge, client: client)
+        )
+
+        try await XCTUnwrap(model.clearLocalSession()).value
+
+        XCTAssertEqual(model.state, .signedOut)
+        XCTAssertNil(try keychain.readStoredCredential())
+        XCTAssertTrue(await cookieStore.allCookies().isEmpty)
+    }
+
     private func tokenCookie(expires: Date) throws -> HTTPCookie {
         try XCTUnwrap(HTTPCookie(properties: [
             .name: "AUTH_TOKEN",
