@@ -1,4 +1,5 @@
 import Foundation
+import Security
 import XCTest
 @testable import SiriusMac
 import SiriusXMClient
