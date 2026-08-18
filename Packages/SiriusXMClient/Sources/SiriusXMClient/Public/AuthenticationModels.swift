@@ -29,11 +29,22 @@ public protocol CredentialStore: Sendable {
 /// Semantic result of an authentication attempt.
 public enum AuthenticationOutcome: Sendable, Equatable {
     case waitingForAuthenticationComposition
+    case authenticatedPendingEntitlement
+    case rejected
+    case challengeRequired
+    case unsupported
+    case cancelled
 }
 
 /// Semantic entitlement availability for the current client state.
 public enum EntitlementAvailability: Sendable, Equatable {
     case unavailable
+    case entitled
+    case authenticatedButNotEntitled
+    case rejected
+    case challengeRequired
+    case unsupported
+    case cancelled
 }
 
 /// Semantic result of ending a client session.
