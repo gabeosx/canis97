@@ -33,6 +33,29 @@ final class WebAuthenticationBridgeTests: XCTestCase {
         XCTAssertEqual(snapshot.descriptions, ["AuthenticationCredential(redacted)"])
     }
 
+    func testExplicitNewAttemptDiscardsAnUnconsumedHandoffAndRearmsOneTransfer() async throws {
+        let recorder = CredentialRecorder()
+        let now = Date()
+        let bridge = WebAuthenticationBridge(
+            cookieStore: TestCookieStore(cookies: [try authCookie(expires: now.addingTimeInterval(60))]),
+            now: { now },
+            credentialConsumer: { credential in await recorder.record(credential) }
+        )
+
+        let firstTransfer = await bridge.useLoggedInSession()
+        XCTAssertEqual(firstTransfer, .credentialTransferred)
+        await bridge.beginUserOperatedSignIn()
+        let discardedCredential = await bridge.credential()
+        let secondTransfer = await bridge.useLoggedInSession()
+        let repeatedSecondTransfer = await bridge.useLoggedInSession()
+        let snapshot = await recorder.snapshot()
+
+        XCTAssertNil(discardedCredential)
+        XCTAssertEqual(secondTransfer, .credentialTransferred)
+        XCTAssertEqual(repeatedSecondTransfer, .alreadyConsumed)
+        XCTAssertEqual(snapshot.count, 2)
+    }
+
     func testMissingMultipleExpiredLookalikeAndUnsupportedCookiesFailClosed() throws {
         let now = Date()
         let valid = try authCookie(domain: "siriusxm.com", expires: now.addingTimeInterval(60))

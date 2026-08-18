@@ -42,6 +42,59 @@ final class SelectedAuthenticationCompositionTests: XCTestCase {
         XCTAssertEqual(events, [])
     }
 
+    func testExplicitRetryAfterTerminalClientResultStartsOneFreshNativeTransaction() async throws {
+        let now = Date()
+        let store = CompositionCookieStore(cookies: [try tokenCookie(expires: now.addingTimeInterval(60))])
+        let bridge = WebAuthenticationBridge(cookieStore: store, now: { now }, credentialConsumer: { _ in })
+        let client = CompositionClient(
+            authentications: [.rejected, .authenticatedPendingEntitlement],
+            entitlements: [.entitled]
+        )
+        let model = AuthenticationPresentationModel(
+            flow: ComposedAuthenticationPresentationFlow(bridge: bridge, client: client)
+        )
+
+        try await XCTUnwrap(model.signIn()).value
+        try await XCTUnwrap(model.useLoggedInSession()).value
+        XCTAssertEqual(model.state, .rejected)
+        let terminalEvents = await client.events
+        XCTAssertEqual(terminalEvents, [.authenticate])
+
+        try await XCTUnwrap(model.retry()).value
+        try await XCTUnwrap(model.useLoggedInSession()).value
+
+        XCTAssertEqual(model.state, .entitled)
+        let retriedEvents = await client.events
+        XCTAssertEqual(retriedEvents, [.authenticate, .authenticate, .entitlement])
+    }
+
+    func testExplicitNewLoginAfterSignOutTransfersOneFreshCredential() async throws {
+        let now = Date()
+        let store = CompositionCookieStore(cookies: [try tokenCookie(expires: now.addingTimeInterval(60))])
+        let bridge = WebAuthenticationBridge(cookieStore: store, now: { now }, credentialConsumer: { _ in })
+        let client = CompositionClient(
+            authentications: [.authenticatedPendingEntitlement, .authenticatedPendingEntitlement],
+            entitlements: [.entitled, .entitled]
+        )
+        let model = AuthenticationPresentationModel(
+            flow: ComposedAuthenticationPresentationFlow(bridge: bridge, client: client)
+        )
+
+        try await XCTUnwrap(model.signIn()).value
+        try await XCTUnwrap(model.useLoggedInSession()).value
+        XCTAssertEqual(model.state, .entitled)
+        try await XCTUnwrap(model.signOut()).value
+        XCTAssertEqual(model.state, .signedOut)
+
+        store.replaceCookies(with: [try tokenCookie(expires: now.addingTimeInterval(60))])
+        try await XCTUnwrap(model.signIn()).value
+        try await XCTUnwrap(model.useLoggedInSession()).value
+
+        XCTAssertEqual(model.state, .entitled)
+        let events = await client.events
+        XCTAssertEqual(events, [.authenticate, .entitlement, .signOut, .authenticate, .entitlement])
+    }
+
     private func tokenCookie(expires: Date) throws -> HTTPCookie {
         try XCTUnwrap(HTTPCookie(properties: [
             .name: "AUTH_TOKEN",
@@ -55,31 +108,39 @@ final class SelectedAuthenticationCompositionTests: XCTestCase {
 }
 
 private actor CompositionClient: ClientAuthenticationFlow {
-    enum Event: Equatable { case authenticate, entitlement }
+    enum Event: Equatable { case authenticate, entitlement, signOut }
 
-    private let authentication: AuthenticationOutcome
-    private let entitlement: EntitlementAvailability
+    private var authentications: [AuthenticationOutcome]
+    private var entitlements: [EntitlementAvailability]
     private(set) var events: [Event] = []
 
     init(
         authentication: AuthenticationOutcome = .authenticatedPendingEntitlement,
         entitlement: EntitlementAvailability = .entitled
     ) {
-        self.authentication = authentication
-        self.entitlement = entitlement
+        authentications = [authentication]
+        entitlements = [entitlement]
+    }
+
+    init(authentications: [AuthenticationOutcome], entitlements: [EntitlementAvailability]) {
+        self.authentications = authentications
+        self.entitlements = entitlements
     }
 
     func authenticate() async -> AuthenticationOutcome {
         events.append(.authenticate)
-        return authentication
+        return authentications.isEmpty ? .unsupported : authentications.removeFirst()
     }
 
     func entitlementAvailability() async -> EntitlementAvailability {
         events.append(.entitlement)
-        return entitlement
+        return entitlements.isEmpty ? .unavailable : entitlements.removeFirst()
     }
 
-    func signOut() async -> SignOutOutcome { .signedOut }
+    func signOut() async -> SignOutOutcome {
+        events.append(.signOut)
+        return .signedOut
+    }
 }
 
 @MainActor
@@ -90,4 +151,5 @@ private final class CompositionCookieStore: WebAuthenticationCookieStore {
 
     func allCookies() async -> [HTTPCookie] { cookies }
     func delete(_ cookie: HTTPCookie) async throws { cookies.removeAll { $0 === cookie } }
+    func replaceCookies(with cookies: [HTTPCookie]) { self.cookies = cookies }
 }
