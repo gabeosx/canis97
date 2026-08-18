@@ -23,7 +23,7 @@ final class WebAuthenticationBridge {
     private let cookieStore: any WebAuthenticationCookieStore
     private let now: @MainActor () -> Date
     private let credentialConsumer: @MainActor @Sendable (AuthenticationCredential) async -> Void
-    private let handoff: VolatileWebCredentialHandoff?
+    private let handoff: VolatileWebCredentialHandoff
     private var webView: WKWebView?
     private var didTransferCredential = false
 
@@ -44,11 +44,15 @@ final class WebAuthenticationBridge {
         now: @escaping @MainActor () -> Date = Date.init,
         credentialConsumer: @escaping @MainActor @Sendable (AuthenticationCredential) async -> Void
     ) {
+        let handoff = VolatileWebCredentialHandoff()
         webViewConfiguration = Self.makeConfiguration()
         self.cookieStore = cookieStore
         self.now = now
-        self.credentialConsumer = credentialConsumer
-        handoff = nil
+        self.handoff = handoff
+        self.credentialConsumer = { credential in
+            await handoff.store(credential)
+            await credentialConsumer(credential)
+        }
     }
 
     static func makeConfiguration() -> WKWebViewConfiguration {
@@ -65,7 +69,12 @@ final class WebAuthenticationBridge {
     }
 
     /// Starts the sole owner-operated authentication path without reading browser state.
-    func beginUserOperatedSignIn() {
+    /// A new explicit attempt discards any volatile prior handoff before re-arming selection.
+    func beginUserOperatedSignIn() async {
+        // Keep selection fail-closed while the actor erases stale material.
+        didTransferCredential = true
+        await handoff.discard()
+        didTransferCredential = false
         guard let url = URL(string: "https://www.siriusxm.com/") else { return }
         makeWebView().load(URLRequest(url: url))
     }
@@ -113,7 +122,7 @@ final class WebAuthenticationBridge {
 extension WebAuthenticationBridge: CredentialSource {
     /// Provides the bridge's single-consumption handoff without exposing its material.
     func credential() async -> AuthenticationCredential? {
-        await handoff?.credential()
+        await handoff.credential()
     }
 }
 
@@ -161,6 +170,10 @@ private actor VolatileWebCredentialHandoff: CredentialSource {
     func credential() -> AuthenticationCredential? {
         defer { storedCredential = nil }
         return storedCredential
+    }
+
+    func discard() {
+        storedCredential = nil
     }
 }
 

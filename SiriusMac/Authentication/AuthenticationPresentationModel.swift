@@ -258,7 +258,7 @@ struct ComposedAuthenticationPresentationFlow: AuthenticationPresentationFlow {
     }
 
     func beginWebViewSignIn() async -> AuthenticationPresentationState {
-        bridge.beginUserOperatedSignIn()
+        await bridge.beginUserOperatedSignIn()
         return .waitingForWebView
     }
 
