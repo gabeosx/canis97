@@ -5,8 +5,39 @@ import SiriusXMClient
 @MainActor
 @Observable
 final class AuthenticationPresentationModel {
+    private let flow: any AuthenticationPresentationFlow
+
     private(set) var state: AuthenticationPresentationState = .waitingForWebView
     private(set) var diagnostics: [SafeAuthenticationDiagnostic] = []
+    private(set) var isAttemptInFlight = false
+    private(set) var backgroundRetryCount = 0
+
+    init(flow: any AuthenticationPresentationFlow = UncomposedAuthenticationPresentationFlow()) {
+        self.flow = flow
+    }
+
+    func signIn() {
+        Task { @MainActor in
+            state = await flow.beginWebViewSignIn()
+        }
+    }
+
+    func useLoggedInSession() {
+        Task { @MainActor in
+            state = await flow.useLoggedInSession()
+        }
+    }
+
+    func retry() {
+        signIn()
+    }
+
+    func signOut() {
+        Task { @MainActor in
+            let result = await flow.signOut()
+            state = result.presentationState
+        }
+    }
 
     func presentation(for state: AuthenticationPresentationState) -> AuthenticationPresentationCopy {
         switch state {
@@ -126,4 +157,35 @@ enum SafeAuthenticationDiagnostic: Equatable {
     case unsupported
     case signedOut
     case cleanupFailed
+}
+
+protocol AuthenticationPresentationFlow: Sendable {
+    func beginWebViewSignIn() async -> AuthenticationPresentationState
+    func useLoggedInSession() async -> AuthenticationPresentationState
+    func signOut() async -> SignOutOutcome
+}
+
+private struct UncomposedAuthenticationPresentationFlow: AuthenticationPresentationFlow {
+    func beginWebViewSignIn() async -> AuthenticationPresentationState {
+        .waitingForWebView
+    }
+
+    func useLoggedInSession() async -> AuthenticationPresentationState {
+        .waitingForWebView
+    }
+
+    func signOut() async -> SignOutOutcome {
+        .alreadySignedOut
+    }
+}
+
+private extension SignOutOutcome {
+    var presentationState: AuthenticationPresentationState {
+        switch self {
+        case .alreadySignedOut, .signedOut:
+            .signedOut
+        case .cleanupFailed(let failure):
+            .cleanupFailed(failure)
+        }
+    }
 }
