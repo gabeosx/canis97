@@ -31,10 +31,10 @@ Phase 0 is historical. FEAS-01 records the accepted architecture; FEAS-02/03/05 
 
 ### Reusable Client Library
 
-- [ ] **CLNT-01**: Other native Apple-platform software can consume a documented SwiftPM `SiriusXMClient` product independently of the Sirius Mac application.
-- [ ] **CLNT-02**: Client consumers use typed async APIs, domain models, capabilities, and errors for authentication, entitlement, catalog, metadata, and live-stream resolution without depending on endpoints, cookies, headers, or raw wire schemas.
+- [x] **CLNT-01**: Other native Apple-platform software can consume a documented SwiftPM `SiriusXMClient` product independently of the Sirius Mac application.
+- [x] **CLNT-02**: Client consumers use typed async APIs, domain models, capabilities, and errors for authentication, entitlement, catalog, metadata, and live-stream resolution without depending on endpoints, cookies, headers, or raw wire schemas.
 - [ ] **CLNT-03**: SiriusXM endpoint, schema, authentication, and stream-resolution details remain in internal replaceable adapters that do not leak into the library's public API.
-- [ ] **CLNT-04**: The library accepts injected transport, clock, credential-source, and redacted-diagnostics collaborators where needed for deterministic testing and app-owned secret handling.
+- [x] **CLNT-04**: The library accepts injected transport, clock, credential-source, and redacted-diagnostics collaborators where needed for deterministic testing and app-owned secret handling.
 - [ ] **CLNT-05**: The public library has DocC documentation, semantic-versioning policy, sanitized contract fixtures, compatibility tests, and an adapter-repair runbook.
 
 ### Compatibility Diagnostics
@@ -155,10 +155,10 @@ Every v1 requirement maps to exactly one delivery phase in `.planning/ROADMAP.md
 | SECR-01 | Phase 1 | Pending |
 | SECR-02 | Phase 1 | Pending |
 | SECR-03 | Phase 1 | Pending |
-| CLNT-01 | Phase 1 | Pending |
-| CLNT-02 | Phase 1 | Pending |
+| CLNT-01 | Phase 1 | Complete |
+| CLNT-02 | Phase 1 | Complete |
 | CLNT-03 | Phase 1 | Pending |
-| CLNT-04 | Phase 1 | Pending |
+| CLNT-04 | Phase 1 | Complete |
 | CLNT-05 | Phase 5 | Pending |
 | COMP-01 | Phase 5 | Pending |
 | COMP-02 | Phase 5 | Pending |
