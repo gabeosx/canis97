@@ -73,17 +73,88 @@ struct EphemeralSessionTests {
 
     @Test("cancellation never retries or retains credential-bearing request state")
     func cancellationDoesNotRetry() async {
-        let transport = EphemeralURLSessionTransport()
+        await BlockingURLProtocol.controller.reset()
+        let configuration = EphemeralURLSessionTransport.makeConfiguration()
+        configuration.protocolClasses = [BlockingURLProtocol.self]
+        let transport = EphemeralURLSessionTransport(configuration: configuration)
+        let credential = AuthenticationCredential(volatileMaterial: Data("synthetic-token".utf8))
 
-        transport.cancelCurrentRequestForTesting()
+        let sendTask = Task {
+            do {
+                _ = try await transport.send(.authentication, using: credential)
+                return SendOutcome.completed
+            } catch is CancellationError {
+                return SendOutcome.cancelled
+            } catch {
+                return SendOutcome.unexpectedError
+            }
+        }
 
-        #expect(transport.redirectAttemptCount == 0)
+        await BlockingURLProtocol.controller.waitUntilStarted()
+        #expect(transport.hasActiveRequest)
+
+        sendTask.cancel()
+
+        #expect(await sendTask.value == .cancelled)
         #expect(transport.hasActiveRequest == false)
+        #expect(transport.redirectAttemptCount == 0)
+        #expect(await BlockingURLProtocol.controller.startCount == 1)
     }
 
     private func request(_ value: String) -> URLRequest {
         URLRequest(url: URL(string: value)!)
     }
+}
+
+private enum SendOutcome: Sendable, Equatable {
+    case completed
+    case cancelled
+    case unexpectedError
+}
+
+private actor BlockingRequestController {
+    private var starts = 0
+    private var startWaiters: [CheckedContinuation<Void, Never>] = []
+
+    var startCount: Int { starts }
+
+    func reset() {
+        starts = 0
+        startWaiters.removeAll()
+    }
+
+    func waitUntilStarted() async {
+        guard starts == 0 else { return }
+
+        await withCheckedContinuation { continuation in
+            startWaiters.append(continuation)
+        }
+    }
+
+    func recordStart() {
+        starts += 1
+        let waiters = startWaiters
+        startWaiters.removeAll()
+        waiters.forEach { $0.resume() }
+    }
+}
+
+private final class BlockingURLProtocol: URLProtocol, @unchecked Sendable {
+    static let controller = BlockingRequestController()
+
+    override class func canInit(with request: URLRequest) -> Bool {
+        request.url?.host == SiriusXMRequestContract.host
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        Task { await Self.controller.recordStart() }
+    }
+
+    override func stopLoading() {}
 }
 
 private final class RedirectCompletionCapture: @unchecked Sendable {
