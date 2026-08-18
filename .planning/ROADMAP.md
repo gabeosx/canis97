@@ -101,7 +101,7 @@ Plans:
   6. A native Apple-platform developer can consume the `SiriusXMClient` SwiftPM product and use typed async capabilities without depending on SiriusXM endpoints, cookies, headers, or raw schemas.
   7. Deterministic WebView-bridge, native-authentication, entitlement, sign-out, and redaction tests always compile and run independently of mutable `.planning` artifacts.
 
-**Plans**: 10/11 plans executed
+**Plans**: 11/11 plans executed
 
 **Execution baseline:** Phase 1 consumes the settled WKWebView-token/native-request architecture directly. Do not run authentication feasibility experiments, regenerate a Phase 0 quartet, inspect GO/NO-GO artifacts, or request duplicate owner proof runs. Phase 0 review findings are production acceptance requirements in Plans 01-02, 01-06, 01-07, and 01-08.
 
@@ -142,7 +142,7 @@ Plans:
 
 **Wave 9** *(blocked on Wave 8 completion)*
 
-- [ ] 01-11-PLAN.md — Consolidate the detached Xcode test graph while preserving the active SiriusMacTests target.
+- [x] 01-11-PLAN.md — Consolidate the detached Xcode test graph while preserving the active SiriusMacTests target.
 
 ### Phase 2: Authorized Live Listening
 
@@ -219,7 +219,7 @@ Active product execution proceeds 1 → 2 → 3 → 4 → 5. Phase 0 is retained
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 0. Authentication Feasibility Gate | 12/12 | Complete (historical) | 2026-08-17 |
-| 1. Safe Interoperability Foundation | 10/11 | In Progress|  |
+| 1. Safe Interoperability Foundation | 11/11 | In Progress|  |
 | 2. Authorized Live Listening | 0/TBD | Not started | - |
 | 3. Native Mac Listening Experience | 0/TBD | Not started | - |
 | 4. Safe Skins & Accessible Recovery | 0/TBD | Not started | - |
