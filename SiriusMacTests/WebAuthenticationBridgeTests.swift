@@ -14,11 +14,11 @@ final class WebAuthenticationBridgeTests: XCTestCase {
         XCTAssertEqual(store.readCount, 0)
     }
 
-    func testExplicitConsentAcceptsOneCurrentApexOrBoundaryCorrectSubdomainToken() async throws {
+    func testExplicitConsentAcceptsOneCurrentExactWWWToken() async throws {
         let recorder = CredentialRecorder()
         let now = Date()
         let bridge = WebAuthenticationBridge(
-            cookieStore: TestCookieStore(cookies: [try authCookie(domain: ".player.siriusxm.com", expires: now.addingTimeInterval(60))]),
+            cookieStore: TestCookieStore(cookies: [try authCookie(domain: "www.siriusxm.com", expires: now.addingTimeInterval(60))]),
             now: { now },
             credentialConsumer: { credential in await recorder.record(credential) }
         )
@@ -59,13 +59,23 @@ final class WebAuthenticationBridgeTests: XCTestCase {
     func testMissingMultipleExpiredLookalikeAndUnsupportedCookiesFailClosed() throws {
         let now = Date()
         let valid = try authCookie(domain: "siriusxm.com", expires: now.addingTimeInterval(60))
+        let secureLeadingDotApex = try authCookie(domain: ".siriusxm.com", expires: now.addingTimeInterval(60))
+        let exactWWW = try authCookie(domain: "www.siriusxm.com", expires: now.addingTimeInterval(60))
+        let insecure = try authCookie(domain: "siriusxm.com", expires: now.addingTimeInterval(60), secure: false)
         let expired = try authCookie(domain: "siriusxm.com", expires: now.addingTimeInterval(-60))
+        let playerSubdomain = try authCookie(domain: "player.siriusxm.com", expires: now.addingTimeInterval(60))
+        let arbitrarySubdomain = try authCookie(domain: "account.siriusxm.com", expires: now.addingTimeInterval(60))
         let lookalike = try authCookie(domain: "evil-siriusxm.com", expires: now.addingTimeInterval(60))
         let unsupportedPath = try authCookie(domain: "siriusxm.com", path: "/account", expires: now.addingTimeInterval(60))
 
         XCTAssertEqual(FirstPartyTokenCookiePolicy.select(from: [], now: now), .missing)
         XCTAssertEqual(FirstPartyTokenCookiePolicy.select(from: [valid, valid], now: now), .ambiguous)
+        XCTAssertEqual(FirstPartyTokenCookiePolicy.select(from: [secureLeadingDotApex], now: now), .one)
+        XCTAssertEqual(FirstPartyTokenCookiePolicy.select(from: [exactWWW], now: now), .one)
+        XCTAssertEqual(FirstPartyTokenCookiePolicy.select(from: [insecure], now: now), .missing)
         XCTAssertEqual(FirstPartyTokenCookiePolicy.select(from: [expired], now: now), .missing)
+        XCTAssertEqual(FirstPartyTokenCookiePolicy.select(from: [playerSubdomain], now: now), .missing)
+        XCTAssertEqual(FirstPartyTokenCookiePolicy.select(from: [arbitrarySubdomain], now: now), .missing)
         XCTAssertEqual(FirstPartyTokenCookiePolicy.select(from: [lookalike], now: now), .missing)
         XCTAssertEqual(FirstPartyTokenCookiePolicy.select(from: [unsupportedPath], now: now), .missing)
     }
@@ -229,10 +239,11 @@ final class WebAuthenticationBridgeTests: XCTestCase {
         XCTAssertEqual(rearmedSelection, .credentialTransferred)
     }
 
-    func testSignOutDeletesEveryExactApexAndSubdomainMatchThenRescans() async throws {
+    func testSignOutDeletesEveryExactApexAndWWWMatchThenRescans() async throws {
         let now = Date()
         let store = TestCookieStore(cookies: [
             try authCookie(domain: "siriusxm.com", expires: now.addingTimeInterval(60)),
+            try authCookie(domain: "www.siriusxm.com", expires: now.addingTimeInterval(60)),
             try authCookie(domain: "player.siriusxm.com", expires: now.addingTimeInterval(60)),
             try authCookie(domain: "evil-siriusxm.com", expires: now.addingTimeInterval(60)),
         ])
@@ -248,7 +259,7 @@ final class WebAuthenticationBridgeTests: XCTestCase {
 
     func testSignOutFailsClosedWhenDeletionFailsOrAMatchingCookieRemains() async throws {
         let now = Date()
-        let token = try authCookie(domain: "player.siriusxm.com", expires: now.addingTimeInterval(60))
+        let token = try authCookie(domain: "siriusxm.com", expires: now.addingTimeInterval(60))
         let deleteFailureStore = TestCookieStore(cookies: [token], deleteFailure: true)
         let staleStore = TestCookieStore(cookies: [token], retainDeletedCookies: true)
 
@@ -257,6 +268,21 @@ final class WebAuthenticationBridgeTests: XCTestCase {
 
         XCTAssertEqual(deleteFailure, .cleanupFailed)
         XCTAssertEqual(staleResult, .cleanupFailed)
+    }
+
+    func testUnapprovedSubdomainIsNeitherTransferredNorAnExactCleanupMatch() async throws {
+        let now = Date()
+        let store = TestCookieStore(cookies: [
+            try authCookie(domain: "player.siriusxm.com", expires: now.addingTimeInterval(60)),
+        ])
+        let bridge = WebAuthenticationBridge(cookieStore: store, now: { now }, credentialConsumer: { _ in })
+
+        let extraction = await bridge.useLoggedInSession()
+        let cleanup = await bridge.removeAuthenticationResidue()
+
+        XCTAssertEqual(extraction, .authCookieMissing)
+        XCTAssertEqual(cleanup, .removed)
+        XCTAssertEqual(store.deletedCount, 0)
     }
 
     func testBridgeAndTestsAreUnconditionallyIncludedWithoutPlanningArtifactChecks() throws {
@@ -279,7 +305,8 @@ final class WebAuthenticationBridgeTests: XCTestCase {
         value: String = #"{"session":{"accessToken":"synthetic-access-token"}}"#,
         domain: String = "siriusxm.com",
         path: String = "/",
-        expires: Date
+        expires: Date,
+        secure: Bool = true
     ) throws -> HTTPCookie {
         try XCTUnwrap(HTTPCookie(properties: [
             .name: "AUTH_TOKEN",
@@ -287,7 +314,7 @@ final class WebAuthenticationBridgeTests: XCTestCase {
             .domain: domain,
             .path: path,
             .expires: expires,
-            .secure: "TRUE",
+            .secure: secure ? "TRUE" : "FALSE",
         ]))
     }
 }
