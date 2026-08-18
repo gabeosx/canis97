@@ -22,15 +22,47 @@ final class KeychainCredentialStore: CredentialStore, @unchecked Sendable {
         }
     }
 
+    enum StoredAuthenticationCredentialLoadOutcome {
+        enum Kind: Equatable {
+            case credential
+            case missing
+            case invalidErased
+            case cleanupFailed
+            case unavailable
+        }
+
+        case credential(AuthenticationCredential)
+        case missing
+        case invalidErased
+        case cleanupFailed
+        case unavailable
+
+        var kind: Kind {
+            switch self {
+            case .credential: .credential
+            case .missing: .missing
+            case .invalidErased: .invalidErased
+            case .cleanupFailed: .cleanupFailed
+            case .unavailable: .unavailable
+            }
+        }
+    }
+
     private let service: String
     private let account: String
+    private let storedCredentialReader: (() throws -> Data?)?
+    private let storedCredentialRemover: (() throws -> Void)?
 
     init(
         service: String = Bundle.main.bundleIdentifier ?? "com.siriusmac.player",
-        account: String = "approved-reusable-credential"
+        account: String = "approved-reusable-credential",
+        storedCredentialReader: (() throws -> Data?)? = nil,
+        storedCredentialRemover: (() throws -> Void)? = nil
     ) {
         self.service = service
         self.account = account
+        self.storedCredentialReader = storedCredentialReader
+        self.storedCredentialRemover = storedCredentialRemover
     }
 
     func save(_ credential: AuthenticationCredential) async throws {
@@ -44,6 +76,10 @@ final class KeychainCredentialStore: CredentialStore, @unchecked Sendable {
     }
 
     func readStoredCredential() throws -> Data? {
+        if let storedCredentialReader {
+            return try storedCredentialReader()
+        }
+
         var query = itemQuery
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
@@ -64,12 +100,46 @@ final class KeychainCredentialStore: CredentialStore, @unchecked Sendable {
     }
 
     func removeStoredCredential() throws {
+        if let storedCredentialRemover {
+            return try storedCredentialRemover()
+        }
+
         switch Self.classify(status: SecItemDelete(itemQuery as CFDictionary)) {
         case .found, .missing:
             return
         case .unavailable:
             throw StorageError.unavailable
         }
+    }
+
+    /// Loads a reusable credential only for the app's explicit sign-in orchestration.
+    ///
+    /// Material remains inside this adapter until it becomes an opaque client handoff.
+    /// Invalid persisted bytes are removed before returning a semantic terminal result.
+    func loadStoredCredentialForAuthentication() -> StoredAuthenticationCredentialLoadOutcome {
+        let storedMaterial: Data
+        do {
+            guard let material = try readStoredCredential() else {
+                return .missing
+            }
+            storedMaterial = material
+        } catch {
+            return .unavailable
+        }
+
+        guard storedMaterial.count <= 8_192,
+              let text = String(data: storedMaterial, encoding: .utf8),
+              !text.isEmpty,
+              !text.contains(where: { $0.isWhitespace }) else {
+            do {
+                try removeStoredCredential()
+                return .invalidErased
+            } catch {
+                return .cleanupFailed
+            }
+        }
+
+        return .credential(AuthenticationCredential(volatileMaterial: storedMaterial))
     }
 
     static func classify(status: OSStatus) -> StatusClassification {

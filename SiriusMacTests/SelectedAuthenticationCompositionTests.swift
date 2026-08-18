@@ -153,11 +153,14 @@ final class SelectedAuthenticationCompositionTests: XCTestCase {
         let flow = ComposedAuthenticationPresentationFlow(bridge: bridge, client: client, credentialSource: source)
 
         let state = await flow.prepareForExplicitSignIn(onAuthenticationVerification: {}, onEntitlementVerification: {})
+        let events = await client.events
+        let cookieReadCount = cookieStore.allCookieReadCount
+        let secondCredential = await source.credential()
 
         XCTAssertEqual(state, .entitled)
-        XCTAssertEqual(await client.events, [.credential, .authenticate, .entitlement])
-        XCTAssertEqual(await cookieStore.allCookieReadCount, 0)
-        XCTAssertNil(await source.credential())
+        XCTAssertEqual(events, [.credential, .authenticate, .entitlement])
+        XCTAssertEqual(cookieReadCount, 0)
+        XCTAssertNil(secondCredential)
     }
 
     func testRejectedRestoreErasesBeforeTerminalStateThenLaterExplicitRetryUsesWebView() async throws {
@@ -184,13 +187,15 @@ final class SelectedAuthenticationCompositionTests: XCTestCase {
         try await XCTUnwrap(model.signIn()).value
         XCTAssertEqual(model.state, .rejected)
         XCTAssertNil(try keychain.readStoredCredential())
-        XCTAssertEqual(await cookieStore.allCookieReadCount, 0)
+        let cookieReadCount = cookieStore.allCookieReadCount
+        XCTAssertEqual(cookieReadCount, 0)
 
         try await XCTUnwrap(model.retry()).value
         try await XCTUnwrap(model.useLoggedInSession()).value
+        let events = await client.events
 
         XCTAssertEqual(model.state, .entitled)
-        XCTAssertEqual(await client.events, [.credential, .authenticate, .credential, .authenticate, .entitlement])
+        XCTAssertEqual(events, [.credential, .authenticate, .credential, .authenticate, .entitlement])
     }
 
     func testUnavailableRestoreDoesNotFallThroughToWebViewOrClient() async {
@@ -204,9 +209,10 @@ final class SelectedAuthenticationCompositionTests: XCTestCase {
         let flow = ComposedAuthenticationPresentationFlow(bridge: bridge, client: client, credentialSource: source)
 
         let state = await flow.prepareForExplicitSignIn(onAuthenticationVerification: {}, onEntitlementVerification: {})
+        let events = await client.events
 
         XCTAssertEqual(state, .unsupported)
-        XCTAssertEqual(await client.events, [])
+        XCTAssertEqual(events, [])
     }
 
     private func tokenCookie(expires: Date) throws -> HTTPCookie {

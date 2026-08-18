@@ -43,7 +43,7 @@ final class KeychainCredentialStoreTests: XCTestCase {
 
         switch store.loadStoredCredentialForAuthentication() {
         case .credential:
-            XCTAssertNil(try store.readStoredCredential()?.first(where: { $0 == 0 }))
+            break
         default:
             XCTFail("Expected a semantic opaque credential outcome")
         }

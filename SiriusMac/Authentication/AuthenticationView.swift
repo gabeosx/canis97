@@ -7,14 +7,23 @@ struct AuthenticationView: View {
 
     init() {
         let bridge = WebAuthenticationBridge()
+        let keychain = KeychainCredentialStore()
+        let credentialSource = RestorableAuthenticationCredentialSource(
+            keychain: keychain,
+            webViewSource: bridge
+        )
         let client = SiriusXMClient(
-            credentialSource: bridge,
-            credentialStore: KeychainCredentialStore(),
+            credentialSource: credentialSource,
+            credentialStore: keychain,
             residueCleaner: bridge
         )
         _bridge = State(initialValue: bridge)
         _model = State(initialValue: AuthenticationPresentationModel(
-            flow: ComposedAuthenticationPresentationFlow(bridge: bridge, client: client)
+            flow: ComposedAuthenticationPresentationFlow(
+                bridge: bridge,
+                client: client,
+                credentialSource: credentialSource
+            )
         ))
     }
 

@@ -20,7 +20,19 @@ final class AuthenticationPresentationModel {
     @discardableResult
     func signIn() -> Task<Void, Never>? {
         guard canStartWebViewSignIn else { return nil }
-        return beginWebViewSignIn()
+        let identifier = startAttempt(at: .waitingForWebView)
+        let flow = flow
+        return Task { [weak self, flow] in
+            let result = await flow.prepareForExplicitSignIn(
+                onAuthenticationVerification: { [weak self] in
+                    self?.state = .verifyingAuthentication
+                },
+                onEntitlementVerification: { [weak self] in
+                    self?.state = .verifyingEntitlement
+                }
+            )
+            self?.finishAttempt(identifier, with: result)
+        }
     }
 
     @discardableResult
@@ -41,7 +53,7 @@ final class AuthenticationPresentationModel {
     func retry() -> Task<Void, Never>? {
         guard isRetryableTerminalState else { return nil }
         state = .waitingForWebView
-        return beginWebViewSignIn()
+        return signIn()
     }
 
     @discardableResult
@@ -92,15 +104,6 @@ final class AuthenticationPresentationModel {
              .verifyingEntitlement,
              .entitled:
             false
-        }
-    }
-
-    private func beginWebViewSignIn() -> Task<Void, Never> {
-        let identifier = startAttempt(at: .waitingForWebView)
-        let flow = flow
-        return Task { [weak self, flow] in
-            let result = await flow.beginWebViewSignIn()
-            self?.finishAttempt(identifier, with: result)
         }
     }
 
@@ -241,10 +244,23 @@ enum SafeAuthenticationDiagnostic: Equatable {
 
 protocol AuthenticationPresentationFlow: Sendable {
     func beginWebViewSignIn() async -> AuthenticationPresentationState
+    func prepareForExplicitSignIn(
+        onAuthenticationVerification: @MainActor @escaping @Sendable () -> Void,
+        onEntitlementVerification: @MainActor @escaping @Sendable () -> Void
+    ) async -> AuthenticationPresentationState
     func useLoggedInSession(
         onEntitlementVerification: @MainActor @escaping @Sendable () -> Void
     ) async -> AuthenticationPresentationState
     func signOut() async -> SignOutOutcome
+}
+
+extension AuthenticationPresentationFlow {
+    func prepareForExplicitSignIn(
+        onAuthenticationVerification _: @MainActor @escaping @Sendable () -> Void,
+        onEntitlementVerification _: @MainActor @escaping @Sendable () -> Void
+    ) async -> AuthenticationPresentationState {
+        await beginWebViewSignIn()
+    }
 }
 
 protocol ClientAuthenticationFlow: Sendable {
@@ -263,10 +279,16 @@ extension SiriusXMClient: ClientAuthenticationFlow {
 struct ComposedAuthenticationPresentationFlow: AuthenticationPresentationFlow {
     let bridge: WebAuthenticationBridge
     let client: any ClientAuthenticationFlow
+    let credentialSource: RestorableAuthenticationCredentialSource?
 
-    init(bridge: WebAuthenticationBridge, client: any ClientAuthenticationFlow) {
+    init(
+        bridge: WebAuthenticationBridge,
+        client: any ClientAuthenticationFlow,
+        credentialSource: RestorableAuthenticationCredentialSource? = nil
+    ) {
         self.bridge = bridge
         self.client = client
+        self.credentialSource = credentialSource
     }
 
     func beginWebViewSignIn() async -> AuthenticationPresentationState {
@@ -274,26 +296,41 @@ struct ComposedAuthenticationPresentationFlow: AuthenticationPresentationFlow {
         return .waitingForWebView
     }
 
+    func prepareForExplicitSignIn(
+        onAuthenticationVerification: @MainActor @escaping @Sendable () -> Void,
+        onEntitlementVerification: @MainActor @escaping @Sendable () -> Void
+    ) async -> AuthenticationPresentationState {
+        guard let credentialSource else {
+            return await beginWebViewSignIn()
+        }
+
+        switch credentialSource.prepareForExplicitSignIn() {
+        case .restoredCredentialReady:
+            onAuthenticationVerification()
+            return await completeClientTransaction(
+                credentialSource: credentialSource,
+                onEntitlementVerification: onEntitlementVerification
+            )
+        case .webViewRequired:
+            return await beginWebViewSignIn()
+        case .invalidCredentialErased, .unavailable:
+            return .unsupported
+        case .cleanupFailed:
+            return .cleanupFailed(.keychain)
+        }
+    }
+
     func useLoggedInSession(
         onEntitlementVerification: @MainActor @escaping @Sendable () -> Void
     ) async -> AuthenticationPresentationState {
         guard await bridge.useLoggedInSession() == .credentialTransferred else {
+            credentialSource?.finishWebViewAttempt()
             return .unsupported
         }
-
-        switch await client.authenticate() {
-        case .authenticatedPendingEntitlement:
-            onEntitlementVerification()
-            return presentationState(for: await client.entitlementAvailability())
-        case .waitingForAuthenticationComposition, .unsupported:
-            return .unsupported
-        case .rejected:
-            return .rejected
-        case .challengeRequired:
-            return .challengeRequired
-        case .cancelled:
-            return .unsupported
-        }
+        return await completeClientTransaction(
+            credentialSource: credentialSource,
+            onEntitlementVerification: onEntitlementVerification
+        )
     }
 
     func signOut() async -> SignOutOutcome {
@@ -312,6 +349,39 @@ struct ComposedAuthenticationPresentationFlow: AuthenticationPresentationFlow {
             .challengeRequired
         case .unavailable, .unsupported, .cancelled:
             .unsupported
+        }
+    }
+
+    private func completeClientTransaction(
+        credentialSource: RestorableAuthenticationCredentialSource?,
+        onEntitlementVerification: @MainActor @escaping @Sendable () -> Void
+    ) async -> AuthenticationPresentationState {
+        let state: AuthenticationPresentationState
+        switch await client.authenticate() {
+        case .authenticatedPendingEntitlement:
+            onEntitlementVerification()
+            state = presentationState(for: await client.entitlementAvailability())
+        case .waitingForAuthenticationComposition, .unsupported, .cancelled:
+            state = .unsupported
+        case .rejected:
+            state = .rejected
+        case .challengeRequired:
+            state = .challengeRequired
+        }
+
+        guard state != .entitled else {
+            credentialSource?.finalizeSuccessfulRestore()
+            credentialSource?.finishWebViewAttempt()
+            return state
+        }
+
+        guard let credentialSource else { return state }
+        switch await credentialSource.eraseRejectedRestore() {
+        case .cleanupFailed:
+            return .cleanupFailed(.keychain)
+        case .notRequired, .erased:
+            credentialSource.finishWebViewAttempt()
+            return state
         }
     }
 }
