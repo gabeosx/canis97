@@ -6,7 +6,7 @@ struct UnsupportedAuthenticationView: View {
     var body: some View {
         ContentUnavailableView(
             copy.title,
-            systemImage: "exclamationmark.triangle",
+            systemImage: copy.iconName,
             description: Text(copy.message)
         )
     }
