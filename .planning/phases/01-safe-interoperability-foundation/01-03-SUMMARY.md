@@ -131,7 +131,7 @@ status: complete
 
 **3. [Rule 3 - Blocking] Added the missing isolated fixture test target.**
 - **Found during:** Task 2 (Make diagnostics and fixtures safe by construction)
-- **Issue:** The plan requires `FixtureTests/RedactionTests.swift`, but the SwiftPM manifest had no target that would compile or run the required suite.
+- **Issue:** The plan requires `Packages/SiriusXMClient/Tests/FixtureTests/RedactionTests.swift`, but the SwiftPM manifest had no target that would compile or run the required suite.
 - **Fix:** Added the dependency-free `FixtureTests` target to the package manifest.
 - **Files modified:** `Packages/SiriusXMClient/Package.swift`
 - **Verification:** `swift test --package-path Packages/SiriusXMClient --filter RedactionTests` passes.

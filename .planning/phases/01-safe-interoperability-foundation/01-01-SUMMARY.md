@@ -39,7 +39,7 @@ coverage:
     requirement: CLNT-01
     verification:
       - kind: integration
-        ref: "SiriusMacTests/CompatibilityTracerTests.swift"
+        ref: "SiriusMacTests/AuthenticationPresentationModelTests.swift"
         status: pass
     human_judgment: false
   - id: D2
@@ -91,7 +91,7 @@ status: complete
 
 - `SiriusMac.xcodeproj/project.pbxproj` - Native app/test targets, Swift 6 concurrency settings, and local package linkage.
 - `SiriusMac/SiriusMacApp.swift` - Compatibility scene and main-actor presentation model.
-- `SiriusMacTests/CompatibilityTracerTests.swift` - Deterministic app-to-client tracer tests.
+- `SiriusMacTests/AuthenticationPresentationModelTests.swift` - Successor coverage for deterministic presentation state and the no-background-retry contract; it replaced the original compatibility tracer in Plan 01-05.
 - `Packages/SiriusXMClient/Package.swift` - Unconditional reusable library and test targets.
 - `Packages/SiriusXMClient/Sources/SiriusXMClient/Public/SiriusXMClient.swift` - Actor-isolated semantic facade.
 - `Packages/SiriusXMClient/Sources/SiriusXMClient/Public/AuthenticationModels.swift` - Typed outcomes and redacted credential seams.
@@ -112,7 +112,7 @@ status: complete
 - **Issue:** The Task 1 verification command required a named scheme and a fully formed test/app bundle before Task 2's planned scheme work.
 - **Fix:** Created the shared scheme early and added the Xcode module, testability, generated Info.plist, and native architecture settings required for the app test bundle.
 - **Files modified:** `SiriusMac.xcodeproj/project.pbxproj`, `SiriusMac.xcodeproj/xcshareddata/xcschemes/SiriusMac.xcscheme`
-- **Verification:** Focused `CompatibilityTracerTests` pass through Xcode.
+- **Verification:** The original focused compatibility tracer passed through Xcode; its maintained successor coverage is in `SiriusMacTests/AuthenticationPresentationModelTests.swift`.
 - **Committed in:** `b574217`, `34c20b1`
 
 **2. [Rule 3 - Blocking] Used the configured Xcode developer directory for SwiftPM verification.**
