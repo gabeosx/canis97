@@ -7,14 +7,26 @@ final class EphemeralURLSessionTransport: NSObject, SessionTransport, @unchecked
     }
 
     private let requestState = RequestState()
+    private let configuration: URLSessionConfiguration
     private lazy var session = URLSession(
-        configuration: Self.makeConfiguration(),
+        configuration: configuration,
         delegate: self,
         delegateQueue: nil
     )
 
     var redirectAttemptCount: Int { requestState.redirectAttemptCount }
     var hasActiveRequest: Bool { requestState.hasActiveRequest }
+
+    override init() {
+        configuration = Self.makeConfiguration()
+        super.init()
+    }
+
+    /// Internal test seam for deterministic transport behavior without a live network.
+    init(configuration: URLSessionConfiguration) {
+        self.configuration = configuration.copy() as! URLSessionConfiguration
+        super.init()
+    }
 
     static func makeConfiguration() -> URLSessionConfiguration {
         let configuration = URLSessionConfiguration.ephemeral
@@ -38,7 +50,16 @@ final class EphemeralURLSessionTransport: NSObject, SessionTransport, @unchecked
         requestState.begin(request)
         defer { requestState.clear() }
 
-        let (body, response) = try await session.data(for: request)
+        let body: Data
+        let response: URLResponse
+        do {
+            (body, response) = try await session.data(for: request)
+        } catch {
+            if Task.isCancelled {
+                throw CancellationError()
+            }
+            throw error
+        }
         try Task.checkCancellation()
         guard let response = response as? HTTPURLResponse else {
             throw URLError(.badServerResponse)
