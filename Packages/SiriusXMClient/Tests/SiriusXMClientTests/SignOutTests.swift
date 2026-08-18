@@ -125,7 +125,7 @@ struct SignOutTests {
         await authentication.waitUntilStarted()
 
         #expect(await coordinator.signOut() == .signedOut)
-        await authentication.finish(with: nativeResponse(["authenticated": true]))
+        await authentication.finish(with: nativeResponse(SanitizedNativeResponseFixtures.profileV4Authenticated))
 
         #expect(await attempt.value == .authentication(.cancelled))
         #expect(await coordinator.snapshot == .signedOut)
@@ -157,13 +157,13 @@ private actor StaticCredentialSource: CredentialSource {
 
 private actor StaticAuthenticationVerifier: NativeAuthenticationVerifying {
     func verifyAuthentication(using _: AuthenticationCredential) async -> NativeTransportResponse {
-        nativeResponse(["authenticated": true])
+        nativeResponse(SanitizedNativeResponseFixtures.profileV4Authenticated)
     }
 }
 
 private actor StaticEntitlementVerifier: NativeEntitlementVerifying {
     func verifyEntitlement(using _: AuthenticationCredential) async -> NativeTransportResponse {
-        nativeResponse(["entitled": true])
+        nativeResponse(SanitizedNativeResponseFixtures.subscriptionV1Active)
     }
 }
 
@@ -266,10 +266,10 @@ private actor NoopDiagnostics: SessionDiagnostics {
 
 private enum CleanupFailureError: Error { case failed }
 
-private func nativeResponse(_ object: [String: Any]) -> NativeTransportResponse {
+private func nativeResponse(_ body: Data) -> NativeTransportResponse {
     NativeTransportResponse(
         statusCode: 200,
         contentType: "application/json",
-        body: try! JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+        body: body
     )
 }

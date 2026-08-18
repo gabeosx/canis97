@@ -4,15 +4,15 @@ import Testing
 
 @Suite("Web token native authentication")
 struct WebTokenAuthenticationTests {
-    @Test("the public client publishes entitlement only after native authentication and entitlement")
+    @Test("multi-field native responses publish one active session after entitlement")
     func authenticatesWithOneRuntimeOwnedTransaction() async {
         let source = WebTokenCredentialSource()
         let sequence = WebTokenVerificationSequence()
         let store = WebTokenCredentialStore()
         let coordinator = SessionCoordinator(
             credentialSource: source,
-            authenticationVerifier: WebTokenAuthenticationVerifier(sequence: sequence, response: response(["authenticated": true])),
-            entitlementVerifier: WebTokenEntitlementVerifier(sequence: sequence, response: response(["entitled": true])),
+            authenticationVerifier: WebTokenAuthenticationVerifier(sequence: sequence, response: response(SanitizedNativeResponseFixtures.profileV4Authenticated)),
+            entitlementVerifier: WebTokenEntitlementVerifier(sequence: sequence, response: response(SanitizedNativeResponseFixtures.subscriptionV1Active)),
             credentialStore: store,
             clock: WebTokenFixedClock(),
             diagnostics: WebTokenDiagnostics()
@@ -24,6 +24,10 @@ struct WebTokenAuthenticationTests {
         #expect(await sequence.events == [.authentication, .entitlement])
         #expect(await source.requestCount == 1)
         #expect(await store.saveCount == 1)
+        guard case .active = await coordinator.snapshot else {
+            Issue.record("Expected the coordinator to publish one active session")
+            return
+        }
     }
 
     @Test("unentitled and terminal native results leave no active state or persistence")
@@ -31,8 +35,8 @@ struct WebTokenAuthenticationTests {
         let unentitledStore = WebTokenCredentialStore()
         let unentitled = SiriusXMClient(sessionCoordinator: SessionCoordinator(
             credentialSource: WebTokenCredentialSource(),
-            authenticationVerifier: WebTokenAuthenticationVerifier(response: response(["authenticated": true])),
-            entitlementVerifier: WebTokenEntitlementVerifier(response: response(["entitled": false])),
+            authenticationVerifier: WebTokenAuthenticationVerifier(response: response(SanitizedNativeResponseFixtures.profileV4Authenticated)),
+            entitlementVerifier: WebTokenEntitlementVerifier(response: response(SanitizedNativeResponseFixtures.subscriptionV1Inactive)),
             credentialStore: unentitledStore,
             clock: WebTokenFixedClock(),
             diagnostics: WebTokenDiagnostics()
@@ -45,8 +49,8 @@ struct WebTokenAuthenticationTests {
         let rejectedStore = WebTokenCredentialStore()
         let rejected = SiriusXMClient(sessionCoordinator: SessionCoordinator(
             credentialSource: WebTokenCredentialSource(),
-            authenticationVerifier: WebTokenAuthenticationVerifier(response: response(["authenticated": false], statusCode: 403)),
-            entitlementVerifier: WebTokenEntitlementVerifier(response: response(["entitled": true])),
+            authenticationVerifier: WebTokenAuthenticationVerifier(response: response(SanitizedNativeResponseFixtures.profileV4Authenticated, statusCode: 403)),
+            entitlementVerifier: WebTokenEntitlementVerifier(response: response(SanitizedNativeResponseFixtures.subscriptionV1Active)),
             credentialStore: rejectedStore,
             clock: WebTokenFixedClock(),
             diagnostics: WebTokenDiagnostics()
@@ -57,11 +61,11 @@ struct WebTokenAuthenticationTests {
         #expect(await rejectedStore.saveCount == 0)
     }
 
-    private func response(_ object: [String: Any], statusCode: Int = 200) -> NativeTransportResponse {
+    private func response(_ body: Data, statusCode: Int = 200) -> NativeTransportResponse {
         NativeTransportResponse(
             statusCode: statusCode,
             contentType: "application/json",
-            body: try! JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+            body: body
         )
     }
 }

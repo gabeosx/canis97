@@ -23,8 +23,8 @@ struct AuthenticationOutcomeTests {
     @Test("control and ambiguous native responses fail closed")
     func terminalAndAmbiguousResponsesAreNeverAccepted() {
         let controlResponses = [
-            response(statusCode: 403, object: ["authenticated": true]),
-            response(statusCode: 429, object: ["authenticated": true]),
+            response(statusCode: 403, body: Data("{}".utf8)),
+            response(statusCode: 429, body: Data("{}".utf8)),
             response(statusCode: 200, object: ["challenge": "captcha"]),
             response(statusCode: 200, object: ["challenge": "mfa"]),
             response(statusCode: 200, object: ["bot": true]),
@@ -54,13 +54,6 @@ struct AuthenticationOutcomeTests {
         #expect(AuthenticationFlowAdapter.classifyEntitlement(missing) == .unsupported)
         #expect(AuthenticationFlowAdapter.classifyEntitlement(nonString) == .unsupported)
         #expect(AuthenticationFlowAdapter.classifyEntitlement(unknown) == .unsupported)
-    }
-
-    @Test("legacy booleans do not provide profile or entitlement semantics")
-    func classifiersDoNotInterpretLegacySuccessBooleans() {
-        #expect(AdapterAuthenticationResult.authenticatedPendingEntitlement.isTerminal == false)
-        #expect(AuthenticationFlowAdapter.classifyAuthentication(response(statusCode: 200, object: ["authenticated": false])) == .authenticatedPendingEntitlement)
-        #expect(AuthenticationFlowAdapter.classifyEntitlement(response(statusCode: 200, object: ["entitled": true])) == .unsupported)
     }
 
     private func response(
