@@ -61,16 +61,17 @@ final class AuthenticationPresentationModelTests: XCTestCase {
         let flow = AuthenticationFlowSpy(beginResults: [.rejected, .rejected], holdBegin: true)
         let model = AuthenticationPresentationModel(flow: flow)
 
-        model.signIn()
-        model.signIn()
+        let firstAttempt = model.signIn()
+        let secondAttempt = model.signIn()
         await Task.yield()
 
         XCTAssertTrue(model.isAttemptInFlight)
+        XCTAssertNil(secondAttempt)
         let pendingCounts = await flow.callCounts()
         XCTAssertEqual(pendingCounts.begin, 1)
 
         await flow.finishBegin()
-        await Task.yield()
+        await firstAttempt?.value
 
         XCTAssertEqual(model.state, .rejected)
     }
@@ -79,10 +80,8 @@ final class AuthenticationPresentationModelTests: XCTestCase {
         let flow = AuthenticationFlowSpy(beginResults: [.rejected, .waitingForWebView])
         let model = AuthenticationPresentationModel(flow: flow)
 
-        model.signIn()
-        await Task.yield()
-        model.retry()
-        await Task.yield()
+        await model.signIn()?.value
+        await model.retry()?.value
 
         let retryCounts = await flow.callCounts()
         XCTAssertEqual(retryCounts.begin, 2)
@@ -94,9 +93,7 @@ final class AuthenticationPresentationModelTests: XCTestCase {
         let flow = AuthenticationFlowSpy(beginResult: .challengeRequired)
         let model = AuthenticationPresentationModel(flow: flow)
 
-        model.signIn()
-        await Task.yield()
-        await Task.yield()
+        await model.signIn()?.value
 
         XCTAssertEqual(model.state, .challengeRequired)
         XCTAssertEqual(model.backgroundRetryCount, 0)
@@ -112,15 +109,12 @@ final class AuthenticationPresentationModelTests: XCTestCase {
         )
         let model = AuthenticationPresentationModel(flow: flow)
 
-        model.signOut()
-        await Task.yield()
+        XCTAssertNil(model.signOut())
         let signedOutCounts = await flow.callCounts()
         XCTAssertEqual(signedOutCounts.signOut, 0)
 
-        model.useLoggedInSession()
-        await Task.yield()
-        model.signOut()
-        await Task.yield()
+        await model.useLoggedInSession()?.value
+        await model.signOut()?.value
 
         let cleanupCounts = await flow.callCounts()
         XCTAssertEqual(cleanupCounts.signOut, 1)

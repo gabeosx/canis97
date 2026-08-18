@@ -8,7 +8,10 @@ struct AuthenticationView: View {
 
         Group {
             if case .unsupported = model.state {
-                UnsupportedAuthenticationView(copy: copy)
+                VStack(alignment: .leading, spacing: 16) {
+                    UnsupportedAuthenticationView(copy: copy)
+                    Button("Retry Sign In") { _ = model.retry() }
+                }
             } else {
                 VStack(alignment: .leading, spacing: 20) {
                     Label(copy.title, systemImage: copy.iconName)
@@ -22,15 +25,20 @@ struct AuthenticationView: View {
                         ProgressView()
                             .accessibilityLabel("Authentication in progress")
                     } else if copy.isReady {
-                        Label("Authentication is complete", systemImage: "checkmark.circle")
-                            .foregroundStyle(.green)
+                        VStack(alignment: .leading, spacing: 12) {
+                            Label("Authentication is complete", systemImage: "checkmark.circle")
+                                .foregroundStyle(.green)
+                            Button("Sign Out") { _ = model.signOut() }
+                        }
                     } else {
                         WebViewAuthenticationContainer()
+                        authenticationActions
                     }
                 }
                 .frame(maxWidth: 520, alignment: .leading)
             }
         }
+        .disabled(model.isAttemptInFlight)
         .padding()
     }
 
@@ -40,6 +48,28 @@ struct AuthenticationView: View {
             true
         default:
             false
+        }
+    }
+
+    @ViewBuilder
+    private var authenticationActions: some View {
+        switch model.state {
+        case .waitingForWebView:
+            HStack {
+                Button("Sign In") { _ = model.signIn() }
+                Button("Use Logged-In Session") { _ = model.useLoggedInSession() }
+            }
+        case .authenticatedButNotEntitled,
+             .rejected,
+             .challengeRequired,
+             .signedOut,
+             .cleanupFailed:
+            Button("Retry Sign In") { _ = model.retry() }
+        case .verifyingAuthentication,
+             .verifyingEntitlement,
+             .entitled,
+             .unsupported:
+            EmptyView()
         }
     }
 }

@@ -6,6 +6,7 @@ import SiriusXMClient
 @Observable
 final class AuthenticationPresentationModel {
     private let flow: any AuthenticationPresentationFlow
+    private var attemptID: UUID?
 
     private(set) var state: AuthenticationPresentationState = .waitingForWebView
     private(set) var diagnostics: [SafeAuthenticationDiagnostic] = []
@@ -16,27 +17,92 @@ final class AuthenticationPresentationModel {
         self.flow = flow
     }
 
-    func signIn() {
-        Task { @MainActor in
-            state = await flow.beginWebViewSignIn()
+    @discardableResult
+    func signIn() -> Task<Void, Never>? {
+        guard canStartWebViewSignIn else { return nil }
+        return beginWebViewSignIn()
+    }
+
+    @discardableResult
+    func useLoggedInSession() -> Task<Void, Never>? {
+        guard state == .waitingForWebView, !isAttemptInFlight else { return nil }
+
+        let identifier = startAttempt(at: .verifyingAuthentication)
+        let flow = flow
+        return Task { [weak self, flow] in
+            let result = await flow.useLoggedInSession()
+            self?.finishAttempt(identifier, with: result)
         }
     }
 
-    func useLoggedInSession() {
-        Task { @MainActor in
-            state = await flow.useLoggedInSession()
-        }
+    @discardableResult
+    func retry() -> Task<Void, Never>? {
+        guard isRetryableTerminalState else { return nil }
+        state = .waitingForWebView
+        return beginWebViewSignIn()
     }
 
-    func retry() {
-        signIn()
-    }
+    @discardableResult
+    func signOut() -> Task<Void, Never>? {
+        guard state == .entitled, !isAttemptInFlight else { return nil }
 
-    func signOut() {
-        Task { @MainActor in
+        let identifier = startAttempt(at: .entitled)
+        let flow = flow
+        return Task { [weak self, flow] in
             let result = await flow.signOut()
-            state = result.presentationState
+            self?.finishAttempt(identifier, with: result.presentationState)
         }
+    }
+
+    private var canStartWebViewSignIn: Bool {
+        guard !isAttemptInFlight else { return false }
+        return switch state {
+        case .waitingForWebView, .signedOut:
+            true
+        default:
+            false
+        }
+    }
+
+    private var isRetryableTerminalState: Bool {
+        switch state {
+        case .authenticatedButNotEntitled,
+             .rejected,
+             .challengeRequired,
+             .unsupported,
+             .signedOut,
+             .cleanupFailed:
+            true
+        case .waitingForWebView,
+             .verifyingAuthentication,
+             .verifyingEntitlement,
+             .entitled:
+            false
+        }
+    }
+
+    private func beginWebViewSignIn() -> Task<Void, Never> {
+        let identifier = startAttempt(at: .waitingForWebView)
+        let flow = flow
+        return Task { [weak self, flow] in
+            let result = await flow.beginWebViewSignIn()
+            self?.finishAttempt(identifier, with: result)
+        }
+    }
+
+    private func startAttempt(at state: AuthenticationPresentationState) -> UUID {
+        let identifier = UUID()
+        attemptID = identifier
+        isAttemptInFlight = true
+        self.state = state
+        return identifier
+    }
+
+    private func finishAttempt(_ identifier: UUID, with state: AuthenticationPresentationState) {
+        guard attemptID == identifier else { return }
+        attemptID = nil
+        isAttemptInFlight = false
+        self.state = state
     }
 
     func presentation(for state: AuthenticationPresentationState) -> AuthenticationPresentationCopy {
