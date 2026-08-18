@@ -361,10 +361,11 @@ final class WebAuthenticationBridgeTests: XCTestCase {
         let retiredWebView = bridge.makeWebView()
         host.install(retiredWebView)
 
-        XCTAssertEqual(await bridge.removeAuthenticationResidue(), .removed)
+        let cleanup = await bridge.removeAuthenticationResidue()
         let freshWebView = bridge.makeWebView()
         host.install(freshWebView)
 
+        XCTAssertEqual(cleanup, .removed)
         XCTAssertEqual(host.subviews.count, 1)
         XCTAssertTrue(host.subviews[0] === freshWebView)
         XCTAssertFalse(host.subviews[0] === retiredWebView)

@@ -19,24 +19,29 @@ final class WebAuthenticationBridge {
         case alreadyConsumed
     }
 
-    let webViewConfiguration: WKWebViewConfiguration
+    var webViewConfiguration: WKWebViewConfiguration { websiteSession.configuration }
+    var websiteSessionGeneration: Int { websiteSession.generation }
 
-    private let cookieStore: any WebAuthenticationCookieStore
+    private var cookieStore: any WebAuthenticationCookieStore
     private let now: @MainActor () -> Date
     private let credentialConsumer: @MainActor @Sendable (AuthenticationCredential) async -> Void
     private let handoffDisposer: @MainActor @Sendable () async -> Void
     private let handoff: VolatileWebCredentialHandoff
-    private var webView: WKWebView?
+    private let websiteSession: WebAuthenticationWebsiteSession
+    private let websiteSessionRetirer: @MainActor @Sendable () async -> Bool
+    private let usesLiveCookieStore: Bool
     private var selectionState: CredentialSelectionState = .available
     private var selectionGeneration = 0
 
     init() {
         let handoff = VolatileWebCredentialHandoff()
-        let configuration = Self.makeConfiguration()
-        webViewConfiguration = configuration
-        cookieStore = WebKitAuthenticationCookieStore(cookieStore: configuration.websiteDataStore.httpCookieStore)
+        let websiteSession = WebAuthenticationWebsiteSession()
+        self.websiteSession = websiteSession
+        cookieStore = WebKitAuthenticationCookieStore(cookieStore: websiteSession.configuration.websiteDataStore.httpCookieStore)
         now = Date.init
         self.handoff = handoff
+        websiteSessionRetirer = { await websiteSession.removeAllWebsiteData() }
+        usesLiveCookieStore = true
         handoffDisposer = { await handoff.discard() }
         credentialConsumer = { credential in
             await handoff.store(credential)
@@ -47,13 +52,16 @@ final class WebAuthenticationBridge {
         cookieStore: any WebAuthenticationCookieStore,
         now: @escaping @MainActor () -> Date = Date.init,
         credentialConsumer: @escaping @MainActor @Sendable (AuthenticationCredential) async -> Void,
-        handoffDisposer: @escaping @MainActor @Sendable () async -> Void = {}
+        handoffDisposer: @escaping @MainActor @Sendable () async -> Void = {},
+        websiteSessionRetirer: @escaping @MainActor @Sendable () async -> Bool = { true }
     ) {
         let handoff = VolatileWebCredentialHandoff()
-        webViewConfiguration = Self.makeConfiguration()
+        websiteSession = WebAuthenticationWebsiteSession()
         self.cookieStore = cookieStore
         self.now = now
         self.handoff = handoff
+        self.websiteSessionRetirer = websiteSessionRetirer
+        usesLiveCookieStore = false
         self.handoffDisposer = {
             await handoff.discard()
             await handoffDisposer()
@@ -71,10 +79,7 @@ final class WebAuthenticationBridge {
     }
 
     func makeWebView() -> WKWebView {
-        if let webView { return webView }
-        let webView = WKWebView(frame: .zero, configuration: webViewConfiguration)
-        self.webView = webView
-        return webView
+        websiteSession.makeWebView()
     }
 
     /// Starts the sole owner-operated authentication path without reading browser state.
@@ -141,6 +146,20 @@ final class WebAuthenticationBridge {
         guard selectionState == .selecting, selectionGeneration == reservation else { return }
         selectionState = .available
     }
+
+    /// Retires the bridge-owned nonpersistent website session without inspecting its records.
+    /// The only observable result is whether its bulk removal completed before rotation.
+    func retireAuthenticationWebsiteSession() async -> Bool {
+        websiteSession.stopLoading()
+        guard await websiteSessionRetirer() else { return false }
+        websiteSession.installFreshNonpersistentSession()
+        if usesLiveCookieStore {
+            cookieStore = WebKitAuthenticationCookieStore(
+                cookieStore: websiteSession.configuration.websiteDataStore.httpCookieStore
+            )
+        }
+        return true
+    }
 }
 
 extension WebAuthenticationBridge: CredentialSource {
@@ -152,7 +171,7 @@ extension WebAuthenticationBridge: CredentialSource {
 
 extension WebAuthenticationBridge: AuthenticationResidueCleaner {
     /// Deletes only cookies selected by the same predicate used for extraction,
-    /// then requires a clean rescan before reporting completion.
+    /// rescans that exact set, then retires the app-owned nonpersistent website session.
     func removeAuthenticationResidue() async -> AuthenticationResidueCleanupOutcome {
         let currentTime = now()
         let initialMatches = FirstPartyTokenCookiePolicy.matchingCookies(
@@ -160,11 +179,12 @@ extension WebAuthenticationBridge: AuthenticationResidueCleaner {
             now: currentTime
         )
 
+        var deletionFailed = false
         for cookie in initialMatches {
             do {
                 try await cookieStore.delete(cookie)
             } catch {
-                return .cleanupFailed
+                deletionFailed = true
             }
         }
 
@@ -172,7 +192,40 @@ extension WebAuthenticationBridge: AuthenticationResidueCleaner {
             in: await cookieStore.allCookies(),
             now: currentTime
         )
-        return remainingMatches.isEmpty ? .removed : .cleanupFailed
+        let didRetireWebsiteSession = await retireAuthenticationWebsiteSession()
+        return !deletionFailed && remainingMatches.isEmpty && didRetireWebsiteSession ? .removed : .cleanupFailed
+    }
+}
+
+@MainActor
+private final class WebAuthenticationWebsiteSession {
+    private(set) var configuration: WKWebViewConfiguration = WebAuthenticationBridge.makeConfiguration()
+    private(set) var generation = 0
+    private var webView: WKWebView?
+
+    func makeWebView() -> WKWebView {
+        if let webView { return webView }
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        self.webView = webView
+        return webView
+    }
+
+    func stopLoading() {
+        webView?.stopLoading()
+    }
+
+    func removeAllWebsiteData() async -> Bool {
+        await configuration.websiteDataStore.removeData(
+            ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(),
+            modifiedSince: .distantPast
+        )
+        return true
+    }
+
+    func installFreshNonpersistentSession() {
+        webView = nil
+        configuration = WebAuthenticationBridge.makeConfiguration()
+        generation &+= 1
     }
 }
 
