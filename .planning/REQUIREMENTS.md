@@ -19,22 +19,22 @@ Phase 0 is historical. FEAS-01 records the accepted architecture; FEAS-02/03/05 
 
 ### Authentication
 
-- [x] **AUTH-01**: Subscriber can sign in directly against SiriusXM and receives explicit success, rejection, challenge, unsupported-flow, and entitlement outcomes.
-- [x] **AUTH-02**: Authentication fails closed when SiriusXM returns an unknown or changed flow without attempting to bypass CAPTCHA, MFA, device, geographic, anti-bot, DRM, or subscription controls.
-- [x] **AUTH-03**: Subscriber can sign out and the app clears active session material and its stored SiriusXM credentials.
+- [ ] **AUTH-01**: Subscriber can sign in directly against SiriusXM and receives explicit success, rejection, challenge, unsupported-flow, and entitlement outcomes.
+- [ ] **AUTH-02**: Authentication fails closed when SiriusXM returns an unknown or changed flow without attempting to bypass CAPTCHA, MFA, device, geographic, anti-bot, DRM, or subscription controls.
+- [ ] **AUTH-03**: Subscriber can sign out and the app clears active session material and its stored SiriusXM credentials.
 
 ### Security & Privacy
 
-- [x] **SECR-01**: Subscriber credentials are stored through a macOS Keychain-backed app adapter and are never persisted in preferences, SwiftData, fixtures, or other local application data.
-- [x] **SECR-02**: Session tokens and resolved stream resources remain ephemeral and leave the Mac only in direct requests to SiriusXM.
-- [x] **SECR-03**: Logs, fixtures, tests, crash context, compatibility reports, and support exports redact or exclude credentials, authorization material, token-bearing URLs, and raw sensitive responses by construction.
+- [ ] **SECR-01**: Subscriber credentials are stored through a macOS Keychain-backed app adapter and are never persisted in preferences, SwiftData, fixtures, or other local application data.
+- [ ] **SECR-02**: Session tokens and resolved stream resources remain ephemeral and leave the Mac only in direct requests to SiriusXM.
+- [ ] **SECR-03**: Logs, fixtures, tests, crash context, compatibility reports, and support exports redact or exclude credentials, authorization material, token-bearing URLs, and raw sensitive responses by construction.
 
 ### Reusable Client Library
 
-- [x] **CLNT-01**: Other native Apple-platform software can consume a documented SwiftPM `SiriusXMClient` product independently of the Sirius Mac application.
-- [x] **CLNT-02**: Client consumers use typed async APIs, domain models, capabilities, and errors for authentication, entitlement, catalog, metadata, and live-stream resolution without depending on endpoints, cookies, headers, or raw wire schemas.
-- [x] **CLNT-03**: SiriusXM endpoint, schema, authentication, and stream-resolution details remain in internal replaceable adapters that do not leak into the library's public API.
-- [x] **CLNT-04**: The library accepts injected transport, clock, credential-source, and redacted-diagnostics collaborators where needed for deterministic testing and app-owned secret handling.
+- [ ] **CLNT-01**: Other native Apple-platform software can consume a documented SwiftPM `SiriusXMClient` product independently of the Sirius Mac application.
+- [ ] **CLNT-02**: Client consumers use typed async APIs, domain models, capabilities, and errors for authentication, entitlement, catalog, metadata, and live-stream resolution without depending on endpoints, cookies, headers, or raw wire schemas.
+- [ ] **CLNT-03**: SiriusXM endpoint, schema, authentication, and stream-resolution details remain in internal replaceable adapters that do not leak into the library's public API.
+- [ ] **CLNT-04**: The library accepts injected transport, clock, credential-source, and redacted-diagnostics collaborators where needed for deterministic testing and app-owned secret handling.
 - [ ] **CLNT-05**: The public library has DocC documentation, semantic-versioning policy, sanitized contract fixtures, compatibility tests, and an adapter-repair runbook.
 
 ### Compatibility Diagnostics
@@ -149,16 +149,16 @@ Every v1 requirement maps to exactly one delivery phase in `.planning/ROADMAP.md
 | FEAS-03 | Phase 0 | Superseded |
 | FEAS-04 | Phase 0 | Carried into AUTH-02 |
 | FEAS-05 | Phase 0 | Superseded |
-| AUTH-01 | Phase 1 | Complete |
-| AUTH-02 | Phase 1 | Complete |
-| AUTH-03 | Phase 1 | Complete |
-| SECR-01 | Phase 1 | Complete |
-| SECR-02 | Phase 1 | Complete |
-| SECR-03 | Phase 1 | Complete |
-| CLNT-01 | Phase 1 | Complete |
-| CLNT-02 | Phase 1 | Complete |
-| CLNT-03 | Phase 1 | Complete |
-| CLNT-04 | Phase 1 | Complete |
+| AUTH-01 | Phase 1 | Gaps Found |
+| AUTH-02 | Phase 1 | Gaps Found |
+| AUTH-03 | Phase 1 | Gaps Found |
+| SECR-01 | Phase 1 | Gaps Found |
+| SECR-02 | Phase 1 | Gaps Found |
+| SECR-03 | Phase 1 | Gaps Found |
+| CLNT-01 | Phase 1 | Gaps Found |
+| CLNT-02 | Phase 1 | Gaps Found |
+| CLNT-03 | Phase 1 | Gaps Found |
+| CLNT-04 | Phase 1 | Gaps Found |
 | CLNT-05 | Phase 5 | Pending |
 | COMP-01 | Phase 5 | Pending |
 | COMP-02 | Phase 5 | Pending |
