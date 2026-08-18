@@ -27,7 +27,7 @@ final class CompatibilityPresentationModel {
         presentationCount += 1
 
         switch await client.authenticationAvailability() {
-        case .waitingForComposition:
+        case .waitingForAuthenticationComposition:
             return .waitingForAuthenticationComposition
         }
     }
