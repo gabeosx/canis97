@@ -1,6 +1,6 @@
 ---
 phase: 01-safe-interoperability-foundation
-reviewed: 2026-08-18T18:16:12Z
+reviewed: 2026-08-18T18:24:22Z
 depth: standard
 files_reviewed: 19
 files_reviewed_list:
@@ -25,39 +25,33 @@ files_reviewed_list:
   - SiriusMacTests/WebAuthenticationBridgeTests.swift
 findings:
   critical: 0
-  warning: 1
+  warning: 0
   info: 0
-  total: 1
-status: issues_found
+  total: 0
+status: clean
 ---
 
 # Phase 1: Code Review Report
 
-**Reviewed:** 2026-08-18T18:16:12Z
+**Reviewed:** 2026-08-18T18:24:22Z
 **Depth:** standard
 **Files Reviewed:** 19
-**Status:** issues_found
+**Status:** clean
 
 ## Summary
 
-Reviewed the `a8e2dfd..HEAD` closure changes and their call paths. The versioned response classifiers, control precedence, exact Secure issuer predicate, WebKit generation rotation, bounded restore source, terminal restore erasure, app-target membership, and SPI boundary are coherent. No release-signing finding is included because this closure did not change that already-deferred Phase 5 concern.
+Re-reviewed the complete `a8e2dfd..HEAD` closure scope after WR-01. The replacement regression runs the production `send()` path against a blocked, test-local `URLProtocol`, cancels the caller only after the request is active, and verifies normalized `CancellationError`, deferred active-state clearing, one intercepted request, and no redirect/follow-up work. The production redirect delegate continues to unconditionally decline every redirect.
 
-The redirect cancellation regression is not valid evidence for real request cancellation: it observes only an idle bookkeeping object. The existing passing suites therefore do not cover cancellation of an in-flight credential-bearing transport task.
+The response classification, exact cookie predicate, WebKit session retirement, restoration/Keychain cleanup, presentation composition, target membership, and SPI boundary remain coherent. `swift test` passed all 29 package tests and `xcodebuild test` passed all 41 app tests. The unchanged signing configuration is the explicit Phase 5 REL-01 deferral and is outside this closure scope.
+
+All reviewed files meet quality standards. No actionable closure defects found.
 
 ## Narrative Findings (AI reviewer)
 
-## Warnings
-
-### WR-01: Cancellation test never creates or cancels an in-flight transport request
-
-**File:** `Packages/SiriusXMClient/Tests/SiriusXMClientTests/EphemeralSessionTests.swift:74-82`
-
-**Issue:** `cancellationDoesNotRetry()` constructs a transport and calls `cancelCurrentRequestForTesting()` while no `send()` operation exists. That helper merely clears `RequestState` (`EphemeralURLSessionTransport.swift:59-61`), so the assertions only prove that a fresh transport has zero redirects and no active-request flag. They do not exercise `URLSession.data(for:)`, task cancellation, deferred state clearing, or the absence of a retry/follow-up after a real credential-bearing request is cancelled. This leaves the closure's cancellation guarantee unverified.
-
-**Fix:** Add a deterministic URLSession/transport seam that starts a blocked `send()` request, waits until it is active, cancels the calling task, and asserts the send exits as cancellation, `hasActiveRequest` becomes false, and no redirect/retry callback is scheduled. Keep the seam in tests and retain the production unconditional `completionHandler(nil)` policy.
+None.
 
 ---
 
-_Reviewed: 2026-08-18T18:16:12Z_
+_Reviewed: 2026-08-18T18:24:22Z_
 _Reviewer: the agent (gsd-code-reviewer)_
 _Depth: standard_
