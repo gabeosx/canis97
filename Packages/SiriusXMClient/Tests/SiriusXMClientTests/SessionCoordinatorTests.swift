@@ -8,8 +8,8 @@ struct SessionCoordinatorTests {
     func performsAuthenticationThenEntitlementOnce() async {
         let source = RecordingCredentialSource()
         let sequence = VerificationSequence()
-        let authentication = RecordingAuthenticationVerifier(sequence: sequence, response: response(object: ["authenticated": true]))
-        let entitlement = RecordingEntitlementVerifier(sequence: sequence, response: response(object: ["entitled": true]))
+        let authentication = RecordingAuthenticationVerifier(sequence: sequence, response: response(body: SanitizedNativeResponseFixtures.profileV4Authenticated))
+        let entitlement = RecordingEntitlementVerifier(sequence: sequence, response: response(body: SanitizedNativeResponseFixtures.subscriptionV1Active))
         let store = RecordingCredentialStore()
         let coordinator = SessionCoordinator(
             credentialSource: source,
@@ -33,7 +33,7 @@ struct SessionCoordinatorTests {
         let entitlement = BlockingEntitlementVerifier()
         let coordinator = SessionCoordinator(
             credentialSource: RecordingCredentialSource(),
-            authenticationVerifier: RecordingAuthenticationVerifier(response: response(object: ["authenticated": true])),
+            authenticationVerifier: RecordingAuthenticationVerifier(response: response(body: SanitizedNativeResponseFixtures.profileV4Authenticated)),
             entitlementVerifier: entitlement,
             credentialStore: RecordingCredentialStore(),
             clock: FixedSessionClock(),
@@ -45,7 +45,7 @@ struct SessionCoordinatorTests {
 
         #expect(await coordinator.snapshot == .verifyingEntitlement)
 
-        await entitlement.release(with: response(object: ["entitled": true]))
+        await entitlement.release(with: response(body: SanitizedNativeResponseFixtures.subscriptionV1Active))
         #expect(await attempt.value == .active)
         guard case .active = await coordinator.snapshot else {
             Issue.record("Expected an active session only after entitlement")
@@ -58,8 +58,8 @@ struct SessionCoordinatorTests {
         let store = RecordingCredentialStore()
         let coordinator = SessionCoordinator(
             credentialSource: RecordingCredentialSource(),
-            authenticationVerifier: RecordingAuthenticationVerifier(response: response(object: ["authenticated": true])),
-            entitlementVerifier: RecordingEntitlementVerifier(response: response(object: ["entitled": false])),
+            authenticationVerifier: RecordingAuthenticationVerifier(response: response(body: SanitizedNativeResponseFixtures.profileV4Authenticated)),
+            entitlementVerifier: RecordingEntitlementVerifier(response: response(body: SanitizedNativeResponseFixtures.subscriptionV1Inactive)),
             credentialStore: store,
             clock: FixedSessionClock(),
             diagnostics: RecordingDiagnostics()
@@ -78,7 +78,7 @@ struct SessionCoordinatorTests {
         let coordinator = SessionCoordinator(
             credentialSource: source,
             authenticationVerifier: authentication,
-            entitlementVerifier: RecordingEntitlementVerifier(response: response(object: ["entitled": true])),
+            entitlementVerifier: RecordingEntitlementVerifier(response: response(body: SanitizedNativeResponseFixtures.subscriptionV1Active)),
             credentialStore: store,
             clock: FixedSessionClock(),
             diagnostics: RecordingDiagnostics()
@@ -89,15 +89,14 @@ struct SessionCoordinatorTests {
         #expect(await coordinator.attemptSession() == .attemptInProgress)
 
         first.cancel()
-        await authentication.release(with: response(object: ["authenticated": true]))
+        await authentication.release(with: response(body: SanitizedNativeResponseFixtures.profileV4Authenticated))
         #expect(await first.value == .authentication(.cancelled))
         #expect(await coordinator.snapshot == .signedOut)
         #expect(await source.requestCount == 1)
         #expect(await store.saveCount == 0)
     }
 
-    private func response(object: [String: Any]) -> NativeTransportResponse {
-        let body = try! JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+    private func response(body: Data) -> NativeTransportResponse {
         return NativeTransportResponse(statusCode: 200, contentType: "application/json", body: body)
     }
 }
