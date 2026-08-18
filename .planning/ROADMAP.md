@@ -15,7 +15,7 @@ Sirius Mac moves from a settled authentication architecture to a dependable nati
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 0: Authentication Feasibility Gate** - Historical feasibility work that informed the accepted WebView-token/native-request architecture.
-- [ ] **Phase 1: Safe Interoperability Foundation** - Subscribers get a fail-closed, private authorization foundation and a reusable client boundary.
+- [x] **Phase 1: Safe Interoperability Foundation** - Subscribers get a fail-closed, private authorization foundation and a reusable client boundary. (completed 2026-08-18)
 - [ ] **Phase 2: Authorized Live Listening** - Subscribers can browse entitled linear channels and listen reliably with truthful playback and metadata states.
 - [ ] **Phase 3: Native Mac Listening Experience** - Subscribers control one shared listening session through native windows, local library features, and macOS media controls.
 - [ ] **Phase 4: Safe Skins & Accessible Recovery** - Subscribers can personalize the player with bundled or validated local skins without compromising safety or access.
@@ -227,7 +227,7 @@ Active product execution proceeds 1 → 2 → 3 → 4 → 5. Phase 0 is retained
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 0. Authentication Feasibility Gate | 12/12 | Complete (historical) | 2026-08-17 |
-| 1. Safe Interoperability Foundation | 16/16 | In Progress|  |
+| 1. Safe Interoperability Foundation | 16/16 | Complete    | 2026-08-18 |
 | 2. Authorized Live Listening | 0/TBD | Not started | - |
 | 3. Native Mac Listening Experience | 0/TBD | Not started | - |
 | 4. Safe Skins & Accessible Recovery | 0/TBD | Not started | - |
