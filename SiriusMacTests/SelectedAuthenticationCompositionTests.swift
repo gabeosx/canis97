@@ -138,6 +138,77 @@ final class SelectedAuthenticationCompositionTests: XCTestCase {
         XCTAssertEqual(events, [.signOut, .signOut])
     }
 
+    func testFreshRestoreConsumesOneStoredCredentialBeforeOrderedNativeTransaction() async throws {
+        let keychain = KeychainCredentialStore(
+            service: "com.siriusmac.tests.\(UUID().uuidString)",
+            account: "fresh-restore"
+        )
+        defer { try? keychain.removeStoredCredential() }
+        try await keychain.save(AuthenticationCredential(volatileMaterial: Data("approved-restore".utf8)))
+
+        let cookieStore = CompositionCookieStore(cookies: [])
+        let bridge = WebAuthenticationBridge(cookieStore: cookieStore, credentialConsumer: { _ in })
+        let source = RestorableAuthenticationCredentialSource(keychain: keychain, webViewSource: bridge)
+        let client = CompositionClient(credentialSource: source)
+        let flow = ComposedAuthenticationPresentationFlow(bridge: bridge, client: client, credentialSource: source)
+
+        let state = await flow.prepareForExplicitSignIn(onAuthenticationVerification: {}, onEntitlementVerification: {})
+
+        XCTAssertEqual(state, .entitled)
+        XCTAssertEqual(await client.events, [.credential, .authenticate, .entitlement])
+        XCTAssertEqual(await cookieStore.allCookieReadCount, 0)
+        XCTAssertNil(await source.credential())
+    }
+
+    func testRejectedRestoreErasesBeforeTerminalStateThenLaterExplicitRetryUsesWebView() async throws {
+        let now = Date()
+        let keychain = KeychainCredentialStore(
+            service: "com.siriusmac.tests.\(UUID().uuidString)",
+            account: "rejected-restore"
+        )
+        defer { try? keychain.removeStoredCredential() }
+        try await keychain.save(AuthenticationCredential(volatileMaterial: Data("approved-restore".utf8)))
+
+        let cookieStore = CompositionCookieStore(cookies: [try tokenCookie(expires: now.addingTimeInterval(60))])
+        let bridge = WebAuthenticationBridge(cookieStore: cookieStore, now: { now }, credentialConsumer: { _ in })
+        let source = RestorableAuthenticationCredentialSource(keychain: keychain, webViewSource: bridge)
+        let client = CompositionClient(
+            credentialSource: source,
+            authentications: [.rejected, .authenticatedPendingEntitlement],
+            entitlements: [.entitled]
+        )
+        let model = AuthenticationPresentationModel(
+            flow: ComposedAuthenticationPresentationFlow(bridge: bridge, client: client, credentialSource: source)
+        )
+
+        try await XCTUnwrap(model.signIn()).value
+        XCTAssertEqual(model.state, .rejected)
+        XCTAssertNil(try keychain.readStoredCredential())
+        XCTAssertEqual(await cookieStore.allCookieReadCount, 0)
+
+        try await XCTUnwrap(model.retry()).value
+        try await XCTUnwrap(model.useLoggedInSession()).value
+
+        XCTAssertEqual(model.state, .entitled)
+        XCTAssertEqual(await client.events, [.credential, .authenticate, .credential, .authenticate, .entitlement])
+    }
+
+    func testUnavailableRestoreDoesNotFallThroughToWebViewOrClient() async {
+        let bridge = WebAuthenticationBridge(cookieStore: CompositionCookieStore(cookies: []), credentialConsumer: { _ in })
+        let keychain = KeychainCredentialStore(
+            storedCredentialReader: { throw KeychainCredentialStore.StorageError.unavailable },
+            storedCredentialRemover: {}
+        )
+        let source = RestorableAuthenticationCredentialSource(keychain: keychain, webViewSource: bridge)
+        let client = CompositionClient(credentialSource: source)
+        let flow = ComposedAuthenticationPresentationFlow(bridge: bridge, client: client, credentialSource: source)
+
+        let state = await flow.prepareForExplicitSignIn(onAuthenticationVerification: {}, onEntitlementVerification: {})
+
+        XCTAssertEqual(state, .unsupported)
+        XCTAssertEqual(await client.events, [])
+    }
+
     private func tokenCookie(expires: Date) throws -> HTTPCookie {
         try XCTUnwrap(HTTPCookie(properties: [
             .name: "AUTH_TOKEN",
@@ -151,30 +222,42 @@ final class SelectedAuthenticationCompositionTests: XCTestCase {
 }
 
 private actor CompositionClient: ClientAuthenticationFlow {
-    enum Event: Equatable { case authenticate, entitlement, signOut }
+    enum Event: Equatable { case credential, authenticate, entitlement, signOut }
 
     private var authentications: [AuthenticationOutcome]
     private var entitlements: [EntitlementAvailability]
     private let signOutResult: SignOutOutcome
+    private let credentialSource: (any CredentialSource)?
     private(set) var events: [Event] = []
 
     init(
         authentication: AuthenticationOutcome = .authenticatedPendingEntitlement,
         entitlement: EntitlementAvailability = .entitled,
-        signOut: SignOutOutcome = .signedOut
+        signOut: SignOutOutcome = .signedOut,
+        credentialSource: (any CredentialSource)? = nil
     ) {
         authentications = [authentication]
         entitlements = [entitlement]
         signOutResult = signOut
+        self.credentialSource = credentialSource
     }
 
-    init(authentications: [AuthenticationOutcome], entitlements: [EntitlementAvailability]) {
+    init(
+        credentialSource: (any CredentialSource)? = nil,
+        authentications: [AuthenticationOutcome],
+        entitlements: [EntitlementAvailability]
+    ) {
         self.authentications = authentications
         self.entitlements = entitlements
         signOutResult = .signedOut
+        self.credentialSource = credentialSource
     }
 
     func authenticate() async -> AuthenticationOutcome {
+        if let credentialSource {
+            guard await credentialSource.credential() != nil else { return .cancelled }
+            events.append(.credential)
+        }
         events.append(.authenticate)
         return authentications.isEmpty ? .unsupported : authentications.removeFirst()
     }
@@ -193,10 +276,14 @@ private actor CompositionClient: ClientAuthenticationFlow {
 @MainActor
 private final class CompositionCookieStore: WebAuthenticationCookieStore {
     private var cookies: [HTTPCookie]
+    private(set) var allCookieReadCount = 0
 
     init(cookies: [HTTPCookie]) { self.cookies = cookies }
 
-    func allCookies() async -> [HTTPCookie] { cookies }
+    func allCookies() async -> [HTTPCookie] {
+        allCookieReadCount += 1
+        return cookies
+    }
     func delete(_ cookie: HTTPCookie) async throws { cookies.removeAll { $0 === cookie } }
     func replaceCookies(with cookies: [HTTPCookie]) { self.cookies = cookies }
 }

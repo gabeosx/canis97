@@ -35,6 +35,41 @@ final class KeychainCredentialStoreTests: XCTestCase {
         XCTAssertFalse(KeychainCredentialStore.StorageError.unavailable.localizedDescription.contains("-25293"))
     }
 
+    func testAuthenticationLoaderReturnsOnlyAnOpaqueBoundedCredential() async throws {
+        let store = makeStore()
+        defer { try? store.removeStoredCredential() }
+
+        try await store.save(AuthenticationCredential(volatileMaterial: Data("approved-material".utf8)))
+
+        switch store.loadStoredCredentialForAuthentication() {
+        case .credential:
+            XCTAssertNil(try store.readStoredCredential()?.first(where: { $0 == 0 }))
+        default:
+            XCTFail("Expected a semantic opaque credential outcome")
+        }
+    }
+
+    func testAuthenticationLoaderErasesInvalidMaterialAndSurfacesStorageFailuresSemantically() async throws {
+        let invalidStore = makeStore()
+        defer { try? invalidStore.removeStoredCredential() }
+        try await invalidStore.save(AuthenticationCredential(volatileMaterial: Data("contains whitespace".utf8)))
+
+        XCTAssertEqual(invalidStore.loadStoredCredentialForAuthentication().kind, .invalidErased)
+        XCTAssertNil(try invalidStore.readStoredCredential())
+
+        let unavailableStore = KeychainCredentialStore(
+            storedCredentialReader: { throw KeychainCredentialStore.StorageError.unavailable },
+            storedCredentialRemover: {}
+        )
+        XCTAssertEqual(unavailableStore.loadStoredCredentialForAuthentication().kind, .unavailable)
+
+        let cleanupFailureStore = KeychainCredentialStore(
+            storedCredentialReader: { Data() },
+            storedCredentialRemover: { throw KeychainCredentialStore.StorageError.unavailable }
+        )
+        XCTAssertEqual(cleanupFailureStore.loadStoredCredentialForAuthentication().kind, .cleanupFailed)
+    }
+
     private func makeStore() -> KeychainCredentialStore {
         KeychainCredentialStore(
             service: "com.siriusmac.player.tests.\(UUID().uuidString)",
