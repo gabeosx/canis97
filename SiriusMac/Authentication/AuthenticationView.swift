@@ -6,24 +6,10 @@ struct AuthenticationView: View {
     @State private var bridge: WebAuthenticationBridge
 
     init() {
-        let bridge = WebAuthenticationBridge()
-        let keychain = KeychainCredentialStore()
-        let credentialSource = RestorableAuthenticationCredentialSource(
-            keychain: keychain,
-            webViewSource: bridge
-        )
-        let client = SiriusXMClient(
-            credentialSource: credentialSource,
-            credentialStore: keychain,
-            residueCleaner: bridge
-        )
-        _bridge = State(initialValue: bridge)
+        let composition = AuthenticationComposition()
+        _bridge = State(initialValue: composition.bridge)
         _model = State(initialValue: AuthenticationPresentationModel(
-            flow: ComposedAuthenticationPresentationFlow(
-                bridge: bridge,
-                client: client,
-                credentialSource: credentialSource
-            )
+            flow: composition.flow
         ))
     }
 
@@ -110,6 +96,43 @@ struct AuthenticationView: View {
 
     private var clearLocalSessionButton: some View {
         Button("Clear Local Session") { _ = model.clearLocalSession() }
+    }
+}
+
+/// Keeps production composition to one Keychain adapter, one WebView bridge, and
+/// one combined credential source. Tests can recreate the same graph with fakes.
+@MainActor
+struct AuthenticationComposition {
+    let bridge: WebAuthenticationBridge
+    let credentialSource: RestorableAuthenticationCredentialSource
+    let flow: ComposedAuthenticationPresentationFlow
+
+    init() {
+        self.init(bridge: WebAuthenticationBridge(), keychain: KeychainCredentialStore())
+    }
+
+    init(
+        bridge: WebAuthenticationBridge,
+        keychain: KeychainCredentialStore,
+        client: (any ClientAuthenticationFlow)? = nil
+    ) {
+        let credentialSource = RestorableAuthenticationCredentialSource(
+            keychain: keychain,
+            webViewSource: bridge
+        )
+        let composedClient = client ?? SiriusXMClient(
+            credentialSource: credentialSource,
+            credentialStore: keychain,
+            residueCleaner: bridge
+        )
+
+        self.bridge = bridge
+        self.credentialSource = credentialSource
+        flow = ComposedAuthenticationPresentationFlow(
+            bridge: bridge,
+            client: composedClient,
+            credentialSource: credentialSource
+        )
     }
 }
 
