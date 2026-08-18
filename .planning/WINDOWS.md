@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 7
+open_count: 8
 waived_count: 0
 fixed_count: 1
-total_count: 8
-last_updated: 2026-08-18T04:19:55.786Z
+total_count: 9
+last_updated: 2026-08-18T11:28:29.131Z
 ---
 
 # Broken Windows Ledger
@@ -23,6 +23,7 @@ last_updated: 2026-08-18T04:19:55.786Z
 | 6 | 00 | deviation | .planning/phases/01-safe-interoperability-foundation/01-01-PLAN.md |  | Approved cross-plan wiring added an executable fail-closed Phase 1 preflight. | open |  | 2026-08-17T19:15:53.911Z |  |
 | 7 | 00 | deviation | Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityRunner/main.swift |  | Removed the impossible owner-artifact dependency from zero-run finalization. | open |  | 2026-08-17T22:18:30.328Z |  |
 | 8 | 01 | stub | SiriusMac/Authentication/AuthenticationPresentationModel.swift | 234 | UncomposedAuthenticationPresentationFlow remains waiting-only until Plan 01-06 wires the nonpersistent WebKit bridge. | open |  | 2026-08-18T04:19:55.786Z |  |
+| 9 | 01 | unrun-verify | SiriusMacTests/SelectedAuthenticationCompositionTests.swift |  | Focused XCTest composition verification is blocked by existing SiriusMacTests test-host linker configuration | open |  | 2026-08-18T11:28:29.131Z |  |
 
 ````json
 [
@@ -120,6 +121,18 @@ last_updated: 2026-08-18T04:19:55.786Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-18T04:19:55.786Z",
+    "resolved_at": null
+  },
+  {
+    "id": 9,
+    "kind": "unrun-verify",
+    "phase": "01",
+    "file": "SiriusMacTests/SelectedAuthenticationCompositionTests.swift",
+    "line": null,
+    "description": "Focused XCTest composition verification is blocked by existing SiriusMacTests test-host linker configuration",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-18T11:28:29.131Z",
     "resolved_at": null
   }
 ]
