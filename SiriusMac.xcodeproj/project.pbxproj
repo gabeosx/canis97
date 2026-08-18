@@ -1,0 +1,75 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A00100010000000000000001 /* SiriusMacApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00100020000000000000001 /* SiriusMacApp.swift */; };
+		A00100010000000000000002 /* CompatibilityTracerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00100020000000000000002 /* CompatibilityTracerTests.swift */; };
+		A00100010000000000000003 /* SiriusXMClient in Frameworks */ = {isa = PBXBuildFile; productRef = A00100100000000000000001 /* SiriusXMClient */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		A00100020000000000000001 /* SiriusMacApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiriusMacApp.swift; sourceTree = "<group>"; };
+		A00100020000000000000002 /* CompatibilityTracerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompatibilityTracerTests.swift; sourceTree = "<group>"; };
+		A00100020000000000000003 /* SiriusMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SiriusMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A00100020000000000000004 /* SiriusMacTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SiriusMacTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A00100030000000000000001 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (A00100010000000000000003 /* SiriusXMClient in Frameworks */,); runOnlyForDeploymentPostprocessing = 0; };
+		A00100030000000000000002 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A00100040000000000000001 = {isa = PBXGroup; children = (A00100040000000000000002 /* SiriusMac */, A00100040000000000000003 /* SiriusMacTests */, A00100040000000000000004 /* Products */,); sourceTree = "<group>"; };
+		A00100040000000000000002 /* SiriusMac */ = {isa = PBXGroup; children = (A00100020000000000000001 /* SiriusMacApp.swift */,); path = SiriusMac; sourceTree = "<group>"; };
+		A00100040000000000000003 /* SiriusMacTests */ = {isa = PBXGroup; children = (A00100020000000000000002 /* CompatibilityTracerTests.swift */,); path = SiriusMacTests; sourceTree = "<group>"; };
+		A00100040000000000000004 /* Products */ = {isa = PBXGroup; children = (A00100020000000000000003 /* SiriusMac.app */, A00100020000000000000004 /* SiriusMacTests.xctest */,); name = Products; sourceTree = "<group>"; };
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A00100050000000000000001 /* SiriusMac */ = {isa = PBXNativeTarget; buildConfigurationList = A00100060000000000000001 /* Build configuration list for PBXNativeTarget "SiriusMac" */; buildPhases = (A00100070000000000000001 /* Sources */, A00100030000000000000001 /* Frameworks */,); buildRules = (); dependencies = (); name = SiriusMac; packageProductDependencies = (A00100100000000000000001 /* SiriusXMClient */,); productName = SiriusMac; productReference = A00100020000000000000003 /* SiriusMac.app */; productType = "com.apple.product-type.application"; };
+		A00100050000000000000002 /* SiriusMacTests */ = {isa = PBXNativeTarget; buildConfigurationList = A00100060000000000000002 /* Build configuration list for PBXNativeTarget "SiriusMacTests" */; buildPhases = (A00100070000000000000002 /* Sources */, A00100030000000000000002 /* Frameworks */,); buildRules = (); dependencies = (A00100090000000000000001 /* PBXTargetDependency */,); name = SiriusMacTests; packageProductDependencies = (); productName = SiriusMacTests; productReference = A00100020000000000000004 /* SiriusMacTests.xctest */; productType = "com.apple.product-type.bundle.unit-test"; };
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A001000A0000000000000001 /* Project object */ = {isa = PBXProject; attributes = { LastSwiftUpdateCheck = 2600; LastUpgradeCheck = 2600; TargetAttributes = { A00100050000000000000001 = { CreatedOnToolsVersion = 26.0; }; A00100050000000000000002 = { CreatedOnToolsVersion = 26.0; TestTargetID = A00100050000000000000001; }; }; }; buildConfigurationList = A00100060000000000000003 /* Build configuration list for PBXProject "SiriusMac" */; compatibilityVersion = "Xcode 16.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base,); mainGroup = A00100040000000000000001; minimizedProjectReferenceProxies = 1; packageReferences = (A00100110000000000000001 /* XCLocalSwiftPackageReference "SiriusXMClient" */,); preferredProjectObjectVersion = 77; productRefGroup = A00100040000000000000004 /* Products */; projectDirPath = ""; projectRoot = ""; targets = (A00100050000000000000001 /* SiriusMac */, A00100050000000000000002 /* SiriusMacTests */,); };
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A00100070000000000000001 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A00100010000000000000001 /* SiriusMacApp.swift in Sources */,); runOnlyForDeploymentPostprocessing = 0; };
+		A00100070000000000000002 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A00100010000000000000002 /* CompatibilityTracerTests.swift in Sources */,); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A00100090000000000000001 /* PBXTargetDependency */ = {isa = PBXTargetDependency; target = A00100050000000000000001 /* SiriusMac */; };
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		A00100080000000000000001 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = { ARCHS = arm64; CLANG_ENABLE_MODULES = YES; CODE_SIGNING_ALLOWED = NO; MACOSX_DEPLOYMENT_TARGET = 26.0; SDKROOT = macosx; SWIFT_STRICT_CONCURRENCY = complete; SWIFT_VERSION = 6.0; }; name = Debug; };
+		A00100080000000000000002 /* Release */ = {isa = XCBuildConfiguration; buildSettings = { ARCHS = arm64; CLANG_ENABLE_MODULES = YES; CODE_SIGNING_ALLOWED = NO; MACOSX_DEPLOYMENT_TARGET = 26.0; SDKROOT = macosx; SWIFT_STRICT_CONCURRENCY = complete; SWIFT_VERSION = 6.0; }; name = Release; };
+		A00100080000000000000003 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = { CODE_SIGNING_ALLOWED = NO; ENABLE_TESTABILITY = YES; PRODUCT_BUNDLE_IDENTIFIER = com.siriusmac.player; PRODUCT_MODULE_NAME = SiriusMac; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_EMIT_LOC_STRINGS = YES; }; name = Debug; };
+		A00100080000000000000004 /* Release */ = {isa = XCBuildConfiguration; buildSettings = { CODE_SIGNING_ALLOWED = NO; PRODUCT_BUNDLE_IDENTIFIER = com.siriusmac.player; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_EMIT_LOC_STRINGS = YES; }; name = Release; };
+		A00100080000000000000005 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = { BUNDLE_LOADER = "$(TEST_HOST)"; CODE_SIGNING_ALLOWED = NO; PRODUCT_BUNDLE_IDENTIFIER = com.siriusmac.player.tests; PRODUCT_MODULE_NAME = SiriusMacTests; TEST_HOST = "$(BUILT_PRODUCTS_DIR)/SiriusMac.app/Contents/MacOS/SiriusMac"; }; name = Debug; };
+		A00100080000000000000006 /* Release */ = {isa = XCBuildConfiguration; buildSettings = { BUNDLE_LOADER = "$(TEST_HOST)"; CODE_SIGNING_ALLOWED = NO; PRODUCT_BUNDLE_IDENTIFIER = com.siriusmac.player.tests; PRODUCT_MODULE_NAME = SiriusMacTests; TEST_HOST = "$(BUILT_PRODUCTS_DIR)/SiriusMac.app/Contents/MacOS/SiriusMac"; }; name = Release; };
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A00100060000000000000001 /* Build configuration list for PBXNativeTarget "SiriusMac" */ = {isa = XCConfigurationList; buildConfigurations = (A00100080000000000000003 /* Debug */, A00100080000000000000004 /* Release */,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		A00100060000000000000002 /* Build configuration list for PBXNativeTarget "SiriusMacTests" */ = {isa = XCConfigurationList; buildConfigurations = (A00100080000000000000005 /* Debug */, A00100080000000000000006 /* Release */,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		A00100060000000000000003 /* Build configuration list for PBXProject "SiriusMac" */ = {isa = XCConfigurationList; buildConfigurations = (A00100080000000000000001 /* Debug */, A00100080000000000000002 /* Release */,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		A00100110000000000000001 /* XCLocalSwiftPackageReference "SiriusXMClient" */ = {isa = XCLocalSwiftPackageReference; relativePath = Packages/SiriusXMClient; };
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A00100100000000000000001 /* SiriusXMClient */ = {isa = XCSwiftPackageProductDependency; package = A00100110000000000000001 /* XCLocalSwiftPackageReference "SiriusXMClient" */; productName = SiriusXMClient; };
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = A001000A0000000000000001 /* Project object */;
+}
