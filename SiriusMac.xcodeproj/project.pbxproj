@@ -9,6 +9,8 @@
 		A00100010000000000000001 /* SiriusMacApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00100020000000000000001 /* SiriusMacApp.swift */; };
 		A00100010000000000000002 /* CompatibilityTracerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00100020000000000000002 /* CompatibilityTracerTests.swift */; };
 		A00100010000000000000003 /* SiriusXMClient in Frameworks */ = {isa = PBXBuildFile; productRef = A00100100000000000000001 /* SiriusXMClient */; };
+		A00100010000000000000004 /* KeychainCredentialStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00100020000000000000005 /* KeychainCredentialStore.swift */; };
+		A00100010000000000000005 /* KeychainCredentialStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00100020000000000000006 /* KeychainCredentialStoreTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -16,6 +18,8 @@
 		A00100020000000000000002 /* CompatibilityTracerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompatibilityTracerTests.swift; sourceTree = "<group>"; };
 		A00100020000000000000003 /* SiriusMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SiriusMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A00100020000000000000004 /* SiriusMacTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SiriusMacTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A00100020000000000000005 /* KeychainCredentialStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainCredentialStore.swift; sourceTree = "<group>"; };
+		A00100020000000000000006 /* KeychainCredentialStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainCredentialStoreTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -25,8 +29,9 @@
 
 /* Begin PBXGroup section */
 		A00100040000000000000001 = {isa = PBXGroup; children = (A00100040000000000000002 /* SiriusMac */, A00100040000000000000003 /* SiriusMacTests */, A00100040000000000000004 /* Products */,); sourceTree = "<group>"; };
-		A00100040000000000000002 /* SiriusMac */ = {isa = PBXGroup; children = (A00100020000000000000001 /* SiriusMacApp.swift */,); path = SiriusMac; sourceTree = "<group>"; };
-		A00100040000000000000003 /* SiriusMacTests */ = {isa = PBXGroup; children = (A00100020000000000000002 /* CompatibilityTracerTests.swift */,); path = SiriusMacTests; sourceTree = "<group>"; };
+		A00100040000000000000002 /* SiriusMac */ = {isa = PBXGroup; children = (A00100020000000000000001 /* SiriusMacApp.swift */, A00100040000000000000005 /* Security */,); path = SiriusMac; sourceTree = "<group>"; };
+		A00100040000000000000003 /* SiriusMacTests */ = {isa = PBXGroup; children = (A00100020000000000000002 /* CompatibilityTracerTests.swift */, A00100020000000000000006 /* KeychainCredentialStoreTests.swift */,); path = SiriusMacTests; sourceTree = "<group>"; };
+		A00100040000000000000005 /* Security */ = {isa = PBXGroup; children = (A00100020000000000000005 /* KeychainCredentialStore.swift */,); path = Security; sourceTree = "<group>"; };
 		A00100040000000000000004 /* Products */ = {isa = PBXGroup; children = (A00100020000000000000003 /* SiriusMac.app */, A00100020000000000000004 /* SiriusMacTests.xctest */,); name = Products; sourceTree = "<group>"; };
 /* End PBXGroup section */
 
@@ -40,8 +45,8 @@
 /* End PBXProject section */
 
 /* Begin PBXSourcesBuildPhase section */
-		A00100070000000000000001 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A00100010000000000000001 /* SiriusMacApp.swift in Sources */,); runOnlyForDeploymentPostprocessing = 0; };
-		A00100070000000000000002 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A00100010000000000000002 /* CompatibilityTracerTests.swift in Sources */,); runOnlyForDeploymentPostprocessing = 0; };
+		A00100070000000000000001 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A00100010000000000000001 /* SiriusMacApp.swift in Sources */, A00100010000000000000004 /* KeychainCredentialStore.swift in Sources */,); runOnlyForDeploymentPostprocessing = 0; };
+		A00100070000000000000002 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A00100010000000000000002 /* CompatibilityTracerTests.swift in Sources */, A00100010000000000000005 /* KeychainCredentialStoreTests.swift in Sources */,); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
