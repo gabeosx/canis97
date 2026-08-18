@@ -147,9 +147,15 @@ Plans:
 **Wave 10** *(blocked on Wave 9 completion)*
 
 - [x] 01-12-PLAN.md — Make WebView credential selection atomic across suspension and prove exactly one transfer under concurrent explicit selections.
+
+**Wave 11** *(blocked on Wave 10 completion)*
+
 - [x] 01-13-PLAN.md — Decode representative profile/subscription responses and prove the complete native authorization transaction.
 - [x] 01-14-PLAN.md — Instrument the production redirect callback and prove every follow-up request is cancelled.
 - [x] 01-15-PLAN.md — Enforce the Secure evidence-backed cookie predicate and retire the complete nonpersistent WebKit session.
+
+**Wave 12** *(blocked on Wave 11 completion)*
+
 - [x] 01-16-PLAN.md — Restore bounded Keychain material through the same native transaction and erase every invalid or rejected restore.
 
 ### Phase 2: Authorized Live Listening
