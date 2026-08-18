@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 01
 current_phase_name: safe-interoperability-foundation
 status: executing
-stopped_at: Completed 01-09-PLAN.md
-last_updated: "2026-08-18T13:20:04.522Z"
+stopped_at: Completed 01-10-PLAN.md
+last_updated: "2026-08-18T13:31:37.849Z"
 last_activity: 2026-08-18
 last_activity_desc: "Completed quick task 260818-c4r: update only Phase 1's Goal line in .planning/ROADMAP.md"
 progress:
   total_phases: 2
   completed_phases: 1
   total_plans: 23
-  completed_plans: 21
+  completed_plans: 22
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-08-16)
 ## Current Position
 
 Phase: 01 (safe-interoperability-foundation) — EXECUTING
-Plan: 9 of 11
+Plan: 10 of 11
 Status: Ready to execute
 Last activity: 2026-08-18 — Completed 01-09 explicit WebView retry and re-login lifecycle
 
-Progress: [█████████░] 91%
+Progress: [██████████] 96%
 
 ## Performance Metrics
 
@@ -83,6 +83,7 @@ Progress: [█████████░] 91%
 | Phase 01 P07 | 12min | 2 tasks | 11 files |
 | Phase 01 P08 | 25 min | 2 tasks | 5 files |
 | Phase 01-safe-interoperability-foundation P09 | 5min | 1 tasks | 4 files |
+| Phase 01 P10 | 4 min | 1 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -121,6 +122,8 @@ All earlier Phase 0 feasibility-selection, proof-run, quartet, GO/NO-GO, and cal
 - [Phase ?]: Repaired the native XCTest target with explicit app-host linkage and unconditional source membership.
 - [Phase ?]: Phase 2 readiness derives only from synthetic Phase 1 acceptance and static authority scans.
 - [Phase ?]: Only an explicit user-operated new sign-in attempt may discard and re-arm the volatile WebView credential handoff.
+- [Phase ?]: Every explicit cleanup request retires actor state then runs both idempotent cleaners; only overlapping requests share a result.
+- [Phase ?]: Fresh composition exposes cleanup-only UI and never reads or restores a stored credential.
 
 ### Pending Todos
 
@@ -151,6 +154,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-18T13:20:04.507Z
-Stopped at: Completed 01-09-PLAN.md
+Last session: 2026-08-18T13:31:23.959Z
+Stopped at: Completed 01-10-PLAN.md
 Resume file: None
