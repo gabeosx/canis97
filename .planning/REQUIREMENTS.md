@@ -9,11 +9,13 @@ Requirements for the initial public release. Each requirement maps to exactly on
 
 ### Authentication Feasibility
 
-- [ ] **FEAS-01**: After the owner explicitly clicks a control in this app's nonpersistent `WKWebView`, the maintainer may select only the one current first-party `AUTH_TOKEN` cookie, decode only `session.accessToken`, and pass it once in volatile memory to an exact SiriusXM HTTPS verifier. Broad cookie/storage enumeration, arbitrary JavaScript extraction, developer tools, shared-browser state, persistence, diagnostics, fixtures, and raw artifacts remain prohibited.
-- [ ] **FEAS-02**: If browser return is safely ruled out, maintainer can evaluate one minimal honest native authentication path without spoofing a browser or client identity, bypassing access controls, or retaining a fallback path.
-- [ ] **FEAS-03**: Account owner can perform two separate manually initiated proof runs through the sole selected path, each reaching explicit authenticated-and-entitled state and clean sign-out, with a conservative human-controlled cooldown between runs.
-- [ ] **FEAS-04**: Any challenge, CAPTCHA, MFA requirement, HTTP 403 or 429, rate-limit signal, unexpected redirect, suspected bot response, protected-control behavior, or ambiguous entitlement evidence immediately stops evaluation and records no secrets or raw sensitive response data.
-- [ ] **FEAS-05**: Phase 0 produces exactly one sanitized feasibility decision—`GO browser-return`, `GO native-direct`, or `NO-GO unsupported`—and Phase 1 cannot execute without a GO decision backed by both proof runs.
+Phase 0 is historical. FEAS-01 records the accepted architecture; FEAS-02/03/05 are retired experiment/gate requirements and have no authority over product execution. FEAS-04's safety behavior continues under AUTH-02 and the Phase 1 acceptance plans.
+
+- [x] **FEAS-01**: After the owner explicitly clicks a control in this app's nonpersistent `WKWebView`, the app may select only the one current first-party `AUTH_TOKEN` cookie, decode only `session.accessToken`, and pass it once in volatile memory to exact native SiriusXM HTTPS verifiers. Broad cookie/storage enumeration, arbitrary JavaScript extraction, developer tools, shared-browser state, persistence, diagnostics, fixtures, and raw artifacts remain prohibited.
+- [x] **FEAS-02 (superseded)**: The alternative-path investigation is retired; the settled WebView-token/native-request path is the sole production architecture.
+- [x] **FEAS-03 (superseded)**: Duplicate owner proof runs are not a Phase 1 or downstream execution gate.
+- [x] **FEAS-04**: Any challenge, CAPTCHA, MFA requirement, HTTP 403 or 429, rate-limit signal, unexpected redirect, suspected bot response, protected-control behavior, or ambiguous entitlement evidence immediately stops the attempt and records no secrets or raw sensitive response data.
+- [x] **FEAS-05 (superseded)**: Historical GO/NO-GO artifacts are retained for provenance only; Phase 1 executes from the architecture locked in ROADMAP.md and `01-CONTEXT.md`.
 
 ### Authentication
 
@@ -142,11 +144,11 @@ Every v1 requirement maps to exactly one delivery phase in `.planning/ROADMAP.md
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FEAS-01 | Phase 0 | Gaps Found |
-| FEAS-02 | Phase 0 | Gaps Found |
-| FEAS-03 | Phase 0 | Gaps Found |
-| FEAS-04 | Phase 0 | Gaps Found |
-| FEAS-05 | Phase 0 | Gaps Found |
+| FEAS-01 | Phase 0 | Architecture accepted |
+| FEAS-02 | Phase 0 | Superseded |
+| FEAS-03 | Phase 0 | Superseded |
+| FEAS-04 | Phase 0 | Carried into AUTH-02 |
+| FEAS-05 | Phase 0 | Superseded |
 | AUTH-01 | Phase 1 | Pending |
 | AUTH-02 | Phase 1 | Pending |
 | AUTH-03 | Phase 1 | Pending |
@@ -200,4 +202,4 @@ Every v1 requirement maps to exactly one delivery phase in `.planning/ROADMAP.md
 
 ---
 *Requirements defined: 2026-08-16*
-*Last updated: 2026-08-16 after adding the Phase 0 authentication feasibility gate*
+*Last updated: 2026-08-17 after settling the WebView-token/native-request architecture and retiring the Phase 0 artifact gate*

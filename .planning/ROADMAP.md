@@ -2,7 +2,7 @@
 
 ## Overview
 
-Sirius Mac moves from a safe, repairable proof of authorized SiriusXM interoperability to a dependable native live-radio experience, then completes its distinctive declarative skinning and public release path. Each phase preserves the central boundary: SiriusXM protocol behavior can change behind the reusable client library, while the Mac app remains secure, native, and clear about unsupported upstream conditions.
+Sirius Mac moves from a settled authentication architecture to a dependable native live-radio experience, then completes its distinctive declarative skinning and public release path. The production authentication baseline is fixed: a user-operated, nonpersistent WKWebView yields one current first-party `AUTH_TOKEN`; its access token crosses once in volatile memory into `SiriusXMClient`, which performs native authenticated and entitlement requests. SiriusXM protocol behavior remains repairable behind the reusable client boundary.
 
 ## Phases
 
@@ -14,7 +14,7 @@ Sirius Mac moves from a safe, repairable proof of authorized SiriusXM interopera
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 0: Authentication Feasibility Gate** - Maintainers obtain a safe, evidence-backed GO or NO-GO decision before production investment.
+- [x] **Phase 0: Authentication Feasibility Gate** - Historical feasibility work that informed the accepted WebView-token/native-request architecture.
 - [ ] **Phase 1: Safe Interoperability Foundation** - Subscribers get a fail-closed, private authorization foundation and a reusable client boundary.
 - [ ] **Phase 2: Authorized Live Listening** - Subscribers can browse entitled linear channels and listen reliably with truthful playback and metadata states.
 - [ ] **Phase 3: Native Mac Listening Experience** - Subscribers control one shared listening session through native windows, local library features, and macOS media controls.
@@ -25,17 +25,17 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 ### Phase 0: Authentication Feasibility Gate
 
-**Goal**: Determine whether exactly one safe SiriusXM authentication path can complete two account-owner authorized-and-entitled proof runs with clean sign-out, before building the production application foundation.
+**Goal**: Preserve the historical feasibility work that led to the accepted WebView-token/native-request production architecture.
 **Mode:** mvp
-**Depends on**: Nothing (prerequisite phase)
+**Depends on**: Nothing
 **Requirements**: FEAS-01, FEAS-02, FEAS-03, FEAS-04, FEAS-05
-**Success Criteria** (what must be TRUE):
+**Historical Success Criteria** (retained for provenance; no item gates Phase 1):
 
   1. Public first-party evidence and a bounded account-owner check either establish a clean app-bound browser return or rule it out without reading authenticated browser state.
   2. Only when browser return is ruled out, a minimal honest native path is evaluated without browser/client spoofing, alternate methods, automatic retry, or access-control workarounds.
   3. A supported candidate completes two separate account-owner initiated sign-in → authenticated-and-entitled → clean sign-out runs, with one attempt in flight and a conservative human-controlled cooldown.
   4. Every protected, challenged, rate-limited, redirected, suspicious, or ambiguous outcome stops immediately, retains no secret evidence, and produces `NO-GO unsupported`.
-  5. A sanitized feasibility artifact contains exactly one decision: `GO browser-return`, `GO native-direct`, or `NO-GO unsupported`; only a GO decision permits Phase 1 execution.
+  5. The historical harness recorded a sanitized feasibility decision; that artifact now has no authority over Phase 1 execution.
 
 **Plans**: 12/12 plans executed
 
@@ -81,7 +81,7 @@ Plans:
 
 - [x] 00-13-PLAN.md — Atomically regenerate and validate the canonical Phase 0 quartet and enforce the Phase 1 gate.
 
-**Historical execution note:** The user selected replan-from-scratch on 2026-08-17. Plans and summaries 00-01 through 00-04 remain immutable historical records only and are not the active inventory. See `00-SUPERSESSION.md`; Plans 00-05 through 00-13 are the sole active replacement set, and Phase 1 remains blocked until their finalization contract succeeds.
+**Historical execution note:** Phase 0 artifacts and harness code are retained as implementation reference and review evidence only. On 2026-08-17 the owner settled the production architecture as WKWebView token extraction followed by native authenticated requests. No Phase 0 evidence/selection/owner-result/decision artifact, GO string, or proof-run command authorizes or blocks Phase 1.
 
 **Scope fence:** Phase 0 may create only a minimal isolated feasibility harness and sanitized evidence contract. It does not build the production app shell, public client API, Keychain persistence, catalog, playback, skins, or release infrastructure.
 
@@ -89,46 +89,48 @@ Plans:
 
 **Goal**: Subscribers can establish or end an authorized SiriusXM session without exposing secrets or weakening access controls, through a reusable Apple-platform client boundary.
 **Mode:** mvp
-**Depends on**: Phase 0 (GO result required)
+**Depends on**: None — the authentication architecture is already settled and recorded here.
 **Requirements**: AUTH-01, AUTH-02, AUTH-03, SECR-01, SECR-02, SECR-03, CLNT-01, CLNT-02, CLNT-03, CLNT-04
 **Success Criteria** (what must be TRUE):
 
-  1. A subscriber can sign in directly to SiriusXM and receives an explicit success, rejection, challenge, unsupported-flow, or entitlement outcome.
+  1. A subscriber can sign in through the app's nonpersistent WKWebView; after explicit user confirmation, the app extracts exactly one current first-party `AUTH_TOKEN`, decodes only `session.accessToken`, and transfers it once in volatile memory to the client.
   2. When the authorized flow is unknown, changed, or requires a prohibited access-control workaround, the subscriber receives an explicit unsupported result and the attempt stops without a bypass.
-  3. A subscriber can sign out, after which active session material and stored SiriusXM credentials are cleared.
-  4. Subscriber credentials are Keychain-backed, session and resolved-stream data are ephemeral and direct-to-SiriusXM only, and no secret or raw sensitive response appears in diagnostics, fixtures, tests, or local app data.
-  5. A native Apple-platform developer can consume the `SiriusXMClient` SwiftPM product and use typed async capabilities without depending on SiriusXM endpoints, cookies, headers, or raw schemas.
+  3. Authentication success is created only by a runtime-owned native sequence that verifies the token, confirms entitlement, and atomically activates session state; caller-authored success claims and planning artifacts cannot create an authenticated session.
+  4. A subscriber can sign out, after which actor-held session material, Keychain material, and every cookie matching the exact extraction predicate across accepted SiriusXM domains are cleared or cleanup failure is reported explicitly.
+  5. Subscriber credentials are Keychain-backed, session and resolved-stream data are ephemeral and direct-to-SiriusXM only, and no secret or raw sensitive response appears in diagnostics, fixtures, tests, or local app data.
+  6. A native Apple-platform developer can consume the `SiriusXMClient` SwiftPM product and use typed async capabilities without depending on SiriusXM endpoints, cookies, headers, or raw schemas.
+  7. Deterministic WebView-bridge, native-authentication, entitlement, sign-out, and redaction tests always compile and run independently of mutable `.planning` artifacts.
 
 **Plans**: 8 plans
 
-**Execution gate:** Do not execute any Phase 1 plan unless Phase 0 completed with `GO browser-return` or `GO native-direct` after both required proof runs. A `NO-GO unsupported` result ends production implementation. Existing Phase 1 plans are preserved but must consume the Phase 0 decision rather than repeat feasibility work.
+**Execution baseline:** Phase 1 consumes the settled WKWebView-token/native-request architecture directly. Do not run authentication feasibility experiments, regenerate a Phase 0 quartet, inspect GO/NO-GO artifacts, or request duplicate owner proof runs. Phase 0 review findings are production acceptance requirements in Plans 01-02, 01-06, 01-07, and 01-08.
 
 Plans:
 **Wave 1**
 
-- [ ] 01-01-PLAN.md — Prove the native app-to-client compatibility tracer and public SwiftPM boundary.
+- [ ] 01-01-PLAN.md — Build the native app-to-client walking skeleton and public SwiftPM boundary without a Phase 0 gate.
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 01-02-PLAN.md — Build fail-closed semantic classification and one-attempt session state.
-- [ ] 01-03-PLAN.md — Enforce ephemeral direct-host transport and redaction-by-construction.
+- [ ] 01-02-PLAN.md — Build runtime-owned authentication/entitlement classification and one-attempt session state.
+- [ ] 01-03-PLAN.md — Enforce ephemeral native authenticated transport and redaction-by-construction.
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
 - [ ] 01-04-PLAN.md — Add app-owned Keychain lifecycle and memory-first sign-out.
-- [ ] 01-05-PLAN.md — Deliver the complete native unsupported-authentication experience.
+- [ ] 01-05-PLAN.md — Deliver the typed native sign-in, unsupported, entitlement, and cleanup experience.
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 01-06-PLAN.md — Revalidate and consume the sole Phase 0 GO path without repeating feasibility or live proof.
+- [ ] 01-06-PLAN.md — Productionize the nonpersistent WKWebView token bridge and symmetric cookie cleanup.
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 01-07-PLAN.md — Implement only the recorded selected result or the no-live-adapter unsupported state.
+- [ ] 01-07-PLAN.md — Compose WebView token extraction with native authentication and entitlement requests.
 
 **Wave 6** *(blocked on Wave 5 completion)*
 
-- [ ] 01-08-PLAN.md — Complete production synthetic authentication/cleanup acceptance and record Phase 2 readiness without repeating live proof.
+- [ ] 01-08-PLAN.md — Close the Phase 0 review regressions with production acceptance and record Phase 2 readiness.
 
 ### Phase 2: Authorized Live Listening
 
@@ -200,12 +202,12 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5
+Active product execution proceeds 1 → 2 → 3 → 4 → 5. Phase 0 is retained historical work, not an execution dependency.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 0. Authentication Feasibility Gate | 12/12 | In Progress|  |
-| 1. Safe Interoperability Foundation | 0/8 | Not started | - |
+| 0. Authentication Feasibility Gate | 12/12 | Complete (historical) | 2026-08-17 |
+| 1. Safe Interoperability Foundation | 0/8 | Ready to execute | - |
 | 2. Authorized Live Listening | 0/TBD | Not started | - |
 | 3. Native Mac Listening Experience | 0/TBD | Not started | - |
 | 4. Safe Skins & Accessible Recovery | 0/TBD | Not started | - |

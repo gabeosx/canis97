@@ -1,5 +1,7 @@
 # Phase 1: Safe Interoperability Foundation - Research
 
+> **Superseded authentication recommendation (2026-08-17):** The owner settled the production architecture as a nonpersistent, user-operated WKWebView that extracts one first-party `AUTH_TOKEN`, followed by native authenticated and entitlement requests. Sections below that recommend a real-browser callback, prohibit the bounded WebView token bridge, require path selection, or impose a two-run/Phase 0 continuation gate are historical research only. Executors must follow `01-CONTEXT.md`, `ROADMAP.md`, and Plans 01-01 through 01-08 and must not repeat authentication experiments.
+
 **Researched:** 2026-08-16  
 **Domain:** Safe authorized-session interoperability, SwiftPM library boundary, Keychain-backed credential handling  
 **Confidence:** MEDIUM

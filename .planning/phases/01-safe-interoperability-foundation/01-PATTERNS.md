@@ -69,7 +69,7 @@
 
 **Analog:** None — create injected transport seam and internal live implementation.
 
-**Planning-derived convention:** Keep the protocol injectable for scripted tests and make the production implementation internal, client-owned, and `URLSessionConfiguration.ephemeral`. Permit direct requests only to evidence-verified SiriusXM host(s); do not hard-code speculative endpoint/host details before the manual feasibility work proves them.
+**Planning-derived convention:** Keep the protocol injectable for scripted tests and make the production implementation internal, client-owned, and `URLSessionConfiguration.ephemeral`. Port the already proven native-request contract into an exact SiriusXM host policy; do not re-run feasibility or broaden hosts during execution.
 
 **Research reference pattern** (`01-RESEARCH.md`, lines 343-350; not project code):
 
@@ -82,7 +82,7 @@ let session = URLSession(configuration: configuration)
 
 **Analog:** None — create the replaceable volatile-protocol boundary.
 
-**Planning-derived convention:** Confine paths, headers/cookies, body schemas, redirect parsing, raw decoding, and strict known-shape classification to `internal` adapter code. Return semantic adapter results only; malformed or changed upstream output is unsupported. Never emulate a browser, harvest browser state, spoof app identity, or bypass service controls.
+**Planning-derived convention:** Confine paths, headers/cookies, body schemas, redirect parsing, raw decoding, and strict known-shape classification to internal adapter code. The app-owned nonpersistent WebView bridge may select only the exact `AUTH_TOKEN` cookie through the shared first-party predicate; no other cookie/storage inspection is allowed. Return semantic adapter results only; malformed or changed upstream output is unsupported.
 
 **Source:** `01-RESEARCH.md` “Pattern 1” (lines 196-207) and anti-patterns (lines 245-250).
 
@@ -153,7 +153,7 @@ guard status == errSecSuccess else {
 
 **Analog:** None — create the first application presentation boundary.
 
-**Planning-derived convention:** Show a dedicated compatibility state—not a partially authenticated player shell—when the selected path is unavailable. State that authentication is unsupported, no credentials were retained, and no workaround was attempted. Provide explicit user Retry, official SiriusXM-site navigation, and only safe redacted diagnostics. Retry must be an explicit user action and never choose an alternate path or trigger an automatic retry.
+**Planning-derived convention:** Show one native WebView sign-in surface and a dedicated compatibility state—not a partially authenticated player shell—when extraction, native authentication, or entitlement is unavailable. Retry is explicit and repeats the same single path only; it never chooses an alternate path or triggers automatically.
 
 **Source:** `01-CONTEXT.md` “Unsupported-authentication experience” (lines 27-33) and “Single authentication path” (lines 17-25).
 
@@ -171,7 +171,7 @@ guard status == errSecSuccess else {
 
 **Apply to:** Session actor, adapter, transport, UI presentation model, and tests.
 
-- Exactly one evidence-selected authentication path may ship; no selector and no browser/native fallback.
+- Exactly one settled authentication path ships: nonpersistent WKWebView token extraction followed by native requests; no selector or fallback.
 - At most one attempt can be in flight; do not send a second attempt, automatically retry, or rapidly probe.
 - On a control-protection or ambiguous signal, stop, clear transient material, return unsupported, and retain no credentials.
 
@@ -189,14 +189,14 @@ guard status == errSecSuccess else {
 
 - Use static, allow-listed event classes and privacy-qualified OSLog values.
 - Redact structurally before data reaches a log, test failure, fixture, compatibility report, or support export.
-- Use synthetic, redacted fixture data; manual two-run viability evidence is not routine CI and must contain no account/session data.
+- Use synthetic, redacted fixture data. Phase 1 contains no manual viability experiment or Phase 0 artifact gate.
 
 ### Verification boundary
 
 **Apply to:** Phase plan acceptance criteria.
 
 - Automated Swift Testing covers semantic outcomes, one-attempt behavior, sign-out, ephemeral session configuration, redaction canaries, and public-consumer compilation.
-- The two authorized smoke tests are human-initiated, separately run, manual-only, and a hard gate for Phases 2–5. They are not scripts, scheduled jobs, or credential-bearing test artifacts.
+- Full synthetic package and app acceptance is the Phase 2 gate. Phase 0 artifacts and duplicate smoke tests have no execution authority.
 
 ## No Analog Found
 

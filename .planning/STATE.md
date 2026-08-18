@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 00
-current_phase_name: authentication-feasibility-gate
-status: verifying
-stopped_at: Completed 00-16-PLAN.md
-last_updated: "2026-08-17T22:18:13.161Z"
+current_phase: 01
+current_phase_name: safe-interoperability-foundation
+status: ready_to_execute
+stopped_at: Phase 1 replanned around settled WebView-token/native-request architecture
+last_updated: "2026-08-18T02:29:21.609Z"
 last_activity: 2026-08-17
 last_activity_desc: Phase 00 execution started
 progress:
@@ -23,14 +23,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-16)
 
 **Core value:** Subscribers can reliably start and control a live SiriusXM stream from a delightful native Mac player, even as the unsupported SiriusXM integration evolves underneath it.
-**Current focus:** Phase 00 — authentication-feasibility-gate
+**Current focus:** Phase 01 — safe-interoperability-foundation
 
 ## Current Position
 
-Phase: 00 (authentication-feasibility-gate) — EXECUTING
-Plan: 12 of 12
-Status: Phase complete — ready for verification
-Last activity: 2026-08-17 — Phase 00 execution started
+Phase: 01 (safe-interoperability-foundation) — READY TO EXECUTE
+Plan: 0 of 8
+Status: Plans updated; execution may start at 01-01
+Last activity: 2026-08-17 — Phase 1 architecture and plans aligned
 
 Progress: [██████░░░░] 60%
 
@@ -79,47 +79,18 @@ Progress: [██████░░░░] 60%
 
 ### Decisions
 
-Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecting current work:
+Decisions are logged in PROJECT.md. Active decisions affecting current work:
 
-- Phase 1: Validate only authorized, direct SiriusXM interoperability; changed or prohibited access-control flows return an explicit unsupported result and never trigger a bypass.
-- Phase 0: Prove exactly one safe authentication path before any production implementation; browser-return is evaluated first, with one honest native-direct path considered only if browser return is ruled out.
-- Phase 0: The account owner performs exactly two live proof runs; automation never inspects browser state or persists secrets, and any challenge or access-control signal stops the probe.
-- Phase 1: Keep credentials in the app-owned Keychain adapter and preserve only typed, replaceable SiriusXM behavior behind `SiriusXMClient`.
-- Phase 3: One playback coordinator owns the active player across both native windows and system media controls.
-- Phase 4: Skins are declarative local data/assets only and must preserve accessible native semantics and recovery.
-- [Phase ?]: Phase 0 uses an offline dependency-free tracer with no provider, browser, account, or default live path.
-- [Phase ?]: Phase 0 artifacts require fresh deterministic derivation and byte comparison before they can authorize downstream work.
-- [Phase ?]: Map the absence of public first-party SiriusXM authentication documentation to a validated unsupported result; do not browse, inspect, or infer provider behavior.
-- [Phase ?]: The Phase 0 canonical unsupported bundle prohibits live attempts and blocks Phase 1 without retaining an alternate path.
-- [Phase ?]: Phase 0 Plan 03: Normalize the zero-candidate result through canonical unsupported closure; retain no candidate source, owner command, or live checkpoint.
-- [Phase ?]: Preserve the canonical unsupported bundle rather than creating a proof-ready record or requesting owner action.
-- [Phase ?]: Treat fresh derivation and byte equality as the authority for the terminal Phase 1 block.
-- [Phase ?]: Use the installed Xcode 26.6 toolchain; current SDK readiness is proved before later GUI work.
-- [Phase ?]: Treat revision-one artifacts as historical blocked input and derive every v2 artifact from strict semantic fields.
-- [Phase ?]: Phase 1 is unlocked only by a complete byte-canonical GO bundle after two successful owner runs, verified cleanup, cooldown, and renewal.
-- [Phase ?]: Open third-party callback documentation is non-dispositive; canonical ready bounds alone permit the bounded browser experiment.
-- [Phase ?]: Native-purpose qualification cannot select native-direct; exact digest-bound owner approval is required for browser experiment readiness.
-- [Phase ?]: Owner approved only the bounded WKWebView experiment contract with exact digest 573f6ba270924112; approval does not establish empirical authentication or unlock Phase 1.
-- [Phase ?]: Enable the browser target only when exact current-SDK, canonical contract, and digest-bound approval artifacts match; open callback documentation remains non-dispositive.
-- [Phase ?]: Create WKWebView only after explicit owner start with nonpersistent storage and no browser-state inspection surface.
-- [Phase ?]: Reduce a matched app-bound return to closed SafeProbeEvent outcomes and close unsafe paths without retry or fallback.
-- [Phase ?]: Keep AV/key material behind a MainActor runtime and clear it after every bounded proof result.
-- [Phase ?]: Treat renewal-pending as incomplete after cleanup, never as GO or NO-GO.
-- [Phase ?]: Require fixed-order sign-out and verified cleanup before a browser proof can serialize complete.
-- [Phase ?]: The owner-retracted browser-complete signal is excluded; renewal-still-pending is the sole persisted browser outcome.
-- [Phase ?]: Native-direct is not applicable without strict WebKit rule-out, so no credential disclosure is presented.
-- [Phase ?]: Renewal-pending plus native-direct not-applicable resolves only to a closed, non-live native branch.
-- [Phase ?]: The current package graph retains no native credential or direct-runtime source or target.
-- [Phase ?]: Renewal-pending browser evidence plus native-direct not-applicable approval closes the native branch without live work.
-- [Phase ?]: Native launch validation must consume the supplied canonical toolchain artifact rather than an internal substitute.
-- [Phase ?]: Renewal-pending plus native-direct not-applicable is prerequisite-incomplete, never GO or unsupported.
-- [Phase ?]: Phase 1 production writes require the unchanged require-phase-one-go command to freshly rederive a complete canonical GO quartet.
-- [Phase ?]: Profile verification is authentication-only; entitlement requires a separate validated contract and predicate.
-- [Phase ?]: Absent bounded public evidence is recorded as canonical unsupported without endpoint inference.
-- [Phase ?]: Phase 0 GO is browser-return only: two ordered v3 runs with authentication, entitlement, sign-out absence, and cleanup.
-- [Phase ?]: Renewal, tune/key, audible playback, and native-direct are not Phase 0 owner-visible closure conditions.
-- [Phase ?]: The canonical unsupported entitlement closes Phase 0 without building or launching the harness or requesting owner activity.
-- [Phase ?]: Zero-run unsupported finalization derives its owner result internally and cannot consume a stale runtime artifact.
+- Phase 1: WebView token extraction and native authenticated requests are proven and settled; execution starts at Plan 01-01 without a Phase 0 artifact gate or repeated authentication experiment.
+- Phase 1: The sole path is a user-operated nonpersistent WKWebView, exact first-party `AUTH_TOKEN` extraction after explicit consent, and native SiriusXM authentication plus entitlement requests.
+- Phase 1: A runtime-owned sequence must verify authentication and entitlement before atomically publishing an active session or saving allowed reusable material; caller-authored success records cannot authorize state.
+- Phase 1: Token extraction and sign-out share one exact first-party cookie predicate across the apex and accepted subdomains; incomplete cleanup is reported.
+- Phase 1: App-owned Keychain is the only persistent secret store, session material stays ephemeral, and diagnostics/fixtures exclude secrets by construction.
+- Phase 1: Deterministic WebView/native-request tests compile unconditionally and never depend on `.planning` artifact contents.
+- Phase 3: One playback coordinator owns the active player across native windows and system media controls.
+- Phase 4: Skins are declarative local data/assets only and preserve accessible native semantics and recovery.
+
+All earlier Phase 0 feasibility-selection, proof-run, quartet, GO/NO-GO, and callback/native-path decisions are historical and superseded for product execution.
 
 ### Pending Todos
 
@@ -127,13 +98,13 @@ None yet.
 
 ### Blockers/Concerns
 
-- Phase 0: Authentication feasibility is a hard gate. A `NO-GO unsupported` result ends production implementation; only `GO browser-return` or `GO native-direct` unlocks Phase 1.
-- Phase 1: Blocked until Phase 0 records a GO result. The current authorized SiriusXM flow remains volatile and must use only sanitized, account-owner-authorized observations.
+- Phase 1: The SiriusXM WebView/token/native-request contract remains volatile; drift must fail closed behind replaceable adapters, never trigger a new authentication-method experiment during execution.
 - Phase 5: Verify signing, notarization, stapling, immutable release, Gatekeeper, and Homebrew Cask behavior against the current release toolchain before publishing.
 
 ### Roadmap Evolution
 
-- Phase 0 added: Authentication Feasibility Gate added as prerequisite; Phase 1 requires GO
+- Phase 0 retained as historical feasibility work; its GO artifacts no longer gate Phase 1.
+- Phase 1 replanned to consume the settled WKWebView token-extraction and native authenticated-request architecture directly.
 
 ## Deferred Items
 
@@ -144,5 +115,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-08-17T22:18:13.146Z
-Stopped at: Completed 00-16-PLAN.md
+Stopped at: Phase 1 ready to execute at 01-01-PLAN.md
 Resume file: None
