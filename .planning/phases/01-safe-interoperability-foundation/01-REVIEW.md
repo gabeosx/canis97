@@ -1,8 +1,8 @@
 ---
 phase: 01-safe-interoperability-foundation
-reviewed: 2026-08-18T12:03:40Z
+reviewed: 2026-08-18T13:47:40Z
 depth: standard
-files_reviewed: 35
+files_reviewed: 31
 files_reviewed_list:
   - .gitignore
   - Packages/SiriusXMClient/Package.swift
@@ -14,19 +14,15 @@ files_reviewed_list:
   - Packages/SiriusXMClient/Sources/SiriusXMClient/Public/SiriusXMClient.swift
   - Packages/SiriusXMClient/Sources/SiriusXMClient/Session/SessionCoordinator.swift
   - Packages/SiriusXMClient/Sources/SiriusXMClient/Session/SessionState.swift
-  - Packages/SiriusXMClient/Sources/SiriusXMClient/Transport/DirectHostPolicy.swift
   - Packages/SiriusXMClient/Sources/SiriusXMClient/Transport/EphemeralURLSessionTransport.swift
-  - Packages/SiriusXMClient/Sources/SiriusXMClient/Transport/SessionTransport.swift
   - Packages/SiriusXMClient/Tests/FixtureTests/RedactionTests.swift
   - Packages/SiriusXMClient/Tests/PublicAPITests/PublicConsumerTests.swift
   - Packages/SiriusXMClient/Tests/SiriusXMClientTests/AuthenticationOutcomeTests.swift
   - Packages/SiriusXMClient/Tests/SiriusXMClientTests/EphemeralSessionTests.swift
-  - Packages/SiriusXMClient/Tests/SiriusXMClientTests/PlaceholderTests.swift
   - Packages/SiriusXMClient/Tests/SiriusXMClientTests/SessionCoordinatorTests.swift
   - Packages/SiriusXMClient/Tests/SiriusXMClientTests/SignOutTests.swift
   - Packages/SiriusXMClient/Tests/SiriusXMClientTests/WebTokenAuthenticationTests.swift
   - SiriusMac.xcodeproj/project.pbxproj
-  - SiriusMac.xcodeproj/xcshareddata/xcschemes/SiriusMac.xcscheme
   - SiriusMac/Authentication/AuthenticationPresentationModel.swift
   - SiriusMac/Authentication/AuthenticationView.swift
   - SiriusMac/Authentication/FirstPartyTokenCookiePolicy.swift
@@ -40,60 +36,67 @@ files_reviewed_list:
   - SiriusMacTests/SelectedAuthenticationCompositionTests.swift
   - SiriusMacTests/WebAuthenticationBridgeTests.swift
 findings:
-  critical: 2
+  critical: 1
   warning: 1
   info: 0
-  total: 3
+  total: 2
 status: issues_found
 ---
 
-# Phase 01: Code Review Report
+# Phase 1: Code Review Report
 
-**Reviewed:** 2026-08-18T12:03:40Z
+**Reviewed:** 2026-08-18T13:47:40Z
 **Depth:** standard
-**Files Reviewed:** 35
+**Files Reviewed:** 31
 **Status:** issues_found
 
 ## Summary
 
-The Phase 1 client and native app preserve several important fail-closed boundaries: the transport is ephemeral and host-constrained, response parsing is strict, and diagnostics avoid provider detail. However, the authentication composition has two lifecycle failures: a bridge cannot be reused after its first credential transfer, and a Keychain credential can become impossible to erase through the application after a restart. The focused macOS composition test target passed from a fresh derived-data directory during this review; its current build graph nevertheless contains duplicate, disconnected target records that should be consolidated.
+The review covered the Phase 1 client, native WebView composition, local cleanup lifecycle, deterministic tests, and the consolidated Xcode test graph, with Plans 01-09 through 01-11 as context. The fresh-state cleanup and graph consolidation are structurally sound, but the bridge's new-attempt latch is not atomic across an asynchronous cookie read, so concurrent explicit selections can create multiple credential transfers in one attempt. The unsupported-result view also presents a Retry control that the presentation model rejects.
+
+## Narrative Findings (AI reviewer)
 
 ## Critical Issues
 
-### CR-01: Credential transfer is permanently consumed, so retry and re-login cannot work
+### CR-01: Concurrent selections can transfer multiple credentials in one attempt
 
-**Classification:** BLOCKER
+**File:** `/Users/gabe/sirius-mac/SiriusMac/Authentication/WebAuthenticationBridge.swift:84-117`
 
-**File:** `SiriusMac/Authentication/WebAuthenticationBridge.swift:75`
+**Issue:** `useLoggedInSession()` checks `didTransferCredential` at line 84, then suspends at line 87 to obtain cookies. A second main-actor task can enter during that suspension, observe the same `false` latch, and progress to lines 115-117 as well. Both calls can invoke `credentialConsumer`, and the second handoff can overwrite the first before the client consumes it. This violates Plan 01-09's per-attempt single-consumption contract and can associate an authentication transaction with the wrong selected credential. The tests exercise only sequential calls, so they do not cover the flagged concurrent-selection assumption.
 
-**Issue:** `useLoggedInSession()` returns `.alreadyConsumed` forever after the first successful transfer because `didTransferCredential` is set at line 107 and is never reset. The UI intentionally exposes `Retry Sign In` after rejected, unsupported, cleanup-failed, and signed-out states (`AuthenticationView.swift:28,86`), but every subsequent attempt reaches the `.alreadyConsumed` branch, which the composed flow converts to `.unsupported`. A user who signs out or receives a terminal native-auth result therefore cannot sign in again without quitting and relaunching the app.
+**Fix:** Introduce an explicit in-progress/consumed handoff state and reserve it before the first suspension. On non-transfer outcomes, reset only the in-progress reservation; retain the consumed state after a successful handoff. Add a controlled-suspension cookie-store test that starts two selections concurrently and proves exactly one consumer invocation.
 
-**Fix:** Establish an explicit new-login lifecycle that clears the transfer flag and any consumed handoff only when a new user-operated WebView sign-in begins (or replace the bridge/client pair for each new login). Keep duplicate consumption blocked during a single attempt, then add regression tests for terminal-result retry and sign-out followed by sign-in.
+```swift
+private enum HandoffState { case available, selecting, consumed }
+private var handoffState: HandoffState = .available
 
-### CR-02: A persisted credential can be stranded after app restart
+func useLoggedInSession() async -> Result {
+    guard handoffState == .available else { return .alreadyConsumed }
+    handoffState = .selecting
+    defer {
+        if handoffState == .selecting { handoffState = .available }
+    }
 
-**Classification:** BLOCKER
-
-**File:** `SiriusMac/Security/KeychainCredentialStore.swift:36`
-
-**Issue:** A successful session persists a credential, but production code never reads `readStoredCredential()` (`KeychainCredentialStore.swift:46`) and the new app instance always composes its client with the empty WebView bridge as the sole credential source (`AuthenticationView.swift:9-14`). After restart, the presentation state is not entitled, so the only Sign Out control is absent (`AuthenticationView.swift:42-47`); even if the client sign-out API were called, `SessionCoordinator.signOut()` returns `.alreadySignedOut` before calling `erase()` when its fresh in-memory state is signed out (`SessionCoordinator.swift:141-144`). The saved credential can consequently remain in Keychain with no application path to reuse or remove it.
-
-**Fix:** Choose one supported lifecycle and implement it end-to-end: either restore a valid Keychain credential through an app-owned `CredentialSource`, or do not persist it until restoration exists. In both cases, provide a user-reachable cleanup path that erases the Keychain item and WebView residue even when no in-memory session is active. Add an app-lifecycle test that signs in, creates a new composition, and verifies the credential is either restored or explicitly removed.
+    let cookies = await cookieStore.allCookies()
+    // Validate exactly one cookie and its payload...
+    handoffState = .consumed
+    await credentialConsumer(credential)
+    return .credentialTransferred
+}
+```
 
 ## Warnings
 
-### WR-01: The Xcode project contains two disconnected SiriusMacTests target definitions
+### WR-01: Unsupported screen offers a retry action that always does nothing
 
-**Classification:** WARNING
+**File:** `/Users/gabe/sirius-mac/SiriusMac/Authentication/AuthenticationView.swift:25-31`
 
-**File:** `SiriusMac.xcodeproj/project.pbxproj:66-73`
+**Issue:** The unsupported-state branch renders `Retry Sign In`, but `AuthenticationPresentationModel.retry()` only accepts states in `isRetryableTerminalState`; `.unsupported` is explicitly excluded at `/Users/gabe/sirius-mac/SiriusMac/Authentication/AuthenticationPresentationModel.swift:81-95`. Pressing the visible control therefore returns `nil` and leaves the UI unchanged.
 
-**Issue:** The root project selects the `E1…` test target (line 72), while a second `A001…` target and a second PBXProject record describe the same test bundle but are not reachable from `rootObject` (lines 68 and 73). File references and source phases are duplicated for the same tests (lines 22-26 and 78-79). This leaves an inert build graph beside the active one, so a future edit can be made to the wrong target and silently have no effect on CI or local tests.
-
-**Fix:** Retain one `SiriusMacTests` target, one source-build phase, and one file reference per test source; remove the unreachable PBXProject/target records and verify the shared scheme still targets the surviving test bundle.
+**Fix:** Either remove the retry button from the unsupported branch, which matches an intentionally terminal fail-closed result, or explicitly include `.unsupported` in the retryable states and add a test proving a new user-operated WebView attempt is started. Do not create an automatic retry path.
 
 ---
 
-_Reviewed: 2026-08-18T12:03:40Z_
+_Reviewed: 2026-08-18T13:47:40Z_
 _Reviewer: the agent (gsd-code-reviewer)_
 _Depth: standard_
