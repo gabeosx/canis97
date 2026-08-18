@@ -215,6 +215,58 @@ final class SelectedAuthenticationCompositionTests: XCTestCase {
         XCTAssertEqual(events, [])
     }
 
+    func testMissingRestoreStartsOnlyTheExistingWebViewBranch() async {
+        let keychain = KeychainCredentialStore(
+            service: "com.siriusmac.tests.\(UUID().uuidString)",
+            account: "missing-restore"
+        )
+        let cookieStore = CompositionCookieStore(cookies: [])
+        let bridge = WebAuthenticationBridge(cookieStore: cookieStore, credentialConsumer: { _ in })
+        let client = CompositionClient()
+        let composition = AuthenticationComposition(bridge: bridge, keychain: keychain, client: client)
+
+        let state = await composition.flow.prepareForExplicitSignIn(
+            onAuthenticationVerification: {},
+            onEntitlementVerification: {}
+        )
+        let events = await client.events
+
+        XCTAssertEqual(state, .waitingForWebView)
+        XCTAssertEqual(events, [])
+        XCTAssertEqual(cookieStore.allCookieReadCount, 0)
+    }
+
+    func testRestoredSuccessSignOutClearsKeychainAndBridgeResidueThroughClientPipeline() async throws {
+        let now = Date()
+        let keychain = KeychainCredentialStore(
+            service: "com.siriusmac.tests.\(UUID().uuidString)",
+            account: "restored-sign-out"
+        )
+        defer { try? keychain.removeStoredCredential() }
+        try await keychain.save(AuthenticationCredential(volatileMaterial: Data("approved-restore".utf8)))
+
+        let cookieStore = CompositionCookieStore(cookies: [try tokenCookie(expires: now.addingTimeInterval(60))])
+        let bridge = WebAuthenticationBridge(cookieStore: cookieStore, now: { now }, credentialConsumer: { _ in })
+        let source = RestorableAuthenticationCredentialSource(keychain: keychain, webViewSource: bridge)
+        let cleanupClient = SiriusXMClient(credentialSource: source, credentialStore: keychain, residueCleaner: bridge)
+        let client = CompositionClient(
+            credentialSource: source,
+            signOutAction: { await cleanupClient.signOut() }
+        )
+        let model = AuthenticationPresentationModel(
+            flow: ComposedAuthenticationPresentationFlow(bridge: bridge, client: client, credentialSource: source)
+        )
+
+        try await XCTUnwrap(model.signIn()).value
+        XCTAssertEqual(model.state, .entitled)
+        try await XCTUnwrap(model.signOut()).value
+        let remainingCookies = await cookieStore.allCookies()
+
+        XCTAssertEqual(model.state, .signedOut)
+        XCTAssertNil(try keychain.readStoredCredential())
+        XCTAssertTrue(remainingCookies.isEmpty)
+    }
+
     private func tokenCookie(expires: Date) throws -> HTTPCookie {
         try XCTUnwrap(HTTPCookie(properties: [
             .name: "AUTH_TOKEN",
@@ -233,6 +285,7 @@ private actor CompositionClient: ClientAuthenticationFlow {
     private var authentications: [AuthenticationOutcome]
     private var entitlements: [EntitlementAvailability]
     private let signOutResult: SignOutOutcome
+    private let signOutAction: (@Sendable () async -> SignOutOutcome)?
     private let credentialSource: (any CredentialSource)?
     private(set) var events: [Event] = []
 
@@ -240,12 +293,14 @@ private actor CompositionClient: ClientAuthenticationFlow {
         authentication: AuthenticationOutcome = .authenticatedPendingEntitlement,
         entitlement: EntitlementAvailability = .entitled,
         signOut: SignOutOutcome = .signedOut,
-        credentialSource: (any CredentialSource)? = nil
+        credentialSource: (any CredentialSource)? = nil,
+        signOutAction: (@Sendable () async -> SignOutOutcome)? = nil
     ) {
         authentications = [authentication]
         entitlements = [entitlement]
         signOutResult = signOut
         self.credentialSource = credentialSource
+        self.signOutAction = signOutAction
     }
 
     init(
@@ -257,6 +312,7 @@ private actor CompositionClient: ClientAuthenticationFlow {
         self.entitlements = entitlements
         signOutResult = .signedOut
         self.credentialSource = credentialSource
+        signOutAction = nil
     }
 
     func authenticate() async -> AuthenticationOutcome {
@@ -275,7 +331,7 @@ private actor CompositionClient: ClientAuthenticationFlow {
 
     func signOut() async -> SignOutOutcome {
         events.append(.signOut)
-        return signOutResult
+        return await signOutAction?() ?? signOutResult
     }
 }
 

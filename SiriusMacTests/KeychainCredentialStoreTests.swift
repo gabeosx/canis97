@@ -70,6 +70,23 @@ final class KeychainCredentialStoreTests: XCTestCase {
         XCTAssertEqual(cleanupFailureStore.loadStoredCredentialForAuthentication().kind, .cleanupFailed)
     }
 
+    func testAuthenticationLoaderErasesEmptyOversizedAndNonUTF8Material() async throws {
+        let invalidMaterials = [
+            Data(),
+            Data(repeating: 65, count: 8_193),
+            Data([0xFF, 0xFE]),
+        ]
+
+        for material in invalidMaterials {
+            let store = makeStore()
+            defer { try? store.removeStoredCredential() }
+            try await store.save(AuthenticationCredential(volatileMaterial: material))
+
+            XCTAssertEqual(store.loadStoredCredentialForAuthentication().kind, .invalidErased)
+            XCTAssertNil(try store.readStoredCredential())
+        }
+    }
+
     private func makeStore() -> KeychainCredentialStore {
         KeychainCredentialStore(
             service: "com.siriusmac.player.tests.\(UUID().uuidString)",
