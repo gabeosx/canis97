@@ -62,6 +62,49 @@ final class WebAuthenticationBridgeTests: XCTestCase {
         XCTAssertEqual(incompleteResult, .malformedCredential)
     }
 
+    func testSignOutDeletesEveryExactApexAndSubdomainMatchThenRescans() async throws {
+        let now = Date()
+        let store = TestCookieStore(cookies: [
+            try authCookie(domain: "siriusxm.com", expires: now.addingTimeInterval(60)),
+            try authCookie(domain: "player.siriusxm.com", expires: now.addingTimeInterval(60)),
+            try authCookie(domain: "evil-siriusxm.com", expires: now.addingTimeInterval(60)),
+        ])
+        let bridge = WebAuthenticationBridge(cookieStore: store, now: { now }, credentialConsumer: { _ in })
+
+        let result = await bridge.removeAuthenticationResidue()
+        let remainingCookies = await store.allCookies()
+
+        XCTAssertEqual(result, .removed)
+        XCTAssertEqual(store.deletedCount, 2)
+        XCTAssertEqual(FirstPartyTokenCookiePolicy.select(from: remainingCookies, now: now), .missing)
+    }
+
+    func testSignOutFailsClosedWhenDeletionFailsOrAMatchingCookieRemains() async throws {
+        let now = Date()
+        let token = try authCookie(domain: "player.siriusxm.com", expires: now.addingTimeInterval(60))
+        let deleteFailureStore = TestCookieStore(cookies: [token], deleteFailure: true)
+        let staleStore = TestCookieStore(cookies: [token], retainDeletedCookies: true)
+
+        let deleteFailure = await WebAuthenticationBridge(cookieStore: deleteFailureStore, now: { now }, credentialConsumer: { _ in }).removeAuthenticationResidue()
+        let staleResult = await WebAuthenticationBridge(cookieStore: staleStore, now: { now }, credentialConsumer: { _ in }).removeAuthenticationResidue()
+
+        XCTAssertEqual(deleteFailure, .cleanupFailed)
+        XCTAssertEqual(staleResult, .cleanupFailed)
+    }
+
+    func testBridgeAndTestsAreUnconditionallyIncludedWithoutPlanningArtifactChecks() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let project = try String(contentsOf: root.appendingPathComponent("SiriusMac.xcodeproj/project.pbxproj"), encoding: .utf8)
+        let testSource = try String(contentsOf: root.appendingPathComponent("SiriusMacTests/WebAuthenticationBridgeTests.swift"), encoding: .utf8)
+
+        XCTAssertTrue(project.contains("WebAuthenticationBridge.swift in Sources"))
+        XCTAssertTrue(project.contains("WebAuthenticationBridgeTests.swift in Sources"))
+        XCTAssertFalse(project.contains(".planning"))
+        XCTAssertFalse(testSource.contains("canImport(AuthFeasibilityHarness)"))
+    }
+
     private func authCookie(
         value: String = #"{"session":{"accessToken":"synthetic-access-token"}}"#,
         domain: String = "siriusxm.com",
@@ -81,11 +124,16 @@ final class WebAuthenticationBridgeTests: XCTestCase {
 
 @MainActor
 private final class TestCookieStore: WebAuthenticationCookieStore {
-    private let cookies: [HTTPCookie]
+    private var cookies: [HTTPCookie]
+    private let deleteFailure: Bool
+    private let retainDeletedCookies: Bool
     private(set) var readCount = 0
+    private(set) var deletedCount = 0
 
-    init(cookies: [HTTPCookie]) {
+    init(cookies: [HTTPCookie], deleteFailure: Bool = false, retainDeletedCookies: Bool = false) {
         self.cookies = cookies
+        self.deleteFailure = deleteFailure
+        self.retainDeletedCookies = retainDeletedCookies
     }
 
     func allCookies() async -> [HTTPCookie] {
@@ -93,7 +141,17 @@ private final class TestCookieStore: WebAuthenticationCookieStore {
         return cookies
     }
 
-    func delete(_ cookie: HTTPCookie) async throws {}
+    func delete(_ cookie: HTTPCookie) async throws {
+        if deleteFailure { throw TestCookieStoreError.deleteFailed }
+        deletedCount += 1
+        if !retainDeletedCookies {
+            cookies.removeAll { $0 === cookie }
+        }
+    }
+}
+
+private enum TestCookieStoreError: Error {
+    case deleteFailed
 }
 
 private actor CredentialRecorder {
