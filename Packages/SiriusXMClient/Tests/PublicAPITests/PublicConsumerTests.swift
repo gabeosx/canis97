@@ -1,0 +1,22 @@
+import Foundation
+import SiriusXMClient
+import Testing
+
+@Test func independentConsumerUsesOnlySemanticCapabilities() async {
+    let client = SiriusXMClient()
+    let credential = AuthenticationCredential(volatileMaterial: Data([1, 2, 3]))
+
+    #expect(await client.authenticate(using: credential) == .waitingForAuthenticationComposition)
+    #expect(await client.entitlement() == .unavailable)
+    #expect(await client.signOut() == .alreadySignedOut)
+    #expect(await client.catalog() == .unavailable)
+    #expect(await client.metadata() == .unavailable)
+    #expect(await client.resolveLiveStream() == .unavailable)
+}
+
+@Test func credentialDescriptionIsRedacted() {
+    let credential = AuthenticationCredential(volatileMaterial: Data([1, 2, 3]))
+
+    #expect(String(describing: credential) == "AuthenticationCredential(redacted)")
+    #expect(String(reflecting: credential) == "AuthenticationCredential(redacted)")
+}
