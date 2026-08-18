@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 8
+open_count: 9
 waived_count: 0
 fixed_count: 1
-total_count: 9
-last_updated: 2026-08-18T11:28:29.131Z
+total_count: 10
+last_updated: 2026-08-18T18:11:48.668Z
 ---
 
 # Broken Windows Ledger
@@ -24,6 +24,7 @@ last_updated: 2026-08-18T11:28:29.131Z
 | 7 | 00 | deviation | Spikes/AuthenticationFeasibility/Sources/AuthFeasibilityRunner/main.swift |  | Removed the impossible owner-artifact dependency from zero-run finalization. | open |  | 2026-08-17T22:18:30.328Z |  |
 | 8 | 01 | stub | SiriusMac/Authentication/AuthenticationPresentationModel.swift | 234 | UncomposedAuthenticationPresentationFlow remains waiting-only until Plan 01-06 wires the nonpersistent WebKit bridge. | open |  | 2026-08-18T04:19:55.786Z |  |
 | 9 | 01 | unrun-verify | SiriusMacTests/SelectedAuthenticationCompositionTests.swift |  | Focused XCTest composition verification is blocked by existing SiriusMacTests test-host linker configuration | open |  | 2026-08-18T11:28:29.131Z |  |
+| 10 | 01 | deviation | SiriusMac.xcodeproj/project.pbxproj |  | Corrected a mismatched group file-reference identifier for RestorableAuthenticationCredentialSource.swift. | open |  | 2026-08-18T18:11:48.668Z |  |
 
 ````json
 [
@@ -133,6 +134,18 @@ last_updated: 2026-08-18T11:28:29.131Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-18T11:28:29.131Z",
+    "resolved_at": null
+  },
+  {
+    "id": 10,
+    "kind": "deviation",
+    "phase": "01",
+    "file": "SiriusMac.xcodeproj/project.pbxproj",
+    "line": null,
+    "description": "Corrected a mismatched group file-reference identifier for RestorableAuthenticationCredentialSource.swift.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-18T18:11:48.668Z",
     "resolved_at": null
   }
 ]

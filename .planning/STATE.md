@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 01
 current_phase_name: safe-interoperability-foundation
 status: executing
-stopped_at: Completed 01-15-PLAN.md
-last_updated: "2026-08-18T17:55:59.507Z"
+stopped_at: Completed 01-16-PLAN.md
+last_updated: "2026-08-18T18:11:39.619Z"
 last_activity: 2026-08-18
 last_activity_desc: "Completed quick task 260818-c4r: update only Phase 1's Goal line in .planning/ROADMAP.md"
 progress:
   total_phases: 2
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 28
-  completed_plans: 27
+  completed_plans: 28
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-08-16)
 ## Current Position
 
 Phase: 01 (safe-interoperability-foundation) — EXECUTING
-Plan: 5 of 12
+Plan: 6 of 12
 Status: Ready to execute
 Last activity: 2026-08-18 — Phase 01 execution started
 
-Progress: [██████████] 96%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -89,6 +89,7 @@ Progress: [██████████] 96%
 | Phase 01 P13 | 6 min | 2 tasks | 6 files |
 | Phase 01 P14 | 2 min | 1 tasks | 2 files |
 | Phase 01 P15 | 8 min | 2 tasks | 4 files |
+| Phase 01 P16 | 10 min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -138,6 +139,9 @@ All earlier Phase 0 feasibility-selection, proof-run, quartet, GO/NO-GO, and cal
 - [Phase ?]: Only Secure current root-path AUTH_TOKEN cookies from normalized siriusxm.com or exact www.siriusxm.com are accepted.
 - [Phase ?]: Cleanup succeeds only after an exact-token rescan is clean and bridge-owned nonpersistent WebKit session retirement succeeds.
 - [Phase ?]: WebKit retirement bulk-removes only the app-owned nonpersistent store without enumerating, exporting, logging, or persisting browser records.
+- [Phase ?]: A Keychain restore is a one-shot opaque CredentialSource input, never a second sign-in method or authorization claim.
+- [Phase ?]: Only missing stored material reaches the existing user-operated WebView branch; unavailable, malformed, and erase-failed material remains terminal.
+- [Phase ?]: All restored non-entitled outcomes erase the stored item before presentation; an erase failure is surfaced as an explicit cleanup failure.
 
 ### Pending Todos
 
@@ -168,6 +172,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-18T17:55:59.487Z
-Stopped at: Completed 01-15-PLAN.md
+Last session: 2026-08-18T18:11:39.601Z
+Stopped at: Completed 01-16-PLAN.md
 Resume file: None
