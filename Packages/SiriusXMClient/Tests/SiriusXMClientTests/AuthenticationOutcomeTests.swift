@@ -56,10 +56,10 @@ struct AuthenticationOutcomeTests {
         #expect(AuthenticationFlowAdapter.classifyEntitlement(unknown) == .unsupported)
     }
 
-    @Test("internal classifiers do not accept caller-authored success booleans")
-    func classifiersAcceptOnlyTransportResponses() {
+    @Test("legacy booleans do not provide profile or entitlement semantics")
+    func classifiersDoNotInterpretLegacySuccessBooleans() {
         #expect(AdapterAuthenticationResult.authenticatedPendingEntitlement.isTerminal == false)
-        #expect(AuthenticationFlowAdapter.classifyAuthentication(response(statusCode: 200, object: ["authenticated": true])) == .unsupported)
+        #expect(AuthenticationFlowAdapter.classifyAuthentication(response(statusCode: 200, object: ["authenticated": false])) == .authenticatedPendingEntitlement)
         #expect(AuthenticationFlowAdapter.classifyEntitlement(response(statusCode: 200, object: ["entitled": true])) == .unsupported)
     }
 

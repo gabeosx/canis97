@@ -84,24 +84,13 @@ enum AuthenticationFlowAdapter {
             return result
         }
 
-        guard let object = exactJSONObject(response.body) else {
-            return .unsupported
+        if let control = controlResult(in: response.body) {
+            return control
         }
 
-        if object["authenticated"] as? Bool == true {
-            return .authenticatedPendingEntitlement
-        }
-        if object["authenticated"] as? Bool == false {
-            return .rejected
-        }
-        if object["bot"] as? Bool == true {
-            return .botControlDetected
-        }
-        if let challenge = object["challenge"] as? String,
-           ["captcha", "mfa", "control"].contains(challenge.lowercased()) {
-            return .challengeRequired
-        }
-        return .unsupported
+        return ProfileResponseV4Decoder.accepts(response.body)
+            ? .authenticatedPendingEntitlement
+            : .unsupported
     }
 
     static func classifyEntitlement(_ response: NativeTransportResponse) -> AdapterEntitlementResult {
@@ -112,34 +101,18 @@ enum AuthenticationFlowAdapter {
             return entitlementResult(from: result)
         }
 
-        guard let object = exactJSONObject(response.body) else {
+        if let control = controlResult(in: response.body) {
+            return entitlementResult(from: control)
+        }
+
+        switch SubscriptionStatusResponseV1Decoder.classify(response.body) {
+        case .active:
+            return .entitled
+        case .inactive:
+            return .authenticatedButNotEntitled
+        case .unsupported:
             return .unsupported
         }
-
-        if object["entitled"] as? Bool == true {
-            return .entitled
-        }
-        if object["entitled"] as? Bool == false {
-            return .authenticatedButNotEntitled
-        }
-        if object["bot"] as? Bool == true {
-            return .botControlDetected
-        }
-        if let challenge = object["challenge"] as? String,
-           ["captcha", "mfa", "control"].contains(challenge.lowercased()) {
-            return .challengeRequired
-        }
-        return .unsupported
-    }
-
-    private static func exactJSONObject(_ data: Data) -> [String: Any]? {
-        guard let object = try? JSONSerialization.jsonObject(with: data),
-              let dictionary = object as? [String: Any],
-              dictionary.count == 1
-        else {
-            return nil
-        }
-        return dictionary
     }
 
     private static func entitlementResult(from result: AdapterAuthenticationResult) -> AdapterEntitlementResult {
@@ -183,6 +156,67 @@ enum AuthenticationFlowAdapter {
             return .authentication(.rateLimited)
         default:
             return .authentication(.unsupported)
+        }
+    }
+
+    private static func controlResult(in body: Data) -> AdapterAuthenticationResult? {
+        guard let object = try? JSONSerialization.jsonObject(with: body) as? [String: Any] else {
+            return nil
+        }
+        if object["bot"] as? Bool == true {
+            return .botControlDetected
+        }
+        if let challenge = object["challenge"] as? String,
+           ["captcha", "mfa", "control"].contains(challenge.lowercased()) {
+            return .challengeRequired
+        }
+        return nil
+    }
+}
+
+/// Settled internal profile-v4 compatibility predicate. Authentication only
+/// requires a non-empty JSON object after transport and control preflight.
+enum ProfileResponseV4Decoder {
+    static func accepts(_ body: Data) -> Bool {
+        guard !body.isEmpty,
+              let object = try? JSONSerialization.jsonObject(with: body),
+              object is [String: Any] else {
+            return false
+        }
+        return true
+    }
+}
+
+/// Settled internal subscription-v1 compatibility predicate. No response
+/// fields other than the exact nested status participate in entitlement.
+enum SubscriptionStatusResponseV1Decoder {
+    enum Result: Sendable, Equatable {
+        case active
+        case inactive
+        case unsupported
+    }
+
+    private struct Response: Decodable {
+        struct Subscription: Decodable {
+            let status: String?
+        }
+
+        let subscription: Subscription?
+    }
+
+    static func classify(_ body: Data) -> Result {
+        guard let response = try? JSONDecoder().decode(Response.self, from: body),
+              let status = response.subscription?.status else {
+            return .unsupported
+        }
+
+        switch status {
+        case "active":
+            return .active
+        case "inactive":
+            return .inactive
+        default:
+            return .unsupported
         }
     }
 }
