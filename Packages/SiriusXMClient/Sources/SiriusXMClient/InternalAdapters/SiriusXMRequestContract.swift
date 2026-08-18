@@ -1,6 +1,6 @@
 import Foundation
 
-/// The fixed, internal native requests established by the settled authentication architecture.
+/// The fixed, ordered native requests established by the settled authentication architecture.
 ///
 /// This type deliberately provides no arbitrary URL or header construction surface.
 enum SiriusXMRequestContract: CaseIterable, Sendable {
@@ -10,6 +10,9 @@ enum SiriusXMRequestContract: CaseIterable, Sendable {
     static let host = "api.edge-gateway.siriusxm.com"
 
     static var all: [Self] { Array(allCases) }
+
+    /// The only authorized runtime sequence: authenticate, then verify entitlement.
+    static let authenticationSequence: [Self] = [.authentication, .entitlement]
 
     var method: String { "GET" }
 

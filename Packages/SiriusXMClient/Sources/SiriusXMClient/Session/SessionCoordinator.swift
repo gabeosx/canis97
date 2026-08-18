@@ -27,6 +27,7 @@ actor SessionCoordinator {
     private var transientCredential: AuthenticationCredential?
     private var pendingVerification: PendingVerification?
     private var state: SessionState = .signedOut
+    private var lastEntitlement: EntitlementAvailability = .unavailable
 
     init(
         credentialSource: any CredentialSource,
@@ -50,6 +51,10 @@ actor SessionCoordinator {
         state
     }
 
+    var entitlementAvailability: EntitlementAvailability {
+        lastEntitlement
+    }
+
     func attemptSession() async -> SessionAttemptOutcome {
         guard attemptLease == nil else {
             return .attemptInProgress
@@ -57,6 +62,7 @@ actor SessionCoordinator {
 
         let lease = AttemptLease()
         attemptLease = lease
+        lastEntitlement = .unavailable
         defer {
             if isCurrent(lease) {
                 attemptLease = nil
@@ -109,6 +115,7 @@ actor SessionCoordinator {
         let entitlement = AuthenticationFlowAdapter.classifyEntitlement(entitlementResponse)
         guard entitlement == .entitled else {
             let outcome = entitlement.publicOutcome
+            lastEntitlement = outcome
             await diagnostics.record(.entitlement(outcome))
             return .entitlement(outcome)
         }
@@ -120,6 +127,7 @@ actor SessionCoordinator {
 
         let activeSession = ActiveSession(establishedAt: clock.now())
         state = .active(activeSession)
+        lastEntitlement = .entitled
 
         do {
             try await credentialStore.save(credential)
@@ -139,6 +147,7 @@ actor SessionCoordinator {
         transientCredential = nil
         pendingVerification = nil
         state = .signedOut
+        lastEntitlement = .unavailable
         let keychainTask = Task.detached { [credentialStore] in
             do {
                 try await credentialStore.erase()

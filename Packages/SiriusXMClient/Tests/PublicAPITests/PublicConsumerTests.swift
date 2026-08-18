@@ -4,9 +4,7 @@ import Testing
 
 @Test func independentConsumerUsesOnlySemanticCapabilities() async {
     let client = SiriusXMClient()
-    let credential = AuthenticationCredential(volatileMaterial: Data([1, 2, 3]))
-
-    #expect(await client.authenticate(using: credential) == .waitingForAuthenticationComposition)
+    #expect(await client.authenticate() == .waitingForAuthenticationComposition)
     #expect(await client.entitlement() == .unavailable)
     #expect(await client.signOut() == .alreadySignedOut)
     #expect(await client.catalog() == .unavailable)

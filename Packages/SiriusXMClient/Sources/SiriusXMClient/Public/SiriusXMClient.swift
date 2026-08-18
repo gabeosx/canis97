@@ -1,3 +1,5 @@
+import Foundation
+
 /// Compatibility spelling retained for the walking skeleton's presentation model.
 public typealias AuthenticationAvailability = AuthenticationOutcome
 
@@ -13,19 +15,57 @@ public actor SiriusXMClient {
         self.sessionCoordinator = sessionCoordinator
     }
 
+    /// Composes the sole supported WebView-token/native-request authentication path.
+    ///
+    /// The app owns the credential source, persistence adapter, and browser-residue
+    /// cleanup. The client owns the ephemeral native requests and derives every
+    /// authentication and entitlement result from their responses.
+    public init(
+        credentialSource: any CredentialSource,
+        credentialStore: any CredentialStore,
+        residueCleaner: any AuthenticationResidueCleaner
+    ) {
+        let verifier = NativeRequestVerifier(transport: EphemeralURLSessionTransport())
+        sessionCoordinator = SessionCoordinator(
+            credentialSource: credentialSource,
+            authenticationVerifier: verifier,
+            entitlementVerifier: verifier,
+            credentialStore: credentialStore,
+            residueCleaner: residueCleaner,
+            clock: SystemSessionClock(),
+            diagnostics: NoopSessionDiagnostics()
+        )
+    }
+
     /// Returns the fail-closed Phase 1 state without contacting a provider.
     public func authenticationAvailability() -> AuthenticationAvailability {
         .waitingForAuthenticationComposition
     }
 
-    /// Fails closed until the native authentication bridge is composed in a later plan.
-    public func authenticate(using _: AuthenticationCredential) -> AuthenticationOutcome {
-        .waitingForAuthenticationComposition
+    /// Consumes one opaque WebView credential and completes native authentication
+    /// followed by native entitlement verification.
+    public func authenticate() async -> AuthenticationOutcome {
+        guard let sessionCoordinator else {
+            return .waitingForAuthenticationComposition
+        }
+
+        switch await sessionCoordinator.attemptSession() {
+        case .active, .entitlement:
+            // Entitlement remains separately observable through `entitlement()`.
+            return .authenticatedPendingEntitlement
+        case let .authentication(outcome):
+            return outcome
+        case .attemptInProgress:
+            return .waitingForAuthenticationComposition
+        }
     }
 
-    /// Reports that entitlement verification is unavailable before authentication composition.
-    public func entitlement() -> EntitlementAvailability {
-        .unavailable
+    /// Reports the entitlement derived from the most recent native transaction.
+    public func entitlement() async -> EntitlementAvailability {
+        guard let sessionCoordinator else {
+            return .unavailable
+        }
+        return await sessionCoordinator.entitlementAvailability
     }
 
     /// Ends the empty in-memory session without scheduling retry work.
@@ -50,4 +90,40 @@ public actor SiriusXMClient {
     public func resolveLiveStream() -> LiveStreamResolutionAvailability {
         .unavailable
     }
+}
+
+private final class NativeRequestVerifier: NativeAuthenticationVerifying, NativeEntitlementVerifying, @unchecked Sendable {
+    private let transport: any SessionTransport
+
+    init(transport: any SessionTransport) {
+        self.transport = transport
+    }
+
+    func verifyAuthentication(using credential: AuthenticationCredential) async -> NativeTransportResponse {
+        await response(for: .authentication, using: credential)
+    }
+
+    func verifyEntitlement(using credential: AuthenticationCredential) async -> NativeTransportResponse {
+        await response(for: .entitlement, using: credential)
+    }
+
+    private func response(
+        for operation: SiriusXMRequestContract,
+        using credential: AuthenticationCredential
+    ) async -> NativeTransportResponse {
+        do {
+            return try await transport.send(operation, using: credential)
+        } catch {
+            // Transport errors expose no provider detail and classify as unsupported.
+            return NativeTransportResponse(statusCode: 500, contentType: nil, body: Data())
+        }
+    }
+}
+
+private struct SystemSessionClock: SessionClock {
+    func now() -> Date { Date() }
+}
+
+private actor NoopSessionDiagnostics: SessionDiagnostics {
+    func record(_: SessionDiagnosticEvent) async {}
 }
