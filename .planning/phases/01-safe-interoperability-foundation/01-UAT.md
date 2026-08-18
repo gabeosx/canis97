@@ -3,7 +3,7 @@ status: partial
 phase: 01-safe-interoperability-foundation
 source: ["01-01-SUMMARY.md", "01-02-SUMMARY.md", "01-03-SUMMARY.md", "01-04-SUMMARY.md", "01-05-SUMMARY.md", "01-06-SUMMARY.md", "01-07-SUMMARY.md", "01-08-SUMMARY.md", "01-09-SUMMARY.md", "01-10-SUMMARY.md", "01-11-SUMMARY.md", "01-12-SUMMARY.md", "01-13-SUMMARY.md", "01-14-SUMMARY.md", "01-15-SUMMARY.md", "01-16-SUMMARY.md"]
 started: 2026-08-18T22:58:14Z
-updated: 2026-08-18T23:08:00Z
+updated: 2026-08-18T23:32:28Z
 ---
 
 ## Current Test
@@ -89,6 +89,8 @@ expected: |
 result: issue
 reported: "I signed in, then clicked \"use logged-in session\" and it gave me: \"Sign-in flow unsupported. This sign-in flow is unsupported. No workaround was attempted.\""
 severity: blocker
+diagnosis: "The live trace stopped before native authentication. Commit c5d8e40 had regressed the previously proven cookie handoff by rejecting AUTH_TOKEN cookies on true SiriusXM subdomains; production also loaded the marketing root instead of /player. The initial auth-cookie-missing diagnostic concealed the distinction."
+fix_ready: "Boundary-safe siriusxm.com/*.siriusxm.com selection, /player entry, value-free first-party cookie-name inventory, and exact selector rejection diagnostics are implemented and verified offline; live confirmation remains pending user authorization."
 
 ### 11. Memory-First Local Session Cleanup
 expected: |
@@ -265,8 +267,8 @@ source: automated
 coverage_id: D2
 coverage_summary: 01-14-SUMMARY.md
 
-### 35. Secure, exact apex/www token selection rejects insecure, expired, lookalike, unsupported-path, and unapproved-subdomain cookies in both bridge paths.
-expected: Secure, exact apex/www token selection rejects insecure, expired, lookalike, unsupported-path, and unapproved-subdomain cookies in both bridge paths.
+### 35. Secure, boundary-safe SiriusXM token selection accepts the apex and true subdomains while rejecting insecure, expired, suffix-lookalike, and unsupported-path cookies in both bridge paths.
+expected: Secure, boundary-safe SiriusXM token selection accepts the apex and true subdomains while rejecting insecure, expired, suffix-lookalike, and unsupported-path cookies in both bridge paths.
 result: pass
 source: automated
 coverage_id: D1
@@ -321,8 +323,11 @@ blocked: 1
 - gap_id: G-01-10
   truth: "A user can transfer the embedded SiriusXM login into native authentication, reach entitlement, and later restore the stored session."
   status: failed
-  reason: "User reported: after signing in and clicking Use Logged-In Session, the app displayed 'Sign-in flow unsupported. This sign-in flow is unsupported. No workaround was attempted.'"
+  reason: "User reported the unsupported result. Instrumented evidence showed the bridge stopped at auth-cookie-missing before any native request. The diagnosed regression was an apex/www-only selector replacing previously proven boundary-safe SiriusXM-subdomain acceptance, compounded by insufficient selector logging."
   severity: blocker
   test: 10
-  artifacts: []
+  artifacts:
+    - SiriusMac/Authentication/FirstPartyTokenCookiePolicy.swift
+    - SiriusMac/Authentication/WebAuthenticationBridge.swift
+    - SiriusMacTests/WebAuthenticationBridgeTests.swift
   missing: []
