@@ -1,59 +1,52 @@
 ---
 phase: 01-safe-interoperability-foundation
-verified: 2026-08-18T12:09:05Z
+verified: 2026-08-18T13:54:11Z
 status: gaps_found
-score: 5/7 must-haves verified
+score: 6/7 must-haves verified
 behavior_unverified: 0
 overrides_applied: 0
+re_verification:
+  previous_status: gaps_found
+  previous_score: 5/7
+  gaps_closed:
+    - "Phase 1's MVP goal is now a valid user story."
+    - "An explicit retry or new login re-arms the same WebView handoff after a terminal result or sign-out."
+    - "A fresh composition can explicitly remove Keychain material and matching browser residue."
+    - "The detached duplicate Xcode test graph has been removed."
+  gaps_remaining:
+    - "Concurrent explicit WebView selections can each transfer a credential within one attempt."
+  regressions: []
 gaps:
-  - truth: "MVP user-flow goal can be verified against a valid user story"
+  - truth: "After explicit confirmation, each native WebView attempt transfers exactly one current first-party credential in volatile memory to the client."
     status: failed
-    reason: "Phase 1 is marked mode: mvp, but its ROADMAP goal is not a valid `As a ..., I want to ..., so that ...` user story; the mandated MVP verifier cannot derive or verify User Flow Coverage."
-    artifacts:
-      - path: ".planning/ROADMAP.md"
-        issue: "`user-story.validate` returned false for the Phase 1 goal."
-    missing:
-      - "Reformat the Phase 1 goal with `/gsd mvp-phase 1` before re-verification."
-  - truth: "A subscriber can begin a new native WebView sign-in after a terminal result or sign-out."
-    status: failed
-    reason: "WebAuthenticationBridge permanently retains didTransferCredential after its first transfer, while the UI's Retry Sign In path retains that same bridge."
+    reason: "WebAuthenticationBridge checks didTransferCredential before awaiting the cookie store, then marks it consumed only after the await. A second main-actor task can pass the same false latch while the first cookie read is suspended, so both can invoke credentialConsumer and overwrite the handoff."
     artifacts:
       - path: "SiriusMac/Authentication/WebAuthenticationBridge.swift"
-        issue: "Lines 75 and 107 return `.alreadyConsumed` forever; `beginUserOperatedSignIn()` at lines 68-71 does not reset the lifecycle."
-      - path: "SiriusMac/Authentication/AuthenticationPresentationModel.swift"
-        issue: "Retry re-enters the same bridge through beginWebViewSignIn at lines 41-45 and 260-262."
+        issue: "Lines 84-88 reserve no selecting state before await cookieStore.allCookies(); lines 115-117 consume too late."
+      - path: "SiriusMacTests/WebAuthenticationBridgeTests.swift"
+        issue: "Covers sequential double selection only; no controlled-suspension concurrent-selection regression exists."
     missing:
-      - "An explicit, user-operated new-attempt lifecycle that safely clears the consumed handoff only before a new login."
-      - "A regression test for terminal-result retry and sign-out followed by a new login."
-  - truth: "A subscriber can sign out and clear persisted credentials after a fresh app composition."
-    status: failed
-    reason: "A new app composition never reads/restores the stored credential and both its UI and coordinator deny cleanup while in-memory state is signed out."
-    artifacts:
-      - path: "SiriusMac/Authentication/AuthenticationView.swift"
-        issue: "Lines 8-18 create a new empty bridge/client; lines 42-47 expose Sign Out only for an entitled in-memory state."
-      - path: "Packages/SiriusXMClient/Sources/SiriusXMClient/Session/SessionCoordinator.swift"
-        issue: "Lines 141-144 return `.alreadySignedOut` before calling Keychain or browser cleaners on a fresh coordinator."
-      - path: "SiriusMac/Security/KeychainCredentialStore.swift"
-        issue: "`readStoredCredential()` exists at lines 46-64 but no production code calls it."
-    missing:
-      - "A supported restore path, or an always-reachable cleanup path that deletes the Keychain item and browser residue without an active in-memory session."
-      - "An app-lifecycle regression that creates a new composition after persistence and proves restore or explicit removal."
+      - "Reserve an in-progress handoff state before the first suspension, reset it only for non-transfer outcomes, and retain consumed after a successful transfer."
+      - "Add a controlled-suspension cookie-store regression that concurrently starts two selections and proves exactly one credential-consumer invocation."
 ---
 
 # Phase 1: Safe Interoperability Foundation Verification Report
 
-**Phase Goal:** Subscribers can establish or end an authorized SiriusXM session without exposing secrets or weakening access controls, through a reusable Apple-platform client boundary.
-**Verified:** 2026-08-18T12:09:05Z
+**Phase Goal:** As a SiriusXM subscriber, I want to establish or end an authorized session, so that I can listen safely on my Mac.
+**Verified:** 2026-08-18T13:54:11Z
 **Status:** gaps_found
-**Re-verification:** No — initial verification
-
-## MVP Contract Gate
-
-Phase 1 is declared as `mode: mvp`, but `gsd-tools query user-story.validate --story "$PHASE_GOAL" --pick valid` returned `false`. Its goal is not a user story, so the required MVP User Flow Coverage cannot be truthfully derived. This is a blocking planning-contract discrepancy; reformat the goal with `/gsd mvp-phase 1`, then re-run verification.
+**Re-verification:** Yes — after gap closure
 
 ## User Flow Coverage
 
-Unavailable: the MVP user story is invalid. No user-flow coverage has been inferred from a non-user-story technical goal.
+| Step | Expected | Evidence in codebase | Status |
+| --- | --- | --- | --- |
+| Open Sirius Mac | Native authentication surface is the only root scene. | `SiriusMacApp` renders `AuthenticationView`; focused macOS XCTest compiles and runs the app target. | ✓ VERIFIED |
+| Start sign-in | An explicit Sign In action loads the app-owned nonpersistent WebView. | `AuthenticationPresentationModel.signIn()` → composed flow → `WebAuthenticationBridge.beginUserOperatedSignIn()`; bridge config uses `.nonPersistent()`. | ✓ VERIFIED |
+| Confirm the logged-in session | One current first-party token is selected, decoded minimally, and handed to the client once for this attempt. | Predicate and sequential tests are present, but the bridge does not reserve its latch before awaiting the cookie store. | ✗ FAILED |
+| Verify authorization | Authentication then entitlement determine active state; a caller cannot assert success. | `SessionCoordinator` calls the two internal classifiers in order and assigns `.active` only after entitlement; 29-package-test run passed. | ✓ VERIFIED |
+| End/clear the session | Memory is retired, then Keychain and matching WebView residue are cleared or failure is exposed. | `clearLocalSession()` reaches `SessionCoordinator.signOut()`; fresh-composition XCTest exercises removal. | ✓ VERIFIED |
+| Outcome | The app reaches a safe, entitled-ready state only through the native verification path. | Semantic entitled state is rendered only after the above sequence; live playback itself is deliberately Phase 2 scope. | ✗ BLOCKED by credential-cardinality failure |
 
 ## Goal Achievement
 
@@ -61,98 +54,109 @@ Unavailable: the MVP user story is invalid. No user-flow coverage has been infer
 
 | # | Truth | Status | Evidence |
 | --- | --- | --- | --- |
-| 1 | A subscriber can sign in through the nonpersistent WebView and transfer one opaque token into native verification. | ✗ FAILED | Fresh-flow pieces and tests exist, but the same bridge permanently returns `.alreadyConsumed` after its first transfer, so retry/re-login is broken. |
-| 2 | Unknown, changed, or prohibited-control flows stop with an explicit unsupported result and no bypass. | ✓ VERIFIED | Closed classifier tests cover 403/429, challenge, bot, malformed, ambiguous, and redirect cases; UI maps bridge failures to `.unsupported`. |
-| 3 | Only native authentication plus entitlement can atomically create an active session. | ✓ VERIFIED | `SessionCoordinator` accepts a credential, verifies authentication then entitlement, assigns `.active` only at lines 128-130, and package tests exercise ordering/atomicity. |
-| 4 | Sign-out clears actor, Keychain, and exact WebView-cookie material, or reports cleanup failure. | ✗ FAILED | Active-session cleanup is implemented, but a fresh composition cannot restore or erase a persisted Keychain credential; it returns `.alreadySignedOut` before cleaners run. |
-| 5 | Credentials are Keychain-backed, session/stream material is ephemeral and direct-only, and diagnostics/fixtures exclude sensitive data. | ✓ VERIFIED | Keychain adapter uses Security APIs; transport uses an ephemeral configuration and exact-host contract; 25-package-test suite includes redaction and transport assertions. |
-| 6 | Independent Apple-platform consumers can use typed async client capabilities without wire details. | ✓ VERIFIED | `Package.swift` exports `SiriusXMClient`; `PublicConsumerTests` imports it normally and calls semantic capability methods. |
-| 7 | Deterministic bridge, native-authentication, entitlement, sign-out, and redaction tests compile independently of planning artifacts. | ✓ VERIFIED | Full SwiftPM suite passed (25 tests) and Xcode suite passed (19 tests); static scan found no production `.planning` or Phase 0 authority dependency. |
+| 1 | A subscriber can sign in through the nonpersistent WebView, extract exactly one current first-party token after explicit confirmation, and transfer it once in volatile memory. | ✗ FAILED | `WebAuthenticationBridge.useLoggedInSession()` checks `didTransferCredential` at line 84, suspends at line 87, and sets it only at line 116. Concurrent explicit calls can both transfer. |
+| 2 | Unknown, changed, or prohibited-control flows return explicit unsupported/challenge results and stop without a bypass. | ✓ VERIFIED | Strict response preflight/classification in `AuthenticationFlowAdapter`; no fallback or shared-browser path found; package classification tests passed. |
+| 3 | Only native authentication plus entitlement atomically create active state; claims/planning artifacts cannot. | ✓ VERIFIED | `SessionCoordinator` verifies authentication then entitlement and assigns active state only at lines 129-131; transaction tests passed. |
+| 4 | Sign-out clears actor state, Keychain material, and exact matching browser cookies, or reports cleanup failure. | ✓ VERIFIED | `SessionCoordinator.signOut()` retires state before both injected cleaners; focused XCTest covers fresh cleanup and package tests cover coalescing/failure. |
+| 5 | Persistent credentials are Keychain-backed; session material is ephemeral/direct-only; diagnostics and fixtures exclude secrets. | ✓ VERIFIED | Direct `SecItem` adapter, ephemeral URL session/exact host policy, closed diagnostics, and redaction tests all passed. |
+| 6 | Independent Apple-platform consumers use the SwiftPM product's typed API without wire details. | ✓ VERIFIED | Public consumer package test passed; `Package.swift` exposes only the `SiriusXMClient` library product and public models are semantic. |
+| 7 | WebView, native-authentication, entitlement, sign-out, and redaction tests compile independently of `.planning`. | ✓ VERIFIED | Full SwiftPM suite passed 29 tests; focused macOS suite passed 14 tests; static scan found no production planning-artifact build condition. |
 
-**Score:** 5/7 truths verified (0 present but behavior-unverified)
+**Score:** 6/7 truths verified (0 present, behavior-unverified)
+
+### Must-Have Audit by Plan
+
+| Plan | Actual implementation check | Verdict |
+| --- | --- | --- |
+| 01-01 | Native app, local SwiftPM product, semantic public boundary, unavailable content capabilities, and no Phase 0 runtime dependency are present. | ✓ VERIFIED |
+| 01-02 | Actor-owned authentication → entitlement sequencing, atomic state, and terminal clearing are implemented and package-tested. | ✓ VERIFIED |
+| 01-03 | Exact direct-host ephemeral transport and closed diagnostic/redaction boundaries are substantive and tested. | ✓ VERIFIED |
+| 01-04 | Keychain-only storage and memory-first aggregate sign-out are wired through injected cleaners. | ✓ VERIFIED |
+| 01-05 | One semantic WebView/native presentation path, fixed safe states, and explicit actions are wired. | ✓ VERIFIED |
+| 01-06 | Nonpersistent WebView, shared predicate, minimal decode, and cleanup rescan are implemented; per-attempt concurrent selection is not safe. | ✗ FAILED |
+| 01-07 | Bridge/client composition and native authentication then entitlement wiring are present and exercised synthetically. | ✓ VERIFIED |
+| 01-08 | Phase 0 review regressions are represented by current synthetic tests and no active Phase 0 authority was found. | ✓ VERIFIED |
+| 01-09 | Explicit re-arm/re-login works sequentially, but the promised one-transfer-per-attempt invariant fails under concurrent selection. | ✗ FAILED |
+| 01-10 | Fresh-composition cleanup is explicit, coalesced, memory-first, and tested. | ✓ VERIFIED |
+| 01-11 | The E4/E1 project graph is parseable, singular, and contains the canonical four test sources. | ✓ VERIFIED |
 
 ### Required Artifacts
 
-All declared artifacts exist and are substantive. Manual Level-3 wiring is included because the generic key-link query cannot resolve basename-only plan links.
-
-| Plan | Artifact(s) | Exists / substantive | Wired status | Details |
-| --- | --- | --- | --- | --- |
-| 01-01 | `Package.swift`, public-consumer test, Xcode project | ✓ | ✓ | SwiftPM product is consumed through `AuthenticationView` and app target. |
-| 01-02 | `SessionCoordinator.swift`, coordinator tests | ✓ | ✓ | Calls `AuthenticationFlowAdapter` for both native responses. |
-| 01-03 | request contract, redaction tests | ✓ | ✓ | `NativeRequestVerifier` uses `EphemeralURLSessionTransport`; contract and diagnostics are internal. |
-| 01-04 | Keychain adapter, sign-out tests | ✓ | ⚠️ partial | Active-session wiring works; fresh-process cleanup is unreachable. |
-| 01-05 | presentation model and view | ✓ | ✓ | View owns one bridge/client/composed-flow graph. |
-| 01-06 | token policy, bridge, bridge tests | ✓ | ⚠️ partial | Extraction and exact cleanup share the predicate; new-login lifecycle is missing. |
-| 01-07 | transaction and composition tests | ✓ | ✓ | Native composition order is exercised synthetically. |
-| 01-08 | acceptance summary | ✓ | ✓ | Records acceptance, but its narrative does not supersede the two lifecycle failures above. |
+| Plans | Artifact(s) | Status | Details |
+| --- | --- | --- | --- |
+| 01-01 | Xcode project, `Package.swift`, public-consumer test | ✓ VERIFIED | All exist, are substantive, and package/product linkage is active. |
+| 01-02 | `SessionCoordinator.swift`, coordinator tests | ✓ VERIFIED | State machine is implemented and calls strict internal classifiers. |
+| 01-03 | request contract, redaction tests | ✓ VERIFIED | Direct request contract and canary-exclusion coverage are substantive. |
+| 01-04 | Keychain store, sign-out tests | ✓ VERIFIED | App-owned `SecItem` CRUD and cleanup ordering are real code, not stubs. |
+| 01-05 | presentation model, authentication view | ✓ VERIFIED | Root view uses model state and semantic flow rather than static placeholder data. |
+| 01-06/09 | token policy, bridge, bridge/composition tests | ✗ FAILED | Artifacts are wired, but `useLoggedInSession()` has an async latch race and tests omit the critical interleaving. |
+| 01-07 | transaction and composition tests | ✓ VERIFIED | Client sequence and app composition are executable native test members. |
+| 01-08 | acceptance summary | ✓ VERIFIED | Required synthetic-acceptance fields exist; it is not used as runtime authority. |
+| 01-10 | coordinator, cleanup view, package/app lifecycle tests | ✓ VERIFIED | Fresh cleanup action reaches both production cleanup seams. |
+| 01-11 | `project.pbxproj` | ✓ VERIFIED | `plutil`/`jq` assertions and target listing confirm one active test graph. |
 
 ### Key Link Verification
 
 | From | To | Via | Status | Details |
 | --- | --- | --- | --- | --- |
-| `SiriusMacApp` | `SiriusXMClient` | `AuthenticationView` → composed flow | ✓ WIRED | App renders `AuthenticationView`; its initializer creates bridge, client, Keychain store, and composed flow. |
-| `SessionCoordinator` | `AuthenticationFlowAdapter` | strict native-response classification | ✓ WIRED | Lines 99 and 115 classify the two verifier responses before state publication. |
-| WebView bridge | `SiriusXMClient` | opaque `CredentialSource` | ⚠️ PARTIAL | Initial handoff is wired, but `didTransferCredential` is never reset for a subsequent explicit login. |
-| `SiriusXMClient` | direct native transport | `NativeRequestVerifier` | ✓ WIRED | Client initializes verifier with `EphemeralURLSessionTransport`. |
-| sign-out action | Keychain and residue cleaners | `SessionCoordinator.signOut()` | ⚠️ PARTIAL | Cleaners run after an active/in-flight session, but not after app restart. |
+| `SiriusMacApp` | `AuthenticationView` | root `WindowGroup` | ✓ WIRED | The native app launches the authentication surface. |
+| `AuthenticationView` | bridge + client | composed flow initializer | ✓ WIRED | The view constructs one bridge, Keychain store, client, and semantic model. |
+| bridge | client | opaque `CredentialSource` | ⚠️ WIRED, BEHAVIOR FAILED | The call chain exists, but concurrent cookie reads can create two handoffs. |
+| `SessionCoordinator` | `AuthenticationFlowAdapter` | ordered internal classifications | ✓ WIRED | Lines 100 and 116 classify native authentication/entitlement before active publication. |
+| client | direct transport | `NativeRequestVerifier` | ✓ WIRED | Production client uses `EphemeralURLSessionTransport` and exact request contracts. |
+| explicit cleanup UI | coordinator cleaners | model → client → `signOut()` | ✓ WIRED | Both Keychain erase and bridge residue cleanup are awaited after memory retirement. |
+| Xcode root E4 | test target E1 | project object graph | ✓ WIRED | `plutil`/`jq` and `xcodebuild -list -json` report the one canonical graph. |
 
 ### Data-Flow Trace (Level 4)
 
 | Artifact | Data variable | Source | Status |
 | --- | --- | --- | --- |
-| `AuthenticationView` | `model.state` | Native composed-flow outcomes | ✓ FLOWING for initial attempt; retry path is blocked by bridge state. |
-| `SessionCoordinator` | `state` / `lastEntitlement` | Sequential authentication and entitlement verifier responses | ✓ FLOWING; active assignment follows both verified outcomes. |
-| `WebAuthenticationBridge` | opaque credential handoff | one selected WebView cookie | ✓ FLOWING once per bridge; no new-attempt reset. |
+| `AuthenticationView` | `model.state` | semantic results from composed bridge/client flow | ✓ FLOWING |
+| `WebAuthenticationBridge` | opaque handoff | one matching WebView-owned first-party cookie | ✗ CARDINALITY RACE |
+| `SessionCoordinator` | `state` / entitlement | sequential native verifier responses | ✓ FLOWING |
+| cleanup UI | signed-out / cleanup-failed state | aggregate Keychain + residue-cleaner outcomes | ✓ FLOWING |
 
 ### Behavioral Spot-Checks
 
 | Behavior | Command | Result | Status |
 | --- | --- | --- | --- |
-| Package client/auth/sign-out/redaction regressions | `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --package-path Packages/SiriusXMClient` | 25 tests passed | ✓ PASS |
-| Native bridge/composition/Keychain regressions | `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project SiriusMac.xcodeproj -scheme SiriusMac -destination 'platform=macOS' test` | 19 tests passed | ✓ PASS |
-
-The green suites do not exercise the failed retry-after-transfer or persisted-credential-after-restart paths. `SelectedAuthenticationCompositionTests` covers one initial transfer and a missing-cookie terminal result, while `KeychainCredentialStoreTests` exercise CRUD in isolation only.
+| Client sequencing, cleanup, transport, redaction, and public API | `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --package-path Packages/SiriusXMClient` | 29 tests passed | ✓ PASS |
+| WebView bridge/retry and fresh-composition cleanup | `xcodebuild ... -destination 'platform=macOS' -only-testing:SiriusMacTests/WebAuthenticationBridgeTests -only-testing:SiriusMacTests/SelectedAuthenticationCompositionTests test` | 14 tests passed | ✓ PASS |
+| Concurrent selection within one bridge attempt | Controlled-suspension test | No test exists; source inspection proves latch is set after the first suspension. | ✗ FAIL |
+| Consolidated Xcode graph | `plutil -lint` + `plutil|jq` + `xcodebuild -list -json` | Parsed; canonical records asserted; one `SiriusMacTests` target. | ✓ PASS |
 
 ### Requirements Coverage
 
 | Requirement | Source Plan(s) | Status | Evidence |
 | --- | --- | --- | --- |
-| AUTH-01 | 01-02, 01-05, 01-06, 01-07, 01-08 | ✗ BLOCKED | Initial semantic flow exists, but a retry/new login after transfer cannot succeed. |
-| AUTH-02 | 01-02, 01-03, 01-05, 01-06, 01-07, 01-08 | ✓ SATISFIED | Strict classifier, exact host policy, and terminal UI prevent bypass/fallback behavior. |
-| AUTH-03 | 01-04 through 01-08 | ✗ BLOCKED | Fresh-process sign-out cannot erase persistent credentials or residue. |
-| SECR-01 | 01-04, 01-07, 01-08 | ✓ SATISFIED | Persistent secret storage uses `SecItem` Keychain operations only. |
-| SECR-02 | 01-02, 01-03, 01-04, 01-06 through 01-08 | ✓ SATISFIED | Direct ephemeral transport and volatile handoff are implemented and tested. |
-| SECR-03 | 01-03, 01-05 through 01-08 | ✓ SATISFIED | Closed diagnostic model and fixture canary-rejection tests pass. |
-| CLNT-01 | 01-01, 01-05, 01-07, 01-08 | ✓ SATISFIED | Reusable library product plus normal independent consumer test. |
-| CLNT-02 | 01-01, 01-02, 01-07, 01-08 | ✓ SATISFIED | Typed async public outcomes/capabilities expose no endpoint or raw-schema API. |
-| CLNT-03 | 01-02, 01-03, 01-07, 01-08 | ✓ SATISFIED | Request contract and response classifiers are internal adapters. |
-| CLNT-04 | 01-01 through 01-08 | ✓ SATISFIED | Transport, credential source/store, clock, diagnostics, and residue-cleaner seams are injectable. |
+| AUTH-01 | 01-02, 05-10 | ✗ BLOCKED | Exact one-transfer-per-attempt fails for concurrent explicit selections. |
+| AUTH-02 | 01-02, 03, 05-08 | ✓ SATISFIED | Strict classifications, explicit terminal UI, and no fallback/bypass path. |
+| AUTH-03 | 01-04, 06-08, 10 | ✓ SATISFIED | Fresh and active-session cleanup retire memory and clear/report both local stores. |
+| SECR-01 | 01-04, 07, 10 | ✓ SATISFIED | Only the app-owned Keychain adapter persists approved material; no production read/restore path. |
+| SECR-02 | 01-02-04, 06-10 | ✓ SATISFIED | Ephemeral direct-host transport and volatile handoff are present; the AUTH-01 race still requires repair. |
+| SECR-03 | 01-03, 05-08 | ✓ SATISFIED | Closed event types and redaction tests exclude synthetic secret canaries. |
+| CLNT-01 | 01-01, 05, 07-08 | ✓ SATISFIED | Independent SwiftPM product/import test passed. |
+| CLNT-02 | 01-01-02, 07-08 | ✓ SATISFIED | Public API exposes typed semantic capabilities and no wire-schema fields. |
+| CLNT-03 | 01-02-03, 07-08 | ✓ SATISFIED | Transport and response details remain under internal adapters. |
+| CLNT-04 | 01-01-11 | ⚠️ PARTIAL | Required collaborators are injectable, but the bridge's injectable cookie store lacks the required concurrent-selection regression. |
 
-No requirement mapped to Phase 1 is orphaned from all plan frontmatter.
+No Phase 1 requirement is orphaned: every listed ID appears in one or more Phase 1 plan frontmatters.
 
-### Code-Review Findings Rechecked
-
-| Finding | Verdict | Evidence |
-| --- | --- | --- |
-| CR-01: bridge cannot be reused after credential transfer | **CONFIRMED — BLOCKER** | `didTransferCredential` changes to `true` at bridge line 107; retry invokes the same bridge and no reset exists. |
-| CR-02: persisted Keychain credential is stranded after restart | **CONFIRMED — BLOCKER** | Keychain reader has no production caller; new app starts unsigned; view hides Sign Out; coordinator returns early while signed out. |
-| WR-01: duplicate disconnected Xcode records | **CONFIRMED — WARNING** | `project.pbxproj` contains both active `E1…` and detached `A001…` `SiriusMacTests` targets, two project objects, duplicated test references/source phases. The root project selects only `E1…`. Full XCTest currently passes through the active target. |
-
-### Anti-Patterns Found
+### Prohibition and Anti-Pattern Scan
 
 | File | Line | Pattern | Severity | Impact |
-| --- | --- | --- | --- | --- |
-| `WebAuthenticationBridge.swift` | 75, 107 | Permanently consumed credential gate with no new-login reset | 🛑 Blocker | Prevents retry and re-login. |
-| `SessionCoordinator.swift` | 141-144 | Cleaner guard exits when fresh in-memory state is signed out | 🛑 Blocker | Can strand persisted Keychain credentials after restart. |
-| `project.pbxproj` | 66-79 | Duplicate disconnected test-target/project/source records | ⚠️ Warning | Future edits can silently modify inactive test graph. |
+| --- | --- | --- | --- |
+| `SiriusMac/Authentication/WebAuthenticationBridge.swift` | 84-117 | Latch is checked before async cookie access and marked consumed only afterward. | 🛑 BLOCKER | Violates the required one-transfer-per-attempt invariant. |
 
-Static scans found no debt-marker comments in Phase 1 source, no production `.planning`/Phase 0 authority dependency, and no placeholder UI/API implementation.
+Static scans found no Phase 1 production dependency on `.planning`, Phase 0 authority artifacts, shared `URLSession`, shared cookie storage, JavaScript injection, or debt-marker comments. `readStoredCredential()` exists only on the Keychain adapter and has no production caller. The prior review warning about an inert unsupported-state retry is not present in the current code: `.unsupported` is now retryable in `AuthenticationPresentationModel` and the view's Retry button reaches that path.
 
-## Gaps Summary
+### Gaps Summary
 
-Phase 1 is not ready to proceed. The report does not accept Plan 08's claimed regression closure as evidence: its green tests cover only the initial handoff and isolated Keychain CRUD, not the two lifecycle paths that the code review identified. First repair the bridge's explicit new-login lifecycle and the app-restart credential lifecycle, consolidate the inactive Xcode project records, and correct the MVP goal format. Then re-run verification.
+Phase 1 is not verified complete. The user-story formatting, sequential retry/re-login, fresh-composition cleanup, and Xcode graph gaps are closed, but the single-consumption handoff is still unsafe under concurrent explicit selections. The exact sequence is visible in the code: both tasks pass the `didTransferCredential == false` guard before either returns from `await cookieStore.allCookies()`, then both may invoke `credentialConsumer`. Because the selected token is the authorization boundary, this is a blocker rather than a warning.
+
+No later roadmap phase explicitly covers bridge handoff concurrency, so this is not deferred work.
 
 ---
 
-_Verified: 2026-08-18T12:09:05Z_
+_Verified: 2026-08-18T13:54:11Z_
 _Verifier: the agent (gsd-verifier)_
