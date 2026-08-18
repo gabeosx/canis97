@@ -13,6 +13,11 @@ public struct AuthenticationCredential: Sendable, CustomStringConvertible, Custo
 
     public var description: String { "AuthenticationCredential(redacted)" }
     public var debugDescription: String { "AuthenticationCredential(redacted)" }
+
+    /// Lets internal request code attach the short-lived material without exposing it to client consumers.
+    func withVolatileMaterial<Result: Sendable>(_ operation: (Data) throws -> Result) rethrows -> Result {
+        try operation(material)
+    }
 }
 
 /// Supplies an opaque credential to the client without exposing integration mechanics.
