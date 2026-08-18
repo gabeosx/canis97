@@ -11,6 +11,7 @@ let package = Package(
     targets: [
         .target(name: "SiriusXMClient"),
         .testTarget(name: "SiriusXMClientTests", dependencies: ["SiriusXMClient"]),
+        .testTarget(name: "FixtureTests", dependencies: ["SiriusXMClient"]),
         .testTarget(name: "PublicAPITests", dependencies: ["SiriusXMClient"]),
     ]
 )
