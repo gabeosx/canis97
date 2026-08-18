@@ -20,6 +20,10 @@
 		C00100010000000000000003 /* WebAuthenticationBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00100020000000000000000003 /* WebAuthenticationBridge.swift */; };
 		C00100010000000000000004 /* WebAuthenticationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00100020000000000000000004 /* WebAuthenticationView.swift */; };
 		D00100010000000000000001 /* SelectedAuthenticationCompositionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00100020000000000000000001 /* SelectedAuthenticationCompositionTests.swift */; };
+		111111111111111111111111 /* AuthenticationPresentationModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 555555555555555555555555 /* AuthenticationPresentationModelTests.swift */; };
+		222222222222222222222222 /* KeychainCredentialStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 666666666666666666666666 /* KeychainCredentialStoreTests.swift */; };
+		333333333333333333333333 /* WebAuthenticationBridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 777777777777777777777777 /* WebAuthenticationBridgeTests.swift */; };
+		444444444444444444444444 /* SelectedAuthenticationCompositionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 888888888888888888888888 /* SelectedAuthenticationCompositionTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -38,6 +42,10 @@
 		C00100020000000000000000003 /* WebAuthenticationBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiriusMac/Authentication/WebAuthenticationBridge.swift; sourceTree = SOURCE_ROOT; };
 		C00100020000000000000000004 /* WebAuthenticationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiriusMac/Authentication/WebAuthenticationView.swift; sourceTree = SOURCE_ROOT; };
 		D00100020000000000000001 /* SelectedAuthenticationCompositionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiriusMacTests/SelectedAuthenticationCompositionTests.swift; sourceTree = SOURCE_ROOT; };
+		555555555555555555555555 /* AuthenticationPresentationModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiriusMacTests/AuthenticationPresentationModelTests.swift; sourceTree = SOURCE_ROOT; };
+		666666666666666666666666 /* KeychainCredentialStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiriusMacTests/KeychainCredentialStoreTests.swift; sourceTree = SOURCE_ROOT; };
+		777777777777777777777777 /* WebAuthenticationBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiriusMacTests/WebAuthenticationBridgeTests.swift; sourceTree = SOURCE_ROOT; };
+		888888888888888888888888 /* SelectedAuthenticationCompositionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiriusMacTests/SelectedAuthenticationCompositionTests.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -55,17 +63,20 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		E1E1E1E1E1E1E1E1E1E1E1E1 /* SiriusMacTests */ = {isa = PBXNativeTarget; buildConfigurationList = F1F1F1F1F1F1F1F1F1F1F1F1 /* Build configuration list for PBXNativeTarget "SiriusMacTests" */; buildPhases = (999999999999999999999999 /* Sources */, A00100030000000000000002 /* Frameworks */,); buildRules = (); dependencies = (A00100090000000000000001 /* PBXTargetDependency */,); name = SiriusMacTests; packageProductDependencies = (); productName = SiriusMacTests; productReference = A00100020000000000000004 /* SiriusMacTests.xctest */; productType = "com.apple.product-type.bundle.unit-test"; };
 		A00100050000000000000001 /* SiriusMac */ = {isa = PBXNativeTarget; buildConfigurationList = A00100060000000000000001 /* Build configuration list for PBXNativeTarget "SiriusMac" */; buildPhases = (A00100070000000000000001 /* Sources */, A00100030000000000000001 /* Frameworks */,); buildRules = (); dependencies = (); name = SiriusMac; packageProductDependencies = (A00100100000000000000001 /* SiriusXMClient */,); productName = SiriusMac; productReference = A00100020000000000000003 /* SiriusMac.app */; productType = "com.apple.product-type.application"; };
 		A00100050000000000000002 /* SiriusMacTests */ = {isa = PBXNativeTarget; buildConfigurationList = A00100060000000000000000002 /* Build configuration list for PBXNativeTarget "SiriusMacTests" */; buildPhases = (A00100070000000000000002 /* Sources */, A00100030000000000000002 /* Frameworks */,); buildRules = (); dependencies = (A00100090000000000000001 /* PBXTargetDependency */,); name = SiriusMacTests; packageProductDependencies = (); productName = SiriusMacTests; productReference = A00100020000000000000004 /* SiriusMacTests.xctest */; productType = "com.apple.product-type.bundle.unit-test"; };
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
+		E4E4E4E4E4E4E4E4E4E4E4E4 /* Project object */ = {isa = PBXProject; attributes = { LastSwiftUpdateCheck = 2600; LastUpgradeCheck = 2600; TargetAttributes = { A00100050000000000000001 = { CreatedOnToolsVersion = 26.0; }; E1E1E1E1E1E1E1E1E1E1E1E1 = { CreatedOnToolsVersion = 26.0; TestTargetID = A00100050000000000000001; }; }; }; buildConfigurationList = A00100060000000000000003 /* Build configuration list for PBXProject "SiriusMac" */; compatibilityVersion = "Xcode 16.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base,); mainGroup = A00100040000000000000001; minimizedProjectReferenceProxies = 1; packageReferences = (A00100110000000000000001 /* XCLocalSwiftPackageReference "SiriusXMClient" */,); preferredProjectObjectVersion = 77; productRefGroup = A00100040000000000000004 /* Products */; projectDirPath = ""; projectRoot = ""; targets = (A00100050000000000000001 /* SiriusMac */, E1E1E1E1E1E1E1E1E1E1E1E1 /* SiriusMacTests */,); };
 		A001000A0000000000000001 /* Project object */ = {isa = PBXProject; attributes = { LastSwiftUpdateCheck = 2600; LastUpgradeCheck = 2600; TargetAttributes = { A00100050000000000000001 = { CreatedOnToolsVersion = 26.0; }; A00100050000000000000002 = { CreatedOnToolsVersion = 26.0; TestTargetID = A00100050000000000000001; }; }; }; buildConfigurationList = A00100060000000000000003 /* Build configuration list for PBXProject "SiriusMac" */; compatibilityVersion = "Xcode 16.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base,); mainGroup = A00100040000000000000001; minimizedProjectReferenceProxies = 1; packageReferences = (A00100110000000000000001 /* XCLocalSwiftPackageReference "SiriusXMClient" */,); preferredProjectObjectVersion = 77; productRefGroup = A00100040000000000000004 /* Products */; projectDirPath = ""; projectRoot = ""; targets = (A00100050000000000000001 /* SiriusMac */, A00100050000000000000002 /* SiriusMacTests */,); };
 /* End PBXProject section */
 
 /* Begin PBXSourcesBuildPhase section */
 		A00100070000000000000001 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A00100010000000000000001 /* SiriusMacApp.swift in Sources */, B00100010000000000000001 /* AuthenticationPresentationModel.swift in Sources */, B00100010000000000000002 /* AuthenticationView.swift in Sources */, B00100010000000000000003 /* UnsupportedAuthenticationView.swift in Sources */, A00100010000000000000004 /* KeychainCredentialStore.swift in Sources */, C00100010000000000000002 /* FirstPartyTokenCookiePolicy.swift in Sources */, C00100010000000000000003 /* WebAuthenticationBridge.swift in Sources */, C00100010000000000000004 /* WebAuthenticationView.swift in Sources */,); runOnlyForDeploymentPostprocessing = 0; };
 		A00100070000000000000002 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (B00100010000000000000000004 /* AuthenticationPresentationModelTests.swift in Sources */, A00100010000000000000000000005 /* KeychainCredentialStoreTests.swift in Sources */, C00100010000000000000001 /* WebAuthenticationBridgeTests.swift in Sources */, D00100010000000000000001 /* SelectedAuthenticationCompositionTests.swift in Sources */,); runOnlyForDeploymentPostprocessing = 0; };
+		999999999999999999999999 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (111111111111111111111111 /* AuthenticationPresentationModelTests.swift in Sources */, 222222222222222222222222 /* KeychainCredentialStoreTests.swift in Sources */, 333333333333333333333333 /* WebAuthenticationBridgeTests.swift in Sources */, 444444444444444444444444 /* SelectedAuthenticationCompositionTests.swift in Sources */,); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -73,6 +84,8 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		F2F2F2F2F2F2F2F2F2F2F2F2 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = { BUNDLE_LOADER = "$(TEST_HOST)"; CODE_SIGNING_ALLOWED = NO; ENABLE_TESTABILITY = YES; GENERATE_INFOPLIST_FILE = YES; PRODUCT_BUNDLE_IDENTIFIER = com.siriusmac.player.tests; PRODUCT_MODULE_NAME = SiriusMacTests; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; TEST_HOST = "$(BUILT_PRODUCTS_DIR)/SiriusMac.app/Contents/MacOS/SiriusMac"; }; name = Debug; };
+		F3F3F3F3F3F3F3F3F3F3F3F3 /* Release */ = {isa = XCBuildConfiguration; buildSettings = { BUNDLE_LOADER = "$(TEST_HOST)"; CODE_SIGNING_ALLOWED = NO; GENERATE_INFOPLIST_FILE = YES; PRODUCT_BUNDLE_IDENTIFIER = com.siriusmac.player.tests; PRODUCT_MODULE_NAME = SiriusMacTests; PRODUCT_NAME = "$(TARGET_NAME)"; TEST_HOST = "$(BUILT_PRODUCTS_DIR)/SiriusMac.app/Contents/MacOS/SiriusMac"; }; name = Release; };
 		A00100080000000000000001 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = { ARCHS = arm64; CLANG_ENABLE_MODULES = YES; CODE_SIGNING_ALLOWED = NO; MACOSX_DEPLOYMENT_TARGET = 26.0; SDKROOT = macosx; SWIFT_STRICT_CONCURRENCY = complete; SWIFT_VERSION = 6.0; }; name = Debug; };
 		A00100080000000000000002 /* Release */ = {isa = XCBuildConfiguration; buildSettings = { ARCHS = arm64; CLANG_ENABLE_MODULES = YES; CODE_SIGNING_ALLOWED = NO; MACOSX_DEPLOYMENT_TARGET = 26.0; SDKROOT = macosx; SWIFT_STRICT_CONCURRENCY = complete; SWIFT_VERSION = 6.0; }; name = Release; };
 		A00100080000000000000003 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = { CODE_SIGNING_ALLOWED = NO; ENABLE_TESTABILITY = YES; GENERATE_INFOPLIST_FILE = YES; PRODUCT_BUNDLE_IDENTIFIER = com.siriusmac.player; PRODUCT_MODULE_NAME = SiriusMac; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_EMIT_LOC_STRINGS = YES; }; name = Debug; };
@@ -82,6 +95,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		F1F1F1F1F1F1F1F1F1F1F1F1 /* Build configuration list for PBXNativeTarget "SiriusMacTests" */ = {isa = XCConfigurationList; buildConfigurations = (F2F2F2F2F2F2F2F2F2F2F2F2 /* Debug */, F3F3F3F3F3F3F3F3F3F3F3F3 /* Release */,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 		A00100060000000000000001 /* Build configuration list for PBXNativeTarget "SiriusMac" */ = {isa = XCConfigurationList; buildConfigurations = (A00100080000000000000003 /* Debug */, A00100080000000000000004 /* Release */,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 		A00100060000000000000002 /* Build configuration list for PBXNativeTarget "SiriusMacTests" */ = {isa = XCConfigurationList; buildConfigurations = (A00100080000000000000005 /* Debug */, A00100080000000000000006 /* Release */,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 		A00100060000000000000003 /* Build configuration list for PBXProject "SiriusMac" */ = {isa = XCConfigurationList; buildConfigurations = (A00100080000000000000001 /* Debug */, A00100080000000000000002 /* Release */,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
@@ -95,5 +109,5 @@
 		A00100100000000000000001 /* SiriusXMClient */ = {isa = XCSwiftPackageProductDependency; package = A00100110000000000000001 /* XCLocalSwiftPackageReference "SiriusXMClient" */; productName = SiriusXMClient; };
 /* End XCSwiftPackageProductDependency section */
 	};
-	rootObject = A001000A0000000000000001 /* Project object */;
+	rootObject = E4E4E4E4E4E4E4E4E4E4E4E4 /* Project object */;
 }

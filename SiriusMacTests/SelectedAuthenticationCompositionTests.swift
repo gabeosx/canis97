@@ -23,7 +23,8 @@ final class SelectedAuthenticationCompositionTests: XCTestCase {
 
         XCTAssertEqual(state, .entitled)
         XCTAssertEqual(enteredEntitlementVerification, 1)
-        XCTAssertEqual(await client.events, [.authenticate, .entitlement])
+        let events = await client.events
+        XCTAssertEqual(events, [.authenticate, .entitlement])
     }
 
     func testTerminalBridgeAndClientResultsDoNotOfferFallbackOrRetry() async {
@@ -34,8 +35,11 @@ final class SelectedAuthenticationCompositionTests: XCTestCase {
         let client = CompositionClient(authentication: .rejected, entitlement: .unavailable)
         let flow = ComposedAuthenticationPresentationFlow(bridge: bridge, client: client)
 
-        XCTAssertEqual(await flow.useLoggedInSession {}, .unsupported)
-        XCTAssertEqual(await client.events, [])
+        let state = await flow.useLoggedInSession {}
+        let events = await client.events
+
+        XCTAssertEqual(state, .unsupported)
+        XCTAssertEqual(events, [])
     }
 
     private func tokenCookie(expires: Date) throws -> HTTPCookie {
