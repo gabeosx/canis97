@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 01
 current_phase_name: safe-interoperability-foundation
 status: executing
-stopped_at: Completed 01-05-PLAN.md
-last_updated: "2026-08-18T04:20:12.966Z"
+stopped_at: Completed 01-06-PLAN.md
+last_updated: "2026-08-18T04:37:12.542Z"
 last_activity: 2026-08-17
 last_activity_desc: "Completed quick task 260817-v8g: align Phase 1 with settled WebView-token/native-request architecture"
 progress:
   total_phases: 2
   completed_phases: 1
   total_plans: 20
-  completed_plans: 17
+  completed_plans: 18
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-08-16)
 ## Current Position
 
 Phase: 01 (safe-interoperability-foundation) — EXECUTING
-Plan: 6 of 8
+Plan: 7 of 8
 Status: Ready to execute
 Last activity: 2026-08-17 — Phase 01 execution started
 
-Progress: [█████████░] 85%
+Progress: [█████████░] 90%
 
 ## Performance Metrics
 
@@ -79,6 +79,7 @@ Progress: [█████████░] 85%
 | Phase 01 P03 | 6min | 2 tasks | 10 files |
 | Phase 01 P04 | 10min | 2 tasks | 7 files |
 | Phase 01 P05 | 13min | 2 tasks | 7 files |
+| Phase 01 P06 | 15min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -111,6 +112,8 @@ All earlier Phase 0 feasibility-selection, proof-run, quartet, GO/NO-GO, and cal
 - [Phase ?]: Retire actor state before starting both local cleaners and report their aggregate outcome without retrying cleanup.
 - [Phase ?]: Keep authentication presentation semantic and main-actor single-flight; WebKit/token details remain behind an injected flow.
 - [Phase ?]: Retry only restarts the settled native WebView path; unsupported has no player/library composition or alternate method.
+- [Phase ?]: Use one root-path, expiry-aware, boundary-correct SiriusXM cookie predicate for extraction and cleanup.
+- [Phase ?]: Keep the WebView credential handoff opaque and single-consumption through the client seam.
 
 ### Pending Todos
 
@@ -140,6 +143,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-18T04:20:12.945Z
-Stopped at: Completed 01-05-PLAN.md
+Last session: 2026-08-18T04:37:12.522Z
+Stopped at: Completed 01-06-PLAN.md
 Resume file: None
