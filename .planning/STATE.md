@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 01
 current_phase_name: safe-interoperability-foundation
 status: executing
-stopped_at: Completed 01-14-PLAN.md
-last_updated: "2026-08-18T17:46:26.606Z"
+stopped_at: Completed 01-15-PLAN.md
+last_updated: "2026-08-18T17:55:59.507Z"
 last_activity: 2026-08-18
 last_activity_desc: "Completed quick task 260818-c4r: update only Phase 1's Goal line in .planning/ROADMAP.md"
 progress:
   total_phases: 2
   completed_phases: 1
   total_plans: 28
-  completed_plans: 26
+  completed_plans: 27
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-08-16)
 ## Current Position
 
 Phase: 01 (safe-interoperability-foundation) — EXECUTING
-Plan: 4 of 12
+Plan: 5 of 12
 Status: Ready to execute
 Last activity: 2026-08-18 — Phase 01 execution started
 
-Progress: [█████████░] 93%
+Progress: [██████████] 96%
 
 ## Performance Metrics
 
@@ -88,6 +88,7 @@ Progress: [█████████░] 93%
 | Phase 01-safe-interoperability-foundation P12 | 6min | 1 tasks | 2 files |
 | Phase 01 P13 | 6 min | 2 tasks | 6 files |
 | Phase 01 P14 | 2 min | 1 tasks | 2 files |
+| Phase 01 P15 | 8 min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -134,6 +135,9 @@ All earlier Phase 0 feasibility-selection, proof-run, quartet, GO/NO-GO, and cal
 - [Phase 01]: Profile-v4 authentication accepts only a non-empty JSON object after existing transport and control preflight, without inventing a profile field. — Preserves the settled Phase 0 predicate while allowing representative unrelated fields.
 - [Phase 01]: Subscription-v1 entitlement is determined solely by exact nested subscription.status active or inactive values; all other evidence fails closed. — Maintains the settled entitlement contract and contains provider schema details internally.
 - [Phase ?]: Redirect instrumentation exposes only an internal scalar attempt count and never retains redirect or credential-bearing request data.
+- [Phase ?]: Only Secure current root-path AUTH_TOKEN cookies from normalized siriusxm.com or exact www.siriusxm.com are accepted.
+- [Phase ?]: Cleanup succeeds only after an exact-token rescan is clean and bridge-owned nonpersistent WebKit session retirement succeeds.
+- [Phase ?]: WebKit retirement bulk-removes only the app-owned nonpersistent store without enumerating, exporting, logging, or persisting browser records.
 
 ### Pending Todos
 
@@ -164,6 +168,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-18T17:46:26.586Z
-Stopped at: Completed 01-14-PLAN.md
+Last session: 2026-08-18T17:55:59.487Z
+Stopped at: Completed 01-15-PLAN.md
 Resume file: None
