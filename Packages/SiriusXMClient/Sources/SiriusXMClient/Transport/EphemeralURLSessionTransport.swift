@@ -13,7 +13,7 @@ final class EphemeralURLSessionTransport: NSObject, SessionTransport, @unchecked
         delegateQueue: nil
     )
 
-    var followUpRequestCount: Int { requestState.followUpRequestCount }
+    var redirectAttemptCount: Int { requestState.redirectAttemptCount }
     var hasActiveRequest: Bool { requestState.hasActiveRequest }
 
     static func makeConfiguration() -> URLSessionConfiguration {
@@ -69,6 +69,7 @@ extension EphemeralURLSessionTransport: URLSessionTaskDelegate {
         newRequest request: URLRequest,
         completionHandler: @escaping @Sendable (URLRequest?) -> Void
     ) {
+        requestState.recordRedirectAttempt()
         _ = redirectDecision(for: request)
         completionHandler(nil)
     }
@@ -79,7 +80,7 @@ private final class RequestState: @unchecked Sendable {
     private var activeRequest = false
     private var redirects = 0
 
-    var followUpRequestCount: Int {
+    var redirectAttemptCount: Int {
         lock.withLock { redirects }
     }
 
@@ -93,5 +94,9 @@ private final class RequestState: @unchecked Sendable {
 
     func clear() {
         lock.withLock { activeRequest = false }
+    }
+
+    func recordRedirectAttempt() {
+        lock.withLock { redirects += 1 }
     }
 }
