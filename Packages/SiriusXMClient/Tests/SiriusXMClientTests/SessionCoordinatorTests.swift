@@ -96,6 +96,30 @@ struct SessionCoordinatorTests {
         #expect(await store.saveCount == 0)
     }
 
+    @Test("session diagnostics preserve the safe native failure reason")
+    func recordsSafeFailureReason() async {
+        let diagnostics = RecordingDiagnostics()
+        let coordinator = SessionCoordinator(
+            credentialSource: RecordingCredentialSource(),
+            authenticationVerifier: RecordingAuthenticationVerifier(
+                response: NativeTransportResponse(
+                    statusCode: 200,
+                    contentType: "application/json",
+                    body: Data()
+                )
+            ),
+            entitlementVerifier: RecordingEntitlementVerifier(
+                response: response(body: SanitizedNativeResponseFixtures.subscriptionV1Active)
+            ),
+            credentialStore: RecordingCredentialStore(),
+            clock: FixedSessionClock(),
+            diagnostics: diagnostics
+        )
+
+        #expect(await coordinator.attemptSession() == .authentication(.unsupported))
+        #expect(await diagnostics.events == [.authentication(.unsupportedPayload)])
+    }
+
     private func response(body: Data) -> NativeTransportResponse {
         return NativeTransportResponse(statusCode: 200, contentType: "application/json", body: body)
     }
@@ -210,5 +234,9 @@ private struct FixedSessionClock: SessionClock {
 }
 
 private actor RecordingDiagnostics: SessionDiagnostics {
-    func record(_: SessionDiagnosticEvent) async {}
+    private(set) var events: [SessionDiagnosticEvent] = []
+
+    func record(_ event: SessionDiagnosticEvent) async {
+        events.append(event)
+    }
 }

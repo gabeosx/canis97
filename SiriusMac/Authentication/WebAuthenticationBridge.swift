@@ -1,6 +1,42 @@
 import Foundation
+import OSLog
 import WebKit
 import SiriusXMClient
+
+enum AuthenticationBridgeDiagnostic: String, CaseIterable, Equatable {
+    case webSignInStarted = "web-sign-in-started"
+    case credentialSelectionStarted = "credential-selection-started"
+    case authCookieMissing = "auth-cookie-missing"
+    case ambiguousCredentials = "ambiguous-credentials"
+    case malformedCredential = "malformed-credential"
+    case selectionCancelled = "selection-cancelled"
+    case credentialAlreadyConsumed = "credential-already-consumed"
+    case credentialTransferred = "credential-transferred"
+}
+
+@MainActor
+struct AuthenticationBridgeTelemetry {
+    private let recorder: (AuthenticationBridgeDiagnostic) -> Void
+
+    init(record: @escaping (AuthenticationBridgeDiagnostic) -> Void = { _ in }) {
+        recorder = record
+    }
+
+    static let disabled = AuthenticationBridgeTelemetry()
+    static let live: AuthenticationBridgeTelemetry = {
+        let logger = Logger(
+            subsystem: Bundle.main.bundleIdentifier ?? "com.siriusmac.player",
+            category: "authentication"
+        )
+        return AuthenticationBridgeTelemetry { event in
+            logger.info("Sirius Mac auth bridge event \(event.rawValue, privacy: .public)")
+        }
+    }()
+
+    func record(_ event: AuthenticationBridgeDiagnostic) {
+        recorder(event)
+    }
+}
 
 @MainActor
 protocol WebAuthenticationCookieStore: AnyObject {
@@ -29,6 +65,7 @@ final class WebAuthenticationBridge {
     private let handoff: VolatileWebCredentialHandoff
     private let websiteSession: WebAuthenticationWebsiteSession
     private let websiteSessionRetirer: @MainActor @Sendable () async -> Bool
+    private let telemetry: AuthenticationBridgeTelemetry
     private let usesLiveCookieStore: Bool
     private var selectionState: CredentialSelectionState = .available
     private var selectionGeneration = 0
@@ -42,6 +79,7 @@ final class WebAuthenticationBridge {
         self.handoff = handoff
         websiteSessionRetirer = { await websiteSession.removeAllWebsiteData() }
         usesLiveCookieStore = true
+        telemetry = .live
         handoffDisposer = { await handoff.discard() }
         credentialConsumer = { credential in
             await handoff.store(credential)
@@ -53,7 +91,8 @@ final class WebAuthenticationBridge {
         now: @escaping @MainActor () -> Date = Date.init,
         credentialConsumer: @escaping @MainActor @Sendable (AuthenticationCredential) async -> Void,
         handoffDisposer: @escaping @MainActor @Sendable () async -> Void = {},
-        websiteSessionRetirer: @escaping @MainActor @Sendable () async -> Bool = { true }
+        websiteSessionRetirer: @escaping @MainActor @Sendable () async -> Bool = { true },
+        telemetry: AuthenticationBridgeTelemetry = .disabled
     ) {
         let handoff = VolatileWebCredentialHandoff()
         websiteSession = WebAuthenticationWebsiteSession()
@@ -61,6 +100,7 @@ final class WebAuthenticationBridge {
         self.now = now
         self.handoff = handoff
         self.websiteSessionRetirer = websiteSessionRetirer
+        self.telemetry = telemetry
         usesLiveCookieStore = false
         self.handoffDisposer = {
             await handoff.discard()
@@ -85,6 +125,7 @@ final class WebAuthenticationBridge {
     /// Starts the sole owner-operated authentication path without reading browser state.
     /// A new explicit attempt discards any volatile prior handoff before re-arming selection.
     func beginUserOperatedSignIn() async {
+        telemetry.record(.webSignInStarted)
         // Keep selection fail-closed while the actor erases stale material.
         let reservation = beginSelection()
         await handoffDisposer()
@@ -95,7 +136,11 @@ final class WebAuthenticationBridge {
 
     /// The only action that reads the WebView-owned cookie store.
     func useLoggedInSession() async -> Result {
-        guard selectionState == .available else { return .alreadyConsumed }
+        telemetry.record(.credentialSelectionStarted)
+        guard selectionState == .available else {
+            telemetry.record(.credentialAlreadyConsumed)
+            return .alreadyConsumed
+        }
         let reservation = beginSelection()
         defer { completeUncommittedSelection(reservation) }
 
@@ -103,11 +148,18 @@ final class WebAuthenticationBridge {
             in: await cookieStore.allCookies(),
             now: now()
         )
-        guard !Task.isCancelled else { return .cancelled }
+        guard !Task.isCancelled else {
+            telemetry.record(.selectionCancelled)
+            return .cancelled
+        }
         switch candidates.count {
-        case 0: return .authCookieMissing
+        case 0:
+            telemetry.record(.authCookieMissing)
+            return .authCookieMissing
         case 1: break
-        default: return .ambiguousCredentials
+        default:
+            telemetry.record(.ambiguousCredentials)
+            return .ambiguousCredentials
         }
 
         var encodedCookieValue = candidates[0].value
@@ -115,6 +167,7 @@ final class WebAuthenticationBridge {
         guard encodedCookieValue.utf8.count <= 16_384,
               var decodedCookieValue = encodedCookieValue.removingPercentEncoding,
               decodedCookieValue.utf8.count <= 8_192 else {
+            telemetry.record(.malformedCredential)
             return .malformedCredential
         }
         defer { decodedCookieValue = "" }
@@ -126,13 +179,18 @@ final class WebAuthenticationBridge {
               payload.session.accessToken.utf8.count <= 8_192,
               !payload.session.accessToken.isEmpty,
               !payload.session.accessToken.contains(where: { $0.isWhitespace }) else {
+            telemetry.record(.malformedCredential)
             return .malformedCredential
         }
-        guard !Task.isCancelled else { return .cancelled }
+        guard !Task.isCancelled else {
+            telemetry.record(.selectionCancelled)
+            return .cancelled
+        }
 
         let credential = AuthenticationCredential(volatileMaterial: Data(payload.session.accessToken.utf8))
         selectionState = .consumed
         await credentialConsumer(credential)
+        telemetry.record(.credentialTransferred)
         return .credentialTransferred
     }
 

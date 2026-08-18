@@ -9,13 +9,31 @@ struct NativeTransportResponse: Sendable {
     let contentType: String?
     let body: Data
     let redirectLocation: String?
+    let transportFailed: Bool
 
-    init(statusCode: Int, contentType: String?, body: Data, redirectLocation: String? = nil) {
+    init(
+        statusCode: Int,
+        contentType: String?,
+        body: Data,
+        redirectLocation: String? = nil,
+        transportFailed: Bool = false
+    ) {
         self.statusCode = statusCode
         self.contentType = contentType
         self.body = body
         self.redirectLocation = redirectLocation
+        self.transportFailed = transportFailed
     }
+}
+
+struct AdapterAuthenticationClassification: Sendable, Equatable {
+    let result: AdapterAuthenticationResult
+    let diagnosticOutcome: SafeDiagnosticOutcome
+}
+
+struct AdapterEntitlementClassification: Sendable, Equatable {
+    let result: AdapterEntitlementResult
+    let diagnosticOutcome: SafeDiagnosticOutcome
 }
 
 enum AdapterAuthenticationResult: Sendable, Equatable {
@@ -77,41 +95,62 @@ enum AdapterEntitlementResult: Sendable, Equatable {
 
 enum AuthenticationFlowAdapter {
     static func classifyAuthentication(_ response: NativeTransportResponse) -> AdapterAuthenticationResult {
+        inspectAuthentication(response).result
+    }
+
+    static func inspectAuthentication(_ response: NativeTransportResponse) -> AdapterAuthenticationClassification {
         switch preflight(response) {
         case .accepted:
             break
-        case let .authentication(result):
-            return result
+        case let .authentication(result, diagnosticOutcome):
+            return AdapterAuthenticationClassification(result: result, diagnosticOutcome: diagnosticOutcome)
         }
 
         if let control = controlResult(in: response.body) {
-            return control
+            return AdapterAuthenticationClassification(
+                result: control,
+                diagnosticOutcome: diagnosticOutcome(for: control)
+            )
         }
 
-        return ProfileResponseV4Decoder.accepts(response.body)
-            ? .authenticatedPendingEntitlement
-            : .unsupported
+        if ProfileResponseV4Decoder.accepts(response.body) {
+            return AdapterAuthenticationClassification(
+                result: .authenticatedPendingEntitlement,
+                diagnosticOutcome: .completed
+            )
+        }
+        return AdapterAuthenticationClassification(result: .unsupported, diagnosticOutcome: .unsupportedPayload)
     }
 
     static func classifyEntitlement(_ response: NativeTransportResponse) -> AdapterEntitlementResult {
+        inspectEntitlement(response).result
+    }
+
+    static func inspectEntitlement(_ response: NativeTransportResponse) -> AdapterEntitlementClassification {
         switch preflight(response) {
         case .accepted:
             break
-        case let .authentication(result):
-            return entitlementResult(from: result)
+        case let .authentication(result, diagnosticOutcome):
+            return AdapterEntitlementClassification(
+                result: entitlementResult(from: result),
+                diagnosticOutcome: diagnosticOutcome
+            )
         }
 
         if let control = controlResult(in: response.body) {
-            return entitlementResult(from: control)
+            return AdapterEntitlementClassification(
+                result: entitlementResult(from: control),
+                diagnosticOutcome: diagnosticOutcome(for: control)
+            )
         }
 
         switch SubscriptionStatusResponseV1Decoder.classify(response.body) {
         case .active:
-            return .entitled
+            return AdapterEntitlementClassification(result: .entitled, diagnosticOutcome: .completed)
         case .inactive:
-            return .authenticatedButNotEntitled
+            return AdapterEntitlementClassification(result: .authenticatedButNotEntitled, diagnosticOutcome: .notEntitled)
         case .unsupported:
-            return .unsupported
+            return AdapterEntitlementClassification(result: .unsupported, diagnosticOutcome: .unsupportedPayload)
         }
     }
 
@@ -136,26 +175,48 @@ enum AuthenticationFlowAdapter {
 
     private enum Preflight {
         case accepted
-        case authentication(AdapterAuthenticationResult)
+        case authentication(AdapterAuthenticationResult, SafeDiagnosticOutcome)
     }
 
     private static func preflight(_ response: NativeTransportResponse) -> Preflight {
+        guard !response.transportFailed else {
+            return .authentication(.unsupported, .transportFailure)
+        }
         guard response.redirectLocation == nil else {
-            return .authentication(.redirectDrift)
+            return .authentication(.redirectDrift, .redirectDrift)
         }
         guard response.contentType?.lowercased().hasPrefix("application/json") == true else {
-            return .authentication(.unsupported)
+            return .authentication(.unsupported, .unsupportedContentType)
         }
 
         switch response.statusCode {
         case 200 ... 299:
             return .accepted
         case 401, 403:
-            return .authentication(.rejected)
+            return .authentication(.rejected, .rejected)
         case 429:
-            return .authentication(.rateLimited)
+            return .authentication(.rateLimited, .rateLimited)
         default:
-            return .authentication(.unsupported)
+            return .authentication(.unsupported, .unsupportedHTTPStatus)
+        }
+    }
+
+    private static func diagnosticOutcome(for result: AdapterAuthenticationResult) -> SafeDiagnosticOutcome {
+        switch result {
+        case .authenticatedPendingEntitlement:
+            .completed
+        case .rejected:
+            .rejected
+        case .challengeRequired:
+            .challengeRequired
+        case .rateLimited:
+            .rateLimited
+        case .redirectDrift:
+            .redirectDrift
+        case .botControlDetected:
+            .botControlDetected
+        case .unsupported:
+            .unsupportedPayload
         }
     }
 

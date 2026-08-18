@@ -78,13 +78,13 @@ actor SessionCoordinator {
         }
 
         guard let credential = await credentialSource.credential(), isCurrent(lease) else {
-            await diagnostics.record(.cancelled)
+            await diagnostics.record(.authentication(.credentialUnavailable))
             return .authentication(.cancelled)
         }
         transientCredential = credential
 
         guard isCurrent(lease), !Task.isCancelled else {
-            await diagnostics.record(.cancelled)
+            await diagnostics.record(.authentication(.cancelled))
             return .authentication(.cancelled)
         }
 
@@ -93,14 +93,14 @@ actor SessionCoordinator {
         let authenticationResponse = await authenticationVerifier.verifyAuthentication(using: credential)
 
         guard isCurrent(lease), !Task.isCancelled else {
-            await diagnostics.record(.cancelled)
+            await diagnostics.record(.authentication(.cancelled))
             return .authentication(.cancelled)
         }
 
-        let authentication = AuthenticationFlowAdapter.classifyAuthentication(authenticationResponse)
-        guard authentication == .authenticatedPendingEntitlement else {
-            let outcome = authentication.publicOutcome
-            await diagnostics.record(.authentication(outcome))
+        let authentication = AuthenticationFlowAdapter.inspectAuthentication(authenticationResponse)
+        await diagnostics.record(.authentication(authentication.diagnosticOutcome))
+        guard authentication.result == .authenticatedPendingEntitlement else {
+            let outcome = authentication.result.publicOutcome
             return .authentication(outcome)
         }
 
@@ -109,20 +109,20 @@ actor SessionCoordinator {
         let entitlementResponse = await entitlementVerifier.verifyEntitlement(using: credential)
 
         guard isCurrent(lease), !Task.isCancelled else {
-            await diagnostics.record(.cancelled)
+            await diagnostics.record(.authentication(.cancelled))
             return .authentication(.cancelled)
         }
 
-        let entitlement = AuthenticationFlowAdapter.classifyEntitlement(entitlementResponse)
-        guard entitlement == .entitled else {
-            let outcome = entitlement.publicOutcome
+        let entitlement = AuthenticationFlowAdapter.inspectEntitlement(entitlementResponse)
+        await diagnostics.record(.entitlement(entitlement.diagnosticOutcome))
+        guard entitlement.result == .entitled else {
+            let outcome = entitlement.result.publicOutcome
             lastEntitlement = outcome
-            await diagnostics.record(.entitlement(outcome))
             return .entitlement(outcome)
         }
 
         guard isCurrent(lease) else {
-            await diagnostics.record(.cancelled)
+            await diagnostics.record(.authentication(.cancelled))
             return .authentication(.cancelled)
         }
 

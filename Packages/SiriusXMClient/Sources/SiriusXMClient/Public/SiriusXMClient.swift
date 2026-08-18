@@ -25,6 +25,7 @@ public actor SiriusXMClient {
         credentialStore: any CredentialStore,
         residueCleaner: any AuthenticationResidueCleaner
     ) {
+        let diagnostics = OSLogSessionDiagnostics()
         let verifier = NativeRequestVerifier(transport: EphemeralURLSessionTransport())
         sessionCoordinator = SessionCoordinator(
             credentialSource: credentialSource,
@@ -33,7 +34,7 @@ public actor SiriusXMClient {
             credentialStore: credentialStore,
             residueCleaner: residueCleaner,
             clock: SystemSessionClock(),
-            diagnostics: NoopSessionDiagnostics()
+            diagnostics: diagnostics
         )
     }
 
@@ -115,15 +116,16 @@ private final class NativeRequestVerifier: NativeAuthenticationVerifying, Native
             return try await transport.send(operation, using: credential)
         } catch {
             // Transport errors expose no provider detail and classify as unsupported.
-            return NativeTransportResponse(statusCode: 500, contentType: nil, body: Data())
+            return NativeTransportResponse(
+                statusCode: 500,
+                contentType: nil,
+                body: Data(),
+                transportFailed: true
+            )
         }
     }
 }
 
 private struct SystemSessionClock: SessionClock {
     func now() -> Date { Date() }
-}
-
-private actor NoopSessionDiagnostics: SessionDiagnostics {
-    func record(_: SessionDiagnosticEvent) async {}
 }

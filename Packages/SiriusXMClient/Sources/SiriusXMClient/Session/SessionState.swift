@@ -35,8 +35,7 @@ protocol SessionDiagnostics: Sendable {
 }
 
 enum SessionDiagnosticEvent: Sendable, Equatable {
-    case cancelled
-    case authentication(AuthenticationOutcome)
-    case entitlement(EntitlementAvailability)
+    case authentication(SafeDiagnosticOutcome)
+    case entitlement(SafeDiagnosticOutcome)
     case credentialPersistenceFailed
 }

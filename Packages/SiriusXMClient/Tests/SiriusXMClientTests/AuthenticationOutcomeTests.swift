@@ -56,6 +56,43 @@ struct AuthenticationOutcomeTests {
         #expect(AuthenticationFlowAdapter.classifyEntitlement(unknown) == .unsupported)
     }
 
+    @Test("diagnostics distinguish safe failure classes without response material")
+    func diagnosticsIdentifyTheCompatibilityBoundary() {
+        let cases: [(NativeTransportResponse, SafeDiagnosticOutcome)] = [
+            (
+                NativeTransportResponse(
+                    statusCode: 500,
+                    contentType: nil,
+                    body: Data(),
+                    transportFailed: true
+                ),
+                .transportFailure
+            ),
+            (
+                response(
+                    body: SanitizedNativeResponseFixtures.profileV4Authenticated,
+                    redirectLocation: "https://example.invalid/drift"
+                ),
+                .redirectDrift
+            ),
+            (
+                NativeTransportResponse(statusCode: 200, contentType: "text/html", body: Data()),
+                .unsupportedContentType
+            ),
+            (response(statusCode: 500, body: Data("{}".utf8)), .unsupportedHTTPStatus),
+            (response(statusCode: 429, body: Data("{}".utf8)), .rateLimited),
+            (response(statusCode: 200, object: ["bot": true]), .botControlDetected),
+            (response(body: Data()), .unsupportedPayload),
+        ]
+
+        for (nativeResponse, expectedDiagnostic) in cases {
+            #expect(AuthenticationFlowAdapter.inspectAuthentication(nativeResponse).diagnosticOutcome == expectedDiagnostic)
+        }
+
+        let inactive = response(body: SanitizedNativeResponseFixtures.subscriptionV1Inactive)
+        #expect(AuthenticationFlowAdapter.inspectEntitlement(inactive).diagnosticOutcome == .notEntitled)
+    }
+
     private func response(
         statusCode: Int = 200,
         object: [String: Any] = [:],

@@ -18,6 +18,20 @@ struct RedactionTests {
         #expect(!event.rendered.contains(canary))
     }
 
+    @Test("every diagnostic outcome renders as fixed labels only")
+    func allDiagnosticOutcomesAreBounded() {
+        for outcome in SafeDiagnosticOutcome.allCases {
+            let event = SafeDiagnosticEvent(
+                operation: .nativeAuthentication,
+                outcome: outcome,
+                handle: SafeDiagnosticHandle()
+            )
+
+            #expect(event.rendered.range(of: #"^[a-z-]+:[a-z-]+$"#, options: .regularExpression) != nil)
+            #expect(!event.rendered.contains(canary))
+        }
+    }
+
     @Test("safe event and fixture representations exclude secret canaries")
     func representationsExcludeCanaries() throws {
         let event = SafeDiagnosticEvent(

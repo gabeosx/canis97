@@ -96,6 +96,48 @@ final class WebAuthenticationBridgeTests: XCTestCase {
         XCTAssertEqual(incompleteResult, .malformedCredential)
     }
 
+    func testTelemetryIdentifiesSafeCredentialSelectionOutcomesWithoutPayloads() async throws {
+        let now = Date()
+        var events: [AuthenticationBridgeDiagnostic] = []
+        let telemetry = AuthenticationBridgeTelemetry { events.append($0) }
+
+        let missingBridge = WebAuthenticationBridge(
+            cookieStore: TestCookieStore(cookies: []),
+            now: { now },
+            credentialConsumer: { _ in },
+            telemetry: telemetry
+        )
+        let malformedBridge = WebAuthenticationBridge(
+            cookieStore: TestCookieStore(cookies: [try authCookie(value: "not-json", expires: now.addingTimeInterval(60))]),
+            now: { now },
+            credentialConsumer: { _ in },
+            telemetry: telemetry
+        )
+        let transferredBridge = WebAuthenticationBridge(
+            cookieStore: TestCookieStore(cookies: [try authCookie(expires: now.addingTimeInterval(60))]),
+            now: { now },
+            credentialConsumer: { _ in },
+            telemetry: telemetry
+        )
+
+        let missingResult = await missingBridge.useLoggedInSession()
+        let malformedResult = await malformedBridge.useLoggedInSession()
+        let transferredResult = await transferredBridge.useLoggedInSession()
+
+        XCTAssertEqual(missingResult, .authCookieMissing)
+        XCTAssertEqual(malformedResult, .malformedCredential)
+        XCTAssertEqual(transferredResult, .credentialTransferred)
+        XCTAssertEqual(events, [
+            .credentialSelectionStarted,
+            .authCookieMissing,
+            .credentialSelectionStarted,
+            .malformedCredential,
+            .credentialSelectionStarted,
+            .credentialTransferred,
+        ])
+        XCTAssertFalse(events.map(\.rawValue).joined().contains("synthetic-access-token"))
+    }
+
     func testConcurrentSelectionsReserveOneCookieReadAndOneCredentialTransfer() async throws {
         let now = Date()
         let cookie = try authCookie(expires: now.addingTimeInterval(60))
