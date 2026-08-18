@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 01
 current_phase_name: safe-interoperability-foundation
 status: executing
-stopped_at: Completed 01-03-PLAN.md
-last_updated: "2026-08-18T03:51:56.696Z"
+stopped_at: Completed 01-04-PLAN.md
+last_updated: "2026-08-18T04:05:07.093Z"
 last_activity: 2026-08-17
 last_activity_desc: "Completed quick task 260817-v8g: align Phase 1 with settled WebView-token/native-request architecture"
 progress:
   total_phases: 2
   completed_phases: 1
   total_plans: 20
-  completed_plans: 15
+  completed_plans: 16
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-08-16)
 ## Current Position
 
 Phase: 01 (safe-interoperability-foundation) — EXECUTING
-Plan: 4 of 8
+Plan: 5 of 8
 Status: Ready to execute
 Last activity: 2026-08-17 — Phase 01 execution started
 
-Progress: [████████░░] 75%
+Progress: [████████░░] 80%
 
 ## Performance Metrics
 
@@ -77,6 +77,7 @@ Progress: [████████░░] 75%
 | Phase 01 P01 | 12min | 2 tasks | 10 files |
 | Phase 01 P02 | 4min | 2 tasks | 6 files |
 | Phase 01 P03 | 6min | 2 tasks | 10 files |
+| Phase 01 P04 | 10min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -104,6 +105,9 @@ All earlier Phase 0 feasibility-selection, proof-run, quartet, GO/NO-GO, and cal
 - [Phase ?]: Restrict authorization to the two settled GET request contracts and cancel every redirect after validation.
 - [Phase ?]: Keep credential material opaque to public consumers through a scoped internal request-construction closure.
 - [Phase ?]: Reject sensitive fixture structures and values before promotion; diagnostics accept only closed semantic events.
+- [Phase ?]: Keep app Keychain access behind one generic-password identity and safe classifications with no OSStatus or secret detail.
+- [Phase ?]: Expose material to the app-owned Keychain adapter only through an SPI-scoped closure, never through the ordinary public client API.
+- [Phase ?]: Retire actor state before starting both local cleaners and report their aggregate outcome without retrying cleanup.
 
 ### Pending Todos
 
@@ -133,6 +137,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-18T03:51:56.676Z
-Stopped at: Completed 01-03-PLAN.md
+Last session: 2026-08-18T04:05:07.074Z
+Stopped at: Completed 01-04-PLAN.md
 Resume file: None

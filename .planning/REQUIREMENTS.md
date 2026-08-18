@@ -21,11 +21,11 @@ Phase 0 is historical. FEAS-01 records the accepted architecture; FEAS-02/03/05 
 
 - [x] **AUTH-01**: Subscriber can sign in directly against SiriusXM and receives explicit success, rejection, challenge, unsupported-flow, and entitlement outcomes.
 - [x] **AUTH-02**: Authentication fails closed when SiriusXM returns an unknown or changed flow without attempting to bypass CAPTCHA, MFA, device, geographic, anti-bot, DRM, or subscription controls.
-- [ ] **AUTH-03**: Subscriber can sign out and the app clears active session material and its stored SiriusXM credentials.
+- [x] **AUTH-03**: Subscriber can sign out and the app clears active session material and its stored SiriusXM credentials.
 
 ### Security & Privacy
 
-- [ ] **SECR-01**: Subscriber credentials are stored through a macOS Keychain-backed app adapter and are never persisted in preferences, SwiftData, fixtures, or other local application data.
+- [x] **SECR-01**: Subscriber credentials are stored through a macOS Keychain-backed app adapter and are never persisted in preferences, SwiftData, fixtures, or other local application data.
 - [x] **SECR-02**: Session tokens and resolved stream resources remain ephemeral and leave the Mac only in direct requests to SiriusXM.
 - [x] **SECR-03**: Logs, fixtures, tests, crash context, compatibility reports, and support exports redact or exclude credentials, authorization material, token-bearing URLs, and raw sensitive responses by construction.
 
@@ -151,8 +151,8 @@ Every v1 requirement maps to exactly one delivery phase in `.planning/ROADMAP.md
 | FEAS-05 | Phase 0 | Superseded |
 | AUTH-01 | Phase 1 | Complete |
 | AUTH-02 | Phase 1 | Complete |
-| AUTH-03 | Phase 1 | Pending |
-| SECR-01 | Phase 1 | Pending |
+| AUTH-03 | Phase 1 | Complete |
+| SECR-01 | Phase 1 | Complete |
 | SECR-02 | Phase 1 | Complete |
 | SECR-03 | Phase 1 | Complete |
 | CLNT-01 | Phase 1 | Complete |
