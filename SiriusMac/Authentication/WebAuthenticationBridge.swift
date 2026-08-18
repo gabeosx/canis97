@@ -23,6 +23,7 @@ final class WebAuthenticationBridge {
     private let cookieStore: any WebAuthenticationCookieStore
     private let now: @MainActor () -> Date
     private let credentialConsumer: @MainActor @Sendable (AuthenticationCredential) async -> Void
+    private let handoff: VolatileWebCredentialHandoff?
     private var webView: WKWebView?
     private var didTransferCredential = false
 
@@ -32,6 +33,7 @@ final class WebAuthenticationBridge {
         webViewConfiguration = configuration
         cookieStore = WebKitAuthenticationCookieStore(cookieStore: configuration.websiteDataStore.httpCookieStore)
         now = Date.init
+        self.handoff = handoff
         credentialConsumer = { credential in
             await handoff.store(credential)
         }
@@ -46,6 +48,12 @@ final class WebAuthenticationBridge {
         self.cookieStore = cookieStore
         self.now = now
         self.credentialConsumer = credentialConsumer
+        handoff = nil
+    }
+
+    /// The app-facing, single-consumption client seam for the opaque credential.
+    var credentialSource: (any CredentialSource)? {
+        handoff
     }
 
     static func makeConfiguration() -> WKWebViewConfiguration {
@@ -104,6 +112,32 @@ final class WebAuthenticationBridge {
         didTransferCredential = true
         await credentialConsumer(credential)
         return .credentialTransferred
+    }
+}
+
+extension WebAuthenticationBridge: AuthenticationResidueCleaner {
+    /// Deletes only cookies selected by the same predicate used for extraction,
+    /// then requires a clean rescan before reporting completion.
+    func removeAuthenticationResidue() async -> AuthenticationResidueCleanupOutcome {
+        let currentTime = now()
+        let initialMatches = FirstPartyTokenCookiePolicy.matchingCookies(
+            in: await cookieStore.allCookies(),
+            now: currentTime
+        )
+
+        for cookie in initialMatches {
+            do {
+                try await cookieStore.delete(cookie)
+            } catch {
+                return .cleanupFailed
+            }
+        }
+
+        let remainingMatches = FirstPartyTokenCookiePolicy.matchingCookies(
+            in: await cookieStore.allCookies(),
+            now: currentTime
+        )
+        return remainingMatches.isEmpty ? .removed : .cleanupFailed
     }
 }
 

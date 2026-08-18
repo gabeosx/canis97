@@ -101,8 +101,10 @@ final class WebAuthenticationBridgeTests: XCTestCase {
 
         XCTAssertTrue(project.contains("WebAuthenticationBridge.swift in Sources"))
         XCTAssertTrue(project.contains("WebAuthenticationBridgeTests.swift in Sources"))
-        XCTAssertFalse(project.contains(".planning"))
-        XCTAssertFalse(testSource.contains("canImport(AuthFeasibilityHarness)"))
+        let planningDirectory = "." + "planning"
+        XCTAssertFalse(project.contains(planningDirectory))
+        let excludedImport = "can" + "Import(AuthFeasibilityHarness)"
+        XCTAssertFalse(testSource.contains(excludedImport))
     }
 
     private func authCookie(
