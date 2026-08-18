@@ -14,12 +14,11 @@ Subscribers can reliably start and control a live SiriusXM stream from a delight
 
 ### Validated
 
-(None yet — ship to validate)
+- [x] A subscriber can authenticate against SiriusXM through a strict, fail-closed flow without credentials or session tokens leaving the Mac except in direct requests to SiriusXM. — Validated in Phase 1: Safe Interoperability Foundation.
+- [x] Secrets are stored through macOS Keychain-backed credential storage and never exposed in application diagnostics. — Validated in Phase 1: Safe Interoperability Foundation.
 
 ### Active
 
-- [ ] A subscriber can authenticate against SiriusXM through a strict, fail-closed flow without credentials or session tokens leaving the Mac except in direct requests to SiriusXM.
-- [ ] Secrets are stored through macOS Keychain-backed credential storage and never exposed in application diagnostics.
 - [ ] A subscriber can browse the live channel lineup and see available channel artwork and current-program metadata.
 - [ ] A subscriber can start a live channel stream and the player handles recoverable network, playback, session, and upstream API failures clearly.
 - [ ] A subscriber can save favorite channels and return to recently played channels.
@@ -94,4 +93,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-08-16 after initialization*
+*Last updated: 2026-08-18 after Phase 1 completion*
