@@ -23,9 +23,14 @@ final class WebAuthenticationBridgeTests: XCTestCase {
             credentialConsumer: { credential in await recorder.record(credential) }
         )
 
-        XCTAssertEqual(await bridge.useLoggedInSession(), .credentialTransferred)
-        XCTAssertEqual(await recorder.count, 1)
-        XCTAssertEqual(await recorder.descriptions, ["AuthenticationCredential(redacted)"])
+        let result = await bridge.useLoggedInSession()
+        let repeatedResult = await bridge.useLoggedInSession()
+        let snapshot = await recorder.snapshot()
+
+        XCTAssertEqual(result, .credentialTransferred)
+        XCTAssertEqual(repeatedResult, .alreadyConsumed)
+        XCTAssertEqual(snapshot.count, 1)
+        XCTAssertEqual(snapshot.descriptions, ["AuthenticationCredential(redacted)"])
     }
 
     func testMissingMultipleExpiredLookalikeAndUnsupportedCookiesFailClosed() throws {
@@ -45,17 +50,20 @@ final class WebAuthenticationBridgeTests: XCTestCase {
     func testMalformedOrIncompletePayloadProducesATerminalResult() async throws {
         let now = Date()
         let malformed = try authCookie(value: "not-json", expires: now.addingTimeInterval(60))
-        let incomplete = try authCookie(value: #"{\"session\":{}}"#, expires: now.addingTimeInterval(60))
+        let incomplete = try authCookie(value: #"{"session":{}}"#, expires: now.addingTimeInterval(60))
 
         let malformedBridge = WebAuthenticationBridge(cookieStore: TestCookieStore(cookies: [malformed]), now: { now }, credentialConsumer: { _ in })
         let incompleteBridge = WebAuthenticationBridge(cookieStore: TestCookieStore(cookies: [incomplete]), now: { now }, credentialConsumer: { _ in })
 
-        XCTAssertEqual(await malformedBridge.useLoggedInSession(), .malformedCredential)
-        XCTAssertEqual(await incompleteBridge.useLoggedInSession(), .malformedCredential)
+        let malformedResult = await malformedBridge.useLoggedInSession()
+        let incompleteResult = await incompleteBridge.useLoggedInSession()
+
+        XCTAssertEqual(malformedResult, .malformedCredential)
+        XCTAssertEqual(incompleteResult, .malformedCredential)
     }
 
     private func authCookie(
-        value: String = #"{\"session\":{\"accessToken\":\"synthetic-access-token\"}}"#,
+        value: String = #"{"session":{"accessToken":"synthetic-access-token"}}"#,
         domain: String = "siriusxm.com",
         path: String = "/",
         expires: Date
@@ -95,5 +103,9 @@ private actor CredentialRecorder {
     func record(_ credential: AuthenticationCredential) {
         count += 1
         descriptions.append(credential.description)
+    }
+
+    func snapshot() -> (count: Int, descriptions: [String]) {
+        (count, descriptions)
     }
 }

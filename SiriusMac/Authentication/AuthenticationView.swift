@@ -2,6 +2,7 @@ import SwiftUI
 
 struct AuthenticationView: View {
     @State private var model = AuthenticationPresentationModel()
+    @State private var bridge = WebAuthenticationBridge()
 
     var body: some View {
         let copy = model.presentation(for: model.state)
@@ -31,7 +32,7 @@ struct AuthenticationView: View {
                             Button("Sign Out") { _ = model.signOut() }
                         }
                     } else {
-                        WebViewAuthenticationContainer()
+                        WebViewAuthenticationContainer(bridge: bridge)
                         authenticationActions
                     }
                 }
@@ -56,8 +57,16 @@ struct AuthenticationView: View {
         switch model.state {
         case .waitingForWebView:
             HStack {
-                Button("Sign In") { _ = model.signIn() }
-                Button("Use Logged-In Session") { _ = model.useLoggedInSession() }
+                Button("Sign In") {
+                    bridge.beginUserOperatedSignIn()
+                    _ = model.signIn()
+                }
+                Button("Use Logged-In Session") {
+                    Task {
+                        _ = await bridge.useLoggedInSession()
+                        _ = model.useLoggedInSession()
+                    }
+                }
             }
         case .authenticatedButNotEntitled,
              .rejected,
@@ -76,11 +85,12 @@ struct AuthenticationView: View {
 
 /// The fixed native location where Plan 01-06 attaches the nonpersistent WebKit bridge.
 private struct WebViewAuthenticationContainer: View {
+    let bridge: WebAuthenticationBridge
+
     var body: some View {
         GroupBox("Native sign-in") {
-            Text("The SiriusXM sign-in page opens here when you choose Sign In.")
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, minHeight: 180, alignment: .topLeading)
+            WebAuthenticationView(bridge: bridge)
+                .frame(maxWidth: .infinity, minHeight: 180)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Native SiriusXM sign-in area")
