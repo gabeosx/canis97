@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import WebKit
 import XCTest
 import SiriusXMClient
@@ -270,6 +271,105 @@ final class WebAuthenticationBridgeTests: XCTestCase {
         XCTAssertEqual(staleResult, .cleanupFailed)
     }
 
+    func testSignOutRescansExactTokensThenRetiresTheOwnedWebsiteSession() async throws {
+        let now = Date()
+        let store = TestCookieStore(
+            cookies: [
+                try authCookie(domain: "siriusxm.com", expires: now.addingTimeInterval(60)),
+                try authCookie(domain: "www.siriusxm.com", expires: now.addingTimeInterval(60)),
+            ],
+            hasSyntheticSessionResidue: true
+        )
+        let bridge = WebAuthenticationBridge(
+            cookieStore: store,
+            now: { now },
+            credentialConsumer: { _ in },
+            websiteSessionRetirer: { await store.retireAuthenticationWebsiteSession() }
+        )
+        let retiredWebView = bridge.makeWebView()
+
+        let result = await bridge.removeAuthenticationResidue()
+        let freshWebView = bridge.makeWebView()
+
+        XCTAssertEqual(result, .removed)
+        XCTAssertEqual(store.eventLog, ["read", "delete", "delete", "read", "retire"])
+        XCTAssertEqual(store.retirementCount, 1)
+        XCTAssertFalse(store.hasSyntheticSessionResidue)
+        XCTAssertEqual(bridge.websiteSessionGeneration, 1)
+        XCTAssertFalse(retiredWebView === freshWebView)
+        XCTAssertFalse(bridge.webViewConfiguration.websiteDataStore.isPersistent)
+    }
+
+    func testSignOutReportsEveryPartialFailureButStillAttemptsWebsiteSessionRetirement() async throws {
+        let now = Date()
+        let deleteFailureStore = TestCookieStore(
+            cookies: [try authCookie(expires: now.addingTimeInterval(60))],
+            deleteFailure: true,
+            hasSyntheticSessionResidue: true
+        )
+        let staleStore = TestCookieStore(
+            cookies: [try authCookie(expires: now.addingTimeInterval(60))],
+            retainDeletedCookies: true,
+            hasSyntheticSessionResidue: true
+        )
+        let retirementFailureStore = TestCookieStore(
+            cookies: [try authCookie(expires: now.addingTimeInterval(60))],
+            retirementFailure: true,
+            hasSyntheticSessionResidue: true
+        )
+
+        let deleteFailure = await WebAuthenticationBridge(
+            cookieStore: deleteFailureStore,
+            now: { now },
+            credentialConsumer: { _ in },
+            websiteSessionRetirer: { await deleteFailureStore.retireAuthenticationWebsiteSession() }
+        ).removeAuthenticationResidue()
+        let staleResult = await WebAuthenticationBridge(
+            cookieStore: staleStore,
+            now: { now },
+            credentialConsumer: { _ in },
+            websiteSessionRetirer: { await staleStore.retireAuthenticationWebsiteSession() }
+        ).removeAuthenticationResidue()
+        let retirementFailure = await WebAuthenticationBridge(
+            cookieStore: retirementFailureStore,
+            now: { now },
+            credentialConsumer: { _ in },
+            websiteSessionRetirer: { await retirementFailureStore.retireAuthenticationWebsiteSession() }
+        ).removeAuthenticationResidue()
+
+        XCTAssertEqual(deleteFailure, .cleanupFailed)
+        XCTAssertEqual(staleResult, .cleanupFailed)
+        XCTAssertEqual(retirementFailure, .cleanupFailed)
+        XCTAssertEqual(deleteFailureStore.eventLog, ["read", "delete", "read", "retire"])
+        XCTAssertEqual(staleStore.eventLog, ["read", "delete", "read", "retire"])
+        XCTAssertEqual(retirementFailureStore.eventLog, ["read", "delete", "read", "retire"])
+        XCTAssertEqual(deleteFailureStore.retirementCount, 1)
+        XCTAssertEqual(staleStore.retirementCount, 1)
+        XCTAssertEqual(retirementFailureStore.retirementCount, 1)
+    }
+
+    func testStableWebViewHostReplacesTheRetiredChild() async throws {
+        let now = Date()
+        let store = TestCookieStore(cookies: [try authCookie(expires: now.addingTimeInterval(60))])
+        let bridge = WebAuthenticationBridge(
+            cookieStore: store,
+            now: { now },
+            credentialConsumer: { _ in },
+            websiteSessionRetirer: { await store.retireAuthenticationWebsiteSession() }
+        )
+        let host = WebAuthenticationWebViewHost(frame: .zero)
+        let retiredWebView = bridge.makeWebView()
+        host.install(retiredWebView)
+
+        XCTAssertEqual(await bridge.removeAuthenticationResidue(), .removed)
+        let freshWebView = bridge.makeWebView()
+        host.install(freshWebView)
+
+        XCTAssertEqual(host.subviews.count, 1)
+        XCTAssertTrue(host.subviews[0] === freshWebView)
+        XCTAssertFalse(host.subviews[0] === retiredWebView)
+    }
+
     func testUnapprovedSubdomainIsNeitherTransferredNorAnExactCleanupMatch() async throws {
         let now = Date()
         let store = TestCookieStore(cookies: [
@@ -327,26 +427,48 @@ private final class TestCookieStore: WebAuthenticationCookieStore {
     private var cookies: [HTTPCookie]
     private let deleteFailure: Bool
     private let retainDeletedCookies: Bool
+    private let retirementFailure: Bool
+    private(set) var hasSyntheticSessionResidue: Bool
     private(set) var readCount = 0
     private(set) var deletedCount = 0
+    private(set) var retirementCount = 0
+    private(set) var eventLog: [String] = []
 
-    init(cookies: [HTTPCookie], deleteFailure: Bool = false, retainDeletedCookies: Bool = false) {
+    init(
+        cookies: [HTTPCookie],
+        deleteFailure: Bool = false,
+        retainDeletedCookies: Bool = false,
+        retirementFailure: Bool = false,
+        hasSyntheticSessionResidue: Bool = false
+    ) {
         self.cookies = cookies
         self.deleteFailure = deleteFailure
         self.retainDeletedCookies = retainDeletedCookies
+        self.retirementFailure = retirementFailure
+        self.hasSyntheticSessionResidue = hasSyntheticSessionResidue
     }
 
     func allCookies() async -> [HTTPCookie] {
         readCount += 1
+        eventLog.append("read")
         return cookies
     }
 
     func delete(_ cookie: HTTPCookie) async throws {
+        eventLog.append("delete")
         if deleteFailure { throw TestCookieStoreError.deleteFailed }
         deletedCount += 1
         if !retainDeletedCookies {
             cookies.removeAll { $0 === cookie }
         }
+    }
+
+    func retireAuthenticationWebsiteSession() async -> Bool {
+        eventLog.append("retire")
+        retirementCount += 1
+        guard !retirementFailure else { return false }
+        hasSyntheticSessionResidue = false
+        return true
     }
 }
 
