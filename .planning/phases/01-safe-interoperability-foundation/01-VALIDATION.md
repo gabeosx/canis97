@@ -1,74 +1,89 @@
 ---
-phase: 1
+phase: 01
 slug: safe-interoperability-foundation
-status: planned
+status: validated
 nyquist_compliant: true
-wave_0_complete: false
-created: 2026-08-16
-updated: 2026-08-17
+wave_0_complete: true
+created: 2026-08-18
+updated: 2026-08-18
 ---
 
-# Phase 1 — Validation Strategy
+# Phase 01 — Validation Strategy
 
-## Test infrastructure
+> Retroactive Nyquist audit of all Phase 1 requirements after closure Plans 01-13–01-16.
+
+## Test Infrastructure
 
 | Property | Value |
-|---|---|
-| Framework | Swift Testing; XCTest for app/WebKit/Keychain integration |
-| Package command | `swift test --package-path Packages/SiriusXMClient` |
-| App command | `xcodebuild -project SiriusMac.xcodeproj -scheme SiriusMac -destination 'platform=macOS' test` |
-| Live provider activity | None; Phase 1 validation uses synthetic collaborators |
+|----------|-------|
+| **Frameworks** | XCTest for the macOS app; Swift Testing/XCTest for SwiftPM packages |
+| **App project** | `SiriusMac.xcodeproj` / `SiriusMac` scheme |
+| **Client package** | `Packages/SiriusXMClient/Package.swift` |
+| **Historical regression package** | `Spikes/AuthenticationFeasibility/Package.swift` |
+| **Quick app command** | `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild test -scheme SiriusMac -destination 'platform=macOS'` |
+| **Quick client command** | `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --package-path Packages/SiriusXMClient` |
+| **Full regression command** | Run the app command, client command, then `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --package-path Spikes/AuthenticationFeasibility` |
+| **Observed result** | 41 app + 29 client + 60 Phase 0 tests passed |
 
-Full Xcode is an execution prerequisite for app tests. Authentication feasibility, Phase 0 artifact validation, and duplicate owner proof runs are explicitly outside this strategy.
+## Sampling Rate
 
-## Sampling rate
+- **After every behavior-changing task:** run its focused XCTest or Swift Testing filter.
+- **After every plan:** run the complete owning app or package suite.
+- **After each wave and before verification:** run the macOS build plus all three suites.
+- **Watch mode:** prohibited; all commands are one-shot.
+- **Observed full feedback latency:** under 15 seconds on the current development Mac.
 
-- After every task: run the focused test command in that task.
-- After every wave: run the complete package suite and the app suite once the scheme exists.
-- Before phase verification: run both full suites and the static stale-gate scan from Plan 01-08.
-- Mutable `.planning` artifacts must never control whether WebKit/authentication sources or deterministic tests compile.
+## Requirement Verification Map
 
-## Per-task verification map
+| Requirement | Behavioral evidence | Test files | Automated command | Status |
+|-------------|---------------------|------------|-------------------|--------|
+| AUTH-01 | Explicit WebView consent transfers one credential; native authentication precedes entitlement; valid restored material is revalidated through the same transaction. | `SiriusMacTests/WebAuthenticationBridgeTests.swift`, `SiriusMacTests/SelectedAuthenticationCompositionTests.swift`, `Packages/SiriusXMClient/Tests/SiriusXMClientTests/SessionCoordinatorTests.swift`, `WebTokenAuthenticationTests.swift` | App + client suites | ✅ green |
+| AUTH-02 | Unknown, malformed, challenge, bot-control, redirect, 403, 429, invalid-restore, and unavailable-restore cases terminate without fallback or retry. | `AuthenticationOutcomeTests.swift`, `EphemeralSessionTests.swift`, `SelectedAuthenticationCompositionTests.swift`, `WebAuthenticationBridgeTests.swift` | App + client suites | ✅ green |
+| AUTH-03 | Sign-out retires actor memory first, erases Keychain material, deletes/rescans exact cookies, and replaces the complete nonpersistent WebKit session. | `SignOutTests.swift`, `KeychainCredentialStoreTests.swift`, `WebAuthenticationBridgeTests.swift`, `SelectedAuthenticationCompositionTests.swift` | App + client suites | ✅ green |
+| SECR-01 | App-scoped Keychain CRUD, bounded opaque loading, invalid-data erasure, and persistence only after entitlement are verified. | `KeychainCredentialStoreTests.swift`, `SessionCoordinatorTests.swift`, `SelectedAuthenticationCompositionTests.swift` | App + client suites | ✅ green |
+| SECR-02 | WebKit and URLSession are nonpersistent, shared cookie/credential stores are disabled, redirects never follow, and real in-flight cancellation clears request state. | `WebAuthenticationBridgeTests.swift`, `EphemeralSessionTests.swift` | App + client suites | ✅ green |
+| SECR-03 | Credentials render redacted; sensitive keys/values are recursively rejected; fixtures are invented and diagnostics expose closed values only. | `Packages/SiriusXMClient/Tests/FixtureTests/RedactionTests.swift`, `SanitizedNativeResponseFixtures.swift` | Client suite | ✅ green |
+| CLNT-01 | An independent non-`@testable` consumer imports and exercises the SwiftPM library product. | `Packages/SiriusXMClient/Tests/PublicAPITests/PublicConsumerTests.swift` | Client suite | ✅ green |
+| CLNT-02 | Public consumers receive typed async authentication, entitlement, catalog, metadata, and live-stream-resolution outcomes without wire details. | `PublicConsumerTests.swift`, `AuthenticationOutcomeTests.swift`, `WebTokenAuthenticationTests.swift` | Client suite | ✅ green |
+| CLNT-03 | Endpoint, transport, response-version, cookie, and header mechanics stay internal while semantic outcomes remain public. | `PublicConsumerTests.swift`, `AuthenticationOutcomeTests.swift`, `EphemeralSessionTests.swift` | Client suite | ✅ green |
+| CLNT-04 | Credential source/store, native verifiers, transport, clocks, diagnostics, cookie stores, WebKit session owners, and Keychain loaders are deterministic collaborators. | `SessionCoordinatorTests.swift`, `SignOutTests.swift`, `EphemeralSessionTests.swift`, all three app authentication test files | App + client suites | ✅ green |
 
-| Task | Secure behavior | Automated command |
-|---|---|---|
-| 01-01-01 | Native app/package walking skeleton exists with no Phase 0 gate | `xcodebuild ... -only-testing:SiriusMacTests/CompatibilityTracerTests test` |
-| 01-01-02 | Independent consumer uses semantic APIs and sees no wire/token details | `swift test --package-path Packages/SiriusXMClient --filter PublicConsumerTests` |
-| 01-02-01 | Native auth and entitlement responses map to distinct fail-closed outcomes | `swift test --package-path Packages/SiriusXMClient --filter AuthenticationOutcomeTests` |
-| 01-02-02 | One actor owns one attempt; only runtime verification atomically activates session | `swift test --package-path Packages/SiriusXMClient --filter SessionCoordinatorTests` |
-| 01-03-01 | Ephemeral exact-host transport rejects redirect drift and secret forwarding | `swift test --package-path Packages/SiriusXMClient --filter EphemeralSessionTests` |
-| 01-03-02 | Closed diagnostics exclude credential/token/cookie/response canaries | `swift test --package-path Packages/SiriusXMClient --filter RedactionTests` |
-| 01-04-01 | Keychain CRUD is isolated and save occurs only after entitled success | `xcodebuild ... -only-testing:SiriusMacTests/KeychainCredentialStoreTests test` |
-| 01-04-02 | Sign-out is memory-first and cleanup failure is explicit | `swift test --package-path Packages/SiriusXMClient --filter SignOutTests` |
-| 01-05-01 | One WebView sign-in surface renders every semantic state | `xcodebuild ... -only-testing:SiriusMacTests/AuthenticationPresentationModelTests test` |
-| 01-05-02 | Explicit user action permits one attempt and no fallback/retry | same focused app suite |
-| 01-06-01 | Extraction accepts exactly one current first-party token via one shared predicate | `xcodebuild ... -only-testing:SiriusMacTests/WebAuthenticationBridgeTests test` |
-| 01-06-02 | Sign-out applies that predicate across apex/subdomains and tests always compile | same focused app suite plus build-graph assertions |
-| 01-07-01 | Runtime sequence performs authentication then entitlement before session publication | `swift test --package-path Packages/SiriusXMClient --filter WebTokenAuthenticationTests` |
-| 01-07-02 | Native app composes WebView credential source to the client with no alternate path | `xcodebuild ... -only-testing:SiriusMacTests/SelectedAuthenticationCompositionTests test` |
-| 01-08-01 | `00-REVIEW` regressions are covered synthetically | focused package/app regression suites |
-| 01-08-02 | Full suites pass and Phase 2 readiness contains no Phase 0 authority | full package/app suites plus stale-gate scan |
+## Closure Task Map
 
-`...` in the table abbreviates only the stable Xcode prefix shown in the app command; each plan contains the exact runnable command.
+| Task ID | Plan | Wave | Requirements | Secure behavior | Test type | Status |
+|---------|------|------|--------------|-----------------|-----------|--------|
+| 01-13-01 | 13 | 11 | AUTH-01, AUTH-02, SECR-03, CLNT-02, CLNT-03, CLNT-04 | Multi-field response evidence remains versioned, internal, and fail closed. | unit + integration | ✅ green |
+| 01-13-02 | 13 | 11 | CLNT-01, CLNT-02, CLNT-03 | Full package graph uses sanitized fixtures with no public wire leakage. | regression | ✅ green |
+| 01-14-01 | 14 | 11 | AUTH-02, SECR-02, SECR-03, CLNT-03, CLNT-04 | Actual redirect callback cancels follow-up; actual blocked send cancellation clears state. | unit + transport integration | ✅ green |
+| 01-15-01 | 15 | 11 | AUTH-01, AUTH-02, AUTH-03, SECR-02, SECR-03, CLNT-04 | Extraction and cleanup share one Secure bounded issuer predicate. | unit + integration | ✅ green |
+| 01-15-02 | 15 | 11 | AUTH-03, SECR-02, SECR-03, CLNT-04 | Exact token cleanup is followed by whole nonpersistent-session retirement. | integration | ✅ green |
+| 01-16-01 | 16 | 12 | AUTH-01, AUTH-02, AUTH-03, SECR-01, SECR-02, SECR-03, CLNT-04 | Restored bytes remain opaque and cannot bypass native authentication or entitlement. | unit + integration | ✅ green |
+| 01-16-02 | 16 | 12 | AUTH-01, AUTH-03, SECR-01, CLNT-04 | One production credential source handles restart, rejection erasure, retry, and sign-out. | integration + regression | ✅ green |
 
-## `00-REVIEW.md` acceptance mapping
+## Wave 0 Requirements
 
-| Finding | Phase 1 blocking acceptance |
-|---|---|
-| CR-01 untrusted owner-result | No file or caller can assert success; only runtime-observed native auth plus entitlement activates a session. |
-| CR-02 entitlement not wired | The single production sequence always performs native entitlement verification after authentication and before persistence/session publication. |
-| CR-03 subdomain token survives sign-out | Extraction and cleanup share one exact cookie predicate across apex and accepted SiriusXM subdomains; any remaining or ambiguous match fails cleanup. |
-| WR-01 non-atomic quartet | Phase 1 consumes no quartet; `SessionCoordinator` publishes one immutable active-session value only after the complete sequence succeeds. |
-| WR-02 tests silently excluded | Browser bridge and deterministic tests are unconditional build-graph members and cannot be disabled by `.planning` contents. |
+Existing infrastructure covers all Phase 1 requirements. No generated tests or framework changes were needed during the Nyquist audit.
 
-## Manual-only verification
+## Manual-Only Verifications
 
-None. A normal user sign-in after implementation is product use, not an authentication experiment or Phase 1 acceptance gate.
+All Phase 1 requirement behaviors have deterministic automated verification. Live SiriusXM compatibility is intentionally not claimed by these tests; changed upstream behavior fails closed and is repaired through internal adapters with sanitized evidence.
 
-## Sign-off
+## Validation Audit 2026-08-18
 
-- [x] Every task has automated verification.
-- [x] No three consecutive tasks lack feedback.
-- [x] No Phase 0 artifact or GO string is an execution prerequisite.
-- [x] All legitimate Phase 0 review findings have blocking regression coverage.
-- [x] Phase 1 is ready to execute at Plan 01-01.
+| Metric | Count |
+|--------|-------|
+| Requirements audited | 10 |
+| Covered | 10 |
+| Partial | 0 |
+| Missing | 0 |
+| Tests generated | 0 |
+
+## Validation Sign-Off
+
+- [x] Every Phase 1 requirement maps to behavior-level automated evidence.
+- [x] Every closure task has a focused automated verifier.
+- [x] Full app, client, and Phase 0 regression suites are green.
+- [x] No watch-mode flags or live provider dependencies are present.
+- [x] `nyquist_compliant: true` is set.
+
+**Approval:** approved 2026-08-18
