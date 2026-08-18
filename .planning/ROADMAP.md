@@ -101,7 +101,7 @@ Plans:
   6. A native Apple-platform developer can consume the `SiriusXMClient` SwiftPM product and use typed async capabilities without depending on SiriusXM endpoints, cookies, headers, or raw schemas.
   7. Deterministic WebView-bridge, native-authentication, entitlement, sign-out, and redaction tests always compile and run independently of mutable `.planning` artifacts.
 
-**Plans**: 8/8 plans executed
+**Plans**: 8/11 plans executed
 
 **Execution baseline:** Phase 1 consumes the settled WKWebView-token/native-request architecture directly. Do not run authentication feasibility experiments, regenerate a Phase 0 quartet, inspect GO/NO-GO artifacts, or request duplicate owner proof runs. Phase 0 review findings are production acceptance requirements in Plans 01-02, 01-06, 01-07, and 01-08.
 
@@ -131,6 +131,18 @@ Plans:
 **Wave 6** *(blocked on Wave 5 completion)*
 
 - [x] 01-08-PLAN.md — Close the Phase 0 review regressions with production acceptance and record Phase 2 readiness.
+
+**Wave 7** *(blocked on Wave 6 completion)*
+
+- [ ] 01-09-PLAN.md — Restore explicit WebView retry and re-login while preserving one credential transfer per attempt.
+
+**Wave 8** *(blocked on Wave 7 completion)*
+
+- [ ] 01-10-PLAN.md — Make Keychain and browser-residue cleanup reachable after a fresh app composition.
+
+**Wave 9** *(blocked on Wave 8 completion)*
+
+- [ ] 01-11-PLAN.md — Consolidate the detached Xcode test graph while preserving the active SiriusMacTests target.
 
 ### Phase 2: Authorized Live Listening
 
