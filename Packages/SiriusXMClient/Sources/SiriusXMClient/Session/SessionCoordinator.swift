@@ -19,6 +19,7 @@ actor SessionCoordinator {
     private let authenticationVerifier: any NativeAuthenticationVerifying
     private let entitlementVerifier: any NativeEntitlementVerifying
     private let credentialStore: any CredentialStore
+    private let residueCleaner: any AuthenticationResidueCleaner
     private let clock: any SessionClock
     private let diagnostics: any SessionDiagnostics
 
@@ -32,6 +33,7 @@ actor SessionCoordinator {
         authenticationVerifier: any NativeAuthenticationVerifying,
         entitlementVerifier: any NativeEntitlementVerifying,
         credentialStore: any CredentialStore,
+        residueCleaner: any AuthenticationResidueCleaner = NoopResidueCleaner(),
         clock: any SessionClock,
         diagnostics: any SessionDiagnostics
     ) {
@@ -39,6 +41,7 @@ actor SessionCoordinator {
         self.authenticationVerifier = authenticationVerifier
         self.entitlementVerifier = entitlementVerifier
         self.credentialStore = credentialStore
+        self.residueCleaner = residueCleaner
         self.clock = clock
         self.diagnostics = diagnostics
     }
@@ -52,25 +55,28 @@ actor SessionCoordinator {
             return .attemptInProgress
         }
 
-        attemptLease = AttemptLease()
+        let lease = AttemptLease()
+        attemptLease = lease
         defer {
-            attemptLease = nil
-            transientCredential = nil
-            pendingVerification = nil
-            if case .active = state {
-                // An active session is already an immutable, fully verified value.
-            } else {
-                state = .signedOut
+            if isCurrent(lease) {
+                attemptLease = nil
+                transientCredential = nil
+                pendingVerification = nil
+                if case .active = state {
+                    // An active session is already an immutable, fully verified value.
+                } else {
+                    state = .signedOut
+                }
             }
         }
 
-        guard let credential = await credentialSource.credential() else {
+        guard let credential = await credentialSource.credential(), isCurrent(lease) else {
             await diagnostics.record(.cancelled)
             return .authentication(.cancelled)
         }
         transientCredential = credential
 
-        guard !Task.isCancelled else {
+        guard isCurrent(lease), !Task.isCancelled else {
             await diagnostics.record(.cancelled)
             return .authentication(.cancelled)
         }
@@ -79,7 +85,7 @@ actor SessionCoordinator {
         state = .verifyingAuthentication
         let authenticationResponse = await authenticationVerifier.verifyAuthentication(using: credential)
 
-        guard !Task.isCancelled else {
+        guard isCurrent(lease), !Task.isCancelled else {
             await diagnostics.record(.cancelled)
             return .authentication(.cancelled)
         }
@@ -95,7 +101,7 @@ actor SessionCoordinator {
         state = .verifyingEntitlement
         let entitlementResponse = await entitlementVerifier.verifyEntitlement(using: credential)
 
-        guard !Task.isCancelled else {
+        guard isCurrent(lease), !Task.isCancelled else {
             await diagnostics.record(.cancelled)
             return .authentication(.cancelled)
         }
@@ -107,6 +113,11 @@ actor SessionCoordinator {
             return .entitlement(outcome)
         }
 
+        guard isCurrent(lease) else {
+            await diagnostics.record(.cancelled)
+            return .authentication(.cancelled)
+        }
+
         let activeSession = ActiveSession(establishedAt: clock.now())
         state = .active(activeSession)
 
@@ -116,5 +127,52 @@ actor SessionCoordinator {
             await diagnostics.record(.credentialPersistenceFailed)
         }
         return .active
+    }
+
+    /// Retires all actor-owned material before attempting each app-owned cleaner once.
+    func signOut() async -> SignOutOutcome {
+        guard attemptLease != nil || state != .signedOut else {
+            return .alreadySignedOut
+        }
+
+        attemptLease = nil
+        transientCredential = nil
+        pendingVerification = nil
+        state = .signedOut
+        let keychainTask = Task.detached { [credentialStore] in
+            do {
+                try await credentialStore.erase()
+                return false
+            } catch {
+                return true
+            }
+        }
+        let residueTask = Task.detached { [residueCleaner] in
+            await residueCleaner.removeAuthenticationResidue() == .cleanupFailed
+        }
+
+        let keychainFailed = await keychainTask.value
+        let residueFailed = await residueTask.value
+
+        switch (keychainFailed, residueFailed) {
+        case (false, false):
+            return .signedOut
+        case (true, false):
+            return .cleanupFailed(.keychain)
+        case (false, true):
+            return .cleanupFailed(.browserResidue)
+        case (true, true):
+            return .cleanupFailed(.both)
+        }
+    }
+
+    private func isCurrent(_ lease: AttemptLease) -> Bool {
+        attemptLease?.id == lease.id
+    }
+}
+
+private struct NoopResidueCleaner: AuthenticationResidueCleaner {
+    func removeAuthenticationResidue() async -> AuthenticationResidueCleanupOutcome {
+        .removed
     }
 }

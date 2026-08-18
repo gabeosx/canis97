@@ -160,7 +160,7 @@ private actor TrackingResidueCleaner: AuthenticationResidueCleaner {
 
     func removeAuthenticationResidue() async -> AuthenticationResidueCleanupOutcome {
         callCount += 1
-        result
+        return result
     }
 }
 

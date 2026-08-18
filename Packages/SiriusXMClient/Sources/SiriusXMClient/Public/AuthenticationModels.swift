@@ -35,6 +35,17 @@ public protocol CredentialStore: Sendable {
     func erase() async throws
 }
 
+/// Removes app-owned browser residue without exposing browser APIs to the client.
+public protocol AuthenticationResidueCleaner: Sendable {
+    func removeAuthenticationResidue() async -> AuthenticationResidueCleanupOutcome
+}
+
+/// Semantic completion state for one injected browser-residue cleanup operation.
+public enum AuthenticationResidueCleanupOutcome: Sendable, Equatable {
+    case removed
+    case cleanupFailed
+}
+
 /// Semantic result of an authentication attempt.
 public enum AuthenticationOutcome: Sendable, Equatable {
     case waitingForAuthenticationComposition
@@ -59,6 +70,15 @@ public enum EntitlementAvailability: Sendable, Equatable {
 /// Semantic result of ending a client session.
 public enum SignOutOutcome: Sendable, Equatable {
     case alreadySignedOut
+    case signedOut
+    case cleanupFailed(SignOutCleanupFailure)
+}
+
+/// Safe aggregate classification for local cleanup that did not complete.
+public enum SignOutCleanupFailure: Sendable, Equatable {
+    case keychain
+    case browserResidue
+    case both
 }
 
 /// Semantic catalog availability.

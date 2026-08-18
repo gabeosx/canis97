@@ -3,7 +3,15 @@ public typealias AuthenticationAvailability = AuthenticationOutcome
 
 /// A semantic client for the supported SiriusXM subscriber experience.
 public actor SiriusXMClient {
-    public init() {}
+    private let sessionCoordinator: SessionCoordinator?
+
+    public init() {
+        self.sessionCoordinator = nil
+    }
+
+    init(sessionCoordinator: SessionCoordinator) {
+        self.sessionCoordinator = sessionCoordinator
+    }
 
     /// Returns the fail-closed Phase 1 state without contacting a provider.
     public func authenticationAvailability() -> AuthenticationAvailability {
@@ -21,8 +29,11 @@ public actor SiriusXMClient {
     }
 
     /// Ends the empty in-memory session without scheduling retry work.
-    public func signOut() -> SignOutOutcome {
-        .alreadySignedOut
+    public func signOut() async -> SignOutOutcome {
+        guard let sessionCoordinator else {
+            return .alreadySignedOut
+        }
+        return await sessionCoordinator.signOut()
     }
 
     /// Keeps catalog work unavailable until the authorized content phase.
