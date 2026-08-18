@@ -101,6 +101,7 @@ final class WebAuthenticationBridgeTests: XCTestCase {
 
         XCTAssertTrue(project.contains("WebAuthenticationBridge.swift in Sources"))
         XCTAssertTrue(project.contains("WebAuthenticationBridgeTests.swift in Sources"))
+        XCTAssertTrue(project.contains("SelectedAuthenticationCompositionTests.swift in Sources"))
         let planningDirectory = "." + "planning"
         XCTAssertFalse(project.contains(planningDirectory))
         let excludedImport = "can" + "Import(AuthFeasibilityHarness)"
