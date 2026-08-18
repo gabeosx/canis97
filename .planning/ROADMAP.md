@@ -87,7 +87,7 @@ Plans:
 
 ### Phase 1: Safe Interoperability Foundation
 
-**Goal**: Subscribers can establish or end an authorized SiriusXM session without exposing secrets or weakening access controls, through a reusable Apple-platform client boundary.
+**Goal**: As a SiriusXM subscriber, I want to establish or end an authorized session, so that I can listen safely on my Mac.
 **Mode:** mvp
 **Depends on**: None — the authentication architecture is already settled and recorded here.
 **Requirements**: AUTH-01, AUTH-02, AUTH-03, SECR-01, SECR-02, SECR-03, CLNT-01, CLNT-02, CLNT-03, CLNT-04
