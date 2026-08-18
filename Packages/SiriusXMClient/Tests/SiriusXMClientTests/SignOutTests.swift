@@ -43,6 +43,50 @@ struct SignOutTests {
         #expect(await cleaner.callCount == 2)
     }
 
+    @Test("overlapping explicit cleanup requests share one cleanup operation")
+    func coalescesOverlappingCleanupRequests() async {
+        let store = TrackingCredentialStore()
+        let cleaner = BlockingResidueCleaner()
+        let coordinator = makeActiveCoordinator(credentialStore: store, residueCleaner: cleaner)
+
+        let first = Task { await coordinator.signOut() }
+        await cleaner.waitUntilStarted()
+        let second = Task { await coordinator.signOut() }
+        await Task.yield()
+
+        #expect(await store.eraseCount == 1)
+        #expect(await cleaner.callCount == 1)
+        await cleaner.finish(with: .removed)
+        #expect(await first.value == .signedOut)
+        #expect(await second.value == .signedOut)
+    }
+
+    @Test("a later explicit request can retry cleanup after failure")
+    func retriesOnlyWhenExplicitlyRequested() async {
+        let store = FailOnceCredentialStore()
+        let cleaner = TrackingResidueCleaner()
+        let coordinator = makeActiveCoordinator(credentialStore: store, residueCleaner: cleaner)
+
+        #expect(await coordinator.signOut() == .cleanupFailed(.keychain))
+        #expect(await coordinator.snapshot == .signedOut)
+        #expect(await coordinator.signOut() == .signedOut)
+        #expect(await store.eraseCount == 2)
+        #expect(await cleaner.callCount == 2)
+    }
+
+    @Test("cleanup remains complete after a new attempt begins between explicit requests")
+    func cleansAfterNewAttemptFollowingEarlierCleanup() async {
+        let store = TrackingCredentialStore()
+        let cleaner = TrackingResidueCleaner()
+        let coordinator = makeActiveCoordinator(credentialStore: store, residueCleaner: cleaner)
+
+        #expect(await coordinator.signOut() == .signedOut)
+        #expect(await coordinator.attemptSession() == .active)
+        #expect(await coordinator.signOut() == .signedOut)
+        #expect(await store.eraseCount == 2)
+        #expect(await cleaner.callCount == 2)
+    }
+
     @Test("partial and complete cleanup failures remain explicit after memory is retired")
     func reportsAggregateCleanupFailures() async {
         let keychainFailure = makeActiveCoordinator(
@@ -90,7 +134,7 @@ struct SignOutTests {
     }
 
     private func makeActiveCoordinator(
-        credentialStore: TrackingCredentialStore = TrackingCredentialStore(),
+        credentialStore: any CredentialStore = TrackingCredentialStore(),
         residueCleaner: any AuthenticationResidueCleaner = TrackingResidueCleaner()
     ) -> SessionCoordinator {
         SessionCoordinator(
@@ -162,6 +206,17 @@ private actor TrackingCredentialStore: CredentialStore {
     }
 }
 
+private actor FailOnceCredentialStore: CredentialStore {
+    private(set) var eraseCount = 0
+
+    func save(_: AuthenticationCredential) async throws {}
+
+    func erase() async throws {
+        eraseCount += 1
+        if eraseCount == 1 { throw CleanupFailureError.failed }
+    }
+}
+
 private actor TrackingResidueCleaner: AuthenticationResidueCleaner {
     private let result: AuthenticationResidueCleanupOutcome
     private(set) var callCount = 0
@@ -180,8 +235,10 @@ private actor BlockingResidueCleaner: AuthenticationResidueCleaner {
     private var started = false
     private var startWaiter: CheckedContinuation<Void, Never>?
     private var resultWaiter: CheckedContinuation<AuthenticationResidueCleanupOutcome, Never>?
+    private(set) var callCount = 0
 
     func removeAuthenticationResidue() async -> AuthenticationResidueCleanupOutcome {
+        callCount += 1
         started = true
         startWaiter?.resume()
         startWaiter = nil

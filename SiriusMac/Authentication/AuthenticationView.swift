@@ -25,7 +25,10 @@ struct AuthenticationView: View {
             if case .unsupported = model.state {
                 VStack(alignment: .leading, spacing: 16) {
                     UnsupportedAuthenticationView(copy: copy)
-                    Button("Retry Sign In") { _ = model.retry() }
+                    HStack {
+                        Button("Retry Sign In") { _ = model.retry() }
+                        clearLocalSessionButton
+                    }
                 }
             } else {
                 VStack(alignment: .leading, spacing: 20) {
@@ -77,19 +80,27 @@ struct AuthenticationView: View {
                 Button("Use Logged-In Session") {
                     _ = model.useLoggedInSession()
                 }
+                clearLocalSessionButton
             }
         case .authenticatedButNotEntitled,
              .rejected,
              .challengeRequired,
              .signedOut,
              .cleanupFailed:
-            Button("Retry Sign In") { _ = model.retry() }
+            HStack {
+                Button("Retry Sign In") { _ = model.retry() }
+                clearLocalSessionButton
+            }
         case .verifyingAuthentication,
              .verifyingEntitlement,
              .entitled,
              .unsupported:
             EmptyView()
         }
+    }
+
+    private var clearLocalSessionButton: some View {
+        Button("Clear Local Session") { _ = model.clearLocalSession() }
     }
 }
 

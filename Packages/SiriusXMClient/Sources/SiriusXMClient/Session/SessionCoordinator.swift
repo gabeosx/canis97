@@ -28,6 +28,7 @@ actor SessionCoordinator {
     private var pendingVerification: PendingVerification?
     private var state: SessionState = .signedOut
     private var lastEntitlement: EntitlementAvailability = .unavailable
+    private var cleanupTask: Task<SignOutOutcome, Never>?
 
     init(
         credentialSource: any CredentialSource,
@@ -139,8 +140,8 @@ actor SessionCoordinator {
 
     /// Retires all actor-owned material before attempting each app-owned cleaner once.
     func signOut() async -> SignOutOutcome {
-        guard attemptLease != nil || state != .signedOut else {
-            return .alreadySignedOut
+        if let cleanupTask {
+            return await cleanupTask.value
         }
 
         attemptLease = nil
@@ -148,31 +149,34 @@ actor SessionCoordinator {
         pendingVerification = nil
         state = .signedOut
         lastEntitlement = .unavailable
-        let keychainTask = Task.detached { [credentialStore] in
-            do {
-                try await credentialStore.erase()
-                return false
-            } catch {
-                return true
+        let cleanupTask: Task<SignOutOutcome, Never> = Task.detached { [credentialStore, residueCleaner] in
+            async let keychainFailed: Bool = {
+                do {
+                    try await credentialStore.erase()
+                    return false
+                } catch {
+                    return true
+                }
+            }()
+            async let residueFailed: Bool = {
+                await residueCleaner.removeAuthenticationResidue() == .cleanupFailed
+            }()
+
+            switch await (keychainFailed, residueFailed) {
+            case (false, false):
+                return .signedOut
+            case (true, false):
+                return .cleanupFailed(.keychain)
+            case (false, true):
+                return .cleanupFailed(.browserResidue)
+            case (true, true):
+                return .cleanupFailed(.both)
             }
         }
-        let residueTask = Task.detached { [residueCleaner] in
-            await residueCleaner.removeAuthenticationResidue() == .cleanupFailed
-        }
-
-        let keychainFailed = await keychainTask.value
-        let residueFailed = await residueTask.value
-
-        switch (keychainFailed, residueFailed) {
-        case (false, false):
-            return .signedOut
-        case (true, false):
-            return .cleanupFailed(.keychain)
-        case (false, true):
-            return .cleanupFailed(.browserResidue)
-        case (true, true):
-            return .cleanupFailed(.both)
-        }
+        self.cleanupTask = cleanupTask
+        let outcome = await cleanupTask.value
+        self.cleanupTask = nil
+        return outcome
     }
 
     private func isCurrent(_ lease: AttemptLease) -> Bool {

@@ -56,6 +56,18 @@ final class AuthenticationPresentationModel {
         }
     }
 
+    @discardableResult
+    func clearLocalSession() -> Task<Void, Never>? {
+        guard state != .entitled, !isAttemptInFlight else { return nil }
+
+        let identifier = startAttempt(at: state)
+        let flow = flow
+        return Task { [weak self, flow] in
+            let result = await flow.signOut()
+            self?.finishAttempt(identifier, with: result.presentationState)
+        }
+    }
+
     private var canStartWebViewSignIn: Bool {
         guard !isAttemptInFlight else { return false }
         return switch state {

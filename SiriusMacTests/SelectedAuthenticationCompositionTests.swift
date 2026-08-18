@@ -112,11 +112,30 @@ final class SelectedAuthenticationCompositionTests: XCTestCase {
             flow: ComposedAuthenticationPresentationFlow(bridge: bridge, client: client)
         )
 
-        try await XCTUnwrap(model.clearLocalSession()).value
+        let clearTask = try XCTUnwrap(model.clearLocalSession())
+        await clearTask.value
 
         XCTAssertEqual(model.state, .signedOut)
         XCTAssertNil(try keychain.readStoredCredential())
-        XCTAssertTrue(await cookieStore.allCookies().isEmpty)
+        let remainingCookies = await cookieStore.allCookies()
+        XCTAssertTrue(remainingCookies.isEmpty)
+    }
+
+    func testFreshCleanupFailureStaysSignedOutAndAllowsAnExplicitRetry() async throws {
+        let client = CompositionClient(signOut: .cleanupFailed(.browserResidue))
+        let bridge = WebAuthenticationBridge(cookieStore: CompositionCookieStore(cookies: []), credentialConsumer: { _ in })
+        let model = AuthenticationPresentationModel(
+            flow: ComposedAuthenticationPresentationFlow(bridge: bridge, client: client)
+        )
+
+        let cleanupTask = try XCTUnwrap(model.clearLocalSession())
+        await cleanupTask.value
+
+        XCTAssertEqual(model.state, .cleanupFailed(.browserResidue))
+        let retryTask = try XCTUnwrap(model.clearLocalSession())
+        await retryTask.value
+        let events = await client.events
+        XCTAssertEqual(events, [.signOut, .signOut])
     }
 
     private func tokenCookie(expires: Date) throws -> HTTPCookie {
@@ -136,19 +155,23 @@ private actor CompositionClient: ClientAuthenticationFlow {
 
     private var authentications: [AuthenticationOutcome]
     private var entitlements: [EntitlementAvailability]
+    private let signOutResult: SignOutOutcome
     private(set) var events: [Event] = []
 
     init(
         authentication: AuthenticationOutcome = .authenticatedPendingEntitlement,
-        entitlement: EntitlementAvailability = .entitled
+        entitlement: EntitlementAvailability = .entitled,
+        signOut: SignOutOutcome = .signedOut
     ) {
         authentications = [authentication]
         entitlements = [entitlement]
+        signOutResult = signOut
     }
 
     init(authentications: [AuthenticationOutcome], entitlements: [EntitlementAvailability]) {
         self.authentications = authentications
         self.entitlements = entitlements
+        signOutResult = .signedOut
     }
 
     func authenticate() async -> AuthenticationOutcome {
@@ -163,7 +186,7 @@ private actor CompositionClient: ClientAuthenticationFlow {
 
     func signOut() async -> SignOutOutcome {
         events.append(.signOut)
-        return .signedOut
+        return signOutResult
     }
 }
 
