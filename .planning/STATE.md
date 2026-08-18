@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 01
 current_phase_name: safe-interoperability-foundation
 status: executing
-stopped_at: Completed 01-12-PLAN.md
-last_updated: "2026-08-18T17:33:47.381Z"
+stopped_at: Completed 01-13-PLAN.md
+last_updated: "2026-08-18T17:42:09.362Z"
 last_activity: 2026-08-18
 last_activity_desc: "Completed quick task 260818-c4r: update only Phase 1's Goal line in .planning/ROADMAP.md"
 progress:
   total_phases: 2
-  completed_phases: 2
+  completed_phases: 1
   total_plans: 28
-  completed_plans: 24
+  completed_plans: 25
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-08-16)
 ## Current Position
 
 Phase: 01 (safe-interoperability-foundation) — EXECUTING
-Plan: 2 of 12
+Plan: 3 of 12
 Status: Ready to execute
 Last activity: 2026-08-18 — Phase 01 execution started
 
-Progress: [██████████] 100%
+Progress: [█████████░] 89%
 
 ## Performance Metrics
 
@@ -86,6 +86,7 @@ Progress: [██████████] 100%
 | Phase 01 P10 | 4 min | 1 tasks | 5 files |
 | Phase 01 P11 | 13 min | 1 tasks | 2 files |
 | Phase 01-safe-interoperability-foundation P12 | 6min | 1 tasks | 2 files |
+| Phase 01 P13 | 6 min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -129,6 +130,8 @@ All earlier Phase 0 feasibility-selection, proof-run, quartet, GO/NO-GO, and cal
 - [Phase ?]: Retained the E4/E1 test graph as the sole SiriusMacTests configuration.
 - [Phase ?]: Reserve WebView credential selection before cookie-store suspension and commit consumption before credential delivery.
 - [Phase ?]: Only explicit user-operated sign-in may re-arm a consumed WebView credential handoff.
+- [Phase 01]: Profile-v4 authentication accepts only a non-empty JSON object after existing transport and control preflight, without inventing a profile field. — Preserves the settled Phase 0 predicate while allowing representative unrelated fields.
+- [Phase 01]: Subscription-v1 entitlement is determined solely by exact nested subscription.status active or inactive values; all other evidence fails closed. — Maintains the settled entitlement contract and contains provider schema details internally.
 
 ### Pending Todos
 
@@ -159,6 +162,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-18T14:32:50.044Z
-Stopped at: Completed 01-12-PLAN.md
+Last session: 2026-08-18T17:42:09.342Z
+Stopped at: Completed 01-13-PLAN.md
 Resume file: None
