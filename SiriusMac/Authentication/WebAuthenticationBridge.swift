@@ -15,6 +15,7 @@ final class WebAuthenticationBridge {
         case authCookieMissing
         case ambiguousCredentials
         case malformedCredential
+        case cancelled
         case alreadyConsumed
     }
 
@@ -23,9 +24,11 @@ final class WebAuthenticationBridge {
     private let cookieStore: any WebAuthenticationCookieStore
     private let now: @MainActor () -> Date
     private let credentialConsumer: @MainActor @Sendable (AuthenticationCredential) async -> Void
+    private let handoffDisposer: @MainActor @Sendable () async -> Void
     private let handoff: VolatileWebCredentialHandoff
     private var webView: WKWebView?
-    private var didTransferCredential = false
+    private var selectionState: CredentialSelectionState = .available
+    private var selectionGeneration = 0
 
     init() {
         let handoff = VolatileWebCredentialHandoff()
@@ -34,6 +37,7 @@ final class WebAuthenticationBridge {
         cookieStore = WebKitAuthenticationCookieStore(cookieStore: configuration.websiteDataStore.httpCookieStore)
         now = Date.init
         self.handoff = handoff
+        handoffDisposer = { await handoff.discard() }
         credentialConsumer = { credential in
             await handoff.store(credential)
         }
@@ -42,13 +46,18 @@ final class WebAuthenticationBridge {
     init(
         cookieStore: any WebAuthenticationCookieStore,
         now: @escaping @MainActor () -> Date = Date.init,
-        credentialConsumer: @escaping @MainActor @Sendable (AuthenticationCredential) async -> Void
+        credentialConsumer: @escaping @MainActor @Sendable (AuthenticationCredential) async -> Void,
+        handoffDisposer: @escaping @MainActor @Sendable () async -> Void = {}
     ) {
         let handoff = VolatileWebCredentialHandoff()
         webViewConfiguration = Self.makeConfiguration()
         self.cookieStore = cookieStore
         self.now = now
         self.handoff = handoff
+        self.handoffDisposer = {
+            await handoff.discard()
+            await handoffDisposer()
+        }
         self.credentialConsumer = { credential in
             await handoff.store(credential)
             await credentialConsumer(credential)
@@ -72,21 +81,24 @@ final class WebAuthenticationBridge {
     /// A new explicit attempt discards any volatile prior handoff before re-arming selection.
     func beginUserOperatedSignIn() async {
         // Keep selection fail-closed while the actor erases stale material.
-        didTransferCredential = true
-        await handoff.discard()
-        didTransferCredential = false
+        let reservation = beginSelection()
+        await handoffDisposer()
+        completeUncommittedSelection(reservation)
         guard let url = URL(string: "https://www.siriusxm.com/") else { return }
         makeWebView().load(URLRequest(url: url))
     }
 
     /// The only action that reads the WebView-owned cookie store.
     func useLoggedInSession() async -> Result {
-        guard !didTransferCredential else { return .alreadyConsumed }
+        guard selectionState == .available else { return .alreadyConsumed }
+        let reservation = beginSelection()
+        defer { completeUncommittedSelection(reservation) }
 
         let candidates = FirstPartyTokenCookiePolicy.matchingCookies(
             in: await cookieStore.allCookies(),
             now: now()
         )
+        guard !Task.isCancelled else { return .cancelled }
         switch candidates.count {
         case 0: return .authCookieMissing
         case 1: break
@@ -111,11 +123,23 @@ final class WebAuthenticationBridge {
               !payload.session.accessToken.contains(where: { $0.isWhitespace }) else {
             return .malformedCredential
         }
+        guard !Task.isCancelled else { return .cancelled }
 
         let credential = AuthenticationCredential(volatileMaterial: Data(payload.session.accessToken.utf8))
-        didTransferCredential = true
+        selectionState = .consumed
         await credentialConsumer(credential)
         return .credentialTransferred
+    }
+
+    private func beginSelection() -> Int {
+        selectionGeneration &+= 1
+        selectionState = .selecting
+        return selectionGeneration
+    }
+
+    private func completeUncommittedSelection(_ reservation: Int) {
+        guard selectionState == .selecting, selectionGeneration == reservation else { return }
+        selectionState = .available
     }
 }
 
@@ -158,6 +182,12 @@ private struct TokenCookiePayload: Decodable {
     struct TokenSession: Decodable {
         let accessToken: String
     }
+}
+
+private enum CredentialSelectionState {
+    case available
+    case selecting
+    case consumed
 }
 
 private actor VolatileWebCredentialHandoff: CredentialSource {
