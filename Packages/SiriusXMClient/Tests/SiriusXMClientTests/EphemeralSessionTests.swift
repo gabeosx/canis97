@@ -34,13 +34,41 @@ struct EphemeralSessionTests {
         }
     }
 
-    @Test("redirect validation cancels all follow-up requests")
-    func redirectDriftCancelsBeforeFollowUp() {
-        let transport = EphemeralURLSessionTransport()
-        let drift = request("https://example.invalid/not-approved")
+    @Test("the production redirect callback records attempts and cancels every follow-up")
+    func productionRedirectCallbackCancelsEveryFollowUp() {
+        let destinations = [
+            try! SiriusXMRequestContract.makeRequest(for: .authentication, authorization: "synthetic-token"),
+            request("https://example.invalid/not-approved"),
+        ]
 
-        #expect(transport.redirectDecision(for: drift) == .cancel)
-        #expect(transport.followUpRequestCount == 0)
+        for destination in destinations {
+            let transport = EphemeralURLSessionTransport()
+            let capture = RedirectCompletionCapture()
+            let task = URLSession.shared.dataTask(with: URL(string: "https://example.invalid/original")!)
+            let response = HTTPURLResponse(
+                url: URL(string: "https://example.invalid/original")!,
+                statusCode: 302,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+
+            #expect(transport.redirectAttemptCount == 0)
+            #expect(transport.hasActiveRequest == false)
+
+            transport.urlSession(
+                URLSession.shared,
+                task: task,
+                willPerformHTTPRedirection: response,
+                newRequest: destination
+            ) { followUpRequest in
+                capture.record(followUpRequest, observedAttemptCount: transport.redirectAttemptCount)
+            }
+
+            #expect(capture.observedAttemptCount == 1)
+            #expect(capture.followUpRequest == nil)
+            #expect(transport.redirectAttemptCount == 1)
+            #expect(transport.hasActiveRequest == false)
+        }
     }
 
     @Test("cancellation never retries or retains credential-bearing request state")
@@ -49,11 +77,32 @@ struct EphemeralSessionTests {
 
         transport.cancelCurrentRequestForTesting()
 
-        #expect(transport.followUpRequestCount == 0)
+        #expect(transport.redirectAttemptCount == 0)
         #expect(transport.hasActiveRequest == false)
     }
 
     private func request(_ value: String) -> URLRequest {
         URLRequest(url: URL(string: value)!)
+    }
+}
+
+private final class RedirectCompletionCapture: @unchecked Sendable {
+    private let lock = NSLock()
+    private var capturedRequest: URLRequest?
+    private var capturedAttemptCount: Int?
+
+    var followUpRequest: URLRequest? {
+        lock.withLock { capturedRequest }
+    }
+
+    var observedAttemptCount: Int? {
+        lock.withLock { capturedAttemptCount }
+    }
+
+    func record(_ request: URLRequest?, observedAttemptCount: Int) {
+        lock.withLock {
+            capturedRequest = request
+            capturedAttemptCount = observedAttemptCount
+        }
     }
 }
