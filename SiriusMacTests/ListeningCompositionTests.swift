@@ -291,8 +291,30 @@ final class ListeningCompositionTests: XCTestCase {
         }
     }
 
-    func testCatalogRunClassifiesAChannelBeyondTheBoundedNestingLimit() async throws {
+    func testCatalogRunClassifiesAnAdmissibleChannelBeyondTheBoundedNestingLimit() async throws {
         var nested: [String: Any] = ["id": "safe-channel-1", "type": "channel-linear"]
+        for _ in 0 ... 12 {
+            nested = ["container": nested]
+        }
+        let body = try JSONSerialization.data(withJSONObject: nested)
+        let adapter = ClosedLiveObservationAdapter(
+            credentialLoader: { .available(AuthenticationCredential(volatileMaterial: Data("synthetic-credential".utf8))) },
+            transport: RecordingCatalogTransport(
+                result: .response(statusCode: 200, contentType: "application/json", body: body)
+            )
+        )
+
+        XCTAssertEqual(adapter.begin(entitlement: .entitled), .started)
+
+        let result = await adapter.runCatalog()
+        XCTAssertEqual(
+            result,
+            .classifiedTerminal(.malformedContract, .candidateBeyondNestingLimit)
+        )
+    }
+
+    func testCatalogRunClassifiesNonChannelDataBeyondTheBoundedNestingLimit() async throws {
+        var nested: [String: Any] = ["kind": "unrecognized"]
         for _ in 0 ... 12 {
             nested = ["container": nested]
         }
