@@ -172,17 +172,17 @@ Plans:
   4. Recoverable stream expiry, network interruption, sleep/wake, and stalls make bounded, cancellation-aware recovery attempts without infinite retry or synthesized listener activity.
   5. While listening, a subscriber sees the active channel, best available artwork, and current program or song text; unavailable or stale metadata is explicit and does not interrupt healthy audio.
 
-**Plans**: 1/7 plans executed
+**Plans**: 2/7 plans executed
 
 **Wave 1 — Provider-agnostic Validation Wave 0**
 
 - [x] 02-01-PLAN.md — Create all four offline contract suites and reversible semantic app seams without live provider work.
 
-**Wave 2 — Owner-visible live gate** *(blocked on Wave 1)*
+**Wave 2 — Owner-visible live gate** *(halted: `new-login-required`)*
 
-- [ ] 02-02-PLAN.md — Run the first bounded authenticated provider/AVFoundation checkpoint and record sanitized supported or unsupported evidence.
+- [x] 02-02-PLAN.md — Run the first bounded authenticated provider/AVFoundation checkpoint and record sanitized supported or unsupported evidence.
 
-**Wave 3 — Evidence-backed compatibility contract** *(blocked on Wave 2 `SUPPORTED` result)*
+**Wave 3 — Evidence-backed compatibility contract** *(blocked by Plan 02-02 `UNSUPPORTED` result)*
 
 - [ ] 02-03-PLAN.md — Resolve the research questions and encode only supported fixed operations, strict decoders, and the ephemeral media handoff.
 
@@ -262,7 +262,7 @@ Active product execution proceeds 1 → 2 → 3 → 4 → 5. Phase 0 is retained
 |-------|----------------|--------|-----------|
 | 0. Authentication Feasibility Gate | 12/12 | Complete (historical) | 2026-08-17 |
 | 1. Safe Interoperability Foundation | 16/16 | Complete    | 2026-08-18 |
-| 2. Authorized Live Listening | 1/7 | In Progress|  |
+| 2. Authorized Live Listening | 2/7 | Halted | 2026-08-19 |
 | 3. Native Mac Listening Experience | 0/TBD | Not started | - |
 | 4. Safe Skins & Accessible Recovery | 0/TBD | Not started | - |
 | 5. Public Release & Compatibility Support | 0/TBD | Not started | - |
