@@ -145,6 +145,28 @@ struct LivePlaybackCoordinatorTests {
         #expect(await operations.keyCount == 0)
     }
 
+    @Test("an older tune cannot overwrite a newer operation context")
+    func outOfOrderTuneKeepsResourceAndKeyBoundToNewerContext() async {
+        let older = LiveChannelID("fixture-older")
+        let newer = LiveChannelID("fixture-newer")
+        let operations = OutOfOrderFixedLiveOperations(older: older, newer: newer)
+        let resolver = FixedLiveStreamResolver(operations: operations)
+
+        let first = Task { await resolver.resolveLiveStream(for: older) }
+        await operations.waitUntilOlderTuneStarted()
+
+        let second = await resolver.resolveLiveStream(for: newer)
+        guard case .available = second else {
+            Issue.record("Expected the newer resolution to produce its own opaque handoff")
+            return
+        }
+
+        await operations.completeOlderTune()
+        #expect(await first.value == .failed(.superseded))
+        #expect(await operations.resourceContexts == ["fixture-newer"])
+        #expect(await operations.keyContexts == ["fixture-newer"])
+    }
+
     @Test("production composition uses the bounded selected-channel adapter")
     func productionCompositionUsesTheBoundedSelectedChannelAdapter() async {
         let transport = RecordingProductionLiveTransport()
@@ -186,15 +208,15 @@ private actor RecordingFixedLiveOperations: FixedLiveStreamOperating {
 
     func authorizeTune(for _: LiveChannelID) async -> FixedLiveTuneAuthorization {
         tuneCount += 1
-        return .authorized
+        return .authorized(FixtureLiveOperationContext())
     }
 
-    func resolveResource(for _: LiveChannelID) async -> FixedLiveResourceResolution {
+    func resolveResource(in _: any FixedLiveOperationContext) async -> FixedLiveResourceResolution {
         resourceCount += 1
         return .resolved(FixtureAppleMediaHandoff(), keyRequirement: keyRequirement == .required ? .required : .notRequired)
     }
 
-    func authorizePlaybackKey() async -> LiveStreamResolutionFailure? {
+    func authorizePlaybackKey(for _: any FixedLiveOperationContext) async -> LiveStreamResolutionFailure? {
         keyCount += 1
         return nil
     }
@@ -214,12 +236,12 @@ private actor BlockingFixedLiveOperations: FixedLiveStreamOperating {
         return await withCheckedContinuation { tuneContinuation = $0 }
     }
 
-    func resolveResource(for _: LiveChannelID) async -> FixedLiveResourceResolution {
+    func resolveResource(in _: any FixedLiveOperationContext) async -> FixedLiveResourceResolution {
         resourceCount += 1
         return .failed(.resourceUnavailable)
     }
 
-    func authorizePlaybackKey() async -> LiveStreamResolutionFailure? {
+    func authorizePlaybackKey(for _: any FixedLiveOperationContext) async -> LiveStreamResolutionFailure? {
         keyCount += 1
         return .unsupportedProtection
     }
@@ -230,9 +252,66 @@ private actor BlockingFixedLiveOperations: FixedLiveStreamOperating {
     }
 
     func completeTune() {
-        tuneContinuation?.resume(returning: .authorized)
+        tuneContinuation?.resume(returning: .authorized(FixtureLiveOperationContext()))
         tuneContinuation = nil
     }
+}
+
+private struct FixtureLiveOperationContext: FixedLiveOperationContext {}
+
+private actor OutOfOrderFixedLiveOperations: FixedLiveStreamOperating {
+    private let older: LiveChannelID
+    private let newer: LiveChannelID
+    private var olderTuneContinuation: CheckedContinuation<FixedLiveTuneAuthorization, Never>?
+    private var olderTuneWaiter: CheckedContinuation<Void, Never>?
+    private var olderTuneStarted = false
+    private(set) var resourceContexts: [String] = []
+    private(set) var keyContexts: [String] = []
+
+    init(older: LiveChannelID, newer: LiveChannelID) {
+        self.older = older
+        self.newer = newer
+    }
+
+    func authorizeTune(for channelID: LiveChannelID) async -> FixedLiveTuneAuthorization {
+        if channelID == older {
+            olderTuneStarted = true
+            olderTuneWaiter?.resume()
+            olderTuneWaiter = nil
+            return await withCheckedContinuation { olderTuneContinuation = $0 }
+        }
+        return .authorized(FixtureChannelOperationContext(channelID: newer))
+    }
+
+    func resolveResource(in context: any FixedLiveOperationContext) async -> FixedLiveResourceResolution {
+        guard let context = context as? FixtureChannelOperationContext else {
+            return .failed(.resourceUnavailable)
+        }
+        resourceContexts.append(context.channelID.rawValue)
+        return .resolved(FixtureAppleMediaHandoff(), keyRequirement: .required)
+    }
+
+    func authorizePlaybackKey(for context: any FixedLiveOperationContext) async -> LiveStreamResolutionFailure? {
+        guard let context = context as? FixtureChannelOperationContext else {
+            return .resourceUnavailable
+        }
+        keyContexts.append(context.channelID.rawValue)
+        return nil
+    }
+
+    func waitUntilOlderTuneStarted() async {
+        if olderTuneStarted { return }
+        await withCheckedContinuation { olderTuneWaiter = $0 }
+    }
+
+    func completeOlderTune() {
+        olderTuneContinuation?.resume(returning: .authorized(FixtureChannelOperationContext(channelID: older)))
+        olderTuneContinuation = nil
+    }
+}
+
+private struct FixtureChannelOperationContext: FixedLiveOperationContext {
+    let channelID: LiveChannelID
 }
 
 private struct FixtureAppleMediaHandoff: SiriusXMAppleMediaHandoff {
