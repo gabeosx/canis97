@@ -117,6 +117,19 @@ final class ListeningCompositionTests: XCTestCase {
         XCTAssertFalse(source.contains("self.playbackCoordinator = PlaybackCoordinator()"))
     }
 
+    func testProductionCompositionExplicitlyOwnsSystemRecoveryObservers() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: root.appending(path: "SiriusMac/Authentication/AuthenticationView.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(source.contains("networkObserver: SystemNetworkPathObserver()"))
+        XCTAssertTrue(source.contains("workspaceObserver: SystemWorkspacePowerObserver()"))
+    }
+
     func testLatePlaybackConfirmationPropagatesFromCoordinatorToPresentationModel() async {
         let resolver = ControlledPlaybackResolver()
         let runtime = RecordingPlaybackRuntime()
