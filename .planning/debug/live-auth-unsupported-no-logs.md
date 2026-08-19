@@ -123,11 +123,15 @@ started: First confirmed against the Phase 1 app during UAT on 2026-08-18. A pri
   checked: Focused bridge suite, full app suite, package suite, and build-only
   found: All 22 bridge tests, all 46 SiriusMac tests, and all 32 SiriusXMClient tests passed. The corrected Debug app built at /tmp/sirius-mac-derived-data/Build/Products/Debug/SiriusMac.app without launch.
   implication: The complete fix is integrated and verified offline; no additional SiriusXM request or sign-in was made by the verification.
+- timestamp: 2026-08-19T01:25:12Z
+  checked: Post-transfer native diagnostic sufficiency
+  found: Commit 2b51d30 replaces coarse native failures with fixed labels for transport class, content-type class, HTTP family, authentication JSON shape, and each settled entitlement-shape boundary. A canary test proves failing URLs and error descriptions are discarded before rendering. All 35 package tests, all 46 app tests, and the build-only check pass.
+  implication: One live trace now identifies both bridge selection failures and the likely native failure boundary without exposing tokens or requiring a second sign-in solely to add diagnostics.
 
 ## Resolution
 
 root_cause: Phase 1 hardening discarded two parts of the previously proven WebView handoff. It replaced boundary-safe SiriusXM-subdomain acceptance with an apex/www-only allowlist and added a Secure-attribute requirement. The current live WebKit store exposes a valid AUTH_TOKEN name but reports isSecure false, so the remaining gate rejects it before any native request. The generic auth-cookie-missing label is only the terminal policy result; auth-cookie-insecure identifies the exact failed predicate.
-fix: Restored https://www.siriusxm.com/player and the complete proven token predicate: exact AUTH_TOKEN name, root path, current expiry, and siriusxm.com or a label-boundary-safe subdomain, independent of HTTPCookie.isSecure. Cardinality and suffix-lookalike protections remain. Value-free cookie-name inventory and closed rejection diagnostics remain, and tests cannot contact SiriusXM.
+fix: Restored https://www.siriusxm.com/player and the complete proven token predicate: exact AUTH_TOKEN name, root path, current expiry, and siriusxm.com or a label-boundary-safe subdomain, independent of HTTPCookie.isSecure. Cardinality and suffix-lookalike protections remain. Value-free cookie-name inventory remains, and commit 2b51d30 adds fixed secret-free transport, content, HTTP-family, JSON-shape, and entitlement-shape diagnostics so one live attempt is sufficient to locate the next compatibility boundary.
 verification:
   target_test: pass
   mutation_check:
@@ -138,7 +142,7 @@ verification:
   adjacent_tests:
     result: pass
     suites:
-      - "SiriusXMClient package: 32 tests"
+      - "SiriusXMClient package: 35 tests"
       - "SiriusMac app: 46 tests"
       - "WebAuthenticationBridge focused: 22 tests"
   revert_and_reconfirm:

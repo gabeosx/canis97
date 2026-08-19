@@ -6,9 +6,9 @@ current_phase: 2
 current_phase_name: Authorized Live Listening
 status: planning
 stopped_at: Completed 01-16-PLAN.md
-last_updated: "2026-08-19T01:14:11Z"
+last_updated: "2026-08-19T01:25:12Z"
 last_activity: 2026-08-18
-last_activity_desc: "Completed quick task 260818-tf1: improve sign-in window with responsive WebView sizing and subtler border"
+last_activity_desc: "Completed quick task 260818-tn3: make one live auth attempt fully diagnosable with secret-free native reason labels"
 progress:
   total_phases: 2
   completed_phases: 2
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-08-16)
 Phase: 2 — Authorized Live Listening
 Plan: Not started
 Status: Ready to plan
-Last activity: 2026-08-18 — Completed quick task 260818-tf1: responsive sign-in window
+Last activity: 2026-08-18 — Completed quick task 260818-tn3: secret-safe native auth diagnostics
 
 Progress: [██████████] 100%
 
@@ -136,7 +136,7 @@ All earlier Phase 0 feasibility-selection, proof-run, quartet, GO/NO-GO, and cal
 - [Phase 01]: Profile-v4 authentication accepts only a non-empty JSON object after existing transport and control preflight, without inventing a profile field. — Preserves the settled Phase 0 predicate while allowing representative unrelated fields.
 - [Phase 01]: Subscription-v1 entitlement is determined solely by exact nested subscription.status active or inactive values; all other evidence fails closed. — Maintains the settled entitlement contract and contains provider schema details internally.
 - [Phase ?]: Redirect instrumentation exposes only an internal scalar attempt count and never retains redirect or credential-bearing request data.
-- [Phase ?]: Only Secure current root-path AUTH_TOKEN cookies from normalized siriusxm.com or exact www.siriusxm.com are accepted.
+- [Phase ?]: Accept one current root-path AUTH_TOKEN from siriusxm.com or any label-boundary-safe subdomain independent of WebKit's Secure flag; continue rejecting expired, path-mismatched, duplicate, and suffix-lookalike cookies.
 - [Phase ?]: Cleanup succeeds only after an exact-token rescan is clean and bridge-owned nonpersistent WebKit session retirement succeeds.
 - [Phase ?]: WebKit retirement bulk-removes only the app-owned nonpersistent store without enumerating, exporting, logging, or persisting browser records.
 - [Phase ?]: A Keychain restore is a one-shot opaque CredentialSource input, never a second sign-in method or authorization claim.
@@ -159,6 +159,7 @@ None yet.
 | 260817-v8g | Align Phase 1 with settled WebView-token/native-request architecture and carry Phase 0 review findings into acceptance | 2026-08-17 | b306027 | [260817-v8g-treat-webview-token-extraction-and-nativ](./quick/260817-v8g-treat-webview-token-extraction-and-nativ/) |
 | 260818-c4r | Update only Phase 1's Goal line in .planning/ROADMAP.md | 2026-08-18 | fd464e6 | [260818-c4r-update-only-phase-1-goal-line-in-plannin](./quick/260818-c4r-update-only-phase-1-goal-line-in-plannin/) |
 | 260818-tf1 | Improve sign-in window with responsive WebView sizing and subtler border | 2026-08-18 | e469deb | [260818-tf1-improve-sign-in-window-with-responsive-w](./quick/260818-tf1-improve-sign-in-window-with-responsive-w/) |
+| 260818-tn3 | Make one live auth attempt fully diagnosable with secret-free native reason labels | 2026-08-18 | 2b51d30 | [260818-tn3-make-one-live-auth-attempt-fully-diagnos](./quick/260818-tn3-make-one-live-auth-attempt-fully-diagnos/) |
 
 ### Roadmap Evolution
 

@@ -3,12 +3,22 @@ status: partial
 phase: 01-safe-interoperability-foundation
 source: ["01-01-SUMMARY.md", "01-02-SUMMARY.md", "01-03-SUMMARY.md", "01-04-SUMMARY.md", "01-05-SUMMARY.md", "01-06-SUMMARY.md", "01-07-SUMMARY.md", "01-08-SUMMARY.md", "01-09-SUMMARY.md", "01-10-SUMMARY.md", "01-11-SUMMARY.md", "01-12-SUMMARY.md", "01-13-SUMMARY.md", "01-14-SUMMARY.md", "01-15-SUMMARY.md", "01-16-SUMMARY.md"]
 started: 2026-08-18T22:58:14Z
-updated: 2026-08-19T01:08:02Z
+updated: 2026-08-19T01:25:12Z
 ---
 
 ## Current Test
 
-[testing paused — 1 item outstanding]
+number: 10
+name: Keychain-Backed Session Restore
+expected: |
+  Make exactly one live sign-in attempt with the complete privacy-safe trace:
+  1. In Terminal, run `cd /Users/gabe/sirius-mac` and then `./script/build_and_run.sh --telemetry`.
+  2. Wait for Sirius Mac to open and for Terminal to show the telemetry filter. Click Sign In once and complete the embedded SiriusXM login. Stop immediately if SiriusXM shows CAPTCHA, rate limiting, a bot warning, or any account-security warning.
+  3. When the embedded site visibly shows you are signed in, click Use Logged-In Session exactly once. Do not click Retry Sign In or Clear Local Session.
+  4. Wait for one final native screen, then press Control-C in Terminal to stop log streaming.
+  5. Send the exact final title/message and every Terminal line from `web-sign-in-started` through the last `SiriusXM client event` or bridge event. The app never logs cookie values, tokens, URLs, bodies, headers, or error text.
+  Pass if the trace reaches `credential-transferred`, `native-authentication:completed`, and `entitlement:completed`, and the app shows Ready to listen. If it stops, the final fixed label identifies the transport, content, status-family, JSON-shape, or entitlement-shape boundary from this same attempt.
+awaiting: user response
 
 ## Tests
 
@@ -77,20 +87,18 @@ coverage_summary: 01-03-SUMMARY.md
 
 ### 10. Keychain-Backed Session Restore
 expected: |
-  How to test:
-  1. In Terminal, from /Users/gabe/sirius-mac, run:
-     xcodebuild -project SiriusMac.xcodeproj -scheme SiriusMac -configuration Debug -destination 'platform=macOS' -derivedDataPath /tmp/sirius-mac-uat build
-     open -n /tmp/sirius-mac-uat/Build/Products/Debug/SiriusMac.app
-  2. On the first launch, click Sign In. Sign in inside the embedded SiriusXM area if prompted; enter credentials only there, never in this chat.
-  3. When the embedded site shows that you are logged in, click Use Logged-In Session. Wait for “Ready to listen.”
-  4. Quit Sirius Mac with Command-Q.
-  5. Relaunch it with the same open command, then click Sign In once. Do not click Use Logged-In Session on this launch.
-  Pass if the app uses the stored session, shows “Verifying sign-in,” then “Checking subscription,” and reaches “Ready to listen” without reopening the website sign-in flow. If setup never reaches “Ready to listen,” report the exact title and message shown instead.
+  Make exactly one live sign-in attempt with the complete privacy-safe trace:
+  1. In Terminal, run `cd /Users/gabe/sirius-mac` and then `./script/build_and_run.sh --telemetry`.
+  2. Wait for Sirius Mac to open and for Terminal to show the telemetry filter. Click Sign In once and complete the embedded SiriusXM login. Stop immediately if SiriusXM shows CAPTCHA, rate limiting, a bot warning, or any account-security warning.
+  3. When the embedded site visibly shows you are signed in, click Use Logged-In Session exactly once. Do not click Retry Sign In or Clear Local Session.
+  4. Wait for one final native screen, then press Control-C in Terminal to stop log streaming.
+  5. Send the exact final title/message and every Terminal line from `web-sign-in-started` through the last `SiriusXM client event` or bridge event. The app never logs cookie values, tokens, URLs, bodies, headers, or error text.
+  Pass if the trace reaches `credential-transferred`, `native-authentication:completed`, and `entitlement:completed`, and the app shows Ready to listen. If it stops, the final fixed label identifies the transport, content, status-family, JSON-shape, or entitlement-shape boundary from this same attempt.
 result: issue
 reported: "I signed in, then clicked \"use logged-in session\" and it gave me: \"Sign-in flow unsupported. This sign-in flow is unsupported. No workaround was attempted.\""
 severity: blocker
 diagnosis: "The live trace stopped before native authentication. Commit c5d8e40 had regressed the proven cookie handoff by rejecting true SiriusXM subdomains and adding a Secure-attribute gate. The second trace contains AUTH_TOKEN followed only by auth-cookie-insecure, proving WebKit reports the current token with isSecure false."
-fix_ready: "The complete proven predicate is restored: current root-path AUTH_TOKEN from siriusxm.com or any boundary-safe subdomain, independent of WebKit's Secure attribute. The exact live-shaped regression, mutation check, 46 app tests, 32 package tests, and build-only pass; live confirmation remains pending user authorization."
+fix_ready: "The complete proven predicate is restored: current root-path AUTH_TOKEN from siriusxm.com or any boundary-safe subdomain, independent of WebKit's Secure attribute. Commit 2b51d30 also makes every likely post-transfer native failure boundary distinguishable with fixed secret-free labels. The exact live-shaped regression, mutation check, 46 app tests, 35 package tests, redaction canaries, and build-only pass; one live confirmation is now diagnostically sufficient."
 
 ### 11. Memory-First Local Session Cleanup
 expected: |
@@ -144,9 +152,7 @@ expected: |
   3. While the progress indicator is visible, try clicking an action a second time and watch the native heading.
   4. Wait for the final screen; do not click Retry again.
   Pass this presentation-state check if the app moves through one state at a time, prevents a second overlapping action, and stops on one clearly worded final state with no automatic retry. The already-observed “Sign-in flow unsupported” result still fails Test 10; here it is acceptable only as evidence that the terminal state is presented safely. Report any overlapping action, automatic retry, or unclear final screen.
-result: blocked
-blocked_by: other
-reason: "User declined further SiriusXM sign-in attempts until sufficient privacy-safe logging is added, because repeated logins could increase bot-detection or account-blocking risk."
+result: [pending]
 
 ### 18. Phase 0 authentication-review findings are enforced by deterministic native and package regressions.
 expected: Phase 0 authentication-review findings are enforced by deterministic native and package regressions.
@@ -314,9 +320,9 @@ coverage_summary: 01-16-SUMMARY.md
 total: 40
 passed: 38
 issues: 1
-pending: 0
+pending: 1
 skipped: 0
-blocked: 1
+blocked: 0
 
 ## Gaps
 
