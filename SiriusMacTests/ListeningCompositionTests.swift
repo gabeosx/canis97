@@ -371,6 +371,94 @@ final class ListeningCompositionTests: XCTestCase {
         }
     }
 
+    func testTuneContractUsesOnlyTheApprovedSelectedChannelAndExactRequestSemantics() throws {
+        let request = try XCTUnwrap(
+            ClosedTuneRequestContract.makeRequest(
+                credential: AuthenticationCredential(volatileMaterial: Data("synthetic-credential".utf8))
+            )
+        )
+        let body = try XCTUnwrap(request.httpBody)
+        let object = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+        let sources = try XCTUnwrap(object["sources"] as? [[String: Any]])
+        let source = try XCTUnwrap(sources.first)
+
+        XCTAssertEqual(request.httpMethod, "POST")
+        XCTAssertEqual(request.url?.scheme, "https")
+        XCTAssertEqual(request.url?.host, "api.edge-gateway.siriusxm.com")
+        XCTAssertEqual(request.url?.path, "/playback/play/v1/tuneSource")
+        XCTAssertNil(request.url?.query)
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Accept"), "application/json")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
+        XCTAssertEqual(sources.count, 1)
+        XCTAssertEqual(source["id"] as? String, ClosedTuneSelection.approved.id)
+        XCTAssertEqual(source["type"] as? String, "channel-linear")
+        XCTAssertEqual(source["hlsVersion"] as? String, "V3")
+        XCTAssertEqual(source["manifestVariant"] as? String, "WEB")
+        XCTAssertEqual(source["mtcVersion"] as? String, "V2")
+    }
+
+    func testTuneTransportCancelsEveryRedirect() {
+        XCTAssertEqual(ClosedTuneTransport.redirectDecision, .cancel)
+    }
+
+    func testTuneRunNeedsAResourceAllowlistDecisionWithoutExposingTheResource() async {
+        let adapter = ClosedTuneObservationAdapter(
+            credentialLoader: { .available(AuthenticationCredential(volatileMaterial: Data("synthetic-credential".utf8))) },
+            transport: RecordingTuneTransport(
+                result: .response(
+                    statusCode: 200,
+                    contentType: "application/json",
+                    body: Data(
+                        #"{"source":{"id":"194adbca-34d6-cb94-b153-3488ee563308","type":"channel-linear","streams":[{"url":"https://unapproved.example.invalid/stream.m3u8"}]}}"#.utf8
+                    )
+                )
+            )
+        )
+
+        XCTAssertEqual(adapter.begin(entitlement: .entitled), .started)
+        let result = await adapter.runTune()
+
+        XCTAssertEqual(result, .resourceAllowlistDecisionRequired)
+        XCTAssertEqual(adapter.observations.count, 1)
+        XCTAssertEqual(adapter.observations[0].capability, .tuneAuthorization)
+        XCTAssertEqual(adapter.observations[0].requestContract?.method, .post)
+        XCTAssertEqual(adapter.observations[0].semanticShapes, [
+            LiveSemanticShape(alias: .selectedChannel, valueType: .string, cardinality: .one),
+            LiveSemanticShape(alias: .authorizedResource, valueType: .string, cardinality: .one),
+        ])
+    }
+
+    func testTuneRunClosesOnCancellationAndProtectedOrUnknownResponses() async {
+        let cancelledTransport = RecordingTuneTransport(result: .transportFailure)
+        let cancelled = ClosedTuneObservationAdapter(
+            credentialLoader: { .available(AuthenticationCredential(volatileMaterial: Data("synthetic-credential".utf8))) },
+            transport: cancelledTransport
+        )
+        XCTAssertEqual(cancelled.begin(entitlement: .entitled), .started)
+        cancelled.cancel()
+        let cancelledResult = await cancelled.runTune()
+        let cancelledRequestCount = await cancelledTransport.requestCount()
+        XCTAssertEqual(cancelledResult, .cancelled)
+        XCTAssertEqual(cancelledRequestCount, 0)
+
+        for (response, protection) in [
+            (ClosedTuneTransportResult.redirect, LiveProtectionClass.unknownHostOrRedirect),
+            (.response(statusCode: 403, contentType: "text/plain", body: Data()), .forbidden),
+            (.response(statusCode: 429, contentType: "text/plain", body: Data()), .rateLimited),
+            (.response(statusCode: 200, contentType: "application/json", body: Data(#"{}"#.utf8)), .malformedContract),
+        ] {
+            let adapter = ClosedTuneObservationAdapter(
+                credentialLoader: { .available(AuthenticationCredential(volatileMaterial: Data("synthetic-credential".utf8))) },
+                transport: RecordingTuneTransport(result: response)
+            )
+            XCTAssertEqual(adapter.begin(entitlement: .entitled), .started)
+            let result = await adapter.runTune()
+            XCTAssertEqual(result, .terminal(protection))
+            XCTAssertEqual(adapter.observations.map(\.protection), [protection])
+            XCTAssertEqual(adapter.state, .closed(.terminalObservation))
+        }
+    }
+
     private func supportedCatalogObservation() -> LiveContractObservation {
         LiveContractObservation(
             capability: .catalogRefresh,
@@ -416,6 +504,22 @@ private actor RecordingCatalogTransport: ClosedCatalogRequestPerforming {
     }
 
     func send(_: URLRequest) async -> ClosedCatalogTransportResult {
+        count += 1
+        return result
+    }
+
+    func requestCount() -> Int { count }
+}
+
+private actor RecordingTuneTransport: ClosedTuneRequestPerforming {
+    private let result: ClosedTuneTransportResult
+    private var count = 0
+
+    init(result: ClosedTuneTransportResult) {
+        self.result = result
+    }
+
+    func send(_: URLRequest) async -> ClosedTuneTransportResult {
         count += 1
         return result
     }

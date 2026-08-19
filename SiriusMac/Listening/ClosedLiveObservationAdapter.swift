@@ -168,6 +168,336 @@ extension ClosedCatalogTransport: URLSessionTaskDelegate {
     }
 }
 
+/// The one catalog-admitted channel the owner selected for the temporary tune
+/// checkpoint. It is a fixed safe display identity, not a caller-supplied tune
+/// target or a reusable production selection API.
+enum ClosedTuneSelection {
+    static let approved = ClosedCatalogChannel(
+        id: "194adbca-34d6-cb94-b153-3488ee563308",
+        displayName: "SiriusXM Hits 1",
+        category: nil,
+        isFavorite: nil,
+        isAvailable: nil
+    )
+    static let sourceType = "channel-linear"
+}
+
+enum ClosedTuneResult: Sendable, Equatable {
+    case resourceAllowlistDecisionRequired
+    case terminal(LiveProtectionClass)
+    case cancelled
+    case alreadyConsumed
+}
+
+protocol ClosedTuneRequestPerforming: Sendable {
+    func send(_ request: URLRequest) async -> ClosedTuneTransportResult
+}
+
+enum ClosedTuneTransportResult: Sendable {
+    case response(statusCode: Int, contentType: String?, body: Data)
+    case redirect
+    case transportFailure
+}
+
+/// Exact construction for the one current first-party tune operation. The
+/// selected identity and every JSON field are fixed in this checkpoint-only
+/// type; no caller can select a host, header, path, or request shape.
+enum ClosedTuneRequestContract {
+    private static let scheme = "https"
+    private static let host = "api.edge-gateway.siriusxm.com"
+    private static let path = "/playback/play/v1/tuneSource"
+
+    static func makeRequest(credential: AuthenticationCredential) -> URLRequest? {
+        guard let url = URL(string: "\(scheme)://\(host)\(path)") else { return nil }
+        return credential.withVolatileMaterial { material in
+            guard let authorization = String(data: material, encoding: .utf8),
+                  !authorization.isEmpty,
+                  !authorization.contains(where: { $0.isWhitespace || $0.isNewline })
+            else { return nil }
+
+            let source: [String: String] = [
+                "id": ClosedTuneSelection.approved.id,
+                "type": ClosedTuneSelection.sourceType,
+                "hlsVersion": "V3",
+                "manifestVariant": "WEB",
+                "mtcVersion": "V2",
+            ]
+            guard let body = try? JSONSerialization.data(withJSONObject: ["sources": [source]]) else {
+                return nil
+            }
+
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.httpBody = body
+            request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("Bearer \(authorization)", forHTTPHeaderField: "Authorization")
+            return isExact(request) ? request : nil
+        }
+    }
+
+    static func isExact(_ request: URLRequest) -> Bool {
+        request.url?.scheme == scheme &&
+            request.url?.host == host &&
+            request.url?.path == path &&
+            request.url?.query == nil &&
+            request.url?.fragment == nil &&
+            request.httpMethod == "POST" &&
+            request.value(forHTTPHeaderField: "Accept") == "application/json" &&
+            request.value(forHTTPHeaderField: "Content-Type") == "application/json" &&
+            request.value(forHTTPHeaderField: "Authorization")?.hasPrefix("Bearer ") == true &&
+            hasExactBody(request.httpBody)
+    }
+
+    private static func hasExactBody(_ body: Data?) -> Bool {
+        guard let body,
+              let object = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+              Set(object.keys) == Set(["sources"]),
+              let sources = object["sources"] as? [[String: String]],
+              sources.count == 1,
+              let source = sources.first
+        else { return false }
+
+        return source == [
+            "id": ClosedTuneSelection.approved.id,
+            "type": ClosedTuneSelection.sourceType,
+            "hlsVersion": "V3",
+            "manifestVariant": "WEB",
+            "mtcVersion": "V2",
+        ]
+    }
+}
+
+/// The tune transport is separate from catalog transport so a request cannot
+/// cross the two exact contract predicates. It cancels every redirect before a
+/// location can become a result or a follow-up request.
+final class ClosedTuneTransport: NSObject, ClosedTuneRequestPerforming, @unchecked Sendable {
+    enum RedirectDecision: Sendable, Equatable { case cancel }
+
+    static let redirectDecision: RedirectDecision = .cancel
+    private let redirectLock = NSLock()
+    private var redirectWasObserved = false
+    private lazy var session = URLSession(
+        configuration: Self.makeConfiguration(),
+        delegate: self,
+        delegateQueue: nil
+    )
+
+    private static func makeConfiguration() -> URLSessionConfiguration {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        configuration.httpCookieStorage = nil
+        configuration.httpShouldSetCookies = false
+        configuration.urlCredentialStorage = nil
+        configuration.timeoutIntervalForRequest = 15
+        configuration.timeoutIntervalForResource = 15
+        return configuration
+    }
+
+    func send(_ request: URLRequest) async -> ClosedTuneTransportResult {
+        guard ClosedTuneRequestContract.isExact(request) else { return .transportFailure }
+        setObservedRedirect(false)
+        do {
+            var responseData = Data()
+            defer { responseData = Data() }
+            let response: URLResponse
+            (responseData, response) = try await session.data(for: request)
+            guard let response = response as? HTTPURLResponse else { return .transportFailure }
+            return .response(
+                statusCode: response.statusCode,
+                contentType: response.value(forHTTPHeaderField: "Content-Type"),
+                body: responseData
+            )
+        } catch {
+            return observedRedirect ? .redirect : .transportFailure
+        }
+    }
+}
+
+extension ClosedTuneTransport: URLSessionTaskDelegate {
+    func urlSession(
+        _: URLSession,
+        task _: URLSessionTask,
+        willPerformHTTPRedirection _: HTTPURLResponse,
+        newRequest _: URLRequest,
+        completionHandler: @escaping @Sendable (URLRequest?) -> Void
+    ) {
+        setObservedRedirect(true)
+        completionHandler(nil)
+    }
+
+    private var observedRedirect: Bool {
+        redirectLock.lock()
+        defer { redirectLock.unlock() }
+        return redirectWasObserved
+    }
+
+    private func setObservedRedirect(_ value: Bool) {
+        redirectLock.lock()
+        redirectWasObserved = value
+        redirectLock.unlock()
+    }
+}
+
+/// Single-use owner-selected tune checkpoint. A matching source and a single
+/// HTTPS resource candidate may become only a resource-policy decision; this
+/// type never requests that resource or an associated media key.
+@MainActor
+final class ClosedTuneObservationAdapter {
+    enum StartResult: Equatable {
+        case started
+        case entitlementRequired
+        case alreadyConsumed
+    }
+
+    private let sink: LiveContractObservationSink
+    private let credentialLoader: @MainActor @Sendable () -> ClosedCatalogCredentialAvailability
+    private let transport: any ClosedTuneRequestPerforming
+    private var hasRun = false
+
+    init(
+        sink: LiveContractObservationSink = LiveContractObservationSink(),
+        credentialLoader: @escaping @MainActor @Sendable () -> ClosedCatalogCredentialAvailability = { .missing },
+        transport: any ClosedTuneRequestPerforming = ClosedTuneTransport()
+    ) {
+        self.sink = sink
+        self.credentialLoader = credentialLoader
+        self.transport = transport
+    }
+
+    var observations: [LiveContractObservation] { sink.observations }
+    var state: LiveContractObservationState { sink.state }
+
+    func begin(entitlement: EntitlementAvailability) -> StartResult {
+        guard entitlement == .entitled else { return .entitlementRequired }
+        return sink.begin() ? .started : .alreadyConsumed
+    }
+
+    func cancel() {
+        sink.cancel()
+    }
+
+    func runTune() async -> ClosedTuneResult {
+        guard state != .closed(.cancelled) else { return .cancelled }
+        guard state == .active, !hasRun else { return .alreadyConsumed }
+        hasRun = true
+
+        let credential: AuthenticationCredential
+        switch credentialLoader() {
+        case let .available(value): credential = value
+        case .missing, .invalid: return terminalTuneResult(.authorizationLost)
+        }
+        guard let request = ClosedTuneRequestContract.makeRequest(credential: credential) else {
+            return terminalTuneResult(.authorizationLost)
+        }
+
+        switch await transport.send(request) {
+        case .redirect:
+            return terminalTuneResult(.unknownHostOrRedirect)
+        case .transportFailure:
+            return terminalTuneResult(.unknownContract)
+        case let .response(statusCode, contentType, body):
+            guard (200 ... 299).contains(statusCode) else {
+                return terminalTuneResult(protection(for: statusCode))
+            }
+            guard isJSON(contentType) else { return terminalTuneResult(.malformedContract) }
+            var responseBody = body
+            defer { responseBody = Data() }
+            guard ClosedTuneParser.hasMatchingHTTPSResource(responseBody) else {
+                return terminalTuneResult(.malformedContract)
+            }
+
+            _ = sink.record(
+                LiveContractObservation(
+                    capability: .tuneAuthorization,
+                    disposition: .supported,
+                    requestContract: LiveRequestContract(
+                        purpose: .selectedTune,
+                        method: .post,
+                        authorizedHostPolicy: .firstPartyAuthenticated,
+                        pathTemplate: .tune
+                    ),
+                    semanticShapes: [
+                        LiveSemanticShape(alias: .selectedChannel, valueType: .string, cardinality: .one),
+                        LiveSemanticShape(alias: .authorizedResource, valueType: .string, cardinality: .one),
+                    ],
+                    protection: nil,
+                    avFoundationBehavior: .notObserved
+                )
+            )
+            return .resourceAllowlistDecisionRequired
+        }
+    }
+
+    private func terminalTuneResult(_ protection: LiveProtectionClass) -> ClosedTuneResult {
+        _ = sink.record(
+            LiveContractObservation(
+                capability: .tuneAuthorization,
+                disposition: .unsupported,
+                requestContract: nil,
+                semanticShapes: [],
+                protection: protection,
+                avFoundationBehavior: .notObserved
+            )
+        )
+        return .terminal(protection)
+    }
+
+    private func protection(for statusCode: Int) -> LiveProtectionClass {
+        switch statusCode {
+        case 401: .authorizationLost
+        case 403: .forbidden
+        case 429: .rateLimited
+        case 300 ... 399: .unknownHostOrRedirect
+        case 400 ... 499: .humanVerificationRequired
+        default: .unknownContract
+        }
+    }
+
+    private func isJSON(_ contentType: String?) -> Bool {
+        contentType?.lowercased().split(separator: ";", maxSplits: 1).first == "application/json"
+    }
+}
+
+private enum ClosedTuneParser {
+    static func hasMatchingHTTPSResource(_ body: Data) -> Bool {
+        guard body.count <= 1_048_576,
+              let root = try? JSONSerialization.jsonObject(with: body),
+              root is [String: Any] || root is [Any]
+        else { return false }
+
+        var matched = false
+        func visit(_ value: Any, depth: Int) {
+            guard !matched, depth <= 12 else { return }
+            if let source = value as? [String: Any] {
+                if source["id"] as? String == ClosedTuneSelection.approved.id,
+                   source["type"] as? String == ClosedTuneSelection.sourceType,
+                   let streams = source["streams"] as? [[String: Any]],
+                   streams.contains(where: isHTTPSResource)
+                {
+                    matched = true
+                    return
+                }
+                for child in source.values { visit(child, depth: depth + 1) }
+            } else if let values = value as? [Any] {
+                for child in values { visit(child, depth: depth + 1) }
+            }
+        }
+        visit(root, depth: 0)
+        return matched
+    }
+
+    private static func isHTTPSResource(_ stream: [String: Any]) -> Bool {
+        guard let value = stream["url"] as? String,
+              let url = URL(string: value),
+              url.scheme == "https",
+              url.host != nil
+        else { return false }
+        return true
+    }
+}
+
 /// Temporary checkpoint-only authority for the exact catalog candidate.
 @MainActor
 final class ClosedLiveObservationAdapter {

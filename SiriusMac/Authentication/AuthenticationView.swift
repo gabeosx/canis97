@@ -5,8 +5,11 @@ struct AuthenticationView: View {
     @State private var model: AuthenticationPresentationModel
     @State private var bridge: WebAuthenticationBridge
     @State private var closedLiveObservation: ClosedLiveObservationAdapter
+    @State private var closedTuneObservation: ClosedTuneObservationAdapter
     @State private var catalogResult: ClosedCatalogResult?
     @State private var isCatalogObservationRunning = false
+    @State private var tuneResult: ClosedTuneResult?
+    @State private var isTuneObservationRunning = false
 
     init() {
         let composition = AuthenticationComposition()
@@ -15,6 +18,18 @@ struct AuthenticationView: View {
             flow: composition.flow
         ))
         _closedLiveObservation = State(initialValue: ClosedLiveObservationAdapter(
+            credentialLoader: {
+                switch composition.keychain.loadStoredCredentialForAuthentication() {
+                case let .credential(credential):
+                    .available(credential)
+                case .missing:
+                    .missing
+                case .invalidErased, .cleanupFailed, .unavailable:
+                    .invalid
+                }
+            }
+        ))
+        _closedTuneObservation = State(initialValue: ClosedTuneObservationAdapter(
             credentialLoader: {
                 switch composition.keychain.loadStoredCredentialForAuthentication() {
                 case let .credential(credential):
@@ -70,6 +85,19 @@ struct AuthenticationView: View {
                             .disabled(isCatalogObservationRunning || closedLiveObservation.state != .idle)
                             .accessibilityHint("Makes only the approved catalog request and stops on any protected or unknown response.")
                             catalogCheckpointResult
+                            Button("Run selected SiriusXM Hits 1 tune check") {
+                                let result = closedTuneObservation.begin(entitlement: .entitled)
+                                if result == .started {
+                                    isTuneObservationRunning = true
+                                    Task { @MainActor in
+                                        tuneResult = await closedTuneObservation.runTune()
+                                        isTuneObservationRunning = false
+                                    }
+                                }
+                            }
+                            .disabled(isTuneObservationRunning || closedTuneObservation.state != .idle)
+                            .accessibilityHint("Makes only the approved selected-channel tune request and never requests a returned media resource.")
+                            tuneCheckpointResult
                             Button("Sign Out") { _ = model.signOut() }
                         }
                     } else {
@@ -141,6 +169,35 @@ struct AuthenticationView: View {
             "\(channel.displayName) (\(channel.id)) — \(category)"
         } else {
             "\(channel.displayName) (\(channel.id))"
+        }
+    }
+
+    @ViewBuilder
+    private var tuneCheckpointResult: some View {
+        if isTuneObservationRunning {
+            ProgressView("Checking selected channel tune route")
+                .accessibilityLabel("Checking selected channel tune route")
+        } else if let tuneResult {
+            switch tuneResult {
+            case .resourceAllowlistDecisionRequired:
+                Text("Tune check completed. A returned media resource requires a separate fixed allowlist decision.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("Tune check requires a separate media resource allowlist decision")
+            case let .terminal(protection):
+                Text("Tune check stopped safely: \(protection.rawValue)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("Tune check stopped safely: \(protection.rawValue)")
+            case .cancelled:
+                Text("Tune check cancelled safely.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            case .alreadyConsumed:
+                Text("Tune check was already consumed.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 

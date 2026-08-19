@@ -31,6 +31,7 @@ enum LiveOperationPurpose: String, Sendable, Equatable {
 /// Fixed method facts that can be recorded without retaining request data.
 enum LiveRequestMethod: String, Sendable, Equatable {
     case get = "GET"
+    case post = "POST"
 }
 
 /// An allow-listed host-policy label rather than a host name or destination.
