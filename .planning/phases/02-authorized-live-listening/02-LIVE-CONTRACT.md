@@ -28,7 +28,8 @@ The former `human-verification-required` halt was superseded after the ordinary 
 - **Stream record:** one-or-more opaque resource references, one opaque key-reference field, current live metadata, and opaque tracking metadata.
 - **Resource delivery:** HLS playlist content with AAC media segments; encrypted delivery requires the separate playback-key authorization role.
 - **Playback-key result:** a two-required-string shape. The values are opaque, short-lived, memory-only, and never diagnostic or persistent data.
-- **Metadata:** current program/song information is available from both the tune result and the current-channel metadata role. Artwork availability is supported as provider metadata, with UI precedence and stale/unavailable presentation deferred to Plan 02-07.
+- **Metadata (approved 2026-08-19):** fixed authenticated `GET` to `https://lookaround-cache-prod.streaming.siriusxm.com/playbackservices/v1/live/lookAround?delta=` with `Authorization` and logical `x-sxm-clock`; no other query. A JSON success has `channels` and opaque `delta`; the selected-channel value has ordered `cuts` plus optional `shows`. Product admits only `cuts[0]`: required `name` and ISO-8601 `validFrom`, optional `artistName` and `image {url,width,height}`. Shows never replace a cut. Empty cuts are unavailable. `delta`/`validFrom` are not refresh hints.
+- **Artwork (approved 2026-08-19):** only a strictly normalized relative first-cut image reference may resolve against fixed HTTPS host `imgsrv-sxm-prod-device.streaming.siriusxm.com`, without authorization forwarding. Observed JPEG/PNG are admitted; redirects, absolute/host/traversal references, other types, over-5-MiB bytes, or dimensions over 4096 are unavailable independently of text.
 
 ## Fixed Operation Mapping (Approved 2026-08-19)
 

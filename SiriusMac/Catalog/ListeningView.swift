@@ -18,6 +18,7 @@ struct ListeningView: View {
             }
 
             content
+            metadata
             playbackControls
         }
         .padding(24)
@@ -73,6 +74,36 @@ struct ListeningView: View {
             Text(playbackCopy(model.playbackState))
                 .foregroundStyle(.secondary)
                 .accessibilityLabel(playbackCopy(model.playbackState))
+        }
+    }
+
+    private var metadata: some View {
+        let state = model.metadataPresentation.state
+        return VStack(alignment: .leading, spacing: 4) {
+            Text(metadataText(state.text))
+                .accessibilityLabel("Current metadata: \(metadataText(state.text))")
+            Text(metadataArtwork(state.artwork))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .accessibilityLabel(metadataArtwork(state.artwork))
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private func metadataText(_ text: LiveMetadataText) -> String {
+        switch text {
+        case let .current(value): value
+        case let .stale(value): "Stale: \(value)"
+        case let .channelFallback(id): "Channel \(id.rawValue)"
+        case .unavailable: "Current program unavailable"
+        }
+    }
+
+    private func metadataArtwork(_ artwork: LiveMetadataArtwork) -> String {
+        switch artwork {
+        case .current: "Current artwork available"
+        case .stale: "Stale artwork"
+        case .unavailable: "Artwork unavailable"
         }
     }
 

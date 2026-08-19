@@ -21,8 +21,8 @@ This matrix is not a claim about the provider's exhaustive private API surface. 
 | Stream/manifest/resource resolution | SUPPORTED | Standard HLS playlist and AAC media delivery is supported through the provider media-delivery host class. |
 | Required playback-key authorization | SUPPORTED | A fixed JSON key-authorization role returns the required opaque two-string shape; Plan 02-03 owns the memory-only handoff. |
 | AVFoundation compatibility for one authorized live resource | NOT OBSERVED | Plan 02-05 must prove native `AVPlayer` loading and control behavior. |
-| Current program/song metadata text | SUPPORTED | Current metadata is available in tune and current-channel semantic shapes; Plan 02-07 owns independent refresh and presentation. |
-| Channel/program artwork | SUPPORTED | Provider metadata supports artwork availability; Plan 02-07 owns precedence and stale/unavailable UI. |
+| Current program/song metadata text | SUPPORTED | Fixed authenticated lookaround GET admits only the selected channel's first ordered cut: required name/validFrom and optional artistName; empty or drift is unavailable/closed. |
+| Channel/program artwork | SUPPORTED | First-cut optional relative image resolves only to the fixed artwork host without authorization forwarding; JPEG/PNG plus product 5-MiB/4096 bounds are admitted independently. |
 | Stream re-resolution during bounded recovery | NOT OBSERVED | Plan 02-06 must add and test bounded recovery after one native playback path is proven. |
 | Stream enforcement status | SUPPORTED | Provider API gateway JSON supports a fixed enforcement-status role. |
 | Live activity update | SUPPORTED | Provider API gateway JSON supports bounded channel/time-window activity updates; cadence remains policy, not a captured contract. |
