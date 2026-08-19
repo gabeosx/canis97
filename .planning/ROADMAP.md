@@ -172,7 +172,35 @@ Plans:
   4. Recoverable stream expiry, network interruption, sleep/wake, and stalls make bounded, cancellation-aware recovery attempts without infinite retry or synthesized listener activity.
   5. While listening, a subscriber sees the active channel, best available artwork, and current program or song text; unavailable or stale metadata is explicit and does not interrupt healthy audio.
 
-**Plans**: TBD
+**Plans**: 7 plans
+
+**Wave 1 — Provider-agnostic Validation Wave 0**
+
+- [ ] 02-01-PLAN.md — Create all four offline contract suites and reversible semantic app seams without live provider work.
+
+**Wave 2 — Owner-visible live gate** *(blocked on Wave 1)*
+
+- [ ] 02-02-PLAN.md — Run the first bounded authenticated provider/AVFoundation checkpoint and record sanitized supported or unsupported evidence.
+
+**Wave 3 — Evidence-backed compatibility contract** *(blocked on Wave 2 `SUPPORTED` result)*
+
+- [ ] 02-03-PLAN.md — Resolve the research questions and encode only supported fixed operations, strict decoders, and the ephemeral media handoff.
+
+**Wave 4 — Entitled catalog** *(blocked on Wave 3)*
+
+- [ ] 02-04-PLAN.md — Deliver the deterministic freshness-aware entitled linear lineup and native selection surface.
+
+**Wave 5 — Confirmed live playback** *(blocked on Wave 4)*
+
+- [ ] 02-05-PLAN.md — Resolve a selected channel through current authorization and control one confirmed AVFoundation player.
+
+**Wave 6 — Bounded recovery** *(blocked on Wave 5)*
+
+- [ ] 02-06-PLAN.md — Add cancellation-safe same-channel recovery with finite incident budgets and distinct failures.
+
+**Wave 7 — Independent metadata** *(blocked on Wave 6)*
+
+- [ ] 02-07-PLAN.md — Present current text/artwork with independent fresh, stale, and unavailable states.
 
 ### Phase 3: Native Mac Listening Experience
 

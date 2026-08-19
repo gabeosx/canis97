@@ -311,17 +311,19 @@ monitor.start(queue: monitorQueue)
 
 ## Open Questions
 
-1. **What are the current fixed catalog, tune, stream, metadata, artwork, and key-authorization contracts?**
+**Resolution routing (planning revision 1):** These questions remain `OPEN — LIVE GATE REQUIRED` at planning time. Plan 02-02 is the first Phase 02 work allowed to observe live provider behavior and will create the canonical sanitized `.planning/phases/02-authorized-live-listening/02-LIVE-CONTRACT.md`. Plan 02-03 may mark a question resolved and add fixed provider code only when that artifact says `Gate Result: SUPPORTED`; an unsupported, ambiguous, protected, or incomplete result records `Execution: HALT` and leaves provider-dependent plans blocked. No raw live evidence belongs in this research file or the canonical artifact.
+
+1. **[OPEN — LIVE GATE REQUIRED] What are the current fixed catalog, tune, stream, metadata, artwork, and key-authorization contracts?**
    - What we know: Historical owner-authorized evidence records native account/tune/manifest/playback-key feasibility, while the exact raw capture was intentionally deleted. [VERIFIED: .planning/phases/00-authentication-feasibility-gate/.continue-here.md:32-48]
    - What's unclear: Current paths, payload field types, provider outcome mapping, service hosts, expiry semantics, and metadata cadence.
    - Recommendation: Make this the tracer’s first owner-visible `checkpoint:human-verify`. Reuse the authenticated app session, make the smallest read-only/minimally stateful request sequence, record only semantic shape/outcome information, and stop immediately on protected-control signals. [VERIFIED: .planning/phases/00-authentication-feasibility-gate/.continue-here.md:86-107]
 
-2. **Can AVFoundation obtain and play the authorized stream without a prohibited custom authorization mechanism?**
+2. **[OPEN — LIVE GATE REQUIRED] Can AVFoundation obtain and play the authorized stream without a prohibited custom authorization mechanism?**
    - What we know: Apple supports HLS in `AVPlayer`; historical notes separately flag AES-128 HLS key authorization as unresolved. [CITED: https://developer.apple.com/documentation/avfoundation/avplayer] [VERIFIED: .planning/phases/00-authentication-feasibility-gate/.continue-here.md:58-60]
    - What's unclear: Whether the discovered resource’s authorization can be passed to AVFoundation safely and whether it resumes at the desired live edge.
    - Recommendation: Play one owner-visible authorized item, then immediately stop/clear it. Do not promise or build a fallback media engine without this result. [VERIFIED: AGENTS.md]
 
-3. **Which public API safely hands a resolved resource to an app playback layer?**
+3. **[OPEN — LIVE GATE REQUIRED] Which public API safely hands a resolved resource to an app playback layer?**
    - What we know: The library’s public surface must stay semantic while token/resource material stays ephemeral. [VERIFIED: .planning/REQUIREMENTS.md:18-20; VERIFIED: .planning/REQUIREMENTS.md:24-27]
    - What's unclear: Whether a public opaque resource, an app-integration SPI closure, or an Apple-platform playback-session protocol is the smallest safe contract.
    - Recommendation: Decide after the live-resource mechanism is known; keep URL/header/key material out of ordinary model descriptions, persistence, and diagnostics. [ASSUMED]

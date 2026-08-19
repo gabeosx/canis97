@@ -40,15 +40,15 @@ created: 2026-08-19
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 02-W0-CAT01 | TBD | 0 | CAT-01 | T-02-04 | Filters only entitled standard and app-only `channel-linear` entities from invented fixtures. | unit/contract | `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --package-path Packages/SiriusXMClient` | ❌ W0 | ⬜ pending |
-| 02-W0-CAT02 | TBD | 0 | CAT-02 | T-02-04 | Semantic channel snapshots preserve stable identity, optional presentation fields, entitlement, and freshness without raw provider objects. | unit | `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --package-path Packages/SiriusXMClient` | ❌ W0 | ⬜ pending |
-| 02-W0-CAT03 | TBD | 0 | CAT-03 | T-02-03 | Stale catalog presence cannot authorize or begin playback. | unit/app | `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild test -project SiriusMac.xcodeproj -scheme SiriusMac -destination 'platform=macOS'` | ❌ W0 | ⬜ pending |
-| 02-W0-PLAY01 | TBD | 0 | PLAY-01 | T-02-01 | Tune, start, pause, resume-at-live-edge, and stop publish only confirmed one-player states. | unit/app | `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild test -project SiriusMac.xcodeproj -scheme SiriusMac -destination 'platform=macOS'` | ❌ W0 | ⬜ pending |
-| 02-W0-PLAY02 | TBD | 0 | PLAY-02 | T-02-02 | Concurrent or superseded commands cannot install an obsolete player item or create a second coordinator. | unit | `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --package-path Packages/SiriusXMClient` | ❌ W0 | ⬜ pending |
-| 02-W0-PLAY03 | TBD | 0 | PLAY-03 | T-02-03 | Retry and re-resolution are bounded, cancellation-aware, and stop on protected-control or terminal authorization results. | unit | `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --package-path Packages/SiriusXMClient` | ❌ W0 | ⬜ pending |
-| 02-W0-PLAY04 | TBD | 0 | PLAY-04 | T-02-01 / T-02-03 | Authentication, entitlement, catalog, resolution, network, buffering, decoder, and unsupported-upstream states remain distinct without raw error text. | unit/app | `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild test -project SiriusMac.xcodeproj -scheme SiriusMac -destination 'platform=macOS'` | ❌ W0 | ⬜ pending |
-| 02-W0-META01 | TBD | 0 | META-01 | T-02-04 | Active-generation metadata chooses best available text/artwork and falls back to stable channel identity. | unit | `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --package-path Packages/SiriusXMClient` | ❌ W0 | ⬜ pending |
-| 02-W0-META02 | TBD | 0 | META-02 | T-02-02 | Metadata failure cannot mutate healthy audio state and progresses through explicit stale/unavailable states. | unit/app | `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild test -project SiriusMac.xcodeproj -scheme SiriusMac -destination 'platform=macOS'` | ❌ W0 | ⬜ pending |
+| 02-W0-CAT01 | 02-01 | 0 | CAT-01 | T-02-04 | Filters only entitled standard and app-only `channel-linear` entities from invented fixtures. | unit/contract | `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --package-path Packages/SiriusXMClient` | ❌ W0 | ⬜ pending |
+| 02-W0-CAT02 | 02-01 | 0 | CAT-02 | T-02-04 | Semantic channel snapshots preserve stable identity, optional presentation fields, entitlement, and freshness without raw provider objects. | unit | `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --package-path Packages/SiriusXMClient` | ❌ W0 | ⬜ pending |
+| 02-W0-CAT03 | 02-01 | 0 | CAT-03 | T-02-03 | Stale catalog presence cannot authorize or begin playback. | unit/app | `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild test -project SiriusMac.xcodeproj -scheme SiriusMac -destination 'platform=macOS'` | ❌ W0 | ⬜ pending |
+| 02-W0-PLAY01 | 02-01 | 0 | PLAY-01 | T-02-01 | Tune, start, pause, resume-at-live-edge, and stop publish only confirmed one-player states. | unit/app | `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild test -project SiriusMac.xcodeproj -scheme SiriusMac -destination 'platform=macOS'` | ❌ W0 | ⬜ pending |
+| 02-W0-PLAY02 | 02-01 | 0 | PLAY-02 | T-02-02 | Concurrent or superseded commands cannot install an obsolete player item or create a second coordinator. | unit | `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --package-path Packages/SiriusXMClient` | ❌ W0 | ⬜ pending |
+| 02-W0-PLAY03 | 02-01 | 0 | PLAY-03 | T-02-03 | Retry and re-resolution are bounded, cancellation-aware, and stop on protected-control or terminal authorization results. | unit | `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --package-path Packages/SiriusXMClient` | ❌ W0 | ⬜ pending |
+| 02-W0-PLAY04 | 02-01 | 0 | PLAY-04 | T-02-01 / T-02-03 | Authentication, entitlement, catalog, resolution, network, buffering, decoder, and unsupported-upstream states remain distinct without raw error text. | unit/app | `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild test -project SiriusMac.xcodeproj -scheme SiriusMac -destination 'platform=macOS'` | ❌ W0 | ⬜ pending |
+| 02-W0-META01 | 02-01 | 0 | META-01 | T-02-04 | Active-generation metadata chooses best available text/artwork and falls back to stable channel identity. | unit | `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --package-path Packages/SiriusXMClient` | ❌ W0 | ⬜ pending |
+| 02-W0-META02 | 02-01 | 0 | META-02 | Metadata failure cannot mutate healthy audio state and progresses through explicit stale/unavailable states. | unit/app | `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild test -project SiriusMac.xcodeproj -scheme SiriusMac -destination 'platform=macOS'` | ❌ W0 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -56,11 +56,11 @@ created: 2026-08-19
 
 ## Wave 0 Requirements
 
-- [ ] `Packages/SiriusXMClient/Tests/SiriusXMClientTests/LiveCatalogAdapterTests.swift` — invented/sanitized catalog filtering, stable identity, freshness, and no cache-as-authorization coverage for CAT-01 through CAT-03.
-- [ ] `Packages/SiriusXMClient/Tests/SiriusXMClientTests/LivePlaybackCoordinatorTests.swift` — fake resolver/player/event coverage for PLAY-01 through PLAY-04, command supersession, and bounded recovery.
-- [ ] `Packages/SiriusXMClient/Tests/SiriusXMClientTests/MetadataRefreshCoordinatorTests.swift` — injected clock/transport coverage for META-01 and META-02.
-- [ ] `SiriusMacTests/ListeningCompositionTests.swift` — proves one app composition-owned coordinator and confirmed-state presentation.
-- [ ] A plan-level `checkpoint:human` task for the single bounded live contract and AVFoundation smoke test, with explicit stop conditions and semantic-only evidence.
+- [ ] Plan 02-01 creates `Packages/SiriusXMClient/Tests/SiriusXMClientTests/LiveCatalogAdapterTests.swift` with invented provider-neutral filtering, stable identity, freshness, and no cache-as-authorization coverage for CAT-01 through CAT-03.
+- [ ] Plan 02-01 creates `Packages/SiriusXMClient/Tests/SiriusXMClientTests/LivePlaybackCoordinatorTests.swift` with fake resolver/player/event coverage for PLAY-01 through PLAY-04, command supersession, and bounded recovery.
+- [ ] Plan 02-01 creates `Packages/SiriusXMClient/Tests/SiriusXMClientTests/MetadataRefreshCoordinatorTests.swift` with injected clock/fake-flow coverage for META-01 and META-02.
+- [ ] Plan 02-01 creates `SiriusMacTests/ListeningCompositionTests.swift` to prove one app composition-owned coordinator and confirmed-state presentation.
+- [ ] Plan 02-02 owns the first live-provider touch through a blocking owner-visible checkpoint with explicit stop conditions and semantic-only evidence.
 
 ---
 
