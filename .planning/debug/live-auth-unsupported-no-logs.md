@@ -2,27 +2,28 @@
 status: awaiting_human_verify
 trigger: "I don't want to proceed with further testing that requires me signing-in to Sirius until you add sufficient logging to debug what is actually happening. The more times I login the more likely it becomes that Sirius will block me suspecting I am a bot"
 created: 2026-08-18T23:08:00Z
-updated: 2026-08-18T23:34:11Z
+updated: 2026-08-19T01:08:02Z
 ---
 
 ## Current Focus
 
-hypothesis: Confirmed in code and regression tests: Phase 1 hardening replaced the previously working boundary-safe SiriusXM-subdomain rule with an apex/www-only allowlist and production drifted from /player to the marketing root.
-test: Completed entirely offline: restored boundary-safe siriusxm.com/*.siriusxm.com acceptance, restored /player, added value-free first-party cookie-name inventory and rejection diagnostics, made injected bridge sign-in loading network-free, and ran focused/full suites plus build-only.
-expecting: A future user-authorized attempt transfers the prior working AUTH_TOKEN shape. If it does not, logs show the first-party cookie names present and any exact issuer/path/Secure/expiry rejection without values.
-next_action: Wait for the user to choose whether to perform one instrumented live attempt with ./script/build_and_run.sh --telemetry. Do not initiate another SiriusXM sign-in without that choice.
+hypothesis: Confirmed by the second live trace and a mutation test: the current WebKit AUTH_TOKEN is boundary-safe, current, and root-path but reports isSecure false; the Phase 1 Secure-attribute gate is the remaining handoff regression.
+test: The user trace showed AUTH_TOKEN followed only by auth-cookie-insecure. Offline, the exact current non-Secure subdomain token transfers after removing the Secure gate, fails as authCookieMissing when that gate is temporarily restored, and passes again after restoration of the fix.
+expecting: A future user-authorized attempt reaches credential-transferred, then exposes the native authentication and entitlement outcome through existing secret-safe diagnostics.
+next_action: Wait for the user to choose whether to run the rebuilt app. Do not initiate or request repeated SiriusXM sign-ins; one future attempt is the maximum before interpreting its result.
 bug_class: bohrbug
 reasoning_checkpoint:
-  hypothesis: "The live bridge regressed the proven SiriusXM-subdomain token policy and the first telemetry pass collapsed all selector failures to auth-cookie-missing."
+  hypothesis: "The live bridge regressed both proven parts of the token policy: boundary-safe SiriusXM subdomains and acceptance independent of HTTPCookie.isSecure."
   confirming_evidence:
     - "The user-provided sequence stops at auth-cookie-missing before any native client event."
     - "The previously working policy accepted siriusxm.com and boundary-safe subdomains; c5d8e40 changed player.siriusxm.com into an explicit rejection."
     - "Production loaded the marketing root although the established browser contract uses /player."
-  falsification_test: "The exact previously working player-subdomain cookie must transfer in a focused regression, lookalike domains must remain rejected, injected tests must make no network load, and diagnostic canaries must prove no cookie value reaches telemetry."
-  fix_rationale: "Restore the proven registrable-domain boundary rather than a brittle host list, use the established player entry, and log only sanitized first-party names plus closed rejection reasons."
-  blind_spots: "Only a future owner-authorized attempt can confirm the current SiriusXM site still emits the expected token and that the subsequent native endpoints remain compatible."
+    - "The second live trace inventories AUTH_TOKEN and then emits only auth-cookie-insecure before the generic auth-cookie-missing terminal result."
+  falsification_test: "The exact live-shaped current root-path player-subdomain cookie with isSecure false must transfer, the same test must fail when the Secure gate is restored, lookalike domains must remain rejected, and injected tests must make no network load."
+  fix_rationale: "Restore the complete proven predicate: exact name, root path, current expiry, and a label-boundary-safe SiriusXM domain; do not impose a cookie transport attribute that the live WebKit store does not provide."
+  blind_spots: "Only a future owner-authorized attempt can confirm the subsequent native endpoints remain compatible."
   candidate_causes:
-    - "code: c5d8e40 rejects valid SiriusXM subdomains and production starts on the wrong entry surface"
+    - "code: c5d8e40 rejects valid SiriusXM subdomains, requires a Secure attribute absent from the live token, and production starts on the wrong entry surface"
     - "observability: auth-cookie-missing conceals present cookie names and selector rejection reasons"
   and_gate: "Yes: the restrictive selector produces the missing result, and insufficient telemetry conceals that regression. Both are repaired before another live attempt."
 tdd_checkpoint: null
@@ -110,11 +111,23 @@ started: First confirmed against the Phase 1 app during UAT on 2026-08-18. A pri
   checked: Manual mutation of the repaired first-party domain predicate back to the regressed apex/www-only behavior
   found: The focused player-subdomain handoff test failed with authCookieMissing and zero credential transfers. Restoring boundary-safe subdomain matching made the same test pass.
   implication: The regression test specifically kills the prior c5d8e40 behavior and will prevent the project from forgetting this interoperability fact again.
+- timestamp: 2026-08-19T01:08:02Z
+  checked: User-provided second instrumented live trace
+  found: The first-party inventory contains AUTH_TOKEN. The only selector rejection emitted is auth-cookie-insecure, followed by the generic auth-cookie-missing terminal result; issuer, path, and expiry rejection events are absent.
+  implication: WebKit reports the current first-party token with isSecure false, and the Secure-attribute gate alone prevents transfer.
+- timestamp: 2026-08-19T01:08:02Z
+  checked: Exact live-shaped regression and manual Secure-gate mutation
+  found: A current root-path AUTH_TOKEN on .player.siriusxm.com with isSecure false transfers after the fix. Temporarily restoring cookie.isSecure makes the same test return authCookieMissing with zero transfers; removing the gate makes it pass again.
+  implication: The test proves causality rather than merely correlating the live diagnostic label with the failure.
+- timestamp: 2026-08-19T01:08:02Z
+  checked: Focused bridge suite, full app suite, package suite, and build-only
+  found: All 22 bridge tests, all 46 SiriusMac tests, and all 32 SiriusXMClient tests passed. The corrected Debug app built at /tmp/sirius-mac-derived-data/Build/Products/Debug/SiriusMac.app without launch.
+  implication: The complete fix is integrated and verified offline; no additional SiriusXM request or sign-in was made by the verification.
 
 ## Resolution
 
-root_cause: The original observability gap was only partially fixed. The live failure is a Phase 1 regression from the previously proven WebView handoff: c5d8e40 discarded boundary-safe SiriusXM-subdomain acceptance and explicitly made player.siriusxm.com fail as missing, while production also uses the marketing root instead of the established /player entry. The generic missing label then concealed both the rejected token shape and the first-party cookie names present.
-fix: Restored the proven https://www.siriusxm.com/player entry and the boundary-safe siriusxm.com/*.siriusxm.com AUTH_TOKEN rule while retaining Secure, root-path, current, exact-cardinality, and suffix-lookalike checks. Added a capped, sanitized inventory of first-party cookie names and closed name-absent/issuer/path/Secure/expiry diagnostics; values are never recorded. Injected bridge tests now use a no-op/request-capture loader and cannot contact SiriusXM.
+root_cause: Phase 1 hardening discarded two parts of the previously proven WebView handoff. It replaced boundary-safe SiriusXM-subdomain acceptance with an apex/www-only allowlist and added a Secure-attribute requirement. The current live WebKit store exposes a valid AUTH_TOKEN name but reports isSecure false, so the remaining gate rejects it before any native request. The generic auth-cookie-missing label is only the terminal policy result; auth-cookie-insecure identifies the exact failed predicate.
+fix: Restored https://www.siriusxm.com/player and the complete proven token predicate: exact AUTH_TOKEN name, root path, current expiry, and siriusxm.com or a label-boundary-safe subdomain, independent of HTTPCookie.isSecure. Cardinality and suffix-lookalike protections remain. Value-free cookie-name inventory and closed rejection diagnostics remain, and tests cannot contact SiriusXM.
 verification:
   target_test: pass
   mutation_check:
@@ -126,8 +139,8 @@ verification:
     result: pass
     suites:
       - "SiriusXMClient package: 32 tests"
-      - "SiriusMac app: 45 tests"
-      - "WebAuthenticationBridge focused: 21 tests"
+      - "SiriusMac app: 46 tests"
+      - "WebAuthenticationBridge focused: 22 tests"
   revert_and_reconfirm:
     result: pass
     bug_returned_on_revert: true

@@ -9,7 +9,6 @@ enum AuthenticationBridgeDiagnostic: String, CaseIterable, Equatable {
     case authCookieNameAbsent = "auth-cookie-name-absent"
     case authCookieIssuerRejected = "auth-cookie-issuer-rejected"
     case authCookiePathRejected = "auth-cookie-path-rejected"
-    case authCookieInsecure = "auth-cookie-insecure"
     case authCookieExpired = "auth-cookie-expired"
     case firstPartyCookieInventoryEmpty = "first-party-cookie-inventory-empty"
     case firstPartyCookieInventoryTruncated = "first-party-cookie-inventory-truncated"
@@ -279,7 +278,6 @@ private extension FirstPartyTokenCookiePolicy.RejectionReason {
         case .nameAbsent: .authCookieNameAbsent
         case .issuerRejected: .authCookieIssuerRejected
         case .pathRejected: .authCookiePathRejected
-        case .insecure: .authCookieInsecure
         case .expired: .authCookieExpired
         }
     }

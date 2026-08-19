@@ -12,7 +12,6 @@ enum FirstPartyTokenCookiePolicy {
         case nameAbsent
         case issuerRejected
         case pathRejected
-        case insecure
         case expired
     }
 
@@ -45,9 +44,6 @@ enum FirstPartyTokenCookiePolicy {
             if cookie.path != "/" {
                 reasons.insert(.pathRejected)
             }
-            if !cookie.isSecure {
-                reasons.insert(.insecure)
-            }
             if cookie.expiresDate.map({ $0 <= now }) ?? false {
                 reasons.insert(.expired)
             }
@@ -58,7 +54,6 @@ enum FirstPartyTokenCookiePolicy {
     static func matches(_ cookie: HTTPCookie, now: Date) -> Bool {
         guard cookie.name == "AUTH_TOKEN",
               cookie.path == "/",
-              cookie.isSecure,
               cookie.expiresDate.map({ $0 > now }) ?? true else {
             return false
         }
