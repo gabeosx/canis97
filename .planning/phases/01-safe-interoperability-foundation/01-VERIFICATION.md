@@ -4,7 +4,11 @@ verified: 2026-08-18T18:39:24Z
 status: passed
 score: 7/7 must-haves verified
 behavior_unverified: 0
-overrides_applied: 0
+overrides_applied: 1
+verification_override:
+  acknowledged_at: 2026-08-19T02:00:21Z
+  reason: "Owner chose to proceed based on completed 40/40 UAT instead of regenerating this stale verifier report."
+  stale_report_retained: true
 re_verification:
   previous_status: gaps_found
   previous_score: 6/7
@@ -20,6 +24,14 @@ re_verification:
 **Verified:** 2026-08-18T18:39:24Z
 **Status:** passed
 **Re-verification:** Yes — after gap closure
+
+## Acknowledged Verification Exception
+
+This report is retained as historical verifier output and was **not regenerated** after later Phase 1 implementation and summary updates. In particular, its references to the earlier subscription response shape are stale; the live-tested implementation now uses `/subscription/v1/subscriptions` and classifies `items[].state` values through the internal adapter.
+
+On 2026-08-18, the owner explicitly chose to move on without another verifier pass. That decision is supported by the newer conversational UAT record: all 40 checks passed, including one controlled live trace that reached `credential-transferred`, `native-authentication:completed`, and `entitlement:completed`. The current deterministic evidence recorded by UAT is 35 passing package tests, 47 passing app tests, and a successful Debug build.
+
+This is an acknowledged documentation-staleness exception, not a claim that the report below was freshly re-audited.
 
 ## User Flow Coverage
 

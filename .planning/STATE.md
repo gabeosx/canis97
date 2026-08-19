@@ -6,9 +6,9 @@ current_phase: 2
 current_phase_name: Authorized Live Listening
 status: planning
 stopped_at: Completed 01-16-PLAN.md
-last_updated: "2026-08-19T01:25:12Z"
+last_updated: "2026-08-19T02:00:21Z"
 last_activity: 2026-08-18
-last_activity_desc: "Completed quick task 260818-tn3: make one live auth attempt fully diagnosable with secret-free native reason labels"
+last_activity_desc: "Accepted Phase 1 verification-staleness exception after 40/40 UAT and advanced to Phase 2"
 progress:
   total_phases: 2
   completed_phases: 2
@@ -20,17 +20,17 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-08-16)
+See: .planning/PROJECT.md (updated 2026-08-18)
 
 **Core value:** Subscribers can reliably start and control a live SiriusXM stream from a delightful native Mac player, even as the unsupported SiriusXM integration evolves underneath it.
-**Current focus:** Phase 01 — safe-interoperability-foundation
+**Current focus:** Phase 02 — Authorized Live Listening
 
 ## Current Position
 
 Phase: 2 — Authorized Live Listening
 Plan: Not started
 Status: Ready to plan
-Last activity: 2026-08-18 — Completed quick task 260818-tn3: secret-safe native auth diagnostics
+Last activity: 2026-08-18 — Accepted Phase 1 verification-staleness exception after 40/40 UAT
 
 Progress: [██████████] 100%
 
@@ -134,7 +134,7 @@ All earlier Phase 0 feasibility-selection, proof-run, quartet, GO/NO-GO, and cal
 - [Phase ?]: Reserve WebView credential selection before cookie-store suspension and commit consumption before credential delivery.
 - [Phase ?]: Only explicit user-operated sign-in may re-arm a consumed WebView credential handoff.
 - [Phase 01]: Profile-v4 authentication accepts only a non-empty JSON object after existing transport and control preflight, without inventing a profile field. — Preserves the settled Phase 0 predicate while allowing representative unrelated fields.
-- [Phase 01]: Subscription-v1 entitlement is determined solely by exact nested subscription.status active or inactive values; all other evidence fails closed. — Maintains the settled entitlement contract and contains provider schema details internally.
+- [Phase 01]: Subscription-v1 entitlement uses `/subscription/v1/subscriptions` and classifies only recognized `items[].state` values (`active` or `finished`); missing, malformed, empty, or unknown evidence fails closed. — Matches the successful live contract while containing volatile provider schema details internally.
 - [Phase ?]: Redirect instrumentation exposes only an internal scalar attempt count and never retains redirect or credential-bearing request data.
 - [Phase ?]: Accept one current root-path AUTH_TOKEN from siriusxm.com or any label-boundary-safe subdomain independent of WebKit's Secure flag; continue rejecting expired, path-mismatched, duplicate, and suffix-lookalike cookies.
 - [Phase ?]: Cleanup succeeds only after an exact-token rescan is clean and bridge-owned nonpersistent WebKit session retirement succeeds.
@@ -174,6 +174,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-18T18:11:39.601Z
-Stopped at: Completed 01-16-PLAN.md
+Last session: 2026-08-19T02:00:21Z
+Stopped at: Phase 1 accepted after 40/40 UAT; ready to discuss Phase 2
 Resume file: None

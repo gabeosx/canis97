@@ -67,13 +67,14 @@ Subscribers can reliably start and control a live SiriusXM stream from a delight
 | Build a native macOS application rather than a web wrapper | Native media, security, windowing, and desktop behavior are central to the product | — Pending |
 | Make reliable playback, macOS integration, and nostalgic skinning all part of v1 | The project's value comes from the combination, not any one feature in isolation | — Pending |
 | Publish for general subscriber use on GitHub | The project is intended as a public tool and reusable reference implementation | — Pending |
-| Enforce strict, fail-closed authentication boundaries | An unsanctioned public client must not compromise subscriber credentials or bypass service protections | — Pending |
+| Enforce strict, fail-closed authentication boundaries | An unsanctioned public client must not compromise subscriber credentials or bypass service protections | ✓ Validated — Phase 1 |
 | Scope v1 content to live channels, favorites, recents, and channel metadata | Establish the core listening workflow before adding on-demand content or search | — Pending |
 | Use a compact player plus a larger library window | Preserves the always-available classic-player feel while giving discovery a native desktop workspace | — Pending |
 | Support bundled and declarative user-created skins | Skinning is a core product capability while executable extensions would create avoidable risk | — Pending |
 | Deliver the SiriusXM layer as a first-class reusable library | Protocol volatility and public reuse both require separation from application UI | — Pending |
 | Avoid a cross-platform mandate | The project can prioritize excellent current-macOS and Apple-platform architecture | — Pending |
 | Distribute signed and notarized releases through GitHub and Homebrew | Public users should be able to install normally without bypassing Gatekeeper | — Pending |
+| Use the live-tested `/subscription/v1/subscriptions` contract behind an internal adapter | The earlier gateway response assumption drifted; the current endpoint and `items[].state` classifier completed native authentication and entitlement in a controlled live UAT | ✓ Validated — Phase 1 |
 
 ## Evolution
 
