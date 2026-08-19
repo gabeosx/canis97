@@ -45,7 +45,9 @@ struct AuthenticationView: View {
                             Button("Sign Out") { _ = model.signOut() }
                         }
                     } else {
-                        WebViewAuthenticationContainer(bridge: bridge)
+                        if model.state == .waitingForWebView {
+                            WebViewAuthenticationContainer(bridge: bridge)
+                        }
                         authenticationActions
                     }
                 }
@@ -59,6 +61,10 @@ struct AuthenticationView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .disabled(model.isAttemptInFlight)
         .padding(AuthenticationLayout.contentPadding)
+        .task { @MainActor in
+            let attempt = model.restoreStoredCredentialOnLaunch()
+            await attempt?.value
+        }
     }
 
     private var isVerifying: Bool {
@@ -75,10 +81,7 @@ struct AuthenticationView: View {
         switch model.state {
         case .waitingForWebView:
             HStack {
-                Button("Sign In") {
-                    _ = model.signIn()
-                }
-                Button("Use Logged-In Session") {
+                Button("Use This Window’s Session") {
                     _ = model.useLoggedInSession()
                 }
                 clearLocalSessionButton
@@ -86,10 +89,14 @@ struct AuthenticationView: View {
         case .authenticatedButNotEntitled,
              .rejected,
              .challengeRequired,
-             .signedOut,
              .cleanupFailed:
             HStack {
                 Button("Retry Sign In") { _ = model.retry() }
+                clearLocalSessionButton
+            }
+        case .signedOut:
+            HStack {
+                Button("Sign In") { _ = model.signIn() }
                 clearLocalSessionButton
             }
         case .verifyingAuthentication,

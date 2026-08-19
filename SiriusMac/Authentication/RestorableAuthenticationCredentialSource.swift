@@ -1,6 +1,6 @@
 import SiriusXMClient
 
-/// The sole app-owned credential source used for an explicit Sign In attempt.
+/// The sole app-owned credential source used for native authentication attempts.
 ///
 /// A saved Keychain item is merely a one-shot opaque input: the client still owns
 /// native authentication, entitlement verification, and active-session publication.
@@ -9,6 +9,14 @@ final class RestorableAuthenticationCredentialSource: CredentialSource {
     enum ExplicitSignInCredentialPreparation: Equatable {
         case restoredCredentialReady
         case webViewRequired
+        case invalidCredentialErased
+        case cleanupFailed
+        case unavailable
+    }
+
+    enum AutomaticRestoreCredentialPreparation: Equatable {
+        case restoredCredentialReady
+        case missing
         case invalidCredentialErased
         case cleanupFailed
         case unavailable
@@ -48,6 +56,27 @@ final class RestorableAuthenticationCredentialSource: CredentialSource {
         case .missing:
             attemptOrigin = .webViewRequired
             return .webViewRequired
+        case .invalidErased:
+            return .invalidCredentialErased
+        case .cleanupFailed:
+            return .cleanupFailed
+        case .unavailable:
+            return .unavailable
+        }
+    }
+
+    /// Reads only the app-owned Keychain credential for the one automatic launch
+    /// restoration attempt. It never selects WebView cookies or starts an owner-
+    /// operated sign-in when the stored material is absent or unusable.
+    func prepareForAutomaticRestore() -> AutomaticRestoreCredentialPreparation {
+        guard case .none = attemptOrigin else { return .unavailable }
+
+        switch keychain.loadStoredCredentialForAuthentication() {
+        case let .credential(credential):
+            attemptOrigin = .restoredStaged(credential)
+            return .restoredCredentialReady
+        case .missing:
+            return .missing
         case .invalidErased:
             return .invalidCredentialErased
         case .cleanupFailed:

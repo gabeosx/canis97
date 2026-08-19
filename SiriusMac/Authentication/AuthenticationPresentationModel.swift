@@ -7,8 +7,9 @@ import SiriusXMClient
 final class AuthenticationPresentationModel {
     private let flow: any AuthenticationPresentationFlow
     private var attemptID: UUID?
+    private var hasAttemptedLaunchRestore = false
 
-    private(set) var state: AuthenticationPresentationState = .waitingForWebView
+    private(set) var state: AuthenticationPresentationState = .signedOut
     private(set) var diagnostics: [SafeAuthenticationDiagnostic] = []
     private(set) var isAttemptInFlight = false
     private(set) var backgroundRetryCount = 0
@@ -24,6 +25,31 @@ final class AuthenticationPresentationModel {
         let flow = flow
         return Task { [weak self, flow] in
             let result = await flow.prepareForExplicitSignIn(
+                onAuthenticationVerification: { [weak self] in
+                    self?.state = .verifyingAuthentication
+                },
+                onEntitlementVerification: { [weak self] in
+                    self?.state = .verifyingEntitlement
+                }
+            )
+            self?.finishAttempt(identifier, with: result)
+        }
+    }
+
+    /// Makes the sole automatic Keychain restore attempt for this presentation model.
+    ///
+    /// This never selects WebView cookies or begins a user-operated sign-in. Missing
+    /// credentials settle into the signed-out UI; terminal storage and client outcomes
+    /// are supplied unchanged by the composed flow.
+    @discardableResult
+    func restoreStoredCredentialOnLaunch() -> Task<Void, Never>? {
+        guard !hasAttemptedLaunchRestore, !isAttemptInFlight else { return nil }
+
+        hasAttemptedLaunchRestore = true
+        let identifier = startAttempt(at: .verifyingAuthentication)
+        let flow = flow
+        return Task { [weak self, flow] in
+            let result = await flow.restoreStoredCredential(
                 onAuthenticationVerification: { [weak self] in
                     self?.state = .verifyingAuthentication
                 },
@@ -244,6 +270,10 @@ enum SafeAuthenticationDiagnostic: Equatable {
 
 protocol AuthenticationPresentationFlow: Sendable {
     func beginWebViewSignIn() async -> AuthenticationPresentationState
+    func restoreStoredCredential(
+        onAuthenticationVerification: @MainActor @escaping @Sendable () -> Void,
+        onEntitlementVerification: @MainActor @escaping @Sendable () -> Void
+    ) async -> AuthenticationPresentationState
     func prepareForExplicitSignIn(
         onAuthenticationVerification: @MainActor @escaping @Sendable () -> Void,
         onEntitlementVerification: @MainActor @escaping @Sendable () -> Void
@@ -255,6 +285,13 @@ protocol AuthenticationPresentationFlow: Sendable {
 }
 
 extension AuthenticationPresentationFlow {
+    func restoreStoredCredential(
+        onAuthenticationVerification _: @MainActor @escaping @Sendable () -> Void,
+        onEntitlementVerification _: @MainActor @escaping @Sendable () -> Void
+    ) async -> AuthenticationPresentationState {
+        .signedOut
+    }
+
     func prepareForExplicitSignIn(
         onAuthenticationVerification _: @MainActor @escaping @Sendable () -> Void,
         onEntitlementVerification _: @MainActor @escaping @Sendable () -> Void
@@ -294,6 +331,28 @@ struct ComposedAuthenticationPresentationFlow: AuthenticationPresentationFlow {
     func beginWebViewSignIn() async -> AuthenticationPresentationState {
         await bridge.beginUserOperatedSignIn()
         return .waitingForWebView
+    }
+
+    func restoreStoredCredential(
+        onAuthenticationVerification: @MainActor @escaping @Sendable () -> Void,
+        onEntitlementVerification: @MainActor @escaping @Sendable () -> Void
+    ) async -> AuthenticationPresentationState {
+        guard let credentialSource else { return .signedOut }
+
+        switch credentialSource.prepareForAutomaticRestore() {
+        case .restoredCredentialReady:
+            onAuthenticationVerification()
+            return await completeClientTransaction(
+                credentialSource: credentialSource,
+                onEntitlementVerification: onEntitlementVerification
+            )
+        case .missing:
+            return .signedOut
+        case .invalidCredentialErased, .unavailable:
+            return .unsupported
+        case .cleanupFailed:
+            return .cleanupFailed(.keychain)
+        }
     }
 
     func prepareForExplicitSignIn(

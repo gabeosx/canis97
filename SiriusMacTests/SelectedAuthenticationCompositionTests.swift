@@ -163,6 +163,132 @@ final class SelectedAuthenticationCompositionTests: XCTestCase {
         XCTAssertNil(secondCredential)
     }
 
+    func testAutomaticRestoreConsumesOneStoredCredentialBeforeOrderedNativeTransaction() async throws {
+        var storedCredentialReadCount = 0
+        let keychain = KeychainCredentialStore(
+            storedCredentialReader: {
+                storedCredentialReadCount += 1
+                return Data("approved-restore".utf8)
+            },
+            storedCredentialRemover: {}
+        )
+
+        let cookieStore = CompositionCookieStore(cookies: [])
+        var signInRequestLoadCount = 0
+        let bridge = WebAuthenticationBridge(
+            cookieStore: cookieStore,
+            credentialConsumer: { _ in },
+            signInRequestLoader: { _ in signInRequestLoadCount += 1 }
+        )
+        let source = RestorableAuthenticationCredentialSource(keychain: keychain, webViewSource: bridge)
+        let client = CompositionClient(credentialSource: source)
+        let flow = ComposedAuthenticationPresentationFlow(bridge: bridge, client: client, credentialSource: source)
+
+        let state = await flow.restoreStoredCredential(
+            onAuthenticationVerification: {},
+            onEntitlementVerification: {}
+        )
+        let events = await client.events
+
+        XCTAssertEqual(state, .entitled)
+        XCTAssertEqual(events, [.credential, .authenticate, .entitlement])
+        XCTAssertEqual(storedCredentialReadCount, 1)
+        XCTAssertEqual(cookieStore.allCookieReadCount, 0)
+        XCTAssertEqual(signInRequestLoadCount, 0)
+        let subsequentCredential = await source.credential()
+        XCTAssertNil(subsequentCredential)
+    }
+
+    func testMissingAutomaticRestoreStaysSignedOutWithoutStartingWebView() async {
+        let keychain = KeychainCredentialStore(
+            service: "com.siriusmac.tests.\(UUID().uuidString)",
+            account: "missing-automatic-restore"
+        )
+        let cookieStore = CompositionCookieStore(cookies: [])
+        var signInRequestLoadCount = 0
+        let bridge = WebAuthenticationBridge(
+            cookieStore: cookieStore,
+            credentialConsumer: { _ in },
+            signInRequestLoader: { _ in signInRequestLoadCount += 1 }
+        )
+        let source = RestorableAuthenticationCredentialSource(keychain: keychain, webViewSource: bridge)
+        let client = CompositionClient(credentialSource: source)
+        let flow = ComposedAuthenticationPresentationFlow(bridge: bridge, client: client, credentialSource: source)
+
+        let state = await flow.restoreStoredCredential(
+            onAuthenticationVerification: {},
+            onEntitlementVerification: {}
+        )
+        let events = await client.events
+
+        XCTAssertEqual(state, .signedOut)
+        XCTAssertEqual(events, [])
+        XCTAssertEqual(cookieStore.allCookieReadCount, 0)
+        XCTAssertEqual(signInRequestLoadCount, 0)
+    }
+
+    func testInvalidAutomaticRestoreErasesAndFailsClosedWithoutWebViewFallback() async {
+        var didEraseStoredMaterial = false
+        let keychain = KeychainCredentialStore(
+            storedCredentialReader: { Data("malformed credential".utf8) },
+            storedCredentialRemover: { didEraseStoredMaterial = true }
+        )
+        let cookieStore = CompositionCookieStore(cookies: [])
+        var signInRequestLoadCount = 0
+        let bridge = WebAuthenticationBridge(
+            cookieStore: cookieStore,
+            credentialConsumer: { _ in },
+            signInRequestLoader: { _ in signInRequestLoadCount += 1 }
+        )
+        let source = RestorableAuthenticationCredentialSource(keychain: keychain, webViewSource: bridge)
+        let client = CompositionClient(credentialSource: source)
+        let flow = ComposedAuthenticationPresentationFlow(bridge: bridge, client: client, credentialSource: source)
+
+        let state = await flow.restoreStoredCredential(
+            onAuthenticationVerification: {},
+            onEntitlementVerification: {}
+        )
+        let events = await client.events
+
+        XCTAssertEqual(state, .unsupported)
+        XCTAssertTrue(didEraseStoredMaterial)
+        XCTAssertEqual(events, [])
+        XCTAssertEqual(cookieStore.allCookieReadCount, 0)
+        XCTAssertEqual(signInRequestLoadCount, 0)
+    }
+
+    func testRejectedAutomaticRestoreErasesAndDoesNotFallbackOrRetry() async throws {
+        let keychain = KeychainCredentialStore(
+            service: "com.siriusmac.tests.\(UUID().uuidString)",
+            account: "rejected-automatic-restore"
+        )
+        defer { try? keychain.removeStoredCredential() }
+        try await keychain.save(AuthenticationCredential(volatileMaterial: Data("approved-restore".utf8)))
+
+        let cookieStore = CompositionCookieStore(cookies: [])
+        var signInRequestLoadCount = 0
+        let bridge = WebAuthenticationBridge(
+            cookieStore: cookieStore,
+            credentialConsumer: { _ in },
+            signInRequestLoader: { _ in signInRequestLoadCount += 1 }
+        )
+        let source = RestorableAuthenticationCredentialSource(keychain: keychain, webViewSource: bridge)
+        let client = CompositionClient(authentication: .rejected, credentialSource: source)
+        let flow = ComposedAuthenticationPresentationFlow(bridge: bridge, client: client, credentialSource: source)
+
+        let state = await flow.restoreStoredCredential(
+            onAuthenticationVerification: {},
+            onEntitlementVerification: {}
+        )
+        let events = await client.events
+
+        XCTAssertEqual(state, .rejected)
+        XCTAssertNil(try keychain.readStoredCredential())
+        XCTAssertEqual(events, [.credential, .authenticate])
+        XCTAssertEqual(cookieStore.allCookieReadCount, 0)
+        XCTAssertEqual(signInRequestLoadCount, 0)
+    }
+
     func testRejectedRestoreErasesBeforeTerminalStateThenLaterExplicitRetryUsesWebView() async throws {
         let now = Date()
         let keychain = KeychainCredentialStore(
@@ -198,8 +324,14 @@ final class SelectedAuthenticationCompositionTests: XCTestCase {
         XCTAssertEqual(events, [.credential, .authenticate, .credential, .authenticate, .entitlement])
     }
 
-    func testUnavailableRestoreDoesNotFallThroughToWebViewOrClient() async {
-        let bridge = WebAuthenticationBridge(cookieStore: CompositionCookieStore(cookies: []), credentialConsumer: { _ in })
+    func testUnavailableAutomaticRestoreDoesNotFallThroughToWebViewOrClient() async {
+        let cookieStore = CompositionCookieStore(cookies: [])
+        var signInRequestLoadCount = 0
+        let bridge = WebAuthenticationBridge(
+            cookieStore: cookieStore,
+            credentialConsumer: { _ in },
+            signInRequestLoader: { _ in signInRequestLoadCount += 1 }
+        )
         let keychain = KeychainCredentialStore(
             storedCredentialReader: { throw KeychainCredentialStore.StorageError.unavailable },
             storedCredentialRemover: {}
@@ -208,11 +340,16 @@ final class SelectedAuthenticationCompositionTests: XCTestCase {
         let client = CompositionClient(credentialSource: source)
         let flow = ComposedAuthenticationPresentationFlow(bridge: bridge, client: client, credentialSource: source)
 
-        let state = await flow.prepareForExplicitSignIn(onAuthenticationVerification: {}, onEntitlementVerification: {})
+        let state = await flow.restoreStoredCredential(
+            onAuthenticationVerification: {},
+            onEntitlementVerification: {}
+        )
         let events = await client.events
 
         XCTAssertEqual(state, .unsupported)
         XCTAssertEqual(events, [])
+        XCTAssertEqual(cookieStore.allCookieReadCount, 0)
+        XCTAssertEqual(signInRequestLoadCount, 0)
     }
 
     func testMissingRestoreStartsOnlyTheExistingWebViewBranch() async {

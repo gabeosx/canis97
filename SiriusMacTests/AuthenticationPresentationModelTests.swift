@@ -57,6 +57,41 @@ final class AuthenticationPresentationModelTests: XCTestCase {
         XCTAssertEqual(model.diagnostics, [.challengeRequired, .cleanupFailed])
     }
 
+    func testLaunchRestorationRunsExactlyOnceWithoutUsingTheWebViewSession() async {
+        let flow = AuthenticationFlowSpy(automaticRestoreResult: .entitled)
+        let model = AuthenticationPresentationModel(flow: flow)
+
+        XCTAssertEqual(model.state, .signedOut)
+        XCTAssertNil(model.useLoggedInSession())
+
+        let firstAttempt = model.restoreStoredCredentialOnLaunch()
+        let repeatedAttempt = model.restoreStoredCredentialOnLaunch()
+        await firstAttempt?.value
+
+        XCTAssertNil(repeatedAttempt)
+        XCTAssertEqual(model.state, .entitled)
+        let counts = await flow.callCounts()
+        XCTAssertEqual(counts.automaticRestore, 1)
+        XCTAssertEqual(counts.begin, 0)
+        XCTAssertEqual(counts.loggedInSession, 0)
+    }
+
+    func testTerminalLaunchRestorationDoesNotRetryOrStartTheWebViewPath() async {
+        let flow = AuthenticationFlowSpy(automaticRestoreResult: .unsupported)
+        let model = AuthenticationPresentationModel(flow: flow)
+
+        let firstAttempt = model.restoreStoredCredentialOnLaunch()
+        let repeatedAttempt = model.restoreStoredCredentialOnLaunch()
+        await firstAttempt?.value
+
+        XCTAssertNil(repeatedAttempt)
+        XCTAssertEqual(model.state, .unsupported)
+        let counts = await flow.callCounts()
+        XCTAssertEqual(counts.automaticRestore, 1)
+        XCTAssertEqual(counts.begin, 0)
+        XCTAssertEqual(counts.loggedInSession, 0)
+    }
+
     func testSignInStartsOnlyOneBridgeActionWhileInFlight() async {
         let flow = AuthenticationFlowSpy(beginResults: [.rejected, .rejected], holdBegin: true)
         let model = AuthenticationPresentationModel(flow: flow)
@@ -113,6 +148,7 @@ final class AuthenticationPresentationModelTests: XCTestCase {
         let signedOutCounts = await flow.callCounts()
         XCTAssertEqual(signedOutCounts.signOut, 0)
 
+        await model.signIn()?.value
         await model.useLoggedInSession()?.value
         await model.signOut()?.value
 
@@ -127,10 +163,12 @@ private actor AuthenticationFlowSpy: AuthenticationPresentationFlow {
     private var beginResults: [AuthenticationPresentationState]
     private let holdBegin: Bool
     private var beginContinuation: CheckedContinuation<Void, Never>?
+    private let automaticRestoreResult: AuthenticationPresentationState
     private let loggedInSessionResult: AuthenticationPresentationState
     private let signOutResult: SignOutOutcome
 
     private(set) var beginCallCount = 0
+    private(set) var automaticRestoreCallCount = 0
     private(set) var loggedInSessionCallCount = 0
     private(set) var signOutCallCount = 0
 
@@ -138,11 +176,13 @@ private actor AuthenticationFlowSpy: AuthenticationPresentationFlow {
         beginResult: AuthenticationPresentationState = .waitingForWebView,
         beginResults: [AuthenticationPresentationState]? = nil,
         holdBegin: Bool = false,
+        automaticRestoreResult: AuthenticationPresentationState = .signedOut,
         loggedInSessionResult: AuthenticationPresentationState = .waitingForWebView,
         signOutResult: SignOutOutcome = .alreadySignedOut
     ) {
         self.beginResults = beginResults ?? [beginResult]
         self.holdBegin = holdBegin
+        self.automaticRestoreResult = automaticRestoreResult
         self.loggedInSessionResult = loggedInSessionResult
         self.signOutResult = signOutResult
     }
@@ -155,6 +195,18 @@ private actor AuthenticationFlowSpy: AuthenticationPresentationFlow {
             }
         }
         return beginResults.removeFirst()
+    }
+
+    func restoreStoredCredential(
+        onAuthenticationVerification: @MainActor @escaping @Sendable () -> Void,
+        onEntitlementVerification: @MainActor @escaping @Sendable () -> Void
+    ) async -> AuthenticationPresentationState {
+        automaticRestoreCallCount += 1
+        await onAuthenticationVerification()
+        if automaticRestoreResult == .entitled {
+            await onEntitlementVerification()
+        }
+        return automaticRestoreResult
     }
 
     func useLoggedInSession(
@@ -174,7 +226,7 @@ private actor AuthenticationFlowSpy: AuthenticationPresentationFlow {
         beginContinuation = nil
     }
 
-    func callCounts() -> (begin: Int, loggedInSession: Int, signOut: Int) {
-        (beginCallCount, loggedInSessionCallCount, signOutCallCount)
+    func callCounts() -> (automaticRestore: Int, begin: Int, loggedInSession: Int, signOut: Int) {
+        (automaticRestoreCallCount, beginCallCount, loggedInSessionCallCount, signOutCallCount)
     }
 }
