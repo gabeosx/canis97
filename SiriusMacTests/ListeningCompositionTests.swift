@@ -16,8 +16,9 @@ final class ListeningCompositionTests: XCTestCase {
         model.select(channel)
         await model.playSelectedChannel()
 
+        let tunedChannelIDs = await driver.recordedChannelIDs()
         XCTAssertTrue(model.playbackCoordinator === coordinator)
-        XCTAssertEqual(await driver.tunedChannelIDs, [channel])
+        XCTAssertEqual(tunedChannelIDs, [channel])
         XCTAssertEqual(coordinator.state, .playing(channel))
     }
 
@@ -39,8 +40,9 @@ final class ListeningCompositionTests: XCTestCase {
         model.select(channel)
         await model.playSelectedChannel()
 
+        let tuneCallCount = await driver.recordedTuneCallCount()
         XCTAssertEqual(model.catalog.freshness, .stale)
-        XCTAssertEqual(await driver.tuneCallCount, 0)
+        XCTAssertEqual(tuneCallCount, 0)
         XCTAssertEqual(coordinator.state, .unavailable(.authorizationUnavailable))
     }
 
@@ -77,7 +79,9 @@ final class ListeningCompositionTests: XCTestCase {
 private actor RecordingPlaybackDriver: LivePlaybackDriving {
     private(set) var tunedChannelIDs: [LiveChannelID] = []
 
-    var tuneCallCount: Int { tunedChannelIDs.count }
+    func recordedChannelIDs() -> [LiveChannelID] { tunedChannelIDs }
+
+    func recordedTuneCallCount() -> Int { tunedChannelIDs.count }
 
     func tune(_ channelID: LiveChannelID) async -> LivePlaybackDriverResult {
         tunedChannelIDs.append(channelID)
