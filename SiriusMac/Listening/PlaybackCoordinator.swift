@@ -354,6 +354,7 @@ final class PlaybackCoordinator {
     private var installedItemGeneration: Int?
     private var networkAvailable = true
     private var sleeping = false
+    private var recoveryPendingAfterReconnect = false
 
     private(set) var state: LivePlaybackState = .idle
     private(set) var selectedChannelID: LiveChannelID?
@@ -403,6 +404,13 @@ final class PlaybackCoordinator {
             state = .unavailable(.selectionUnavailable)
             return
         }
+        // A pause is a user command boundary even when the currently audible
+        // item predates the recovery task. It prevents a late recovered item
+        // from installing or restarting playback after the user pauses.
+        if recoveryIncident != nil || recoveryPendingAfterReconnect {
+            cancelRecovery()
+            recoveryPendingAfterReconnect = false
+        }
         guard installedItemGeneration == generation else {
             // A pause command is a serialization boundary. An unresolved tune
             // must not later install or begin audio after the user paused.
@@ -435,15 +443,23 @@ final class PlaybackCoordinator {
         switch signal {
         case .networkBecameUnavailable:
             networkAvailable = false
+            recoveryPendingAfterReconnect = selectedChannelID != nil
             cancelRecovery()
         case .willSleep:
             sleeping = true
             cancelRecovery()
         case .networkBecameAvailable:
             networkAvailable = true
+            if recoveryPendingAfterReconnect, beginRecoveryIfEligible(stallGrace: false) {
+                recoveryPendingAfterReconnect = false
+            }
         case .didWake:
             sleeping = false
-            beginRecoveryIfEligible(stallGrace: false)
+            if recoveryPendingAfterReconnect, beginRecoveryIfEligible(stallGrace: false) {
+                recoveryPendingAfterReconnect = false
+            } else {
+                _ = beginRecoveryIfEligible(stallGrace: false)
+            }
         case .stalled:
             beginRecoveryIfEligible(stallGrace: true)
         case .resourceExpired, .decoderFailed:
@@ -542,13 +558,14 @@ final class PlaybackCoordinator {
         }
     }
 
-    private func beginRecoveryIfEligible(stallGrace: Bool) {
+    @discardableResult
+    private func beginRecoveryIfEligible(stallGrace: Bool) -> Bool {
         guard recoveryIncident == nil,
               recoveryPolicy.maximumReResolutions > 0,
               networkAvailable,
               !sleeping,
               let channelID = selectedChannelID
-        else { return }
+        else { return false }
 
         let incident = RecoveryIncident(generation: generation, channelID: channelID)
         recoveryIncident = incident
@@ -558,6 +575,7 @@ final class PlaybackCoordinator {
         recoveryTask = Task { [weak self] in
             await self?.runRecovery(incident, waitsForStallGrace: stallGrace)
         }
+        return true
     }
 
     private func runRecovery(_ incident: RecoveryIncident, waitsForStallGrace: Bool) async {
@@ -597,16 +615,16 @@ final class PlaybackCoordinator {
         let observed = runtime.observe(
             item,
             onReady: { [weak self] in
-                self?.installReadyItem(item, channelID: incident.channelID, generation: incident.generation)
+                self?.installReadyRecoveredItem(item, incident: incident)
             },
             onPlaying: { [weak self] in
-                self?.publishPlaying(channelID: incident.channelID, generation: incident.generation)
+                self?.publishRecoveredPlaying(incident)
             },
             onPaused: { [weak self] in
-                self?.publishPaused(channelID: incident.channelID, generation: incident.generation)
+                self?.publishRecoveredPaused(incident)
             },
             onFailure: { [weak self] failure in
-                self?.handleObservedFailure(failure, channelID: incident.channelID, generation: incident.generation)
+                self?.handleRecoveredFailure(failure, incident: incident)
             }
         )
         guard isCurrent(incident) else {
@@ -615,6 +633,26 @@ final class PlaybackCoordinator {
         }
         observation?.cancel()
         observation = observed
+    }
+
+    private func installReadyRecoveredItem(_ item: AVPlayerItem, incident: RecoveryIncident) {
+        guard isCurrent(incident) else { return }
+        installReadyItem(item, channelID: incident.channelID, generation: incident.generation)
+    }
+
+    private func publishRecoveredPlaying(_ incident: RecoveryIncident) {
+        guard isCurrent(incident) else { return }
+        publishPlaying(channelID: incident.channelID, generation: incident.generation)
+    }
+
+    private func publishRecoveredPaused(_ incident: RecoveryIncident) {
+        guard isCurrent(incident) else { return }
+        publishPaused(channelID: incident.channelID, generation: incident.generation)
+    }
+
+    private func handleRecoveredFailure(_ failure: LiveListeningFailure, incident: RecoveryIncident) {
+        guard isCurrent(incident) else { return }
+        handleObservedFailure(failure, channelID: incident.channelID, generation: incident.generation)
     }
 
     private func isCurrent(_ incident: RecoveryIncident) -> Bool {
@@ -632,6 +670,7 @@ final class PlaybackCoordinator {
         recoveryTask?.cancel()
         recoveryTask = nil
         recoveryIncident = nil
+        recoveryPendingAfterReconnect = false
         state = .unavailable(failure)
     }
 
@@ -659,6 +698,7 @@ final class PlaybackCoordinator {
         resolutionTask?.cancel()
         resolutionTask = nil
         cancelRecovery()
+        recoveryPendingAfterReconnect = false
         observation?.cancel()
         observation = nil
         installedItemGeneration = nil
