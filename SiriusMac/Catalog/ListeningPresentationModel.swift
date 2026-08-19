@@ -50,6 +50,7 @@ final class ListeningPresentationModel {
     init(flow: any ListeningFlow, playbackCoordinator: PlaybackCoordinator? = nil) {
         self.flow = flow
         self.playbackCoordinator = playbackCoordinator
+        observePlaybackState()
     }
 
     static func makeIfEntitled(
@@ -148,6 +149,23 @@ final class ListeningPresentationModel {
         return Task { [weak self] in
             await operation(playbackCoordinator)
             self?.playbackState = playbackCoordinator.state
+        }
+    }
+
+    /// Playback confirmation arrives after a user command returns. Track the
+    /// coordinator itself so AVFoundation observations, not just button tasks,
+    /// update the rendered semantic state.
+    private func observePlaybackState() {
+        guard let playbackCoordinator else { return }
+        playbackState = playbackCoordinator.state
+        withObservationTracking {
+            _ = playbackCoordinator.state
+        } onChange: { [weak self, playbackCoordinator] in
+            Task { @MainActor [weak self, playbackCoordinator] in
+                guard let self else { return }
+                self.playbackState = playbackCoordinator.state
+                self.observePlaybackState()
+            }
         }
     }
 }

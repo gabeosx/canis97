@@ -133,27 +133,48 @@ struct AuthenticationComposition {
         client: (any ClientAuthenticationFlow)? = nil
     ) {
         let credentialSource = RestorableAuthenticationCredentialSource(keychain: keychain, webViewSource: bridge)
-        let composedClient = client ?? SiriusXMClient(
-            credentialSource: credentialSource,
-            credentialStore: keychain,
-            residueCleaner: bridge
-        )
 
         self.bridge = bridge
         self.keychain = keychain
         self.credentialSource = credentialSource
-        self.flow = ComposedAuthenticationPresentationFlow(
-            bridge: bridge,
-            client: composedClient,
-            credentialSource: credentialSource
-        )
-        self.listeningFlow = (composedClient as? any ListeningFlow) ?? UnavailableListeningFlow()
-        self.playbackCoordinator = PlaybackCoordinator()
+
+        if let client {
+            // Test-only composition remains closed: a non-SiriusXM fake cannot
+            // acquire playback authority merely by satisfying auth presentation.
+            self.flow = ComposedAuthenticationPresentationFlow(
+                bridge: bridge,
+                client: client,
+                credentialSource: credentialSource
+            )
+            self.listeningFlow = (client as? any ListeningFlow) ?? UnavailableListeningFlow()
+            self.playbackCoordinator = PlaybackCoordinator(resolver: UnavailablePlaybackResolver())
+        } else {
+            let composedClient = SiriusXMClient(
+                credentialSource: credentialSource,
+                credentialStore: keychain,
+                residueCleaner: bridge
+            )
+            self.flow = ComposedAuthenticationPresentationFlow(
+                bridge: bridge,
+                client: composedClient,
+                credentialSource: credentialSource
+            )
+            self.listeningFlow = composedClient
+            self.playbackCoordinator = PlaybackCoordinator(
+                resolver: SiriusXMPlaybackResolver(client: composedClient)
+            )
+        }
     }
 }
 
 private final class UnavailableListeningFlow: ListeningFlow, @unchecked Sendable {
     func catalog() async -> CatalogAvailability { .failed(.unavailable) }
+}
+
+private struct UnavailablePlaybackResolver: PlaybackResolving {
+    func resolve(for _: LiveChannelID) async -> PlaybackResourceResolution {
+        .failed(.authorizationUnavailable)
+    }
 }
 
 /// The fixed native location where the nonpersistent WebKit bridge is shown.
