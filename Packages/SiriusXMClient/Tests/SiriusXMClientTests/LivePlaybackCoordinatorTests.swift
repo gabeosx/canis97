@@ -144,6 +144,29 @@ struct LivePlaybackCoordinatorTests {
         #expect(await operations.resourceCount == 0)
         #expect(await operations.keyCount == 0)
     }
+
+    @Test("production composition uses the bounded selected-channel adapter")
+    func productionCompositionUsesTheBoundedSelectedChannelAdapter() async {
+        let transport = RecordingProductionLiveTransport()
+        let client = SiriusXMClient(
+            sessionCoordinator: makeActiveSession(),
+            fixedLiveTransport: transport
+        )
+
+        #expect(await client.authenticate() == .authenticatedPendingEntitlement)
+        let result = await client.resolveLiveStream(for: LiveChannelID("fixture-selected-channel"))
+
+        guard case .available = result else {
+            Issue.record("Expected the bounded production resolver to produce only an opaque handoff")
+            return
+        }
+        #expect(await transport.operations == [.tune, .playbackKey])
+    }
+
+    @Test("production adapter keeps all unsupported operations unmaterializable")
+    func productionAdapterKeepsUnsupportedOperationsUnmaterializable() {
+        #expect(SiriusXMRequestContract.liveListeningOperations.allSatisfy { !$0.isTransportMaterializable })
+    }
 }
 
 private enum FixtureKeyRequirement: Sendable {
@@ -214,6 +237,91 @@ private actor BlockingFixedLiveOperations: FixedLiveStreamOperating {
 
 private struct FixtureAppleMediaHandoff: SiriusXMAppleMediaHandoff {
     @MainActor func makePlayerItem() -> AVPlayerItem? { nil }
+}
+
+private enum ProductionOperation: Sendable, Equatable {
+    case tune
+    case playbackKey
+}
+
+private actor RecordingProductionLiveTransport: FixedLiveTransporting {
+    private(set) var operations: [ProductionOperation] = []
+
+    func tune(
+        for channelID: LiveChannelID,
+        using _: AuthenticationCredential
+    ) async -> NativeTransportResponse {
+        operations.append(.tune)
+        return response(
+            #"{"source":{"id":"\#(channelID.rawValue)","type":"channel-linear","streams":[{"urls":[{"url":"https://live-akc-prod-device.streaming.siriusxm.com/fixture","encryptionKeyId":"fixture-key"}]}]}}"#
+        )
+    }
+
+    func playbackKey(
+        for _: FixedLivePlaybackKeyID,
+        using _: AuthenticationCredential
+    ) async -> NativeTransportResponse {
+        operations.append(.playbackKey)
+        return response(#"{"keyId":"fixture-key","key":"fixture-key-material"}"#)
+    }
+
+    private func response(_ body: String) -> NativeTransportResponse {
+        NativeTransportResponse(
+            statusCode: 200,
+            contentType: "application/json",
+            body: Data(body.utf8)
+        )
+    }
+}
+
+private func makeActiveSession() -> SessionCoordinator {
+    SessionCoordinator(
+        credentialSource: ProductionCredentialSource(),
+        authenticationVerifier: ProductionAuthenticationVerifier(),
+        entitlementVerifier: ProductionEntitlementVerifier(),
+        credentialStore: ProductionCredentialStore(),
+        clock: ProductionClock(),
+        diagnostics: ProductionDiagnostics()
+    )
+}
+
+private actor ProductionCredentialSource: CredentialSource {
+    func credential() async -> AuthenticationCredential? {
+        AuthenticationCredential(volatileMaterial: Data("fixture-credential".utf8))
+    }
+}
+
+private actor ProductionAuthenticationVerifier: NativeAuthenticationVerifying {
+    func verifyAuthentication(using _: AuthenticationCredential) async -> NativeTransportResponse {
+        NativeTransportResponse(
+            statusCode: 200,
+            contentType: "application/json",
+            body: Data(#"{"fixture":"authenticated"}"#.utf8)
+        )
+    }
+}
+
+private actor ProductionEntitlementVerifier: NativeEntitlementVerifying {
+    func verifyEntitlement(using _: AuthenticationCredential) async -> NativeTransportResponse {
+        NativeTransportResponse(
+            statusCode: 200,
+            contentType: "application/json",
+            body: Data(#"{"items":[{"state":"active"}]}"#.utf8)
+        )
+    }
+}
+
+private actor ProductionCredentialStore: CredentialStore {
+    func save(_: AuthenticationCredential) async throws {}
+    func erase() async throws {}
+}
+
+private struct ProductionClock: SessionClock {
+    func now() -> Date { .distantPast }
+}
+
+private actor ProductionDiagnostics: SessionDiagnostics {
+    func record(_: SessionDiagnosticEvent) async {}
 }
 
 private actor RecordingResolver: LivePlaybackResolving {
