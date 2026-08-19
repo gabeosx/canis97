@@ -129,3 +129,133 @@ struct LiveCatalogAdapterTests {
         #expect(stale.allowsPlaybackAuthorization == false)
     }
 }
+
+@Suite("Entitled semantic catalog snapshots")
+struct EntitledLiveCatalogSnapshotTests {
+    @Test("only entitled standard and app-only linear records survive")
+    func filtersOnlyEntitledLinearCandidates() {
+        let result = LiveCatalogAdapter.snapshot(
+            from: [
+                fixture(identity: "fixture-standard", entity: .channelLinear, entitlement: .entitledStandard),
+                fixture(identity: "fixture-app", entity: .channelLinear, entitlement: .entitledAppOnly),
+                fixture(identity: "fixture-xtra", entity: .xtra, entitlement: .entitledStandard),
+                fixture(identity: "fixture-replay", entity: .replay, entitlement: .entitledStandard),
+                fixture(identity: "fixture-on-demand", entity: .onDemand, entitlement: .entitledStandard),
+                fixture(identity: "fixture-unentitled", entity: .channelLinear, entitlement: .notEntitled),
+            ]
+        )
+
+        #expect(result.snapshot?.channels.map(\.id) == [
+            LiveChannelID("fixture-app"),
+            LiveChannelID("fixture-standard"),
+        ])
+        #expect(result.failure == nil)
+    }
+
+    @Test("identity is mandatory while presentation is independently optional and an empty collection is valid")
+    func preservesOptionalPresentationAndAcceptsEmptyCollection() {
+        let optional = LiveCatalogAdapter.snapshot(
+            from: [fixture(identity: "fixture-id", number: nil, name: nil, description: nil, category: nil, artwork: nil)]
+        )
+        let empty = LiveCatalogAdapter.snapshot(from: [])
+
+        let channel = try! #require(optional.snapshot?.channels.first)
+        #expect(channel.id == LiveChannelID("fixture-id"))
+        #expect(channel.displayNumber == nil)
+        #expect(channel.name == nil)
+        #expect(channel.description == nil)
+        #expect(channel.category == nil)
+        #expect(channel.artwork == nil)
+        #expect(empty.snapshot?.channels.isEmpty == true)
+        #expect(empty.failure == nil)
+    }
+
+    @Test("missing collections and malformed or ambiguous candidate data fail closed")
+    func rejectsInvalidCatalogInputs() {
+        let invalidInputs: [LiveCatalogSnapshotResult] = [
+            LiveCatalogAdapter.snapshot(from: nil),
+            LiveCatalogAdapter.snapshot(from: [fixture(identity: "", entity: .channelLinear, entitlement: .entitledStandard)]),
+            LiveCatalogAdapter.snapshot(from: [fixture(identity: "fixture-fraction", number: 12.5)]),
+            LiveCatalogAdapter.snapshot(from: [fixture(identity: "fixture-overflow", number: Double.greatestFiniteMagnitude)]),
+            LiveCatalogAdapter.snapshot(from: [fixture(identity: "fixture-unknown-entity", entity: .unknown, entitlement: .entitledStandard)]),
+            LiveCatalogAdapter.snapshot(from: [fixture(identity: "fixture-unknown-entitlement", entity: .channelLinear, entitlement: .unknown)]),
+        ]
+
+        #expect(invalidInputs.allSatisfy { $0.snapshot == nil && $0.failure != nil })
+        #expect(LiveListeningAdapter.inspectCatalogPreflight(NativeTransportResponse(
+            statusCode: 200,
+            contentType: "application/json",
+            body: Data("fixture".utf8),
+            redirectLocation: "fixture-redirect"
+        )) == .unsupported(.redirectDrift))
+    }
+
+    @Test("exact duplicates collapse while conflicting identities fail")
+    func handlesDuplicateIdentitiesDeterministically() {
+        let duplicate = fixture(identity: "fixture-duplicate", number: 7, name: "Duplicate", category: "Music")
+        let collapsed = LiveCatalogAdapter.snapshot(from: [duplicate, duplicate])
+        let conflicting = LiveCatalogAdapter.snapshot(from: [
+            duplicate,
+            fixture(identity: "fixture-duplicate", number: 8, name: "Conflict", category: "Music"),
+        ])
+
+        #expect(collapsed.snapshot?.channels.map(\.id) == [LiveChannelID("fixture-duplicate")])
+        #expect(collapsed.failure == nil)
+        #expect(conflicting.snapshot == nil)
+        #expect(conflicting.failure == .conflictingIdentity)
+    }
+
+    @Test("category number name and opaque identity establish the stable order")
+    func ordersCandidatesWithoutLossyUnicodeHandling() {
+        let decomposed = "Cafe\u{301}"
+        let composed = "Café"
+        let result = LiveCatalogAdapter.snapshot(from: [
+            fixture(identity: "fixture-z", number: 10, name: "Zulu", category: "Music"),
+            fixture(identity: "fixture-b", number: 2, name: composed, category: "Music"),
+            fixture(identity: "fixture-a", number: 2, name: decomposed, category: "Music"),
+            fixture(identity: "fixture-news", number: 1, name: "News", category: "News"),
+        ])
+
+        #expect(result.snapshot?.channels.map(\.id) == [
+            LiveChannelID("fixture-b"),
+            LiveChannelID("fixture-a"),
+            LiveChannelID("fixture-z"),
+            LiveChannelID("fixture-news"),
+        ])
+        #expect(result.snapshot?.channels.map(\.name).contains(composed) == true)
+        #expect(result.snapshot?.channels.map(\.name).contains(decomposed) == true)
+    }
+
+    @Test("a prior snapshot becomes explicitly stale after a refresh failure and never authorizes tuning")
+    func retainsLastValidSnapshotOnlyForBrowsing() {
+        let fresh = try! #require(LiveCatalogAdapter.snapshot(from: [fixture(identity: "fixture-last-valid")]).snapshot)
+        let stale = LiveCatalogAdapter.withStaleSnapshot(fresh, after: .unsupportedResponse)
+
+        #expect(stale.snapshot?.freshness == .stale)
+        #expect(stale.failure == .unsupportedResponse)
+        #expect(stale.snapshot?.allowsPlaybackAuthorization == false)
+        #expect(LiveCatalogAdapter.withStaleSnapshot(nil, after: .unsupportedResponse).snapshot == nil)
+    }
+
+    private func fixture(
+        identity: String,
+        number: Double? = 1,
+        name: String? = "Fixture Channel",
+        description: String? = "Fixture description",
+        category: String? = "Music",
+        artwork: ChannelArtworkReference? = ChannelArtworkReference(),
+        entity: CatalogEntityKind = .channelLinear,
+        entitlement: ChannelEntitlement = .entitledStandard
+    ) -> LiveCatalogCandidate {
+        LiveCatalogCandidate(
+            identity: identity,
+            displayNumber: number,
+            name: name,
+            description: description,
+            category: category,
+            artwork: artwork,
+            entity: entity,
+            entitlement: entitlement
+        )
+    }
+}
