@@ -1,5 +1,61 @@
 import Foundation
 
+/// A closed, secret-free classification of failures raised before an HTTP
+/// response exists. It deliberately retains no error message or URL.
+enum SafeTransportFailure: Sendable, Equatable {
+    case timedOut
+    case nameResolution
+    case connection
+    case tls
+    case cancelled
+    case other
+
+    init(error: any Error) {
+        guard let urlError = error as? URLError else {
+            self = .other
+            return
+        }
+
+        switch urlError.code {
+        case .timedOut:
+            self = .timedOut
+        case .cannotFindHost, .dnsLookupFailed:
+            self = .nameResolution
+        case .cannotConnectToHost, .networkConnectionLost, .notConnectedToInternet:
+            self = .connection
+        case .secureConnectionFailed,
+             .serverCertificateHasBadDate,
+             .serverCertificateUntrusted,
+             .serverCertificateHasUnknownRoot,
+             .serverCertificateNotYetValid,
+             .clientCertificateRejected,
+             .clientCertificateRequired:
+            self = .tls
+        case .cancelled:
+            self = .cancelled
+        default:
+            self = .other
+        }
+    }
+
+    var diagnosticOutcome: SafeDiagnosticOutcome {
+        switch self {
+        case .timedOut:
+            .transportTimedOut
+        case .nameResolution:
+            .transportNameResolutionFailed
+        case .connection:
+            .transportConnectionFailed
+        case .tls:
+            .transportTLSFailed
+        case .cancelled:
+            .transportCancelled
+        case .other:
+            .transportFailure
+        }
+    }
+}
+
 /// A response supplied only by the client's native transport implementation.
 ///
 /// This remains internal so no application caller can transform a self-authored
@@ -9,20 +65,21 @@ struct NativeTransportResponse: Sendable {
     let contentType: String?
     let body: Data
     let redirectLocation: String?
-    let transportFailed: Bool
+    let transportFailure: SafeTransportFailure?
 
     init(
         statusCode: Int,
         contentType: String?,
         body: Data,
         redirectLocation: String? = nil,
-        transportFailed: Bool = false
+        transportFailed: Bool = false,
+        transportFailure: SafeTransportFailure? = nil
     ) {
         self.statusCode = statusCode
         self.contentType = contentType
         self.body = body
         self.redirectLocation = redirectLocation
-        self.transportFailed = transportFailed
+        self.transportFailure = transportFailure ?? (transportFailed ? .other : nil)
     }
 }
 
@@ -113,13 +170,15 @@ enum AuthenticationFlowAdapter {
             )
         }
 
-        if ProfileResponseV4Decoder.accepts(response.body) {
+        switch ProfileResponseV4Decoder.inspect(response.body) {
+        case .accepted:
             return AdapterAuthenticationClassification(
                 result: .authenticatedPendingEntitlement,
                 diagnosticOutcome: .completed
             )
+        case let .unsupported(diagnosticOutcome):
+            return AdapterAuthenticationClassification(result: .unsupported, diagnosticOutcome: diagnosticOutcome)
         }
-        return AdapterAuthenticationClassification(result: .unsupported, diagnosticOutcome: .unsupportedPayload)
     }
 
     static func classifyEntitlement(_ response: NativeTransportResponse) -> AdapterEntitlementResult {
@@ -144,13 +203,13 @@ enum AuthenticationFlowAdapter {
             )
         }
 
-        switch SubscriptionStatusResponseV1Decoder.classify(response.body) {
+        switch SubscriptionStatusResponseV1Decoder.inspect(response.body) {
         case .active:
             return AdapterEntitlementClassification(result: .entitled, diagnosticOutcome: .completed)
         case .inactive:
             return AdapterEntitlementClassification(result: .authenticatedButNotEntitled, diagnosticOutcome: .notEntitled)
-        case .unsupported:
-            return AdapterEntitlementClassification(result: .unsupported, diagnosticOutcome: .unsupportedPayload)
+        case let .unsupported(diagnosticOutcome):
+            return AdapterEntitlementClassification(result: .unsupported, diagnosticOutcome: diagnosticOutcome)
         }
     }
 
@@ -179,26 +238,39 @@ enum AuthenticationFlowAdapter {
     }
 
     private static func preflight(_ response: NativeTransportResponse) -> Preflight {
-        guard !response.transportFailed else {
-            return .authentication(.unsupported, .transportFailure)
+        if let transportFailure = response.transportFailure {
+            return .authentication(.unsupported, transportFailure.diagnosticOutcome)
         }
         guard response.redirectLocation == nil else {
             return .authentication(.redirectDrift, .redirectDrift)
         }
-        guard response.contentType?.lowercased().hasPrefix("application/json") == true else {
-            return .authentication(.unsupported, .unsupportedContentType)
-        }
 
         switch response.statusCode {
-        case 200 ... 299:
-            return .accepted
         case 401, 403:
             return .authentication(.rejected, .rejected)
         case 429:
             return .authentication(.rateLimited, .rateLimited)
+        case 400 ... 499:
+            return .authentication(.unsupported, .httpClientError)
+        case 500 ... 599:
+            return .authentication(.unsupported, .httpServerError)
+        case 200 ... 299:
+            break
         default:
             return .authentication(.unsupported, .unsupportedHTTPStatus)
         }
+
+        guard let contentType = response.contentType else {
+            return .authentication(.unsupported, .contentTypeMissing)
+        }
+        let normalizedContentType = contentType.lowercased()
+        guard normalizedContentType.hasPrefix("application/json") else {
+            let outcome: SafeDiagnosticOutcome = normalizedContentType.hasPrefix("text/html")
+                ? .contentTypeHTML
+                : .unsupportedContentType
+            return .authentication(.unsupported, outcome)
+        }
+        return .accepted
     }
 
     private static func diagnosticOutcome(for result: AdapterAuthenticationResult) -> SafeDiagnosticOutcome {
@@ -238,13 +310,26 @@ enum AuthenticationFlowAdapter {
 /// Settled internal profile-v4 compatibility predicate. Authentication only
 /// requires a non-empty JSON object after transport and control preflight.
 enum ProfileResponseV4Decoder {
-    static func accepts(_ body: Data) -> Bool {
-        guard !body.isEmpty,
-              let object = try? JSONSerialization.jsonObject(with: body),
-              object is [String: Any] else {
-            return false
+    enum Inspection: Sendable, Equatable {
+        case accepted
+        case unsupported(SafeDiagnosticOutcome)
+    }
+
+    static func inspect(_ body: Data) -> Inspection {
+        guard !body.isEmpty else {
+            return .unsupported(.payloadEmpty)
         }
-        return true
+        guard let object = try? JSONSerialization.jsonObject(with: body) else {
+            return .unsupported(.payloadMalformedJSON)
+        }
+        guard object is [String: Any] else {
+            return .unsupported(.payloadUnexpectedRoot)
+        }
+        return .accepted
+    }
+
+    static func accepts(_ body: Data) -> Bool {
+        inspect(body) == .accepted
     }
 }
 
@@ -254,21 +339,34 @@ enum SubscriptionStatusResponseV1Decoder {
     enum Result: Sendable, Equatable {
         case active
         case inactive
-        case unsupported
-    }
-
-    private struct Response: Decodable {
-        struct Subscription: Decodable {
-            let status: String?
-        }
-
-        let subscription: Subscription?
+        case unsupported(SafeDiagnosticOutcome)
     }
 
     static func classify(_ body: Data) -> Result {
-        guard let response = try? JSONDecoder().decode(Response.self, from: body),
-              let status = response.subscription?.status else {
-            return .unsupported
+        inspect(body)
+    }
+
+    static func inspect(_ body: Data) -> Result {
+        guard !body.isEmpty else {
+            return .unsupported(.payloadEmpty)
+        }
+        guard let decoded = try? JSONSerialization.jsonObject(with: body) else {
+            return .unsupported(.payloadMalformedJSON)
+        }
+        guard let root = decoded as? [String: Any] else {
+            return .unsupported(.payloadUnexpectedRoot)
+        }
+        guard root.keys.contains("subscription") else {
+            return .unsupported(.subscriptionMissing)
+        }
+        guard let subscription = root["subscription"] as? [String: Any] else {
+            return .unsupported(.subscriptionUnexpectedShape)
+        }
+        guard subscription.keys.contains("status") else {
+            return .unsupported(.subscriptionStatusMissing)
+        }
+        guard let status = subscription["status"] as? String else {
+            return .unsupported(.subscriptionStatusUnexpectedShape)
         }
 
         switch status {
@@ -277,7 +375,7 @@ enum SubscriptionStatusResponseV1Decoder {
         case "inactive":
             return .inactive
         default:
-            return .unsupported
+            return .unsupported(.subscriptionStatusUnsupported)
         }
     }
 }

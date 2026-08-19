@@ -117,7 +117,7 @@ struct SessionCoordinatorTests {
         )
 
         #expect(await coordinator.attemptSession() == .authentication(.unsupported))
-        #expect(await diagnostics.events == [.authentication(.unsupportedPayload)])
+        #expect(await diagnostics.events == [.authentication(.payloadEmpty)])
     }
 
     private func response(body: Data) -> NativeTransportResponse {

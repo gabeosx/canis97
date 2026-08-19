@@ -115,12 +115,13 @@ private final class NativeRequestVerifier: NativeAuthenticationVerifying, Native
         do {
             return try await transport.send(operation, using: credential)
         } catch {
-            // Transport errors expose no provider detail and classify as unsupported.
+            // Preserve only a closed error class. Error text and failing URLs
+            // must never cross into session diagnostics.
             return NativeTransportResponse(
-                statusCode: 500,
+                statusCode: 0,
                 contentType: nil,
                 body: Data(),
-                transportFailed: true
+                transportFailure: SafeTransportFailure(error: error)
             )
         }
     }

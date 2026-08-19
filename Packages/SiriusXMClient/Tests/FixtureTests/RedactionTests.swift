@@ -32,6 +32,26 @@ struct RedactionTests {
         }
     }
 
+    @Test("transport classification discards error text and failing URL")
+    func transportErrorMaterialCannotReachDiagnostics() {
+        let error = URLError(
+            .cannotConnectToHost,
+            userInfo: [
+                NSURLErrorFailingURLErrorKey: URL(string: "https://\(canary).invalid/private")!,
+                NSLocalizedDescriptionKey: canary,
+            ]
+        )
+        let failure = SafeTransportFailure(error: error)
+        let event = SafeDiagnosticEvent(
+            operation: .nativeAuthentication,
+            outcome: failure.diagnosticOutcome,
+            handle: SafeDiagnosticHandle()
+        )
+
+        #expect(event.rendered == "native-authentication:transport-connection-failed")
+        #expect(!event.rendered.contains(canary))
+    }
+
     @Test("safe event and fixture representations exclude secret canaries")
     func representationsExcludeCanaries() throws {
         let event = SafeDiagnosticEvent(
