@@ -11,6 +11,7 @@ updated: 2026-08-19T01:25:12Z
 number: 10
 name: Keychain-Backed Session Restore
 expected: |
+  Go/no-go: YES. The rebuilt app accepts the observed current root-path `AUTH_TOKEN` from any true `siriusxm.com` subdomain even when WebKit reports `isSecure == false`, and the logging is now sufficient for one controlled attempt.
   Make exactly one live sign-in attempt with the complete privacy-safe trace:
   1. In Terminal, run `cd /Users/gabe/sirius-mac` and then `./script/build_and_run.sh --telemetry`.
   2. Wait for Sirius Mac to open and for Terminal to show the telemetry filter. Click Sign In once and complete the embedded SiriusXM login. Stop immediately if SiriusXM shows CAPTCHA, rate limiting, a bot warning, or any account-security warning.
@@ -87,6 +88,7 @@ coverage_summary: 01-03-SUMMARY.md
 
 ### 10. Keychain-Backed Session Restore
 expected: |
+  Go/no-go: YES. The rebuilt app accepts the observed current root-path `AUTH_TOKEN` from any true `siriusxm.com` subdomain even when WebKit reports `isSecure == false`, and the logging is now sufficient for one controlled attempt.
   Make exactly one live sign-in attempt with the complete privacy-safe trace:
   1. In Terminal, run `cd /Users/gabe/sirius-mac` and then `./script/build_and_run.sh --telemetry`.
   2. Wait for Sirius Mac to open and for Terminal to show the telemetry filter. Click Sign In once and complete the embedded SiriusXM login. Stop immediately if SiriusXM shows CAPTCHA, rate limiting, a bot warning, or any account-security warning.
