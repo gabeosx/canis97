@@ -74,6 +74,78 @@ final class ListeningCompositionTests: XCTestCase {
         XCTAssertEqual(model.playbackCoordinator.state, .awaitingLiveContract)
         XCTAssertEqual(model.catalog, .unavailable)
     }
+
+    func testLiveContractObservationSinkAcceptsOnlyClosedSemanticEvidence() {
+        let sink = LiveContractObservationSink()
+        let observation = LiveContractObservation(
+            capability: .catalogRefresh,
+            disposition: .supported,
+            requestContract: LiveRequestContract(
+                purpose: .catalogObservation,
+                method: .get,
+                authorizedHostPolicy: .firstPartyAuthenticated,
+                pathTemplate: .catalog
+            ),
+            semanticShapes: [
+                LiveSemanticShape(alias: .catalogEntity, valueType: .object, cardinality: .many),
+            ],
+            protection: nil,
+            avFoundationBehavior: .notObserved
+        )
+
+        XCTAssertTrue(sink.begin())
+        XCTAssertTrue(sink.record(observation))
+        XCTAssertEqual(sink.observations, [observation])
+        XCTAssertEqual(sink.state, .active)
+    }
+
+    func testLiveContractObservationSinkClosesAndRejectsLaterObservations() {
+        let cancelled = LiveContractObservationSink()
+        XCTAssertTrue(cancelled.begin())
+        XCTAssertFalse(cancelled.begin())
+        cancelled.cancel()
+        XCTAssertEqual(cancelled.state, .closed(.cancelled))
+        XCTAssertFalse(cancelled.record(supportedCatalogObservation()))
+
+        let signedOut = LiveContractObservationSink()
+        XCTAssertTrue(signedOut.begin())
+        signedOut.signOut()
+        XCTAssertEqual(signedOut.state, .closed(.signedOut))
+        XCTAssertFalse(signedOut.record(supportedCatalogObservation()))
+
+        let terminal = LiveContractObservationSink()
+        XCTAssertTrue(terminal.begin())
+        XCTAssertTrue(terminal.record(
+            LiveContractObservation(
+                capability: .tuneAuthorization,
+                disposition: .unsupported,
+                requestContract: nil,
+                semanticShapes: [],
+                protection: .rateLimited,
+                avFoundationBehavior: .notObserved
+            )
+        ))
+        XCTAssertEqual(terminal.state, .closed(.terminalObservation))
+        XCTAssertFalse(terminal.record(supportedCatalogObservation()))
+    }
+
+    private func supportedCatalogObservation() -> LiveContractObservation {
+        LiveContractObservation(
+            capability: .catalogRefresh,
+            disposition: .supported,
+            requestContract: LiveRequestContract(
+                purpose: .catalogObservation,
+                method: .get,
+                authorizedHostPolicy: .firstPartyAuthenticated,
+                pathTemplate: .catalog
+            ),
+            semanticShapes: [
+                LiveSemanticShape(alias: .catalogEntity, valueType: .object, cardinality: .many),
+            ],
+            protection: nil,
+            avFoundationBehavior: .notObserved
+        )
+    }
 }
 
 private actor RecordingPlaybackDriver: LivePlaybackDriving {
