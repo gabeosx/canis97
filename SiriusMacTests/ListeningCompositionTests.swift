@@ -395,6 +395,39 @@ final class ListeningCompositionTests: XCTestCase {
         XCTAssertEqual(source["hlsVersion"] as? String, "V3")
         XCTAssertEqual(source["manifestVariant"] as? String, "WEB")
         XCTAssertEqual(source["mtcVersion"] as? String, "V2")
+        XCTAssertEqual(source["trackResumeSupported"] as? Bool, false)
+        let clock = try XCTUnwrap(request.value(forHTTPHeaderField: "x-sxm-clock"))
+        XCTAssertNotNil(clock.range(of: #"^\[\d+,\d+\]$"#, options: .regularExpression))
+    }
+
+    func testTuneContractRejectsMutatedBrowserProvenBodyAndClockThenAcceptsTheOriginal() throws {
+        let request = try XCTUnwrap(
+            ClosedTuneRequestContract.makeRequest(
+                credential: AuthenticationCredential(volatileMaterial: Data("synthetic-credential".utf8))
+            )
+        )
+        let originalBody = try XCTUnwrap(request.httpBody)
+        let object = try XCTUnwrap(try JSONSerialization.jsonObject(with: originalBody) as? [String: Any])
+        let sources = try XCTUnwrap(object["sources"] as? [[String: Any]])
+        var source = try XCTUnwrap(sources.first)
+
+        var mutated = request
+        source["trackResumeSupported"] = true
+        mutated.httpBody = try JSONSerialization.data(withJSONObject: ["sources": [source]])
+        XCTAssertFalse(ClosedTuneRequestContract.isExact(mutated))
+
+        mutated.httpBody = originalBody
+        XCTAssertTrue(ClosedTuneRequestContract.isExact(mutated))
+
+        mutated.setValue("not-a-logical-clock", forHTTPHeaderField: "x-sxm-clock")
+        XCTAssertFalse(ClosedTuneRequestContract.isExact(mutated))
+
+        mutated = request
+        mutated.httpBody = try JSONSerialization.data(withJSONObject: ["sources": []])
+        XCTAssertFalse(ClosedTuneRequestContract.isExact(mutated))
+
+        mutated.httpBody = originalBody
+        XCTAssertTrue(ClosedTuneRequestContract.isExact(mutated))
     }
 
     func testTuneTransportCancelsEveryRedirect() {
@@ -409,7 +442,7 @@ final class ListeningCompositionTests: XCTestCase {
                     statusCode: 200,
                     contentType: "application/json",
                     body: Data(
-                        #"{"source":{"id":"194adbca-34d6-cb94-b153-3488ee563308","type":"channel-linear","streams":[{"url":"https://unapproved.example.invalid/stream.m3u8"}]}}"#.utf8
+                        #"{"source":{"id":"194adbca-34d6-cb94-b153-3488ee563308","type":"channel-linear","streams":[{"urls":[{"url":"https://unapproved.example.invalid/stream.m3u8","encryptionKeyId":"synthetic-key","isPrimary":true,"name":"synthetic","validUntil":"synthetic"}],"metadata":{"live":{}},"mtc":{}}]}}"#.utf8
                     )
                 )
             )

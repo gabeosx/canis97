@@ -220,6 +220,7 @@ enum ClosedTuneRequestContract {
     private static let scheme = "https"
     private static let host = "api.edge-gateway.siriusxm.com"
     private static let path = "/playback/play/v1/tuneSource"
+    private static let clockHeader = "x-sxm-clock"
 
     static func makeRequest(credential: AuthenticationCredential) -> URLRequest? {
         guard let url = URL(string: "\(scheme)://\(host)\(path)") else { return nil }
@@ -229,12 +230,13 @@ enum ClosedTuneRequestContract {
                   !authorization.contains(where: { $0.isWhitespace || $0.isNewline })
             else { return nil }
 
-            let source: [String: String] = [
+            let source: [String: Any] = [
                 "id": ClosedTuneSelection.approved.id,
                 "type": ClosedTuneSelection.sourceType,
                 "hlsVersion": "V3",
                 "manifestVariant": "WEB",
                 "mtcVersion": "V2",
+                "trackResumeSupported": false,
             ]
             guard let body = try? JSONSerialization.data(withJSONObject: ["sources": [source]]) else {
                 return nil
@@ -247,6 +249,10 @@ enum ClosedTuneRequestContract {
             request.setValue("application/json", forHTTPHeaderField: "Accept")
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.setValue("Bearer \(authorization)", forHTTPHeaderField: "Authorization")
+            request.setValue(
+                ClosedTuneLogicalClock.shared.nextHeaderValue(),
+                forHTTPHeaderField: clockHeader
+            )
             return isExact(request) ? request : nil
         }
     }
@@ -261,6 +267,7 @@ enum ClosedTuneRequestContract {
             request.value(forHTTPHeaderField: "Accept") == "application/json" &&
             request.value(forHTTPHeaderField: "Content-Type") == "application/json" &&
             request.value(forHTTPHeaderField: "Authorization")?.hasPrefix("Bearer ") == true &&
+            isLogicalClockHeader(request.value(forHTTPHeaderField: clockHeader)) &&
             hasExactBody(request.httpBody)
     }
 
@@ -268,18 +275,65 @@ enum ClosedTuneRequestContract {
         guard let body,
               let object = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
               Set(object.keys) == Set(["sources"]),
-              let sources = object["sources"] as? [[String: String]],
+              let sources = object["sources"] as? [[String: Any]],
               sources.count == 1,
               let source = sources.first
         else { return false }
 
-        return source == [
-            "id": ClosedTuneSelection.approved.id,
-            "type": ClosedTuneSelection.sourceType,
-            "hlsVersion": "V3",
-            "manifestVariant": "WEB",
-            "mtcVersion": "V2",
-        ]
+        return Set(source.keys) == Set([
+            "id",
+            "type",
+            "hlsVersion",
+            "manifestVariant",
+            "mtcVersion",
+            "trackResumeSupported",
+        ]) &&
+            source["id"] as? String == ClosedTuneSelection.approved.id &&
+            source["type"] as? String == ClosedTuneSelection.sourceType &&
+            source["hlsVersion"] as? String == "V3" &&
+            source["manifestVariant"] as? String == "WEB" &&
+            source["mtcVersion"] as? String == "V2" &&
+            source["trackResumeSupported"] as? Bool == false
+    }
+
+    private static func isLogicalClockHeader(_ value: String?) -> Bool {
+        guard let value,
+              value.first == "[",
+              value.last == "]"
+        else { return false }
+
+        let parts = value.dropFirst().dropLast().split(separator: ",", omittingEmptySubsequences: false)
+        return parts.count == 2 && parts.allSatisfy(isUnsignedDecimal)
+    }
+
+    private static func isUnsignedDecimal(_ value: Substring) -> Bool {
+        !value.isEmpty && value.utf8.allSatisfy { (48 ... 57).contains($0) }
+    }
+}
+
+/// The public web client emits `x-sxm-clock` as a logical `[epoch,counter]`
+/// pair. This closed, one-request checkpoint keeps only the non-secret counter
+/// in process memory; it neither reads nor writes cookies, Keychain items, or
+/// persistent account state.
+private final class ClosedTuneLogicalClock: @unchecked Sendable {
+    static let shared = ClosedTuneLogicalClock()
+
+    private static let maximumValue = 9_007_199_254_740_991
+    private let lock = NSLock()
+    private var epoch = 0
+    private var counter = -1
+
+    func nextHeaderValue() -> String {
+        lock.lock()
+        defer { lock.unlock() }
+
+        if counter >= Self.maximumValue {
+            counter = 0
+            epoch = epoch >= Self.maximumValue ? 0 : epoch + 1
+        } else {
+            counter += 1
+        }
+        return "[\(epoch),\(counter)]"
     }
 }
 
@@ -516,7 +570,7 @@ private enum ClosedTuneParser {
                 if source["id"] as? String == ClosedTuneSelection.approved.id,
                    source["type"] as? String == ClosedTuneSelection.sourceType,
                    let streams = source["streams"] as? [[String: Any]],
-                   streams.contains(where: isHTTPSResource)
+                   streams.contains(where: hasHTTPSResourceURL)
                 {
                     matched = true
                     return
@@ -530,8 +584,13 @@ private enum ClosedTuneParser {
         return matched
     }
 
-    private static func isHTTPSResource(_ stream: [String: Any]) -> Bool {
-        guard let value = stream["url"] as? String,
+    private static func hasHTTPSResourceURL(_ stream: [String: Any]) -> Bool {
+        guard let urls = stream["urls"] as? [[String: Any]] else { return false }
+        return urls.contains(where: isHTTPSResource)
+    }
+
+    private static func isHTTPSResource(_ candidate: [String: Any]) -> Bool {
+        guard let value = candidate["url"] as? String,
               let url = URL(string: value),
               url.scheme == "https",
               url.host != nil
