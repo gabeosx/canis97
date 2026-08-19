@@ -36,6 +36,7 @@ enum ClosedCatalogFailure: String, Sendable, Equatable {
     case documentTooLarge = "catalog-document-too-large"
     case invalidJSON = "catalog-invalid-json"
     case unsupportedRoot = "catalog-unsupported-root"
+    case nestingLimit = "catalog-nesting-limit"
     case noAdmissibleChannel = "catalog-no-admissible-channel"
     case noValidChannelIdentity = "catalog-no-valid-channel-identity"
 }
@@ -309,22 +310,35 @@ private enum ClosedCatalogParser {
             return .failure(.unsupportedRoot)
         }
 
-        let candidates = entities(in: root)
-        guard !candidates.isEmpty else {
+        let search = entities(in: root)
+        guard !search.entities.isEmpty else {
+            if search.reachedNestingLimit {
+                return .failure(.nestingLimit)
+            }
             return .failure(.noAdmissibleChannel)
         }
-        let channels = candidates.compactMap(channel(from:))
+        let channels = search.entities.compactMap(channel(from:))
         return channels.isEmpty ? .failure(.noValidChannelIdentity) : .channels(channels)
     }
 
     /// The one response establishes the provider's JSON nesting, but it is never
     /// retained. Traverse only bounded JSON containers to find explicitly linear
     /// entities; all emitted fields still pass the fixed semantic validators.
-    private static func entities(in root: Any) -> [[String: Any]] {
+    private struct EntitySearch {
+        var entities: [[String: Any]]
+        var reachedNestingLimit: Bool
+    }
+
+    private static func entities(in root: Any) -> EntitySearch {
         var results: [[String: Any]] = []
+        var reachedNestingLimit = false
 
         func visit(_ value: Any, depth: Int) {
-            guard depth <= 12, results.count < 2_000 else { return }
+            guard results.count < 2_000 else { return }
+            guard depth <= 12 else {
+                reachedNestingLimit = true
+                return
+            }
             if let entity = value as? [String: Any] {
                 if entity["type"] as? String == "channel-linear" {
                     results.append(entity)
@@ -340,7 +354,7 @@ private enum ClosedCatalogParser {
         }
 
         visit(root, depth: 0)
-        return results
+        return EntitySearch(entities: results, reachedNestingLimit: reachedNestingLimit)
     }
 
     private static func channel(from entity: [String: Any]) -> ClosedCatalogChannel? {
