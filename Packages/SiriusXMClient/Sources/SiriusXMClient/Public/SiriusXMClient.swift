@@ -9,6 +9,7 @@ public actor SiriusXMClient {
     private let catalogRefresher: any CatalogRefreshing
     private let liveStreamResolver: any LiveStreamResolving
     private var lastValidCatalogSnapshot: LiveCatalogSnapshot?
+    private var catalogRefreshGeneration = 0
     private var liveResolutionGeneration = 0
 
     public init() {
@@ -19,12 +20,16 @@ public actor SiriusXMClient {
 
     init(
         sessionCoordinator: SessionCoordinator,
-        catalogRefresher: any CatalogRefreshing = UnavailableCatalogRefresher(),
+        catalogRefresher: (any CatalogRefreshing)? = nil,
+        catalogTransport: (any FixedCatalogTransporting)? = nil,
         liveStreamResolver: (any LiveStreamResolving)? = nil,
         fixedLiveTransport: (any FixedLiveTransporting)? = nil
     ) {
         self.sessionCoordinator = sessionCoordinator
-        self.catalogRefresher = catalogRefresher
+        self.catalogRefresher = catalogRefresher ?? CurrentSessionCatalogRefresher(
+            sessionCoordinator: sessionCoordinator,
+            transport: catalogTransport ?? FixedCatalogURLSessionTransport()
+        )
         self.liveStreamResolver = liveStreamResolver ?? FixedLiveStreamResolver(
             operations: CurrentSessionFixedLiveOperations(
                 sessionCoordinator: sessionCoordinator,
@@ -55,7 +60,10 @@ public actor SiriusXMClient {
             diagnostics: diagnostics
         )
         sessionCoordinator = coordinator
-        catalogRefresher = UnavailableCatalogRefresher()
+        catalogRefresher = CurrentSessionCatalogRefresher(
+            sessionCoordinator: coordinator,
+            transport: FixedCatalogURLSessionTransport()
+        )
         liveStreamResolver = FixedLiveStreamResolver(
             operations: CurrentSessionFixedLiveOperations(
                 sessionCoordinator: coordinator,
@@ -101,6 +109,7 @@ public actor SiriusXMClient {
             return .alreadySignedOut
         }
         lastValidCatalogSnapshot = nil
+        catalogRefreshGeneration &+= 1
         liveResolutionGeneration &+= 1
         await liveStreamResolver.invalidate()
         return await sessionCoordinator.signOut()
@@ -112,10 +121,13 @@ public actor SiriusXMClient {
     /// plan can supply validated opaque inputs. It does not make a provider
     /// request, expose a request materialization API, or infer a wire schema.
     public func catalog() async -> CatalogAvailability {
+        let expectedGeneration = catalogRefreshGeneration
         guard let sessionCoordinator else {
             return .failed(.authenticationUnavailable)
         }
-        guard await sessionCoordinator.entitlementAvailability == .entitled else {
+        guard catalogRefreshGeneration == expectedGeneration,
+              await sessionCoordinator.entitlementAvailability == .entitled
+        else {
             return .failed(.notEntitled)
         }
 

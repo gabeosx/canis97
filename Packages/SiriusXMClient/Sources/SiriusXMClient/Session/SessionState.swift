@@ -47,3 +47,12 @@ enum CurrentEntitledOperationResult<Value: Sendable>: Sendable {
     case completed(Value)
     case failed(LiveStreamResolutionFailure)
 }
+
+/// Closed outcomes for one fixed catalog operation. Catalog freshness is
+/// browse-only, but its request must still use the current active session.
+enum CurrentCatalogOperationResult<Value: Sendable>: Sendable {
+    case completed(Value)
+    case authenticationUnavailable
+    case notEntitled
+    case superseded
+}

@@ -73,6 +73,256 @@ enum LiveListeningAdapter {
     }
 }
 
+/// Internal transport seam for the one fixed catalog refresh. It accepts no
+/// arbitrary host, path, query, request body, or caller-provided headers.
+protocol FixedCatalogTransporting: Sendable {
+    func catalog(using credential: AuthenticationCredential) async -> NativeTransportResponse
+}
+
+/// Concrete fixed catalog request. The test-only exactness predicate verifies
+/// shape without retaining authorization material or a request object.
+enum FixedCatalogRequestFactory {
+    private static let scheme = "https"
+    private static let path = "/browse/v1/pages/curated-grouping/403ab6a5-d3c9-4c2a-a722-a94a6a5fd056"
+
+    static func makeRequest(using credential: AuthenticationCredential) -> URLRequest? {
+        guard let url = URL(string: "\(scheme)://\(SiriusXMRequestContract.host)\(path)") else { return nil }
+        return credential.withVolatileMaterial { material in
+            guard let authorization = String(data: material, encoding: .utf8),
+                  !authorization.isEmpty,
+                  !authorization.contains(where: { $0.isWhitespace || $0.isNewline })
+            else { return nil }
+            var request = URLRequest(url: url)
+            request.httpMethod = "GET"
+            request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+            request.setValue("Bearer \(authorization)", forHTTPHeaderField: "Authorization")
+            return isExact(request) ? request : nil
+        }
+    }
+
+    static func isExact(credential: AuthenticationCredential) -> Bool {
+        guard let request = makeRequest(using: credential) else { return false }
+        return isExact(request)
+    }
+
+    private static func isExact(_ request: URLRequest) -> Bool {
+        request.url?.scheme == scheme &&
+            request.url?.host == SiriusXMRequestContract.host &&
+            request.url?.path == path &&
+            request.url?.query == nil &&
+            request.url?.fragment == nil &&
+            request.httpMethod == "GET" &&
+            request.httpBody == nil &&
+            request.value(forHTTPHeaderField: "Accept") == "application/json" &&
+            request.value(forHTTPHeaderField: "Authorization")?.hasPrefix("Bearer ") == true
+    }
+}
+
+/// Ephemeral production transport for one fixed catalog request. Redirects
+/// are cancelled and neither redirect targets nor transport errors escape.
+final class FixedCatalogURLSessionTransport: NSObject, FixedCatalogTransporting, @unchecked Sendable {
+    private let redirectLock = NSLock()
+    private var redirectObserved = false
+    private lazy var session = URLSession(
+        configuration: Self.makeConfiguration(),
+        delegate: self,
+        delegateQueue: nil
+    )
+
+    func catalog(using credential: AuthenticationCredential) async -> NativeTransportResponse {
+        guard let request = FixedCatalogRequestFactory.makeRequest(using: credential) else {
+            return Self.failedResponse
+        }
+        redirectLock.withLock { redirectObserved = false }
+        do {
+            let (body, response) = try await session.data(for: request)
+            guard let response = response as? HTTPURLResponse else { return Self.failedResponse }
+            return NativeTransportResponse(
+                statusCode: response.statusCode,
+                contentType: response.value(forHTTPHeaderField: "Content-Type"),
+                body: body,
+                redirectLocation: response.value(forHTTPHeaderField: "Location")
+            )
+        } catch {
+            let redirected = redirectLock.withLock { redirectObserved }
+            return NativeTransportResponse(
+                statusCode: 0,
+                contentType: nil,
+                body: Data(),
+                redirectLocation: redirected ? "blocked" : nil,
+                transportFailure: redirected ? nil : SafeTransportFailure(error: error)
+            )
+        }
+    }
+
+    private static var failedResponse: NativeTransportResponse {
+        NativeTransportResponse(statusCode: 0, contentType: nil, body: Data(), transportFailed: true)
+    }
+
+    private static func makeConfiguration() -> URLSessionConfiguration {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        configuration.httpCookieStorage = nil
+        configuration.httpShouldSetCookies = false
+        configuration.urlCredentialStorage = nil
+        configuration.timeoutIntervalForRequest = 15
+        configuration.timeoutIntervalForResource = 15
+        return configuration
+    }
+}
+
+extension FixedCatalogURLSessionTransport: URLSessionTaskDelegate {
+    func urlSession(
+        _: URLSession,
+        task _: URLSessionTask,
+        willPerformHTTPRedirection _: HTTPURLResponse,
+        newRequest _: URLRequest,
+        completionHandler: @escaping @Sendable (URLRequest?) -> Void
+    ) {
+        redirectLock.withLock { redirectObserved = true }
+        completionHandler(nil)
+    }
+}
+
+/// Decodes only the observed initial-page envelope. Pagination is deliberately
+/// absent: one explicit refresh makes one fixed request and never invents a
+/// query parameter or follow-up operation.
+enum FixedCatalogResponseDecoder {
+    private static let maximumBodyBytes = 1_048_576
+
+    static func decode(_ response: NativeTransportResponse) -> LiveCatalogSnapshotResult {
+        guard response.transportFailure == nil,
+              response.redirectLocation == nil,
+              (200 ... 299).contains(response.statusCode),
+              response.body.count <= maximumBodyBytes,
+              response.contentType?.lowercased().hasPrefix("application/json") == true,
+              !containsProtectedControl(response.body),
+              let root = try? JSONSerialization.jsonObject(with: response.body) as? [String: Any],
+              let page = root["page"] as? [String: Any],
+              let containers = page["containers"] as? [[String: Any]]
+        else {
+            return LiveCatalogSnapshotResult(snapshot: nil, failure: .unsupportedResponse)
+        }
+
+        var candidates: [LiveCatalogCandidate] = []
+        for container in containers {
+            guard let sets = container["sets"] as? [[String: Any]] else {
+                return LiveCatalogSnapshotResult(snapshot: nil, failure: .collectionUnavailable)
+            }
+            for set in sets {
+                guard let items = set["items"] as? [[String: Any]] else {
+                    return LiveCatalogSnapshotResult(snapshot: nil, failure: .collectionUnavailable)
+                }
+                for item in items {
+                    guard let candidate = candidate(from: item) else {
+                        return LiveCatalogSnapshotResult(snapshot: nil, failure: .malformedCandidate)
+                    }
+                    candidates.append(candidate)
+                }
+            }
+        }
+        return LiveCatalogAdapter.snapshot(from: candidates)
+    }
+
+    private static func candidate(from item: [String: Any]) -> LiveCatalogCandidate? {
+        guard let entity = item["entity"] as? [String: Any],
+              let type = entity["type"] as? String,
+              let identity = entity["id"] as? String,
+              !identity.isEmpty
+        else { return nil }
+
+        if type == "channel-xtra" {
+            return LiveCatalogCandidate(
+                identity: identity, displayNumber: nil, name: nil, description: nil,
+                category: nil, artwork: nil, entity: .xtra, entitlement: .notEntitled
+            )
+        }
+        guard type == "channel-linear",
+              let decorations = item["decorations"] as? [String: Any],
+              let connectivity = decorations["connectivity"] as? String,
+              let entitlement = entitlement(for: connectivity),
+              decorations["contentTypeLabel"] as? String == "CHANNEL",
+              let number = number(from: decorations["channelNumber"]),
+              matchingPlayCapability(item["actions"], entityType: type, identity: identity)
+        else { return nil }
+
+        let texts = entity["texts"] as? [String: Any]
+        let title = (texts?["title"] as? [String: Any])?["default"] as? String
+        let description = (texts?["description"] as? [String: Any])?["default"] as? String
+        return LiveCatalogCandidate(
+            identity: identity,
+            displayNumber: number,
+            name: title,
+            description: description,
+            category: decorations["genre"] as? String,
+            artwork: nil,
+            entity: .channelLinear,
+            entitlement: entitlement
+        )
+    }
+
+    private static func entitlement(for connectivity: String) -> ChannelEntitlement? {
+        switch connectivity {
+        case "ip-and-sat": .entitledStandard
+        case "ip": .entitledAppOnly
+        default: nil
+        }
+    }
+
+    private static func matchingPlayCapability(_ actions: Any?, entityType: String, identity: String) -> Bool {
+        guard let actions = actions as? [String: Any],
+              let play = actions["play"] as? [[String: Any]],
+              !play.isEmpty
+        else { return false }
+        return play.contains { action in
+            guard let entity = action["entity"] as? [String: Any] else { return false }
+            return entity["type"] as? String == entityType && entity["id"] as? String == identity
+        }
+    }
+
+    private static func number(from value: Any?) -> Double? {
+        guard let number = value as? NSNumber,
+              CFGetTypeID(number) != CFBooleanGetTypeID(),
+              number.doubleValue.isFinite,
+              Int(exactly: number.doubleValue) != nil
+        else { return nil }
+        return number.doubleValue
+    }
+
+    private static func containsProtectedControl(_ body: Data) -> Bool {
+        guard let object = try? JSONSerialization.jsonObject(with: body) as? [String: Any] else { return false }
+        if object["bot"] as? Bool == true { return true }
+        guard let challenge = object["challenge"] as? String else { return false }
+        return ["captcha", "mfa", "control"].contains(challenge.lowercased())
+    }
+}
+
+actor CurrentSessionCatalogRefresher: CatalogRefreshing {
+    private let sessionCoordinator: SessionCoordinator
+    private let transport: any FixedCatalogTransporting
+
+    init(sessionCoordinator: SessionCoordinator, transport: any FixedCatalogTransporting) {
+        self.sessionCoordinator = sessionCoordinator
+        self.transport = transport
+    }
+
+    func refresh() async -> LiveCatalogSnapshotResult {
+        switch await sessionCoordinator.withCurrentCatalogCredential({ [transport] credential in
+            await transport.catalog(using: credential)
+        }) {
+        case let .completed(response):
+            FixedCatalogResponseDecoder.decode(response)
+        case .authenticationUnavailable:
+            LiveCatalogSnapshotResult(snapshot: nil, failure: .authenticationUnavailable)
+        case .notEntitled:
+            LiveCatalogSnapshotResult(snapshot: nil, failure: .notEntitled)
+        case .superseded:
+            LiveCatalogSnapshotResult(snapshot: nil, failure: .cancelled)
+        }
+    }
+}
+
 /// Internal transport seam for the only supported production live sequence.
 /// It has no arbitrary request, resource, header, or URL entry point.
 protocol FixedLiveTransporting: Sendable {

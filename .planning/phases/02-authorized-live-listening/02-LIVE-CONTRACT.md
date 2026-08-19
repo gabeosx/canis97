@@ -15,7 +15,7 @@ The former `human-verification-required` halt was superseded after the ordinary 
 
 | Role | Host class | Format | Sanitized supported result |
 | --- | --- | --- | --- |
-| Catalog and channel peek | Provider API gateway | JSON | Authorized catalog and current-channel metadata operations return ordinary success and provide linear-channel semantic data. |
+| Catalog and channel peek | Provider API gateway | JSON | Authorized catalog and current-channel metadata operations return ordinary success and provide strictly admitted linear-channel semantic data. |
 | Tune authorization | Provider playback gateway | JSON | An authorized linear-channel tune operation returns ordinary success and a structured live-stream result. |
 | Live resource delivery | Provider media-delivery service | HLS playlist and AAC media | Primary and secondary encrypted live resources resolve through standard HLS playlists and AAC segments. |
 | Playback-key authorization | Provider playback gateway | JSON | A fixed playback-key operation returns the required two-string opaque authorization shape. |
@@ -45,6 +45,19 @@ These are the complete non-sensitive operation facts approved for compatibility 
 | Media resource | `GET` | `live-akc-prod-device.streaming.siriusxm.com` | Opaque signed path | SPI handoff only: never a normal request builder, fixture, log, persistent value, or public accessor. |
 
 Browser-only telemetry operations and headers are omitted. The known catalog/tune/peek/live-activity values above do not supply any additional provider response field names; strict production decoding remains limited to explicitly recorded shapes, and unknown/malformed/control input terminates unsupported.
+
+## Catalog Schema Admission (approved 2026-08-19)
+
+The fixed initial-page envelope is `page.containers[].sets[].items[]`. A pagination response, if the existing fixed operation returns one without a second request, may use `container.sets[].items[]`; product refresh remains exactly one fixed request with no automatic pagination, retry, query parameter, or inferred operation.
+
+An item is admitted only when all of the following are true:
+
+- `entity.type` is `channel-linear`.
+- `decorations.connectivity` is `ip-and-sat` (standard) or `ip` (app-only).
+- `decorations.contentTypeLabel` is `CHANNEL` and `decorations.channelNumber` is integral.
+- `actions.play[]` is nonempty and contains an embedded entity whose `type` and `id` exactly match the item entity.
+
+`entity.type == channel-xtra` is a distinct supported taxonomy value and is excluded from v1. Every other entity type, connectivity/content label, absent collection, missing or mismatched Play capability, malformed number, redirect, status/content-type/body control, or unknown shape is excluded or fails closed under D-01/D-02. `isAvailable` is not an entitlement signal and is never used for admission. Presentation is independently optional through `entity.texts.title.default`, `entity.texts.description.default`, and `decorations.genre`; artwork is opaque/internal and unnecessary for admission.
 
 ## Selected Apple Media Handoff
 

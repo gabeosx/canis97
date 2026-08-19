@@ -184,6 +184,33 @@ actor SessionCoordinator {
         return .completed(await work(credential))
     }
 
+    /// Performs exactly one caller-selected fixed operation using the current
+    /// active credential. Unlike tune resolution, catalog refresh does not
+    /// issue an implicit second entitlement request: its caller has already
+    /// performed the current-session entitlement check and each explicit
+    /// refresh has a one-request ceiling.
+    func withCurrentCatalogCredential<Value: Sendable>(
+        _ work: @Sendable (AuthenticationCredential) async -> Value
+    ) async -> CurrentCatalogOperationResult<Value> {
+        guard case let .active(activeSession) = state,
+              lastEntitlement == .entitled,
+              let credential = transientCredential
+        else {
+            return state == .signedOut ? .authenticationUnavailable : .notEntitled
+        }
+
+        let value = await work(credential)
+        guard case let .active(currentSession) = state,
+              currentSession == activeSession
+        else {
+            return .superseded
+        }
+        guard lastEntitlement == .entitled else {
+            return .notEntitled
+        }
+        return .completed(value)
+    }
+
     /// Retires all actor-owned material before attempting each app-owned cleaner once.
     func signOut() async -> SignOutOutcome {
         if let cleanupTask {

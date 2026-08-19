@@ -15,7 +15,7 @@ This matrix is not a claim about the provider's exhaustive private API surface. 
 
 | Capability | Decision | Evidence boundary / next owner |
 | --- | --- | --- |
-| Catalog refresh and entitled linear filtering | SUPPORTED | Provider API gateway JSON supports authorized linear-channel semantic data; Plan 02-04 owns the typed snapshot and UI. |
+| Catalog refresh and entitled linear filtering | SUPPORTED | One fixed GET decodes only the approved initial-page envelope and admits a standard or app-only `channel-linear` item solely through exact closed entity/connectivity/content-label/integral-number/matching-Play capability checks; `channel-xtra` is excluded. `isAvailable` is not entitlement evidence. |
 | Catalog freshness and last-valid browse snapshot | INTEGRATE | Provider-independent; cached presence remains browse-only and cannot authorize tuning. |
 | Tune authorization | SUPPORTED | Fixed authorized tune role returns a structured live-stream result; Plan 02-03 owns strict decoding. |
 | Stream/manifest/resource resolution | SUPPORTED | Standard HLS playlist and AAC media delivery is supported through the provider media-delivery host class. |
