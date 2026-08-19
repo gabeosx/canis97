@@ -327,15 +327,16 @@ struct FixedCatalogRefreshTests {
         }
     }
 
-    @Test("the production catalog transport cancels redirects without following a target")
-    func transportCancelsRedirects() {
-        let transport = FixedCatalogURLSessionTransport()
+    @Test("catalog redirect delegates are isolated per synthetic request")
+    func catalogRedirectDelegatesAreIsolated() {
+        let redirected = PerRequestRedirectDelegate()
+        let untouched = PerRequestRedirectDelegate()
         let url = URL(string: "https://fixture.invalid/redirect")!
         let task = URLSession.shared.dataTask(with: url)
         let response = HTTPURLResponse(url: url, statusCode: 302, httpVersion: nil, headerFields: nil)!
         let decision = RedirectDecisionBox(URLRequest(url: url))
 
-        transport.urlSession(
+        redirected.urlSession(
             URLSession.shared,
             task: task,
             willPerformHTTPRedirection: response,
@@ -344,6 +345,8 @@ struct FixedCatalogRefreshTests {
         )
 
         #expect(decision.value == nil)
+        #expect(redirected.didObserveRedirect)
+        #expect(!untouched.didObserveRedirect)
     }
 
     @Test("one explicit refresh makes one fixed catalog request and production composition selects it")

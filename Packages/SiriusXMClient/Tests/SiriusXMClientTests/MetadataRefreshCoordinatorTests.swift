@@ -109,6 +109,41 @@ struct MetadataRefreshCoordinatorTests {
         #expect(await refresher.requestedChannelIDs == [channel])
         #expect(await coordinator.currentState.channelID == channel)
     }
+
+    @Test("metadata redirect delegates are isolated per synthetic request")
+    func metadataRedirectDelegatesAreIsolated() {
+        let redirected = PerRequestRedirectDelegate()
+        let untouched = PerRequestRedirectDelegate()
+        let url = URL(string: "https://fixture.invalid/redirect")!
+        let task = URLSession.shared.dataTask(with: url)
+        let response = HTTPURLResponse(url: url, statusCode: 302, httpVersion: nil, headerFields: nil)!
+        let decision = MetadataRedirectDecisionBox(URLRequest(url: url))
+
+        redirected.urlSession(
+            URLSession.shared,
+            task: task,
+            willPerformHTTPRedirection: response,
+            newRequest: URLRequest(url: url),
+            completionHandler: { decision.record($0) }
+        )
+
+        #expect(decision.value == nil)
+        #expect(redirected.didObserveRedirect)
+        #expect(!untouched.didObserveRedirect)
+    }
+}
+
+private final class MetadataRedirectDecisionBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: URLRequest?
+
+    init(_ value: URLRequest?) { stored = value }
+
+    var value: URLRequest? { lock.withLock { stored } }
+
+    func record(_ value: URLRequest?) {
+        lock.withLock { stored = value }
+    }
 }
 
 private struct FixedMetadataClock: LiveMetadataClock {

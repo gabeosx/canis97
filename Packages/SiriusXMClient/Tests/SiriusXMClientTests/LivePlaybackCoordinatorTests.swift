@@ -189,6 +189,28 @@ struct LivePlaybackCoordinatorTests {
     func productionAdapterKeepsUnsupportedOperationsUnmaterializable() {
         #expect(SiriusXMRequestContract.liveListeningOperations.allSatisfy { !$0.isTransportMaterializable })
     }
+
+    @Test("live redirect delegates isolate a redirected task from a sibling failure")
+    func liveRedirectDelegatesAreTaskLocal() {
+        let redirected = PerRequestRedirectDelegate()
+        let sibling = PerRequestRedirectDelegate()
+        let url = URL(string: "https://fixture.invalid/redirect")!
+        let task = URLSession.shared.dataTask(with: url)
+        let response = HTTPURLResponse(url: url, statusCode: 302, httpVersion: nil, headerFields: nil)!
+        let decision = LiveRedirectDecisionBox(URLRequest(url: url))
+
+        redirected.urlSession(
+            URLSession.shared,
+            task: task,
+            willPerformHTTPRedirection: response,
+            newRequest: URLRequest(url: url),
+            completionHandler: { decision.record($0) }
+        )
+
+        #expect(decision.value == nil)
+        #expect(redirected.didObserveRedirect)
+        #expect(!sibling.didObserveRedirect)
+    }
 }
 
 private enum FixtureKeyRequirement: Sendable {
@@ -316,6 +338,19 @@ private struct FixtureChannelOperationContext: FixedLiveOperationContext {
 
 private struct FixtureAppleMediaHandoff: SiriusXMAppleMediaHandoff {
     @MainActor func makePlayerItem() -> AVPlayerItem? { nil }
+}
+
+private final class LiveRedirectDecisionBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: URLRequest?
+
+    init(_ value: URLRequest?) { stored = value }
+
+    var value: URLRequest? { lock.withLock { stored } }
+
+    func record(_ value: URLRequest?) {
+        lock.withLock { stored = value }
+    }
 }
 
 private enum ProductionOperation: Sendable, Equatable {
