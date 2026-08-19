@@ -3,6 +3,102 @@ import XCTest
 import SiriusXMClient
 
 @MainActor
+final class SemanticListeningPresentationTests: XCTestCase {
+    func testOnlyAnEntitledStateConstructsTheListeningModelWithTheInjectedFlow() async {
+        let flow = ControlledCatalogFlow()
+
+        XCTAssertNil(ListeningPresentationModel.makeIfEntitled(.signedOut, flow: flow))
+        let entitled = try? XCTUnwrap(ListeningPresentationModel.makeIfEntitled(.entitled, flow: flow))
+
+        XCTAssertNotNil(entitled)
+        XCTAssertEqual(await flow.callCount(), 0)
+    }
+
+    func testRefreshIsSingleFlightAndPublishesTheSemanticSnapshot() async throws {
+        let flow = ControlledCatalogFlow()
+        let model = ListeningPresentationModel(flow: flow)
+
+        let first = try XCTUnwrap(model.refresh())
+        XCTAssertNil(model.refresh())
+        await flow.waitForCall(1)
+        await flow.complete(
+            .snapshot(LiveCatalogSnapshot(
+                channels: [LiveChannel(id: LiveChannelID("fixture-current"), name: "Current")],
+                freshness: .fresh
+            )),
+            at: 0
+        )
+        await first.value
+
+        XCTAssertEqual(await flow.callCount(), 1)
+        XCTAssertEqual(model.state.snapshot?.channels.map(\.id), [LiveChannelID("fixture-current")])
+        XCTAssertEqual(model.state.freshness, .fresh)
+    }
+
+    func testAnOlderRefreshCannotReplaceTheCurrentSnapshot() async throws {
+        let flow = ControlledCatalogFlow()
+        let model = ListeningPresentationModel(flow: flow)
+        let older = try XCTUnwrap(model.refresh())
+        await flow.waitForCall(1)
+
+        model.reset()
+        let current = try XCTUnwrap(model.refresh())
+        await flow.waitForCall(2)
+        await flow.complete(
+            .snapshot(LiveCatalogSnapshot(
+                channels: [LiveChannel(id: LiveChannelID("fixture-current"), name: "Current")],
+                freshness: .fresh
+            )),
+            at: 1
+        )
+        await current.value
+        await flow.complete(
+            .snapshot(LiveCatalogSnapshot(
+                channels: [LiveChannel(id: LiveChannelID("fixture-older"), name: "Older")],
+                freshness: .fresh
+            )),
+            at: 0
+        )
+        await older.value
+
+        XCTAssertEqual(model.state.snapshot?.channels.map(\.id), [LiveChannelID("fixture-current")])
+    }
+
+    func testSelectionStoresOnlyTheStableIdentityWithoutRefreshOrPlaybackWork() async {
+        let flow = ControlledCatalogFlow()
+        let model = ListeningPresentationModel(flow: flow)
+        let selected = LiveChannelID("fixture-selection")
+
+        model.select(selected)
+
+        XCTAssertEqual(model.selectedChannelID, selected)
+        XCTAssertEqual(await flow.callCount(), 0)
+    }
+
+    func testStaleCatalogRemainsBrowsableAndIsExplicitlyMarkedStale() async throws {
+        let flow = ControlledCatalogFlow()
+        let model = ListeningPresentationModel(flow: flow)
+        let task = try XCTUnwrap(model.refresh())
+        await flow.waitForCall(1)
+        await flow.complete(
+            .stale(
+                snapshot: LiveCatalogSnapshot(
+                    channels: [LiveChannel(id: LiveChannelID("fixture-stale"), name: "Stale")],
+                    freshness: .stale
+                ),
+                failure: .unsupportedResponse
+            ),
+            at: 0
+        )
+        await task.value
+
+        model.select(LiveChannelID("fixture-stale"))
+        XCTAssertEqual(model.state.freshness, .stale)
+        XCTAssertEqual(model.selectedChannelID, LiveChannelID("fixture-stale"))
+    }
+}
+
+@MainActor
 final class ListeningCompositionTests: XCTestCase {
     func testSelectedInventedChannelUsesTheSingleInjectedCoordinator() async {
         let driver = RecordingPlaybackDriver()
@@ -623,5 +719,28 @@ private actor BlockingPlaybackDriver: LivePlaybackDriving {
 
     func confirmTune(of channelID: LiveChannelID) {
         continuations.removeValue(forKey: channelID)?.resume(returning: .confirmed(.playing(channelID)))
+    }
+}
+
+private actor ControlledCatalogFlow: ListeningFlow {
+    private var calls = 0
+    private var continuations: [CheckedContinuation<CatalogAvailability, Never>] = []
+    private var waiters: [Int: CheckedContinuation<Void, Never>] = [:]
+
+    func catalog() async -> CatalogAvailability {
+        calls += 1
+        waiters.removeValue(forKey: calls)?.resume()
+        return await withCheckedContinuation { continuations.append($0) }
+    }
+
+    func callCount() -> Int { calls }
+
+    func waitForCall(_ expected: Int) async {
+        guard calls < expected else { return }
+        await withCheckedContinuation { waiters[expected] = $0 }
+    }
+
+    func complete(_ result: CatalogAvailability, at index: Int) {
+        continuations.remove(at: index).resume(returning: result)
     }
 }
