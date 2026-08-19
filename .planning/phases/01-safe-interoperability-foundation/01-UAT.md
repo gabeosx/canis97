@@ -1,22 +1,14 @@
 ---
-status: partial
+status: complete
 phase: 01-safe-interoperability-foundation
 source: ["01-01-SUMMARY.md", "01-02-SUMMARY.md", "01-03-SUMMARY.md", "01-04-SUMMARY.md", "01-05-SUMMARY.md", "01-06-SUMMARY.md", "01-07-SUMMARY.md", "01-08-SUMMARY.md", "01-09-SUMMARY.md", "01-10-SUMMARY.md", "01-11-SUMMARY.md", "01-12-SUMMARY.md", "01-13-SUMMARY.md", "01-14-SUMMARY.md", "01-15-SUMMARY.md", "01-16-SUMMARY.md"]
 started: 2026-08-18T22:58:14Z
-updated: 2026-08-19T01:50:00Z
+updated: 2026-08-19T01:51:10Z
 ---
 
 ## Current Test
 
-number: 17
-name: Native Authentication State Flow
-expected: |
-  No additional login is needed. Look at the Sirius Mac window from the successful attempt you just completed:
-  1. Confirm the progress indicator has stopped.
-  2. Confirm the final heading says “Ready to listen.”
-  3. Confirm the sign-in controls are no longer offered and the app has not automatically restarted sign-in.
-  Pass if all three are true. Otherwise, report the exact heading, message, buttons, and whether a spinner is still visible.
-awaiting: user response
+[testing complete]
 
 ## Tests
 
@@ -147,7 +139,7 @@ expected: |
   2. Confirm the final heading says “Ready to listen.”
   3. Confirm the sign-in controls are no longer offered and the app has not automatically restarted sign-in.
   Pass if all three are true. Otherwise, report the exact heading, message, buttons, and whether a spinner is still visible.
-result: [pending]
+result: pass
 
 ### 18. Phase 0 authentication-review findings are enforced by deterministic native and package regressions.
 expected: Phase 0 authentication-review findings are enforced by deterministic native and package regressions.
@@ -313,9 +305,9 @@ coverage_summary: 01-16-SUMMARY.md
 ## Summary
 
 total: 40
-passed: 39
+passed: 40
 issues: 0
-pending: 1
+pending: 0
 skipped: 0
 blocked: 0
 
