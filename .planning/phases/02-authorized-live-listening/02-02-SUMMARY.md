@@ -2,104 +2,98 @@
 phase: 02-authorized-live-listening
 plan: "02"
 subsystem: compatibility-gate
-tags: [live-listening, compatibility, fail-closed, avfoundation]
+tags: [live-listening, compatibility, fail-closed, provider-contract]
 requires:
   - phase: 02-01
     provides: provider-neutral live-listening seams and offline verification
 provides:
   - single-use checkpoint shell and closed observation vocabulary
-  - exact catalog and selected-tune checkpoints with a sanitized terminal control result
-  - canonical provider-dependent execution halt
+  - sanitized supported provider-contract evidence for fixed adapter work
+  - explicit AVFoundation verification deferral to Plan 02-05
 affects: [02-03, 02-04, 02-05, 02-06, 02-07]
 actuals:
   tokens: 24455
   tasks: 2
-  commits: 22
+  commits: 27
 tech-stack:
   added: []
-  patterns: [single-use semantic checkpoint, halted-summary dependency propagation]
+  patterns: [single-use semantic checkpoint, opaque media handoff, closed provider results]
 key-files:
   created:
     - .planning/phases/02-authorized-live-listening/02-LIVE-CONTRACT.md
   modified:
-    - script/live_compatibility_checkpoint.sh
-    - SiriusMac/Listening/LiveContractObservation.swift
-    - SiriusMac/Listening/ClosedLiveObservationAdapter.swift
-    - SiriusMac/Authentication/AuthenticationView.swift
-    - SiriusMacTests/ListeningCompositionTests.swift
     - .planning/phases/02-authorized-live-listening/COVERAGE.md
     - .planning/phases/02-authorized-live-listening/02-RESEARCH.md
+    - .planning/phases/02-authorized-live-listening/02-03-PLAN.md
+    - .planning/STATE.md
+    - .planning/ROADMAP.md
 key-decisions:
-  - "Use the current fixed catalog route only to admit a sanitized selected linear channel, then issue one exact tune POST."
-  - "Treat the selected tune's human-verification control as terminal and do not request a resource, key, or player handoff."
-  - "Halt all provider-dependent Phase 02 plans through a status: halted summary."
+  - "Treat the corrected native tune 4xx as an ordinary closed failure, not a human-verification control."
+  - "Use direct authenticated JSON APIs for runtime catalog, tune, metadata, key, enforcement, and live-activity operations; never add runtime DOM manipulation."
+  - "Permit Plan 02-03 to create strict opaque media handoff work while deferring AVFoundation proof to Plan 02-05."
 patterns-established:
-  - "A bounded compatibility checkpoint persists only closed, sanitized outcomes and uses a halted summary to block dependents."
+  - "Sanitized official-client observations may support a fixed provider adapter without making browser automation part of product architecture."
 requirements-completed: []
 coverage: []
 duration: 9h 9m
 completed: 2026-08-19
-status: halted
+status: complete
 ---
 
 # Phase 02 Plan 02: Authorized Live Checkpoint Summary
 
-**The restored native session reached ready state, the current catalog route admitted a selected linear channel, and one fixed tune request stopped safely at `human-verification-required`.**
+**Sanitized provider-contract evidence supports fixed native adapter work; native AVFoundation behavior remains intentionally unverified until Plan 02-05.**
 
 ## Performance
 
-- **Duration:** 11h 24m across the owner-visible checkpoint pauses
+- **Duration:** 11h 24m across checkpoint activity and later artifact reconciliation
 - **Started:** 2026-08-19T03:51:21Z
-- **Completed:** 2026-08-19T15:15:59Z
-- **Tasks:** 2/2 (Task 2 reached its designed terminal halt)
-- **Files modified:** 10
+- **Completed:** 2026-08-19
+- **Tasks:** 2/2
+- **Files modified:** 6 supporting planning artifacts in this reconciliation; earlier task code is preserved unchanged
 
 ## Accomplishments
 
-- Added a temporary exact selected-tune checkpoint with an ephemeral session, fixed host/path/body semantics, redirect cancellation, pre-decode status/content-type controls, and no retry path.
-- Confirmed the current catalog semantic route, then recorded the selected tune as `UNSUPPORTED` with first failure domain `human-verification-required` and `Execution: HALT`.
-- Resolved all three research questions as unsupported/not reached and blocked Plans 02-03 through 02-07 through the halted dependency graph.
+- Added the single-use, provider-neutral checkpoint shell and closed observation vocabulary during the original execution.
+- Corrected the original native tune classification: it was an ordinary `tune-http-400`, not a human-verification control; ordinary tune 4xx outcomes now preserve Keychain material.
+- Recorded sanitized official-player evidence for catalog, tune, HLS/AAC resource delivery, playback-key authorization, metadata, enforcement, and live-activity roles without retaining traffic or secret-bearing evidence.
+- Opened Plan 02-03 for strict fixed operations, decoders, fixtures, and opaque handoff work while retaining native playback proof as Plan 02-05's responsibility.
+
+## Historical Chronology and Supersession
+
+The original checkpoint artifact recorded `human-verification-required` and halted Phase 02 after one native tune. Subsequent systematic debugging disproved that classification: the native result was an ordinary tune HTTP 4xx, and the preservation fix removed automatic Keychain deletion on every failure path. A separately authorized, persistent official-player research session then produced sanitized semantic evidence for the supported provider roles recorded in `02-LIVE-CONTRACT.md`.
+
+This reconciliation supersedes the earlier halt classification only. It does not claim that the native app has audibly played the stream, manipulated a website at runtime, bypassed a provider control, or retained provider traffic. AVFoundation remains not observed.
 
 ## Task Commits
 
-1. **Task 1: Build the provider-neutral checkpoint shell and sanitized evidence sink** - `7205e91` (test), `9f82e32` (feat)
-2. **Task 2: Run the bounded authenticated catalog-to-AVFoundation investigation** - `8f81676` (closed boundary), `b875bd0` (visible result), `06d2a8f` (exact catalog boundary), `814d827` (selected tune boundary), pending artifact commit
-
-## Files Created/Modified
-
-- `script/live_compatibility_checkpoint.sh` - Runs offline tests before one owner-confirmed telemetry launch.
-- `SiriusMac/Listening/LiveContractObservation.swift` - Enforces closed, single-run semantic observation types.
-- `SiriusMacTests/ListeningCompositionTests.swift` - Covers catalog/tune allowlists, redirect cancellation, cancellation, terminal controls, semantic collapse, and missing/invalid credential no-request paths.
-- `02-LIVE-CONTRACT.md` - Canonical sanitized terminal result; no provider control detail, media location, or later playback contract was retained.
-- `COVERAGE.md` and `02-RESEARCH.md` - Record catalog support and the tune control stop without expanding provider scope.
+1. **Task 1: Build the provider-neutral checkpoint shell and sanitized evidence sink** — `7205e91` (test), `9f82e32` (feat)
+2. **Task 2: Run the bounded compatibility investigation and reconcile the result** — `8f81676`, `b875bd0`, `06d2a8f`, `814d827` (original boundary work); `c57c8d2`, `bf25765`, `afe5615`, `bd2f0d7` (classification, preservation, and fixed-contract corrections)
 
 ## Decisions Made
 
-- The existing session restored successfully; the current catalog route admitted a selected linear channel, but the one exact tune reached `human-verification-required`, so the consumed run cannot issue a follow-up request.
-- Catalog semantics are supported only at the closed identity/display level; resource, key, metadata, artwork, and AVFoundation behavior remain unobserved and unsupported.
-- This summary is intentionally `halted`, so the GSD dependency graph blocks every provider-dependent successor.
+- Runtime content work uses direct authenticated JSON APIs behind fixed, replaceable adapters. The one-time official-player DOM interaction was research only and must not become shipped behavior.
+- The live provider contract is supported for a safe opaque media handoff and deterministic fixtures; resource references and playback-key material remain memory-only and redacted by construction.
+- AVFoundation audibility and control semantics are deferred to Plan 02-05. No downstream artifact may present them as observed before that plan verifies them.
 
 ## Deviations from Plan
 
-None - the plan's approved catalog and selected tune candidates reached a terminal closed semantic result and halted before any resource or follow-up operation.
+### Reconciled checkpoint classification
 
-## Issues Encountered
-
-The existing session restored successfully and the current catalog route admitted a safe selected channel. The exact selected tune then returned a control classification requiring human verification. The checkpoint stopped rather than bypass the control, retain its detail, request media, or issue a follow-up operation.
+- **Found during:** Post-checkpoint systematic debugging
+- **Issue:** The original summary treated an ordinary native tune HTTP 4xx as a human-verification control and propagated a circular halt to every provider-dependent plan.
+- **Fix:** Reclassified the result, preserved ordinary 4xx Keychain state, and used semantically redacted official-player evidence to record the supported provider contract.
+- **Impact:** Plan 02-03 is now runnable; AVFoundation verification is explicitly deferred to Plan 02-05 rather than inferred from the provider contract.
 
 ## Known Stubs
 
-None.
-
-## Threat Flags
-
-The temporary checkpoint adds tightly constrained direct network surfaces for one fixed authenticated catalog GET and one selected tune POST. Both are private to the app target, use an opaque credential seam, disable redirects, retain no durable traffic data, and are disabled after one outcome.
+None. AVFoundation is an explicit pending verification, not a placeholder implementation.
 
 ## Next Phase Readiness
 
-Provider-dependent Plans 02-03 through 02-07 are blocked. A future attempt must not bypass or automate the human-verification control; it requires a separately planned, security-reviewed supported provider flow before resource or playback work.
+Plan 02-03 may now encode only the supported fixed operations, strict decoders, sanitized fixtures, and opaque media handoff. Plans 02-04 through 02-07 retain their normal dependency order. Plan 02-05 is the mandatory native AVFoundation verification point.
 
 ## Self-Check: PASSED
 
-- Canonical live contract and summary exist.
-- Task commits (`7205e91`, `9f82e32`, `8f81676`, `b875bd0`, `06d2a8f`, and `814d827`) exist in Git history.
+- `02-LIVE-CONTRACT.md`, `COVERAGE.md`, and `02-RESEARCH.md` agree that the provider contract is supported and AVFoundation is not observed.
+- This summary contains no runtime DOM architecture, raw traffic, credentials, session material, media location, key material, identifier, body, or header value.

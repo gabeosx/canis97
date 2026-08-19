@@ -178,19 +178,19 @@ Plans:
 
 - [x] 02-01-PLAN.md — Create all four offline contract suites and reversible semantic app seams without live provider work.
 
-**Wave 2 — Owner-visible live gate** *(halted: `human-verification-required`)*
+**Wave 2 — Owner-visible live gate** *(completed: sanitized supported provider contract; AVFoundation verification deferred to Wave 5)*
 
 - [x] 02-02-PLAN.md — Run the first bounded authenticated provider/AVFoundation checkpoint and record sanitized supported or unsupported evidence.
 
-**Wave 3 — Evidence-backed compatibility contract** *(blocked by Plan 02-02 `UNSUPPORTED` result)*
+**Wave 3 — Evidence-backed compatibility contract** *(ready)*
 
 - [ ] 02-03-PLAN.md — Resolve the research questions and encode only supported fixed operations, strict decoders, and the ephemeral media handoff.
 
-**Wave 4 — Entitled catalog** *(blocked on Wave 3)*
+**Wave 4 — Entitled catalog** *(depends on Wave 3)*
 
 - [ ] 02-04-PLAN.md — Deliver the deterministic freshness-aware entitled linear lineup and native selection surface.
 
-**Wave 5 — Confirmed live playback** *(blocked on Wave 4)*
+**Wave 5 — Confirmed live playback** *(depends on Wave 4; performs the required native AVFoundation verification)*
 
 - [ ] 02-05-PLAN.md — Resolve a selected channel through current authorization and control one confirmed AVFoundation player.
 
@@ -262,7 +262,7 @@ Active product execution proceeds 1 → 2 → 3 → 4 → 5. Phase 0 is retained
 |-------|----------------|--------|-----------|
 | 0. Authentication Feasibility Gate | 12/12 | Complete (historical) | 2026-08-17 |
 | 1. Safe Interoperability Foundation | 16/16 | Complete    | 2026-08-18 |
-| 2. Authorized Live Listening | 2/7 | Halted | 2026-08-19 |
+| 2. Authorized Live Listening | 2/7 | Active — Plan 02-03 ready | - |
 | 3. Native Mac Listening Experience | 0/TBD | Not started | - |
 | 4. Safe Skins & Accessible Recovery | 0/TBD | Not started | - |
 | 5. Public Release & Compatibility Support | 0/TBD | Not started | - |

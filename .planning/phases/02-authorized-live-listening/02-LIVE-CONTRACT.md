@@ -2,36 +2,42 @@
 
 **Phase:** 02 — Authorized Live Listening
 **Checkpoint:** 02-02
-**Scope:** One owner-authorized existing-session compatibility run only; non-exhaustive and sanitized.
+**Scope:** Sanitized, non-exhaustive provider-contract evidence. This document contains no credentials, sessions, account data, request or response bodies, media locations, key material, identifiers, header values, or raw browser/network evidence.
 
-## Gate Result: UNSUPPORTED
+## Gate Result: SUPPORTED
 
-**First Closed Failure Domain:** `human-verification-required`
-**Execution:** HALT
+**Execution:** Proceed with fixed, fail-closed compatibility work.
+**AVFoundation:** NOT OBSERVED — Plan 02-05 must perform the native player verification before any claim of audible playback, pause, resume, stop, or live-edge behavior.
 
-The rebuilt native app restored the existing Keychain-backed session and reported the semantic ready state. The current fixed catalog route admitted a sanitized linear-channel selection. The owner-authorized selected-channel tune checkpoint then issued exactly one fixed authenticated tune POST through an ephemeral, redirect-cancelling client-owned session and stopped at the control classification `human-verification-required`. No workaround, retry, session transfer, media-resource/key request, or follow-up provider request was made.
+The former `human-verification-required` halt was superseded after the ordinary native tune failure was correctly classified as `tune-http-400`, and separately collected owner-authorized, semantically redacted official-player evidence established the provider contract below. This is evidence for fixed adapter work, not permission for additional discovery, request variation, runtime DOM manipulation, or an access-control workaround.
 
-## Bounded Run Record
+## Supported Provider Roles and Closed Results
 
-- Automatic Keychain restoration reached the app's authenticated-and-entitled ready state.
-- Offline gates passed before the tune: 45 Swift package tests and 21 targeted macOS checkpoint tests.
-- The current fixed catalog route admitted exactly one owner-selected safe linear channel; no raw catalog data was retained.
-- Exactly one allow-listed tune request was constructed and sent with a fixed method, host policy, path template, body semantics, redirect cancellation, and response status/content-type checks.
-- No media resource, media key, AVFoundation, metadata, or artwork request was constructed or sent.
-- No transient evidence directory was created.
-- No raw traffic, provider/account/request/response/resource/key/error details were retained.
+| Role | Host class | Format | Sanitized supported result |
+| --- | --- | --- | --- |
+| Catalog and channel peek | Provider API gateway | JSON | Authorized catalog and current-channel metadata operations return ordinary success and provide linear-channel semantic data. |
+| Tune authorization | Provider playback gateway | JSON | An authorized linear-channel tune operation returns ordinary success and a structured live-stream result. |
+| Live resource delivery | Provider media-delivery service | HLS playlist and AAC media | Primary and secondary encrypted live resources resolve through standard HLS playlists and AAC segments. |
+| Playback-key authorization | Provider playback gateway | JSON | A fixed playback-key operation returns the required two-string opaque authorization shape. |
+| Stream enforcement | Provider API gateway | JSON | Enforcement status can be queried as an ordinary success result. |
+| Live activity update | Provider API gateway | JSON | A bounded periodic live-activity operation accepts channel/time-window semantics and returns ordinary success. |
 
-## Content and Playback Result
+## Semantic Shapes for the Fixed Adapter
 
-Catalog observation and selection were reached. Tune transport reached a terminal control classification. The following were **not exercised**:
+- **Tune result:** a top-level linear-channel discriminator and exactly one-or-more stream records.
+- **Stream record:** one-or-more opaque resource references, one opaque key-reference field, current live metadata, and opaque tracking metadata.
+- **Resource delivery:** HLS playlist content with AAC media segments; encrypted delivery requires the separate playback-key authorization role.
+- **Playback-key result:** a two-required-string shape. The values are opaque, short-lived, memory-only, and never diagnostic or persistent data.
+- **Metadata:** current program/song information is available from both the tune result and the current-channel metadata role. Artwork availability is supported as provider metadata, with UI precedence and stale/unavailable presentation deferred to Plan 02-07.
 
-- resource resolution;
-- media-key authorization;
-- AVFoundation handoff, audibility, pause, resume, stop, or live-edge behavior; and
-- metadata or artwork retrieval.
+## Safety and Implementation Limits
 
-Accordingly, this artifact retains only the confirmed semantic facts: an entitled linear catalog selection was available; the exact selected tune operation stopped at `human-verification-required`; and no resource, key, metadata, or playback handoff was authorized. It records no response schema, field path, account data, resource identity/location, key requirement/value, metadata contract, or playback handoff. It does not establish that the service is unsupported in general; it establishes that the selected tune cannot proceed without a prohibited or user-mediated verification path.
+- Runtime catalog, tune, metadata, key, enforcement, and live-activity operations are direct authenticated JSON APIs. Shipped code must not manipulate a DOM, inspect browser storage, or automate the official player.
+- Use individually named operations, direct-host allowlists, ephemeral session handling, strict decoding, and closed failure classifications. Unknown hosts, redirects, malformed shapes, protected controls, authentication/entitlement loss, and unrecognized status outcomes fail closed.
+- Preserve existing Keychain material for ordinary tune HTTP 4xx outcomes. Only explicit Sign Out or Clear Local Session may erase local session material.
+- Keep resource references and playback-key material in memory only. Never log, persist, fixture, display, or export them.
+- The observed live-activity role is periodic in the official client; exact cadence remains an implementation decision for a bounded, injectable policy rather than a durable provider fact.
 
-## Downstream Routing
+## Deferred Native Playback Proof
 
-Plan 02-03 requires `Gate Result: SUPPORTED` and therefore must not run. Its dependent Plans 02-04 through 02-07 are blocked transitively. A future effort must not bypass or automate the verification control; it needs a separately planned, security-reviewed supported provider flow before it can issue another request or consider resource/AVFoundation work.
+The provider transport, resource, key, and metadata contracts are supported enough for Plan 02-03 to create strict decoders, sanitized fixtures, and an opaque media handoff. Native AVFoundation acceptance remains deliberately deferred: Plan 02-05 must verify one authorized handoff with the app's `AVPlayer` before the project can claim audibility or any player-control semantics.

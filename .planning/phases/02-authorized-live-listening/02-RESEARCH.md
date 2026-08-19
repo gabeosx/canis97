@@ -69,7 +69,17 @@ The existing client intentionally stops at session verification. Its current int
 
 Prior owner-authorized evidence says an issued session worked for account, tuning, manifest, and playback-key requests from an honest native-style client; it also records that the exact raw evidence was deleted. [VERIFIED: .planning/phases/00-authentication-feasibility-gate/.continue-here.md:29-48] No new live request was made during this research: the current code has no catalog/tune request contract, and a raw capture, browser-storage inspection, or improvised endpoint probing would violate the project’s secret and no-bypass boundary. The first execution plan must instead make one owner-visible, bounded discovery probe through the existing session, retain only an allow-listed semantic schema report, and stop on every protected-control signal. [VERIFIED: .planning/phases/00-authentication-feasibility-gate/.continue-here.md:86-107]
 
-**Primary recommendation:** Implement a tracer-first, fixed-contract catalog → one selected channel → resolve → one `AVPlayerItem` flow, guarded by a human live-contract checkpoint; add recovery and independent metadata only after that exact path is confirmed.
+**Primary recommendation:** Implement a tracer-first, fixed-contract catalog → one selected channel → opaque media handoff → one `AVPlayerItem` flow. The provider contract is now supported by the canonical sanitized live contract; validate the native `AVPlayerItem` path in Plan 02-05 before claiming audible playback or player-control semantics.
+
+## Checkpoint Supersession and Open-Question Resolution
+
+This section supersedes the earlier Plan 02-02 halt classification and any prior open-question status that depended on it. The canonical source is [02-LIVE-CONTRACT.md](02-LIVE-CONTRACT.md). It is a sanitized, non-exhaustive provider-contract record; it contains no raw traffic, credentials, identifiers, resource locations, key material, bodies, or header values.
+
+1. **Catalog and tune authorization — RESOLVED SUPPORTED.** Direct authenticated JSON roles support entitled linear-channel catalog/current-channel data and a fixed authorized tune result. Plan 02-03 may encode only the documented fixed adapter boundary and strict semantic fixture shapes.
+2. **Resource and playback-key handoff — RESOLVED SUPPORTED.** Standard HLS playlist/AAC media delivery and a fixed opaque two-string key-authorization shape support a memory-only media handoff. Plan 02-03 must retain direct-host policy, strict decoders, and closed failures; it must not persist or expose opaque values.
+3. **Metadata and AVFoundation — SPLIT RESOLUTION.** Current program/song and artwork availability are provider-supported semantic metadata inputs for Plan 02-07. Native AVFoundation behavior is **NOT OBSERVED** and remains a mandatory Plan 02-05 verification; no plan may infer audibility, pause/resume, stop, or live-edge behavior from provider evidence alone.
+
+The official-player DOM interaction that informed these sanitized results was an owner-authorized research activity only. Shipped runtime architecture remains direct authenticated JSON APIs behind repairable adapters; it must not manipulate a DOM, inspect browser storage, or automate the official player.
 
 ## Architectural Responsibility Map
 
@@ -311,19 +321,19 @@ monitor.start(queue: monitorQueue)
 
 ## Open Questions
 
-**Resolution routing (checkpoint result):** Plan 02-02 restored the existing Keychain-backed session to the semantic ready state, confirmed the current catalog route, and used one owner-selected entitled linear channel for exactly one fixed tune POST. That tune stopped at `human-verification-required` before any resource, key, AVFoundation, metadata, or artwork work. The canonical sanitized [02-LIVE-CONTRACT.md](./02-LIVE-CONTRACT.md) says `Gate Result: UNSUPPORTED` and `Execution: HALT`. Plan 02-03 may not add fixed provider code; provider-dependent plans remain blocked. No raw live evidence belongs in this research file or the canonical artifact.
+**Resolution routing (checkpoint superseded):** The former Plan 02-02 halt classification was disproved by systematic debugging: the native tune outcome was an ordinary `tune-http-400`, not a human-verification control. The canonical sanitized [02-LIVE-CONTRACT.md](./02-LIVE-CONTRACT.md) now says `Gate Result: SUPPORTED` for the fixed provider transport, resource, key, and metadata roles. Plan 02-03 may add only the documented fixed adapter, strict decoders, sanitized fixtures, and opaque media handoff. Native AVFoundation behavior remains `NOT OBSERVED` and is reserved for Plan 02-05. No raw live evidence belongs in this research file or the canonical artifact.
 
-1. **[RESOLVED — UNSUPPORTED / PARTIALLY REACHED] What are the current fixed catalog, tune, stream, metadata, artwork, and key-authorization contracts?**
-   - Result: The current catalog route admitted a sanitized linear selection. The one exact tune request then stopped at `human-verification-required`; no resource resolution, metadata, artwork, or key authorization was retained or inferred.
-   - Canonical record: [02-LIVE-CONTRACT.md](./02-LIVE-CONTRACT.md) — `Gate Result: UNSUPPORTED`, `Execution: HALT`.
+1. **[RESOLVED — SUPPORTED] What are the current fixed catalog, tune, stream, metadata, artwork, and playback-key authorization contracts?**
+   - Result: Sanitized official-client evidence supports fixed direct authenticated JSON roles for entitled linear catalog/current-channel data, tune results, HLS/AAC resource delivery, opaque playback-key authorization, and live metadata/artwork availability.
+   - Canonical record: [02-LIVE-CONTRACT.md](./02-LIVE-CONTRACT.md) — `Gate Result: SUPPORTED`.
 
-2. **[RESOLVED — UNSUPPORTED / NOT REACHED] Can AVFoundation obtain and play the authorized stream without a prohibited custom authorization mechanism?**
-   - Result: Not reached. No authorized resource reached AVFoundation; audible, pause, resume, stop, and live-edge behavior were not exercised.
-   - Canonical record: [02-LIVE-CONTRACT.md](./02-LIVE-CONTRACT.md) — `Gate Result: UNSUPPORTED`, `Execution: HALT`.
+2. **[DEFERRED — NOT OBSERVED] Can AVFoundation obtain and play the authorized stream without a prohibited custom authorization mechanism?**
+   - Result: Provider transport evidence does not establish native player behavior. Audible, pause, resume, stop, and live-edge semantics remain unobserved and must be verified by Plan 02-05 with the app's `AVPlayer`.
+   - Canonical record: [02-LIVE-CONTRACT.md](./02-LIVE-CONTRACT.md) — AVFoundation `NOT OBSERVED`.
 
-3. **[RESOLVED — UNSUPPORTED / NOT REACHED] Which public API safely hands a resolved resource to an app playback layer?**
-   - Result: Not reached. No resolved resource or authorization mechanism was observed, so no playback handoff API is selected or inferred.
-   - Canonical record: [02-LIVE-CONTRACT.md](./02-LIVE-CONTRACT.md) — `Gate Result: UNSUPPORTED`, `Execution: HALT`.
+3. **[RESOLVED — SUPPORTED] Which app-integration boundary safely hands a resolved resource to playback?**
+   - Result: Plan 02-03 may create an SPI-scoped, non-Codable, permanently redacted, memory-only opaque media handoff. It must not expose raw locations or opaque playback-key material, and it must not claim player success before Plan 02-05.
+   - Canonical record: [02-LIVE-CONTRACT.md](./02-LIVE-CONTRACT.md) — supported fixed provider handoff constraints.
 
 ## Environment Availability
 

@@ -1,46 +1,38 @@
 # Phase 02 API Capability Coverage
 
 **Phase:** 02 — Authorized Live Listening
-**Scope:** Current project evidence and the v1 live-listening contract
-**Status:** Plan 02-02 confirmed the fixed catalog route and then reached the terminal `human-verification-required` stop on exactly one selected-channel tune request. The canonical `02-LIVE-CONTRACT.md` reports `Gate Result: UNSUPPORTED` and `Execution: HALT`; Plan 02-03 may not encode fixed provider operations or decoders.
+**Scope:** Non-exhaustive, sanitized compatibility evidence for the v1 live-listening contract.
+**Status:** The canonical [02-LIVE-CONTRACT.md](02-LIVE-CONTRACT.md) is `Gate Result: SUPPORTED`. Its provider-contract evidence permits Plan 02-03; AVFoundation remains explicitly unobserved until Plan 02-05.
 
-This matrix is not a claim about SiriusXM's exhaustive private API surface. It enumerates only capabilities implicated by the current code, Phase 02 requirements, sanitized historical evidence, and the v1 product boundary. Execution may not silently add provider operations beyond these rows.
+This matrix is not a claim about the provider's exhaustive private API surface. It enumerates only capabilities implicated by Phase 02. Execution may not silently add operations beyond these rows.
 
 ## Integrated dependencies — do not duplicate
 
-- **Authentication:** Phase 01's `SiriusXMClient` runtime-owned native transaction remains the owner. Phase 02 reuses the already-integrated authenticated session and adds no sign-in path, token extraction, credential entry, or authentication retry.
-- **Subscription entitlement:** Phase 01's native entitlement verifier and `SessionCoordinator` remain the entry gate. Phase 02 still rechecks current authorization at tune/resource resolution because a catalog cache is never authority.
+- **Authentication and entitlement:** Phase 01's runtime-owned native transaction remains the sole authority. Phase 02 adds no sign-in path, token extraction, credential entry, or authentication retry.
+- **Direct native operations:** Catalog, tune, metadata, key, enforcement, and live-activity work use fixed authenticated JSON operations. The official-player DOM interaction was research-only and is not product architecture.
 
 ## Capability decision matrix
 
-| Capability | Decision | Reason |
-|---|---|---|
-| Catalog refresh and entity filtering | SUPPORTED | The fixed current catalog route admitted a sanitized entitled `channel-linear` selection; no raw schema, field path, or account data was retained. |
-| Catalog freshness and last-valid browse snapshot | INTEGRATE | Provider-independent. Preserve a last valid snapshot with explicit fresh/stale state; refresh failure remains visible and cached presence cannot authorize tuning. |
-| Tune authorization | UNSUPPORTED | The one exact selected-channel tune request stopped at `human-verification-required`; no retry or bypass was attempted. |
-| Stream/manifest/resource resolution | UNSUPPORTED | Not reached after the tune control stop; no resource request or resource location was retained. |
-| Required media-key authorization | UNSUPPORTED | Not reached after the tune control stop; no key request or key requirement was observed. |
-| AVFoundation compatibility for one authorized live resource | UNSUPPORTED | Not reached after the tune control stop; AVFoundation was not exercised. |
-| Current program/song metadata text | UNSUPPORTED | Not reached after the tune control stop; metadata was not exercised. |
-| Channel/program artwork | UNSUPPORTED | Not reached after the tune control stop; artwork was not exercised. |
-| Stream re-resolution during bounded recovery | UNSUPPORTED | Not reached after the tune control stop; recovery was not exercised. |
-| Closed semantic diagnostics for catalog/resolution/metadata/playback | INTEGRATE | Provider-independent. Extend allow-listed operation/outcome enums only; raw provider and AVFoundation error material is never diagnostic data. |
-| Xtra entities as v1 channels | OPT-OUT | D-01 and CAT-01 restrict the Phase 02 lineup to entitled standard and app-only `channel-linear` entries; ambiguous/Xtra entities are excluded. |
-| Replay/time-shift programs | OPT-OUT | D-04 defines live-edge radio semantics and the project scopes replayable programs out of v1. |
-| On-demand shows or episodes | OPT-OUT | The project is intentionally live-channel-only for v1. |
-| Recording or offline download | OPT-OUT | The project explicitly excludes recording/download and must not retain media resources. |
-| SiriusXM-wide search | OPT-OUT | v1 discovery is predictable channel-number/category browsing; SiriusXM-wide search is out of scope. |
-| Arbitrary provider request builder | OPT-OUT | Volatile operations remain individually named behind exact host/method/response contracts; a generic request surface would defeat containment and host authorization. |
-| Alternate playback engine | OPT-OUT | AVFoundation is the required first validation target. A fallback engine is not selected in this phase; unsupported protected behavior stops safely. |
+| Capability | Decision | Evidence boundary / next owner |
+| --- | --- | --- |
+| Catalog refresh and entitled linear filtering | SUPPORTED | Provider API gateway JSON supports authorized linear-channel semantic data; Plan 02-04 owns the typed snapshot and UI. |
+| Catalog freshness and last-valid browse snapshot | INTEGRATE | Provider-independent; cached presence remains browse-only and cannot authorize tuning. |
+| Tune authorization | SUPPORTED | Fixed authorized tune role returns a structured live-stream result; Plan 02-03 owns strict decoding. |
+| Stream/manifest/resource resolution | SUPPORTED | Standard HLS playlist and AAC media delivery is supported through the provider media-delivery host class. |
+| Required playback-key authorization | SUPPORTED | A fixed JSON key-authorization role returns the required opaque two-string shape; Plan 02-03 owns the memory-only handoff. |
+| AVFoundation compatibility for one authorized live resource | NOT OBSERVED | Plan 02-05 must prove native `AVPlayer` loading and control behavior. |
+| Current program/song metadata text | SUPPORTED | Current metadata is available in tune and current-channel semantic shapes; Plan 02-07 owns independent refresh and presentation. |
+| Channel/program artwork | SUPPORTED | Provider metadata supports artwork availability; Plan 02-07 owns precedence and stale/unavailable UI. |
+| Stream re-resolution during bounded recovery | NOT OBSERVED | Plan 02-06 must add and test bounded recovery after one native playback path is proven. |
+| Stream enforcement status | SUPPORTED | Provider API gateway JSON supports a fixed enforcement-status role. |
+| Live activity update | SUPPORTED | Provider API gateway JSON supports bounded channel/time-window activity updates; cadence remains policy, not a captured contract. |
+| Closed semantic diagnostics | INTEGRATE | Only allow-listed operation/outcome enums; no raw provider or AVFoundation error material. |
+| Xtra entities as v1 channels | OPT-OUT | D-01 restricts v1 to entitled standard and app-only `channel-linear` entries. |
+| Replay/time-shift, on-demand, recording, download, or provider-wide search | OPT-OUT | Outside the Phase 02 live-radio product boundary. |
+| Arbitrary provider request builder or alternate playback engine | OPT-OUT | Individually named fixed operations and AVFoundation remain the only supported architecture. |
 
-## Live checkpoint refinement contract
+## Contract and safety rules
 
-Plan 02-02 confirmed the current catalog semantic route and consumed exactly one selected-channel tune run. The `human-verification-required` stop occurred before resource handoff, so `02-LIVE-CONTRACT.md` is the canonical sanitized unsupported artifact and records no provider control detail or media location. A supported run could retain only the following evidence in that artifact, this file, and the plan summary:
+Only semantic roles, host classes, formats, closed result classes, and invented type/cardinality descriptions may appear in planning artifacts and fixtures. Do not retain or introduce raw traffic, credentials, session material, identifiers, bodies, media locations, key material, header values, browser storage, or free-form errors. Unknown redirects/hosts, protected controls, rate limits, authorization loss, malformed contracts, and DRM ambiguity remain terminal closed outcomes.
 
-- whether each pending capability is `SUPPORTED`, `NOT REQUIRED`, or `UNSUPPORTED`;
-- closed failure-domain and protection/control classifications;
-- invented/sanitized field names and type/cardinality shapes sufficient to write deterministic fixtures;
-- fixed request method, authorized-host-policy identifier, and path template facts strictly required to create individually named operations after a supported gate;
-- whether one authorized resource became audibly playable through AVFoundation and whether pause/resume/stop matched live-edge semantics.
-
-The checkpoint must not retain raw requests/responses, arbitrary or unapproved destinations, tokens, cookies, authorization headers, stream/manifest/key locations or values, HAR/browser storage, account identifiers, AVFoundation access/error logs, or secret-bearing errors. A new-login requirement, unknown redirects, CAPTCHA/MFA/control challenges, `403`, `429`, rate-limit/bot signals, DRM/access-control ambiguity, or any need for spoofing/bypass immediately produce `UNSUPPORTED`, write `Execution: HALT`, and end the probe without a follow-up request. No downstream provider-dependent plan may execute unless `02-LIVE-CONTRACT.md` says `Gate Result: SUPPORTED`.
+Plan 02-03 may implement the fixed opaque handoff and fixture contract. It must not claim AVFoundation success, add runtime DOM behavior, or broaden provider operations.
