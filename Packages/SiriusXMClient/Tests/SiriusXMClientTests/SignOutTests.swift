@@ -133,6 +133,38 @@ struct SignOutTests {
         #expect(await cleaner.callCount == 1)
     }
 
+    @Test("explicit sign-out supersedes a blocked current-session revalidation")
+    func signOutSupersedesBlockedRevalidationWithoutRestoringState() async {
+        let entitlement = BlockingCurrentEntitlementVerifier()
+        let store = TrackingCredentialStore()
+        let coordinator = SessionCoordinator(
+            credentialSource: StaticCredentialSource(),
+            authenticationVerifier: StaticAuthenticationVerifier(),
+            entitlementVerifier: entitlement,
+            credentialStore: store,
+            residueCleaner: TrackingResidueCleaner(),
+            clock: FixedSessionClock(),
+            diagnostics: NoopDiagnostics()
+        )
+        #expect(await coordinator.attemptSession() == .active)
+
+        let revalidation = Task {
+            await coordinator.withCurrentEntitledCredential { _ in "late work" }
+        }
+        await entitlement.waitUntilRevalidationStarted()
+
+        #expect(await coordinator.signOut() == .signedOut)
+        await entitlement.finishRevalidation(with: nativeResponse(SanitizedNativeResponseFixtures.subscriptionV1Active))
+
+        guard case let .failed(failure) = await revalidation.value else {
+            Issue.record("Expected the retired operation to be superseded")
+            return
+        }
+        #expect(failure == .superseded)
+        #expect(await coordinator.snapshot == .signedOut)
+        #expect(await store.eraseCount == 1)
+    }
+
     private func makeActiveCoordinator(
         credentialStore: any CredentialStore = TrackingCredentialStore(),
         residueCleaner: any AuthenticationResidueCleaner = TrackingResidueCleaner()
@@ -164,6 +196,34 @@ private actor StaticAuthenticationVerifier: NativeAuthenticationVerifying {
 private actor StaticEntitlementVerifier: NativeEntitlementVerifying {
     func verifyEntitlement(using _: AuthenticationCredential) async -> NativeTransportResponse {
         nativeResponse(SanitizedNativeResponseFixtures.subscriptionV1Active)
+    }
+}
+
+private actor BlockingCurrentEntitlementVerifier: NativeEntitlementVerifying {
+    private var callCount = 0
+    private var started = false
+    private var startWaiter: CheckedContinuation<Void, Never>?
+    private var responseWaiter: CheckedContinuation<NativeTransportResponse, Never>?
+
+    func verifyEntitlement(using _: AuthenticationCredential) async -> NativeTransportResponse {
+        callCount += 1
+        guard callCount > 1 else {
+            return nativeResponse(SanitizedNativeResponseFixtures.subscriptionV1Active)
+        }
+        started = true
+        startWaiter?.resume()
+        startWaiter = nil
+        return await withCheckedContinuation { responseWaiter = $0 }
+    }
+
+    func waitUntilRevalidationStarted() async {
+        if started { return }
+        await withCheckedContinuation { startWaiter = $0 }
+    }
+
+    func finishRevalidation(with response: NativeTransportResponse) {
+        responseWaiter?.resume(returning: response)
+        responseWaiter = nil
     }
 }
 

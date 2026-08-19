@@ -120,6 +120,56 @@ struct SessionCoordinatorTests {
         #expect(await diagnostics.events == [.authentication(.payloadEmpty)])
     }
 
+    @Test("ordinary current-session revalidation failures preserve the active credential")
+    func preservesActiveSessionAcrossClosedOperationFailures() async {
+        let failures: [(NativeTransportResponse, LiveStreamResolutionFailure)] = [
+            (NativeTransportResponse(statusCode: 400, contentType: "application/json", body: Data()), .entitlementUnavailable),
+            (NativeTransportResponse(statusCode: 429, contentType: "application/json", body: Data()), .protectedControl),
+            (NativeTransportResponse(statusCode: 200, contentType: "application/json", body: Data(#"{"challenge":"control"}"#.utf8)), .protectedControl),
+            (NativeTransportResponse(statusCode: 200, contentType: "application/json", body: Data(), redirectLocation: "fixture-redirect"), .protectedControl),
+            (NativeTransportResponse(statusCode: 200, contentType: "application/json", body: Data(), transportFailure: .other), .networkUnavailable),
+            (NativeTransportResponse(statusCode: 200, contentType: "application/json", body: Data("not-json".utf8)), .entitlementUnavailable),
+        ]
+
+        for (failureResponse, expectedFailure) in failures {
+            let source = RecordingCredentialSource()
+            let entitlement = SequencedEntitlementVerifier([
+                response(body: SanitizedNativeResponseFixtures.subscriptionV1Active),
+                failureResponse,
+                response(body: SanitizedNativeResponseFixtures.subscriptionV1Active),
+            ])
+            let store = RecordingCredentialStore()
+            let coordinator = SessionCoordinator(
+                credentialSource: source,
+                authenticationVerifier: RecordingAuthenticationVerifier(response: response(body: SanitizedNativeResponseFixtures.profileV4Authenticated)),
+                entitlementVerifier: entitlement,
+                credentialStore: store,
+                clock: FixedSessionClock(),
+                diagnostics: RecordingDiagnostics()
+            )
+
+            #expect(await coordinator.attemptSession() == .active)
+            let activeSnapshot = await coordinator.snapshot
+
+            let failed = await coordinator.withCurrentEntitledCredential { _ in "unexpected" }
+            guard case let .failed(actualFailure) = failed else {
+                Issue.record("Expected a closed operation failure")
+                continue
+            }
+            #expect(actualFailure == expectedFailure)
+            #expect(await coordinator.snapshot == activeSnapshot)
+
+            let reused = await coordinator.withCurrentEntitledCredential { _ in "reused" }
+            guard case let .completed(value) = reused else {
+                Issue.record("Expected the preserved active session to support a later operation")
+                continue
+            }
+            #expect(value == "reused")
+            #expect(await source.requestCount == 1)
+            #expect(await store.eraseCount == 0)
+        }
+    }
+
     private func response(body: Data) -> NativeTransportResponse {
         return NativeTransportResponse(statusCode: 200, contentType: "application/json", body: body)
     }
@@ -176,6 +226,18 @@ private actor RecordingEntitlementVerifier: NativeEntitlementVerifying {
     }
 }
 
+private actor SequencedEntitlementVerifier: NativeEntitlementVerifying {
+    private var responses: [NativeTransportResponse]
+
+    init(_ responses: [NativeTransportResponse]) {
+        self.responses = responses
+    }
+
+    func verifyEntitlement(using _: AuthenticationCredential) async -> NativeTransportResponse {
+        responses.removeFirst()
+    }
+}
+
 private actor BlockingAuthenticationVerifier: NativeAuthenticationVerifying {
     private var startWaiter: CheckedContinuation<Void, Never>?
     private var responseWaiter: CheckedContinuation<NativeTransportResponse, Never>?
@@ -224,9 +286,10 @@ private actor BlockingEntitlementVerifier: NativeEntitlementVerifying {
 
 private actor RecordingCredentialStore: CredentialStore {
     private(set) var saveCount = 0
+    private(set) var eraseCount = 0
 
     func save(_: AuthenticationCredential) async throws { saveCount += 1 }
-    func erase() async throws {}
+    func erase() async throws { eraseCount += 1 }
 }
 
 private struct FixedSessionClock: SessionClock {
