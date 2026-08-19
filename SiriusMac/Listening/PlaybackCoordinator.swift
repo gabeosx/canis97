@@ -1,5 +1,7 @@
 import AVFoundation
+import AppKit
 import Foundation
+import Network
 import Observation
 @_spi(Playback) import SiriusXMClient
 
@@ -90,6 +92,73 @@ enum PlaybackRecoverySignal: Sendable, Equatable {
     case entitlementLost
     case protectedControl
     case unsupported
+}
+
+@MainActor
+protocol NetworkPathObserving: AnyObject, Sendable {
+    func start(_ onAvailabilityChange: @escaping @MainActor @Sendable (Bool) -> Void)
+    func cancel()
+}
+
+@MainActor
+protocol WorkspacePowerObserving: AnyObject, Sendable {
+    func start(
+        onWillSleep: @escaping @MainActor @Sendable () -> Void,
+        onDidWake: @escaping @MainActor @Sendable () -> Void
+    )
+    func cancel()
+}
+
+/// The monitor provides only availability eligibility. Its callback cannot
+/// resolve a channel or manipulate an AVPlayer.
+@MainActor
+private final class SystemNetworkPathObserver: NetworkPathObserving {
+    private let monitor = NWPathMonitor()
+    private let queue = DispatchQueue(label: "com.siriusmac.playback.recovery-path")
+    private var started = false
+
+    func start(_ onAvailabilityChange: @escaping @MainActor @Sendable (Bool) -> Void) {
+        guard !started else { return }
+        started = true
+        monitor.pathUpdateHandler = { path in
+            let available = path.status == .satisfied
+            Task { @MainActor in onAvailabilityChange(available) }
+        }
+        monitor.start(queue: queue)
+    }
+
+    func cancel() {
+        monitor.cancel()
+    }
+}
+
+/// Workspace power notifications are reduced to lifecycle eligibility signals;
+/// they have no direct access to the provider resolver or active item.
+@MainActor
+private final class SystemWorkspacePowerObserver: WorkspacePowerObserving {
+    private var tokens: [NSObjectProtocol] = []
+
+    func start(
+        onWillSleep: @escaping @MainActor @Sendable () -> Void,
+        onDidWake: @escaping @MainActor @Sendable () -> Void
+    ) {
+        guard tokens.isEmpty else { return }
+        let center = NSWorkspace.shared.notificationCenter
+        tokens = [
+            center.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { _ in
+                Task { @MainActor in onWillSleep() }
+            },
+            center.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { _ in
+                Task { @MainActor in onDidWake() }
+            },
+        ]
+    }
+
+    func cancel() {
+        let center = NSWorkspace.shared.notificationCenter
+        tokens.forEach(center.removeObserver)
+        tokens.removeAll()
+    }
 }
 
 private struct SystemPlaybackRecoverySleeper: PlaybackRecoverySleeping {
@@ -275,6 +344,8 @@ final class PlaybackCoordinator {
     private let runtime: any PlaybackPlayerRuntime
     private let recoveryPolicy: PlaybackRecoveryPolicy
     private let sleeper: any PlaybackRecoverySleeping
+    private let networkObserver: any NetworkPathObserving
+    private let workspaceObserver: any WorkspacePowerObserving
     private var generation = 0
     private var resolutionTask: Task<PlaybackResourceResolution, Never>?
     private var recoveryTask: Task<Void, Never>?
@@ -291,12 +362,34 @@ final class PlaybackCoordinator {
         resolver: any PlaybackResolving,
         runtime: any PlaybackPlayerRuntime = AVFoundationPlaybackRuntime(),
         recoveryPolicy: PlaybackRecoveryPolicy = PlaybackRecoveryPolicy(),
-        sleeper: any PlaybackRecoverySleeping = SystemPlaybackRecoverySleeper()
+        sleeper: any PlaybackRecoverySleeping = SystemPlaybackRecoverySleeper(),
+        networkObserver: (any NetworkPathObserving)? = nil,
+        workspaceObserver: (any WorkspacePowerObserving)? = nil
     ) {
         self.resolver = resolver
         self.runtime = runtime
         self.recoveryPolicy = recoveryPolicy
         self.sleeper = sleeper
+        let networkObserver = networkObserver ?? SystemNetworkPathObserver()
+        let workspaceObserver = workspaceObserver ?? SystemWorkspacePowerObserver()
+        self.networkObserver = networkObserver
+        self.workspaceObserver = workspaceObserver
+        networkObserver.start { [weak self] available in
+            self?.handleRecoverySignal(available ? .networkBecameAvailable : .networkBecameUnavailable)
+        }
+        workspaceObserver.start(
+            onWillSleep: { [weak self] in self?.handleRecoverySignal(.willSleep) },
+            onDidWake: { [weak self] in self?.handleRecoverySignal(.didWake) }
+        )
+    }
+
+    deinit {
+        let networkObserver = networkObserver
+        let workspaceObserver = workspaceObserver
+        Task { @MainActor in
+            networkObserver.cancel()
+            workspaceObserver.cancel()
+        }
     }
 
     func tune(_ channelID: LiveChannelID) async {
