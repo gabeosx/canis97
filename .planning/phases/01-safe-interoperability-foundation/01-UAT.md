@@ -3,22 +3,19 @@ status: partial
 phase: 01-safe-interoperability-foundation
 source: ["01-01-SUMMARY.md", "01-02-SUMMARY.md", "01-03-SUMMARY.md", "01-04-SUMMARY.md", "01-05-SUMMARY.md", "01-06-SUMMARY.md", "01-07-SUMMARY.md", "01-08-SUMMARY.md", "01-09-SUMMARY.md", "01-10-SUMMARY.md", "01-11-SUMMARY.md", "01-12-SUMMARY.md", "01-13-SUMMARY.md", "01-14-SUMMARY.md", "01-15-SUMMARY.md", "01-16-SUMMARY.md"]
 started: 2026-08-18T22:58:14Z
-updated: 2026-08-19T01:45:29Z
+updated: 2026-08-19T01:50:00Z
 ---
 
 ## Current Test
 
-number: 10
-name: Keychain-Backed Session Restore
+number: 17
+name: Native Authentication State Flow
 expected: |
-  Go/no-go: YES, but another login is optional rather than required for diagnosis. A live probe against the retained signed-in session proved the stale entitlement endpoint and current response schema; the rebuilt app contains that exact repair.
-  Make exactly one live sign-in attempt with the complete privacy-safe trace:
-  1. In Terminal, run `cd /Users/gabe/sirius-mac` and then `./script/build_and_run.sh --telemetry`.
-  2. Wait for Sirius Mac to open and for Terminal to show the telemetry filter. Click Sign In once and complete the embedded SiriusXM login. Stop immediately if SiriusXM shows CAPTCHA, rate limiting, a bot warning, or any account-security warning.
-  3. When the embedded site visibly shows you are signed in, click Use Logged-In Session exactly once. Do not click Retry Sign In or Clear Local Session.
-  4. Wait for one final native screen, then press Control-C in Terminal to stop log streaming.
-  5. Send the exact final title/message and every Terminal line from `web-sign-in-started` through the last `SiriusXM client event` or bridge event. If a new upstream mismatch occurs, leave the app open: its Debug WebView is already available under Safari > Develop > SiriusMac > www.siriusxm.com, so the current request can be inspected without another login.
-  Pass if the trace reaches `credential-transferred`, `native-authentication:completed`, and `entitlement:completed`, and the app shows Ready to listen. If it stops, the final fixed label identifies the transport, content, status-family, JSON-shape, or entitlement-shape boundary from this same attempt.
+  No additional login is needed. Look at the Sirius Mac window from the successful attempt you just completed:
+  1. Confirm the progress indicator has stopped.
+  2. Confirm the final heading says “Ready to listen.”
+  3. Confirm the sign-in controls are no longer offered and the app has not automatically restarted sign-in.
+  Pass if all three are true. Otherwise, report the exact heading, message, buttons, and whether a spinner is still visible.
 awaiting: user response
 
 ## Tests
@@ -96,11 +93,8 @@ expected: |
   4. Wait for one final native screen, then press Control-C in Terminal to stop log streaming.
   5. Send the exact final title/message and every Terminal line from `web-sign-in-started` through the last `SiriusXM client event` or bridge event. The app never logs cookie values, tokens, URLs, bodies, headers, or error text.
   Pass if the trace reaches `credential-transferred`, `native-authentication:completed`, and `entitlement:completed`, and the app shows Ready to listen. If it stops, the final fixed label identifies the transport, content, status-family, JSON-shape, or entitlement-shape boundary from this same attempt.
-result: issue
-reported: "I signed in, then clicked \"use logged-in session\" and it gave me: \"Sign-in flow unsupported. This sign-in flow is unsupported. No workaround was attempted.\""
-severity: blocker
-diagnosis: "The third live trace proves the repaired cookie handoff and profile authentication succeed. The entitlement request then calls /subscription/v1/status, which a direct probe proves is an unconfigured 404. The current signed-in player calls /subscription/v1/subscriptions and returns {items:[...]}, with active and finished state values."
-fix_ready: "The rebuilt app uses the live /subscription/v1/subscriptions route, classifies the observed items[].state shape, reports exact 404 failures as http-not-found, and exposes its Debug WebView to Safari's Web Inspector. All 35 package tests, all 47 app tests, and the build-only command pass."
+result: pass
+verified: "The rebuilt live trace reached credential-transferred, native-authentication:completed, and entitlement:completed without retry or fallback."
 
 ### 11. Memory-First Local Session Cleanup
 expected: |
@@ -148,12 +142,11 @@ coverage_summary: 01-07-SUMMARY.md
 
 ### 17. Native Authentication State Flow
 expected: |
-  How to test from the “Signed out” screen you have now:
-  1. Click Retry Sign In once.
-  2. Complete the embedded website sign-in if needed, then click Use Logged-In Session once.
-  3. While the progress indicator is visible, try clicking an action a second time and watch the native heading.
-  4. Wait for the final screen; do not click Retry again.
-  Pass this presentation-state check if the app moves through one state at a time, prevents a second overlapping action, and stops on one clearly worded final state with no automatic retry. The already-observed “Sign-in flow unsupported” result still fails Test 10; here it is acceptable only as evidence that the terminal state is presented safely. Report any overlapping action, automatic retry, or unclear final screen.
+  No additional login is needed. Look at the Sirius Mac window from the successful attempt you just completed:
+  1. Confirm the progress indicator has stopped.
+  2. Confirm the final heading says “Ready to listen.”
+  3. Confirm the sign-in controls are no longer offered and the app has not automatically restarted sign-in.
+  Pass if all three are true. Otherwise, report the exact heading, message, buttons, and whether a spinner is still visible.
 result: [pending]
 
 ### 18. Phase 0 authentication-review findings are enforced by deterministic native and package regressions.
@@ -320,8 +313,8 @@ coverage_summary: 01-16-SUMMARY.md
 ## Summary
 
 total: 40
-passed: 38
-issues: 1
+passed: 39
+issues: 0
 pending: 1
 skipped: 0
 blocked: 0
@@ -330,7 +323,7 @@ blocked: 0
 
 - gap_id: G-01-10
   truth: "A user can transfer the embedded SiriusXM login into native authentication, reach entitlement, and later restore the stored session."
-  status: failed
+  status: resolved
   reason: "User reported the unsupported result. Instrumented evidence showed AUTH_TOKEN was present but rejected solely because WebKit reports isSecure false, before any native request. The diagnosed regression was the Secure-attribute gate plus the earlier apex/www-only selector replacing the complete previously proven predicate."
   severity: blocker
   test: 10
@@ -339,3 +332,5 @@ blocked: 0
     - SiriusMac/Authentication/WebAuthenticationBridge.swift
     - SiriusMacTests/WebAuthenticationBridgeTests.swift
   missing: []
+  resolved_by: 73cfcb3
+  resolved_at: 2026-08-18
