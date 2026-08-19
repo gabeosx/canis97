@@ -311,22 +311,19 @@ monitor.start(queue: monitorQueue)
 
 ## Open Questions
 
-**Resolution routing (planning revision 1):** These questions remain `OPEN — LIVE GATE REQUIRED` at planning time. Plan 02-02 is the first Phase 02 work allowed to observe live provider behavior and will create the canonical sanitized `.planning/phases/02-authorized-live-listening/02-LIVE-CONTRACT.md`. Plan 02-03 may mark a question resolved and add fixed provider code only when that artifact says `Gate Result: SUPPORTED`; an unsupported, ambiguous, protected, or incomplete result records `Execution: HALT` and leaves provider-dependent plans blocked. No raw live evidence belongs in this research file or the canonical artifact.
+**Resolution routing (checkpoint result):** Plan 02-02 consumed its single authorized existing-session run and stopped at `new-login-required` before any content operation. The canonical sanitized [02-LIVE-CONTRACT.md](./02-LIVE-CONTRACT.md) says `Gate Result: UNSUPPORTED` and `Execution: HALT`. Plan 02-03 may not add fixed provider code; provider-dependent plans remain blocked. No raw live evidence belongs in this research file or the canonical artifact.
 
-1. **[OPEN — LIVE GATE REQUIRED] What are the current fixed catalog, tune, stream, metadata, artwork, and key-authorization contracts?**
-   - What we know: Historical owner-authorized evidence records native account/tune/manifest/playback-key feasibility, while the exact raw capture was intentionally deleted. [VERIFIED: .planning/phases/00-authentication-feasibility-gate/.continue-here.md:32-48]
-   - What's unclear: Current paths, payload field types, provider outcome mapping, service hosts, expiry semantics, and metadata cadence.
-   - Recommendation: Make this the tracer’s first owner-visible `checkpoint:human-verify`. Reuse the authenticated app session, make the smallest read-only/minimally stateful request sequence, record only semantic shape/outcome information, and stop immediately on protected-control signals. [VERIFIED: .planning/phases/00-authentication-feasibility-gate/.continue-here.md:86-107]
+1. **[RESOLVED — UNSUPPORTED / NOT REACHED] What are the current fixed catalog, tune, stream, metadata, artwork, and key-authorization contracts?**
+   - Result: Not reached. The existing-session precondition stopped at `new-login-required` before catalog observation, tune, resource resolution, metadata, artwork, or key authorization.
+   - Canonical record: [02-LIVE-CONTRACT.md](./02-LIVE-CONTRACT.md) — `Gate Result: UNSUPPORTED`, `Execution: HALT`.
 
-2. **[OPEN — LIVE GATE REQUIRED] Can AVFoundation obtain and play the authorized stream without a prohibited custom authorization mechanism?**
-   - What we know: Apple supports HLS in `AVPlayer`; historical notes separately flag AES-128 HLS key authorization as unresolved. [CITED: https://developer.apple.com/documentation/avfoundation/avplayer] [VERIFIED: .planning/phases/00-authentication-feasibility-gate/.continue-here.md:58-60]
-   - What's unclear: Whether the discovered resource’s authorization can be passed to AVFoundation safely and whether it resumes at the desired live edge.
-   - Recommendation: Play one owner-visible authorized item, then immediately stop/clear it. Do not promise or build a fallback media engine without this result. [VERIFIED: AGENTS.md]
+2. **[RESOLVED — UNSUPPORTED / NOT REACHED] Can AVFoundation obtain and play the authorized stream without a prohibited custom authorization mechanism?**
+   - Result: Not reached. No authorized resource reached AVFoundation; audible, pause, resume, stop, and live-edge behavior were not exercised.
+   - Canonical record: [02-LIVE-CONTRACT.md](./02-LIVE-CONTRACT.md) — `Gate Result: UNSUPPORTED`, `Execution: HALT`.
 
-3. **[OPEN — LIVE GATE REQUIRED] Which public API safely hands a resolved resource to an app playback layer?**
-   - What we know: The library’s public surface must stay semantic while token/resource material stays ephemeral. [VERIFIED: .planning/REQUIREMENTS.md:18-20; VERIFIED: .planning/REQUIREMENTS.md:24-27]
-   - What's unclear: Whether a public opaque resource, an app-integration SPI closure, or an Apple-platform playback-session protocol is the smallest safe contract.
-   - Recommendation: Decide after the live-resource mechanism is known; keep URL/header/key material out of ordinary model descriptions, persistence, and diagnostics. [ASSUMED]
+3. **[RESOLVED — UNSUPPORTED / NOT REACHED] Which public API safely hands a resolved resource to an app playback layer?**
+   - Result: Not reached. No resolved resource or authorization mechanism was observed, so no playback handoff API is selected or inferred.
+   - Canonical record: [02-LIVE-CONTRACT.md](./02-LIVE-CONTRACT.md) — `Gate Result: UNSUPPORTED`, `Execution: HALT`.
 
 ## Environment Availability
 
