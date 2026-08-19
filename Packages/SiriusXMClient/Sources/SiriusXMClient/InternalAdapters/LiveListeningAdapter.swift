@@ -1,5 +1,27 @@
 import AVFoundation
 import Foundation
+
+/// A one-request redirect observer. It deliberately stores only a boolean,
+/// never the redirect target or request, and cancels every redirect follow-up.
+final class PerRequestRedirectDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    private let lock = NSLock()
+    private var redirectObserved = false
+
+    var didObserveRedirect: Bool {
+        lock.withLock { redirectObserved }
+    }
+
+    func urlSession(
+        _: URLSession,
+        task _: URLSessionTask,
+        willPerformHTTPRedirection _: HTTPURLResponse,
+        newRequest _: URLRequest,
+        completionHandler: @escaping @Sendable (URLRequest?) -> Void
+    ) {
+        lock.withLock { redirectObserved = true }
+        completionHandler(nil)
+    }
+}
 import ImageIO
 
 /// Strict, non-retaining compatibility classifiers for the Phase 02 contract.
@@ -179,22 +201,16 @@ enum FixedCatalogRequestFactory {
 
 /// Ephemeral production transport for one fixed catalog request. Redirects
 /// are cancelled and neither redirect targets nor transport errors escape.
-final class FixedCatalogURLSessionTransport: NSObject, FixedCatalogTransporting, @unchecked Sendable {
-    private let redirectLock = NSLock()
-    private var redirectObserved = false
-    private lazy var session = URLSession(
-        configuration: Self.makeConfiguration(),
-        delegate: self,
-        delegateQueue: nil
-    )
+final class FixedCatalogURLSessionTransport: FixedCatalogTransporting, @unchecked Sendable {
+    private lazy var session = URLSession(configuration: Self.makeConfiguration())
 
     func catalog(using credential: AuthenticationCredential) async -> NativeTransportResponse {
         guard let request = FixedCatalogRequestFactory.makeRequest(using: credential) else {
             return Self.failedResponse
         }
-        redirectLock.withLock { redirectObserved = false }
+        let redirectDelegate = PerRequestRedirectDelegate()
         do {
-            let (body, response) = try await session.data(for: request)
+            let (body, response) = try await session.data(for: request, delegate: redirectDelegate)
             guard let response = response as? HTTPURLResponse else { return Self.failedResponse }
             return NativeTransportResponse(
                 statusCode: response.statusCode,
@@ -203,7 +219,7 @@ final class FixedCatalogURLSessionTransport: NSObject, FixedCatalogTransporting,
                 redirectLocation: response.value(forHTTPHeaderField: "Location")
             )
         } catch {
-            let redirected = redirectLock.withLock { redirectObserved }
+            let redirected = redirectDelegate.didObserveRedirect
             return NativeTransportResponse(
                 statusCode: 0,
                 contentType: nil,
@@ -227,19 +243,6 @@ final class FixedCatalogURLSessionTransport: NSObject, FixedCatalogTransporting,
         configuration.timeoutIntervalForRequest = 15
         configuration.timeoutIntervalForResource = 15
         return configuration
-    }
-}
-
-extension FixedCatalogURLSessionTransport: URLSessionTaskDelegate {
-    func urlSession(
-        _: URLSession,
-        task _: URLSessionTask,
-        willPerformHTTPRedirection _: HTTPURLResponse,
-        newRequest _: URLRequest,
-        completionHandler: @escaping @Sendable (URLRequest?) -> Void
-    ) {
-        redirectLock.withLock { redirectObserved = true }
-        completionHandler(nil)
     }
 }
 
@@ -388,11 +391,9 @@ protocol FixedMetadataTransporting: Sendable {
     func artwork(for reference: ChannelArtworkReference) async -> NativeTransportResponse
 }
 
-final class FixedMetadataURLSessionTransport: NSObject, FixedMetadataTransporting, @unchecked Sendable {
-    private let redirectLock = NSLock()
-    private var redirectObserved = false
+final class FixedMetadataURLSessionTransport: FixedMetadataTransporting, @unchecked Sendable {
     private let clock = FixedLiveLogicalClock()
-    private lazy var session = URLSession(configuration: .ephemeral, delegate: self, delegateQueue: nil)
+    private lazy var session = URLSession(configuration: .ephemeral)
 
     func lookaround(using credential: AuthenticationCredential) async -> NativeTransportResponse {
         guard let url = URL(string: "https://lookaround-cache-prod.streaming.siriusxm.com/playbackservices/v1/live/lookAround?delta=") else { return Self.failed }
@@ -421,25 +422,18 @@ final class FixedMetadataURLSessionTransport: NSObject, FixedMetadataTransportin
     }
 
     private func send(_ request: URLRequest) async -> NativeTransportResponse {
-        redirectLock.withLock { redirectObserved = false }
+        let redirectDelegate = PerRequestRedirectDelegate()
         do {
-            let (body, response) = try await session.data(for: request)
+            let (body, response) = try await session.data(for: request, delegate: redirectDelegate)
             guard let response = response as? HTTPURLResponse else { return Self.failed }
             return NativeTransportResponse(statusCode: response.statusCode, contentType: response.value(forHTTPHeaderField: "Content-Type"), body: body, redirectLocation: response.value(forHTTPHeaderField: "Location"))
         } catch {
-            let redirected = redirectLock.withLock { redirectObserved }
+            let redirected = redirectDelegate.didObserveRedirect
             return NativeTransportResponse(statusCode: 0, contentType: nil, body: Data(), redirectLocation: redirected ? "blocked" : nil, transportFailure: redirected ? nil : SafeTransportFailure(error: error))
         }
     }
 
     private static let failed = NativeTransportResponse(statusCode: 0, contentType: nil, body: Data(), transportFailed: true)
-}
-
-extension FixedMetadataURLSessionTransport: URLSessionTaskDelegate {
-    func urlSession(_: URLSession, task _: URLSessionTask, willPerformHTTPRedirection _: HTTPURLResponse, newRequest _: URLRequest, completionHandler: @escaping @Sendable (URLRequest?) -> Void) {
-        redirectLock.withLock { redirectObserved = true }
-        completionHandler(nil)
-    }
 }
 
 actor CurrentSessionMetadataFetcher: LiveMetadataFetching {
@@ -709,14 +703,8 @@ private enum FixedLiveResponseDecoder {
 
 /// Direct, ephemeral transport for the two fixed provider operations. Each
 /// request is individually constructed and every redirect is cancelled.
-final class FixedLiveURLSessionTransport: NSObject, FixedLiveTransporting, @unchecked Sendable {
-    private let redirectLock = NSLock()
-    private var redirectObserved = false
-    private lazy var session = URLSession(
-        configuration: Self.makeConfiguration(),
-        delegate: self,
-        delegateQueue: nil
-    )
+final class FixedLiveURLSessionTransport: FixedLiveTransporting, @unchecked Sendable {
+    private lazy var session = URLSession(configuration: Self.makeConfiguration())
 
     func tune(for channelID: LiveChannelID, using credential: AuthenticationCredential) async -> NativeTransportResponse {
         guard let request = FixedLiveRequestFactory.tune(for: channelID, using: credential) else {
@@ -733,9 +721,9 @@ final class FixedLiveURLSessionTransport: NSObject, FixedLiveTransporting, @unch
     }
 
     private func send(_ request: URLRequest) async -> NativeTransportResponse {
-        redirectLock.withLock { redirectObserved = false }
+        let redirectDelegate = PerRequestRedirectDelegate()
         do {
-            let (body, response) = try await session.data(for: request)
+            let (body, response) = try await session.data(for: request, delegate: redirectDelegate)
             guard let response = response as? HTTPURLResponse else { return Self.failedResponse }
             return NativeTransportResponse(
                 statusCode: response.statusCode,
@@ -744,7 +732,7 @@ final class FixedLiveURLSessionTransport: NSObject, FixedLiveTransporting, @unch
                 redirectLocation: response.value(forHTTPHeaderField: "Location")
             )
         } catch {
-            let redirected = redirectLock.withLock { redirectObserved }
+            let redirected = redirectDelegate.didObserveRedirect
             return NativeTransportResponse(
                 statusCode: 0,
                 contentType: nil,
@@ -768,19 +756,6 @@ final class FixedLiveURLSessionTransport: NSObject, FixedLiveTransporting, @unch
         configuration.timeoutIntervalForRequest = 15
         configuration.timeoutIntervalForResource = 15
         return configuration
-    }
-}
-
-extension FixedLiveURLSessionTransport: URLSessionTaskDelegate {
-    func urlSession(
-        _: URLSession,
-        task _: URLSessionTask,
-        willPerformHTTPRedirection _: HTTPURLResponse,
-        newRequest _: URLRequest,
-        completionHandler: @escaping @Sendable (URLRequest?) -> Void
-    ) {
-        redirectLock.withLock { redirectObserved = true }
-        completionHandler(nil)
     }
 }
 
