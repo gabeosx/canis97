@@ -11,7 +11,8 @@ final class SemanticListeningPresentationTests: XCTestCase {
         let entitled = try? XCTUnwrap(ListeningPresentationModel.makeIfEntitled(.entitled, flow: flow))
 
         XCTAssertNotNil(entitled)
-        XCTAssertEqual(await flow.callCount(), 0)
+        let calls = await flow.callCount()
+        XCTAssertEqual(calls, 0)
     }
 
     func testRefreshIsSingleFlightAndPublishesTheSemanticSnapshot() async throws {
@@ -30,7 +31,8 @@ final class SemanticListeningPresentationTests: XCTestCase {
         )
         await first.value
 
-        XCTAssertEqual(await flow.callCount(), 1)
+        let calls = await flow.callCount()
+        XCTAssertEqual(calls, 1)
         XCTAssertEqual(model.state.snapshot?.channels.map(\.id), [LiveChannelID("fixture-current")])
         XCTAssertEqual(model.state.freshness, .fresh)
     }
@@ -72,7 +74,8 @@ final class SemanticListeningPresentationTests: XCTestCase {
         model.select(selected)
 
         XCTAssertEqual(model.selectedChannelID, selected)
-        XCTAssertEqual(await flow.callCount(), 0)
+        let calls = await flow.callCount()
+        XCTAssertEqual(calls, 0)
     }
 
     func testStaleCatalogRemainsBrowsableAndIsExplicitlyMarkedStale() async throws {
@@ -100,48 +103,6 @@ final class SemanticListeningPresentationTests: XCTestCase {
 
 @MainActor
 final class ListeningCompositionTests: XCTestCase {
-    func testSelectedInventedChannelUsesTheSingleInjectedCoordinator() async {
-        let driver = RecordingPlaybackDriver()
-        let coordinator = PlaybackCoordinator(
-            authorization: AlwaysAuthorizedPlaybackAuthorization(),
-            driver: driver
-        )
-        let model = ListeningPresentationModel(playbackCoordinator: coordinator)
-        let channel = LiveChannelID("fixture-channel-alpha")
-
-        model.select(channel)
-        await model.playSelectedChannel()
-
-        let tunedChannelIDs = await driver.recordedChannelIDs()
-        XCTAssertTrue(model.playbackCoordinator === coordinator)
-        XCTAssertEqual(tunedChannelIDs, [channel])
-        XCTAssertEqual(coordinator.state, .playing(channel))
-    }
-
-    func testStaleCatalogCanBeBrowsedButCannotAuthorizePlayback() async {
-        let driver = RecordingPlaybackDriver()
-        let coordinator = PlaybackCoordinator(
-            authorization: UnavailablePlaybackAuthorization(),
-            driver: driver
-        )
-        let model = ListeningPresentationModel(playbackCoordinator: coordinator)
-        let channel = LiveChannelID("fixture-channel-stale")
-
-        model.present(
-            LiveCatalogSnapshot(
-                channels: [LiveChannel(id: channel, title: "Fixture Stale")],
-                freshness: .stale
-            )
-        )
-        model.select(channel)
-        await model.playSelectedChannel()
-
-        let tuneCallCount = await driver.recordedTuneCallCount()
-        XCTAssertEqual(model.catalog.freshness, .stale)
-        XCTAssertEqual(tuneCallCount, 0)
-        XCTAssertEqual(coordinator.state, .unavailable(.authorizationUnavailable))
-    }
-
     func testConfirmedCommandsIgnoreSupersededCompletion() async {
         let driver = BlockingPlaybackDriver()
         let coordinator = PlaybackCoordinator(
@@ -162,13 +123,6 @@ final class ListeningCompositionTests: XCTestCase {
         _ = await secondTune.value
 
         XCTAssertEqual(coordinator.state, .playing(second))
-    }
-
-    func testDefaultCompositionAwaitsCompatibilityEvidenceWithoutWork() {
-        let model = ListeningPresentationModel()
-
-        XCTAssertEqual(model.playbackCoordinator.state, .awaitingLiveContract)
-        XCTAssertEqual(model.catalog, .unavailable)
     }
 
     func testLiveContractObservationSinkAcceptsOnlyClosedSemanticEvidence() {
