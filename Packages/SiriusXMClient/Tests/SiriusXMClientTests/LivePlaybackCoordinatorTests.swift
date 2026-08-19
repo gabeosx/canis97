@@ -1,3 +1,4 @@
+import AVFoundation
 import Testing
 @testable import SiriusXMClient
 
@@ -94,6 +95,125 @@ struct LivePlaybackCoordinatorTests {
         #expect(await recovery.value == .unavailable(.cancelled))
         #expect(await resolver.callCount == 2)
     }
+
+    @Test("fixed live resolution executes only tune, resource, and the required key step")
+    func fixedResolutionHasExactOperationCeilings() async {
+        let operations = RecordingFixedLiveOperations(keyRequirement: .required)
+        let resolver = FixedLiveStreamResolver(operations: operations)
+
+        let result = await resolver.resolveLiveStream(for: LiveChannelID("fixture-fixed-contract"))
+
+        guard case .available = result else {
+            Issue.record("Expected one opaque app handoff")
+            return
+        }
+        #expect(await operations.tuneCount == 1)
+        #expect(await operations.resourceCount == 1)
+        #expect(await operations.keyCount == 1)
+    }
+
+    @Test("not-required key resolution never invokes the key operation")
+    func notRequiredKeySkipsTheKeyOperation() async {
+        let operations = RecordingFixedLiveOperations(keyRequirement: .notRequired)
+        let resolver = FixedLiveStreamResolver(operations: operations)
+
+        let result = await resolver.resolveLiveStream(for: LiveChannelID("fixture-no-key"))
+
+        guard case .available = result else {
+            Issue.record("Expected one opaque app handoff")
+            return
+        }
+        #expect(await operations.tuneCount == 1)
+        #expect(await operations.resourceCount == 1)
+        #expect(await operations.keyCount == 0)
+    }
+
+    @Test("invalidating a resolving generation prevents its opaque handoff from escaping")
+    func invalidationSupersedesAnInFlightResolution() async {
+        let operations = BlockingFixedLiveOperations()
+        let resolver = FixedLiveStreamResolver(operations: operations)
+
+        let resolution = Task {
+            await resolver.resolveLiveStream(for: LiveChannelID("fixture-invalidated"))
+        }
+        await operations.waitForTune()
+        await resolver.invalidate()
+        await operations.completeTune()
+
+        #expect(await resolution.value == .failed(.superseded))
+        #expect(await operations.resourceCount == 0)
+        #expect(await operations.keyCount == 0)
+    }
+}
+
+private enum FixtureKeyRequirement: Sendable {
+    case required
+    case notRequired
+}
+
+private actor RecordingFixedLiveOperations: FixedLiveStreamOperating {
+    let keyRequirement: FixtureKeyRequirement
+    private(set) var tuneCount = 0
+    private(set) var resourceCount = 0
+    private(set) var keyCount = 0
+
+    init(keyRequirement: FixtureKeyRequirement) {
+        self.keyRequirement = keyRequirement
+    }
+
+    func authorizeTune(for _: LiveChannelID) async -> FixedLiveTuneAuthorization {
+        tuneCount += 1
+        return .authorized
+    }
+
+    func resolveResource(for _: LiveChannelID) async -> FixedLiveResourceResolution {
+        resourceCount += 1
+        return .resolved(FixtureAppleMediaHandoff(), keyRequirement: keyRequirement == .required ? .required : .notRequired)
+    }
+
+    func authorizePlaybackKey() async -> LiveStreamResolutionFailure? {
+        keyCount += 1
+        return nil
+    }
+}
+
+private actor BlockingFixedLiveOperations: FixedLiveStreamOperating {
+    private var tuneContinuation: CheckedContinuation<FixedLiveTuneAuthorization, Never>?
+    private var tuneWaiter: CheckedContinuation<Void, Never>?
+    private var started = false
+    private(set) var resourceCount = 0
+    private(set) var keyCount = 0
+
+    func authorizeTune(for _: LiveChannelID) async -> FixedLiveTuneAuthorization {
+        started = true
+        tuneWaiter?.resume()
+        tuneWaiter = nil
+        return await withCheckedContinuation { tuneContinuation = $0 }
+    }
+
+    func resolveResource(for _: LiveChannelID) async -> FixedLiveResourceResolution {
+        resourceCount += 1
+        return .failed(.resourceUnavailable)
+    }
+
+    func authorizePlaybackKey() async -> LiveStreamResolutionFailure? {
+        keyCount += 1
+        return .unsupportedProtection
+    }
+
+    func waitForTune() async {
+        guard !started else { return }
+        await withCheckedContinuation { tuneWaiter = $0 }
+    }
+
+    func completeTune() {
+        tuneContinuation?.resume(returning: .authorized)
+        tuneContinuation = nil
+    }
+}
+
+private struct FixtureAppleMediaHandoff: SiriusXMAppleMediaHandoff {
+    @MainActor func makePlayerItem() -> AVPlayerItem? { nil }
 }
 
 private actor RecordingResolver: LivePlaybackResolving {
