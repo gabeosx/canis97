@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import ImageIO
 
 /// Strict, non-retaining compatibility classifiers for the Phase 02 contract.
 /// It intentionally exposes only a closed inspection result: opaque response
@@ -35,6 +36,63 @@ enum LiveListeningAdapter {
             return .unsupported(failure)
         }
         return .accepted
+    }
+
+    /// Decodes only the observed selected-channel lookaround shape. The first
+    /// cut is the sole admitted current program; shows are intentionally not a
+    /// replacement source.
+    static func decodeMetadata(
+        _ response: NativeTransportResponse,
+        channelID: LiveChannelID
+    ) -> MetadataAvailability {
+        guard preflightFailure(for: response) == nil,
+              let root = try? JSONSerialization.jsonObject(with: response.body) as? [String: Any],
+              root["channels"] is [String: Any],
+              root["delta"] is String,
+              let channels = root["channels"] as? [String: Any],
+              let channel = channels[channelID.rawValue] as? [String: Any],
+              let cuts = channel["cuts"] as? [[String: Any]]
+        else { return .failed(.unsupportedResponse) }
+        guard let first = cuts.first else { return .unavailable }
+        guard let title = first["name"] as? String, !title.isEmpty,
+              let validFrom = first["validFrom"] as? String,
+              ISO8601DateFormatter().date(from: validFrom) != nil
+        else { return .failed(.unsupportedResponse) }
+        let artist = first["artistName"] as? String
+        let artwork = artworkReference(from: first["image"])
+        return .current(MetadataSnapshot(channelID: channelID, program: LiveProgramMetadata(title: title, artist: artist, artwork: artwork)))
+    }
+
+    static func decodeArtwork(_ response: NativeTransportResponse) -> ArtworkAvailability {
+        guard response.transportFailure == nil,
+              response.redirectLocation == nil,
+              (200 ... 299).contains(response.statusCode),
+              response.body.count <= 5 * 1_024 * 1_024,
+              let contentType = response.contentType?.lowercased(),
+              let mediaType: ArtworkMediaType = contentType.hasPrefix("image/jpeg") ? .jpeg : contentType.hasPrefix("image/png") ? .png : nil,
+              let source = CGImageSourceCreateWithData(response.body as CFData, nil),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = properties[kCGImagePropertyPixelWidth] as? NSNumber,
+              let height = properties[kCGImagePropertyPixelHeight] as? NSNumber,
+              width.intValue > 0, height.intValue > 0,
+              width.intValue <= 4096, height.intValue <= 4096
+        else { return .unavailable }
+        return .current(ArtworkData(bytes: response.body, mediaType: mediaType))
+    }
+
+    private static func artworkReference(from value: Any?) -> ChannelArtworkReference? {
+        guard let image = value as? [String: Any],
+              let reference = image["url"] as? String,
+              reference.hasPrefix("/"),
+              !reference.contains(".."),
+              URL(string: reference)?.scheme == nil,
+              let width = image["width"] as? NSNumber,
+              let height = image["height"] as? NSNumber,
+              width.intValue > 0, height.intValue > 0,
+              width.intValue <= 4096, height.intValue <= 4096,
+              ["jpeg", "jpg", "png"].contains(reference.split(separator: ".").last?.lowercased())
+        else { return nil }
+        return ChannelArtworkReference(relativeReference: reference)
     }
 
     private static func preflightFailure(for response: NativeTransportResponse) -> SafeDiagnosticOutcome? {
@@ -320,6 +378,98 @@ actor CurrentSessionCatalogRefresher: CatalogRefreshing {
         case .superseded:
             LiveCatalogSnapshotResult(snapshot: nil, failure: .cancelled)
         }
+    }
+}
+
+/// Fixed metadata and artwork seam. It has no caller-provided host, query,
+/// headers, or response exposure.
+protocol FixedMetadataTransporting: Sendable {
+    func lookaround(using credential: AuthenticationCredential) async -> NativeTransportResponse
+    func artwork(for reference: ChannelArtworkReference) async -> NativeTransportResponse
+}
+
+final class FixedMetadataURLSessionTransport: NSObject, FixedMetadataTransporting, @unchecked Sendable {
+    private let redirectLock = NSLock()
+    private var redirectObserved = false
+    private let clock = FixedLiveLogicalClock()
+    private lazy var session = URLSession(configuration: .ephemeral, delegate: self, delegateQueue: nil)
+
+    func lookaround(using credential: AuthenticationCredential) async -> NativeTransportResponse {
+        guard let url = URL(string: "https://lookaround-cache-prod.streaming.siriusxm.com/playbackservices/v1/live/lookAround?delta=") else { return Self.failed }
+        guard let request = credential.withVolatileMaterial({ material -> URLRequest? in
+            guard let authorization = String(data: material, encoding: .utf8), !authorization.isEmpty, !authorization.contains(where: { $0.isWhitespace || $0.isNewline }) else { return nil }
+            var request = URLRequest(url: url)
+            request.httpMethod = "GET"
+            request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+            request.setValue("Bearer \(authorization)", forHTTPHeaderField: "Authorization")
+            request.setValue(clock.next(), forHTTPHeaderField: "x-sxm-clock")
+            return request
+        }) else { return Self.failed }
+        return await send(request)
+    }
+
+    func artwork(for reference: ChannelArtworkReference) async -> NativeTransportResponse {
+        guard let path = reference.relativeReference,
+              path.hasPrefix("/"), !path.contains(".."), URL(string: path)?.scheme == nil,
+              let url = URL(string: "https://imgsrv-sxm-prod-device.streaming.siriusxm.com\(path)")
+        else { return Self.failed }
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        return await send(request)
+    }
+
+    private func send(_ request: URLRequest) async -> NativeTransportResponse {
+        redirectLock.withLock { redirectObserved = false }
+        do {
+            let (body, response) = try await session.data(for: request)
+            guard let response = response as? HTTPURLResponse else { return Self.failed }
+            return NativeTransportResponse(statusCode: response.statusCode, contentType: response.value(forHTTPHeaderField: "Content-Type"), body: body, redirectLocation: response.value(forHTTPHeaderField: "Location"))
+        } catch {
+            let redirected = redirectLock.withLock { redirectObserved }
+            return NativeTransportResponse(statusCode: 0, contentType: nil, body: Data(), redirectLocation: redirected ? "blocked" : nil, transportFailure: redirected ? nil : SafeTransportFailure(error: error))
+        }
+    }
+
+    private static let failed = NativeTransportResponse(statusCode: 0, contentType: nil, body: Data(), transportFailed: true)
+}
+
+extension FixedMetadataURLSessionTransport: URLSessionTaskDelegate {
+    func urlSession(_: URLSession, task _: URLSessionTask, willPerformHTTPRedirection _: HTTPURLResponse, newRequest _: URLRequest, completionHandler: @escaping @Sendable (URLRequest?) -> Void) {
+        redirectLock.withLock { redirectObserved = true }
+        completionHandler(nil)
+    }
+}
+
+actor CurrentSessionMetadataFetcher: LiveMetadataFetching {
+    private let sessionCoordinator: SessionCoordinator
+    private let transport: any FixedMetadataTransporting
+    private var generation = 0
+
+    init(sessionCoordinator: SessionCoordinator, transport: any FixedMetadataTransporting) {
+        self.sessionCoordinator = sessionCoordinator
+        self.transport = transport
+    }
+
+    func metadata(for channelID: LiveChannelID) async -> MetadataAvailability {
+        generation &+= 1
+        let expected = generation
+        switch await sessionCoordinator.withCurrentCatalogCredential({ [transport] credential in await transport.lookaround(using: credential) }) {
+        case let .completed(response):
+            guard generation == expected else { return .failed(.superseded) }
+            return LiveListeningAdapter.decodeMetadata(response, channelID: channelID)
+        case .authenticationUnavailable: return .failed(.authenticationUnavailable)
+        case .notEntitled: return .failed(.notEntitled)
+        case .superseded: return .failed(.superseded)
+        }
+    }
+
+    func artwork(for reference: ChannelArtworkReference) async -> ArtworkAvailability {
+        let expected = generation
+        let response = await transport.artwork(for: reference)
+        guard generation == expected else { return .unavailable }
+        return LiveListeningAdapter.decodeArtwork(response)
     }
 }
 

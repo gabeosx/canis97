@@ -8,6 +8,7 @@ public actor SiriusXMClient {
     private let sessionCoordinator: SessionCoordinator?
     private let catalogRefresher: any CatalogRefreshing
     private let liveStreamResolver: any LiveStreamResolving
+    private let metadataFetcher: any LiveMetadataFetching
     private var lastValidCatalogSnapshot: LiveCatalogSnapshot?
     private var catalogRefreshGeneration = 0
     private var liveResolutionGeneration = 0
@@ -16,6 +17,7 @@ public actor SiriusXMClient {
         self.sessionCoordinator = nil
         self.catalogRefresher = UnavailableCatalogRefresher()
         self.liveStreamResolver = UnavailableLiveStreamResolver()
+        self.metadataFetcher = UnavailableMetadataFetcher()
     }
 
     init(
@@ -36,6 +38,7 @@ public actor SiriusXMClient {
                 transport: fixedLiveTransport ?? FixedLiveURLSessionTransport()
             )
         )
+        self.metadataFetcher = CurrentSessionMetadataFetcher(sessionCoordinator: sessionCoordinator, transport: FixedMetadataURLSessionTransport())
     }
 
     /// Composes the sole supported WebView-token/native-request authentication path.
@@ -70,6 +73,7 @@ public actor SiriusXMClient {
                 transport: FixedLiveURLSessionTransport()
             )
         )
+        metadataFetcher = CurrentSessionMetadataFetcher(sessionCoordinator: coordinator, transport: FixedMetadataURLSessionTransport())
     }
 
     /// Returns the fail-closed Phase 1 state without contacting a provider.
@@ -158,9 +162,21 @@ public actor SiriusXMClient {
         return .failed(failure)
     }
 
-    /// Keeps metadata work unavailable until the authorized content phase.
+    /// Retrieves one selected-channel snapshot through the fixed lookaround
+    /// operation. It has no playback authority or retry loop.
+    public func metadata(for channelID: LiveChannelID) async -> MetadataAvailability {
+        await metadataFetcher.metadata(for: channelID)
+    }
+
+    /// Compatibility spelling without a selected identity. It cannot issue a
+    /// metadata request.
     public func metadata() -> MetadataAvailability {
         .unavailable
+    }
+
+    /// Fetches only an opaque, adapter-issued artwork reference.
+    public func artwork(for reference: ChannelArtworkReference) async -> ArtworkAvailability {
+        await metadataFetcher.artwork(for: reference)
     }
 
     /// Resolves only an explicitly selected live identity after the current
@@ -200,6 +216,11 @@ private struct UnavailableCatalogRefresher: CatalogRefreshing {
     func refresh() async -> LiveCatalogSnapshotResult {
         LiveCatalogSnapshotResult(snapshot: nil, failure: .unavailable)
     }
+}
+
+private struct UnavailableMetadataFetcher: LiveMetadataFetching {
+    func metadata(for _: LiveChannelID) async -> MetadataAvailability { .unavailable }
+    func artwork(for _: ChannelArtworkReference) async -> ArtworkAvailability { .unavailable }
 }
 
 private final class NativeRequestVerifier: NativeAuthenticationVerifying, NativeEntitlementVerifying, @unchecked Sendable {

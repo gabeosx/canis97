@@ -95,10 +95,75 @@ enum CatalogEntityKind: Sendable, Equatable {
 /// It intentionally retains no URL, resource, token, or provider field. Artwork
 /// loading and precedence remain a later presentation concern.
 public struct ChannelArtworkReference: Sendable, Equatable, Hashable, CustomStringConvertible, CustomDebugStringConvertible {
-    public init() {}
+    let relativeReference: String?
+
+    public init() { self.relativeReference = nil }
+
+    init(relativeReference: String) { self.relativeReference = relativeReference }
 
     public var description: String { "ChannelArtworkReference(redacted)" }
     public var debugDescription: String { "ChannelArtworkReference(redacted)" }
+}
+
+/// Current listening context decoded from the fixed, selected-channel metadata
+/// operation. Provider field names and transport details never leave this type.
+public struct LiveProgramMetadata: Sendable, Equatable {
+    public let title: String
+    public let artist: String?
+    public let artwork: ChannelArtworkReference?
+
+    public init(title: String, artist: String? = nil, artwork: ChannelArtworkReference? = nil) {
+        self.title = title
+        self.artist = artist
+        self.artwork = artwork
+    }
+}
+
+public struct MetadataSnapshot: Sendable, Equatable {
+    public let channelID: LiveChannelID
+    public let program: LiveProgramMetadata?
+
+    public init(channelID: LiveChannelID, program: LiveProgramMetadata?) {
+        self.channelID = channelID
+        self.program = program
+    }
+}
+
+public enum MetadataFailure: Sendable, Equatable {
+    case authenticationUnavailable
+    case notEntitled
+    case unsupportedResponse
+    case superseded
+}
+
+public enum MetadataAvailability: Sendable, Equatable {
+    case current(MetadataSnapshot)
+    case unavailable
+    case failed(MetadataFailure)
+}
+
+public enum ArtworkMediaType: Sendable, Equatable { case jpeg, png }
+
+/// Bounded image bytes suitable for native rendering. It deliberately carries
+/// neither a provider URL nor request/response metadata.
+public struct ArtworkData: Sendable, Equatable {
+    public let bytes: Data
+    public let mediaType: ArtworkMediaType
+
+    public init(bytes: Data, mediaType: ArtworkMediaType) {
+        self.bytes = bytes
+        self.mediaType = mediaType
+    }
+}
+
+public enum ArtworkAvailability: Sendable, Equatable {
+    case current(ArtworkData)
+    case unavailable
+}
+
+public protocol LiveMetadataFetching: Sendable {
+    func metadata(for channelID: LiveChannelID) async -> MetadataAvailability
+    func artwork(for reference: ChannelArtworkReference) async -> ArtworkAvailability
 }
 
 /// Presentation-only channel data supplied by a strict compatibility adapter.

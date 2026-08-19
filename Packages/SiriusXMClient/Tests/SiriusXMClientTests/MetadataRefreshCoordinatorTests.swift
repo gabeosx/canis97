@@ -4,6 +4,32 @@ import Testing
 
 @Suite("Provider-neutral metadata refresh contracts")
 struct MetadataRefreshCoordinatorTests {
+    @Test("observed first-cut metadata keeps title, optional artist, and opaque artwork independent")
+    func observedMetadataPrecedence() throws {
+        let channel = LiveChannelID("fixture-channel")
+        let payload = try JSONSerialization.data(withJSONObject: [
+            "channels": ["fixture-channel": [
+                "cuts": [["name": "\u{1F3B5} Unicode title", "artistName": "Artist", "validFrom": "2026-08-19T00:00:00Z", "image": ["url": "/image.jpeg", "width": 450, "height": 450]]],
+                "shows": []
+            ]],
+            "delta": ""
+        ])
+        let result = LiveListeningAdapter.decodeMetadata(NativeTransportResponse(statusCode: 200, contentType: "application/json", body: payload), channelID: channel)
+        guard case let .current(snapshot) = result else { Issue.record("expected current metadata"); return }
+        #expect(snapshot.channelID == channel)
+        #expect(snapshot.program?.title == "\u{1F3B5} Unicode title")
+        #expect(snapshot.program?.artist == "Artist")
+        #expect(snapshot.program?.artwork?.description == "ChannelArtworkReference(redacted)")
+    }
+
+    @Test("empty first-cut collection is unavailable and malformed input fails closed")
+    func emptyAndMalformedMetadataFailClosed() throws {
+        let channel = LiveChannelID("fixture-channel")
+        let empty = try JSONSerialization.data(withJSONObject: ["channels": ["fixture-channel": ["cuts": []]], "delta": ""])
+        #expect(LiveListeningAdapter.decodeMetadata(NativeTransportResponse(statusCode: 200, contentType: "application/json", body: empty), channelID: channel) == .unavailable)
+        #expect(LiveListeningAdapter.decodeMetadata(NativeTransportResponse(statusCode: 200, contentType: "application/json", body: Data("{}".utf8)), channelID: channel) == .failed(.unsupportedResponse))
+    }
+
     @Test("artwork-only metadata remains independent from text presentation")
     func artworkOnlyMetadataKeepsChannelTextFallback() async {
         let channel = LiveChannelID("fixture-artwork-only")

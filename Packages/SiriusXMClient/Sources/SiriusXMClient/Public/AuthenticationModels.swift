@@ -80,8 +80,3 @@ public enum SignOutCleanupFailure: Sendable, Equatable {
     case browserResidue
     case both
 }
-
-/// Semantic metadata availability.
-public enum MetadataAvailability: Sendable, Equatable {
-    case unavailable
-}
