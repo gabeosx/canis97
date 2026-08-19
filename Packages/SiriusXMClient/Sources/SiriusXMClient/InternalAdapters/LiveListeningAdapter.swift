@@ -497,13 +497,24 @@ private struct FixedLiveResourceSelection: Sendable {
     let keyID: FixedLivePlaybackKeyID
 }
 
+/// Keeps every secret-adjacent tune result inside the one resolution that
+/// admitted it. The marker protocol provides no way for any public consumer
+/// to inspect or materialize its contents.
+private final class CurrentSessionLiveOperationContext: FixedLiveOperationContext, @unchecked Sendable {
+    let resource: FixedLiveResourceSelection
+    let handoff: FixedLiveAppleMediaHandoff
+
+    init(selection: FixedLiveResourceSelection) {
+        resource = selection
+        handoff = FixedLiveAppleMediaHandoff(url: selection.url)
+    }
+}
+
 /// Concrete production implementation of the narrow tune -> handoff -> key
 /// sequence. It is actor-owned and has no credential or provider-material API.
 actor CurrentSessionFixedLiveOperations: FixedLiveStreamOperating {
     private let sessionCoordinator: SessionCoordinator
     private let transport: any FixedLiveTransporting
-    private var resource: FixedLiveResourceSelection?
-    private var handoff: FixedLiveAppleMediaHandoff?
 
     init(
         sessionCoordinator: SessionCoordinator,
@@ -514,9 +525,6 @@ actor CurrentSessionFixedLiveOperations: FixedLiveStreamOperating {
     }
 
     func authorizeTune(for channelID: LiveChannelID) async -> FixedLiveTuneAuthorization {
-        resource = nil
-        handoff = nil
-
         switch await sessionCoordinator.withCurrentEntitledCredential({ [transport] credential in
             await transport.tune(for: channelID, using: credential)
         }) {
@@ -532,27 +540,24 @@ actor CurrentSessionFixedLiveOperations: FixedLiveStreamOperating {
             ) else {
                 return .failed(.malformedResource)
             }
-            resource = selection
-            handoff = FixedLiveAppleMediaHandoff(url: selection.url)
-            return .authorized
+            return .authorized(CurrentSessionLiveOperationContext(selection: selection))
         }
     }
 
-    func resolveResource(for channelID: LiveChannelID) async -> FixedLiveResourceResolution {
-        guard let resource,
-              let handoff,
-              FixedLiveResponseDecoder.isCurrent(resource: resource, for: channelID)
+    func resolveResource(in context: any FixedLiveOperationContext) async -> FixedLiveResourceResolution {
+        guard let context = context as? CurrentSessionLiveOperationContext,
+              FixedLiveResponseDecoder.isCurrent(resource: context.resource, for: context.resource.channelID)
         else {
             return .failed(.resourceUnavailable)
         }
-        return .resolved(handoff, keyRequirement: .required)
+        return .resolved(context.handoff, keyRequirement: .required)
     }
 
-    func authorizePlaybackKey() async -> LiveStreamResolutionFailure? {
-        guard let resource, let handoff else { return .resourceUnavailable }
+    func authorizePlaybackKey(for context: any FixedLiveOperationContext) async -> LiveStreamResolutionFailure? {
+        guard let context = context as? CurrentSessionLiveOperationContext else { return .resourceUnavailable }
 
         switch await sessionCoordinator.withCurrentEntitledCredential({ [transport] credential in
-            await transport.playbackKey(for: resource.keyID, using: credential)
+            await transport.playbackKey(for: context.resource.keyID, using: credential)
         }) {
         case let .failed(failure):
             return failure
@@ -562,11 +567,11 @@ actor CurrentSessionFixedLiveOperations: FixedLiveStreamOperating {
             }
             guard let key = FixedLiveResponseDecoder.playbackKey(
                 from: response.body,
-                matching: resource.keyID
+                matching: context.resource.keyID
             ) else {
                 return .unsupportedProtection
             }
-            handoff.attachAuthorizedKey(key)
+            context.handoff.attachAuthorizedKey(key)
             return nil
         }
     }

@@ -483,12 +483,16 @@ struct UnavailableLiveStreamResolver: LiveStreamResolving {
 /// returns URLs, headers, key material, bodies, or request builders.
 protocol FixedLiveStreamOperating: Sendable {
     func authorizeTune(for channelID: LiveChannelID) async -> FixedLiveTuneAuthorization
-    func resolveResource(for channelID: LiveChannelID) async -> FixedLiveResourceResolution
-    func authorizePlaybackKey() async -> LiveStreamResolutionFailure?
+    func resolveResource(in context: any FixedLiveOperationContext) async -> FixedLiveResourceResolution
+    func authorizePlaybackKey(for context: any FixedLiveOperationContext) async -> LiveStreamResolutionFailure?
 }
 
-enum FixedLiveTuneAuthorization: Sendable, Equatable {
-    case authorized
+/// Opaque internal state for one authorized tune sequence. It intentionally
+/// exposes no provider material, storage, encoding, or diagnostic capability.
+protocol FixedLiveOperationContext: Sendable {}
+
+enum FixedLiveTuneAuthorization: Sendable {
+    case authorized(any FixedLiveOperationContext)
     case failed(LiveStreamResolutionFailure)
 }
 
@@ -518,9 +522,10 @@ actor FixedLiveStreamResolver: LiveStreamResolving {
         let command = beginGeneration()
         guard !Task.isCancelled else { return .failed(.cancelled) }
 
+        let context: any FixedLiveOperationContext
         switch await operations.authorizeTune(for: channelID) {
-        case .authorized:
-            break
+        case let .authorized(authorizedContext):
+            context = authorizedContext
         case let .failed(failure):
             return terminal(failure, for: command)
         }
@@ -528,7 +533,7 @@ actor FixedLiveStreamResolver: LiveStreamResolving {
         guard !Task.isCancelled else { return .failed(.cancelled) }
 
         let resource: (any SiriusXMAppleMediaHandoff, FixedLivePlaybackKeyRequirement)
-        switch await operations.resolveResource(for: channelID) {
+        switch await operations.resolveResource(in: context) {
         case let .resolved(handoff, keyRequirement):
             resource = (handoff, keyRequirement)
         case let .failed(failure):
@@ -538,7 +543,7 @@ actor FixedLiveStreamResolver: LiveStreamResolving {
         guard !Task.isCancelled else { return .failed(.cancelled) }
 
         if resource.1 == .required {
-            if let failure = await operations.authorizePlaybackKey() {
+            if let failure = await operations.authorizePlaybackKey(for: context) {
                 return terminal(failure, for: command)
             }
             guard isCurrent(command) else { return .failed(.superseded) }
