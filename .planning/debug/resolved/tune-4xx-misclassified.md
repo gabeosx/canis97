@@ -1,5 +1,5 @@
 ---
-status: resolved
+status: investigating
 trigger: "The live selected-channel tune checkpoint reported human-verification-required even though the adapter mapped nearly every unexpected HTTP 4xx response to that label."
 created: 2026-08-19T20:28:00Z
 updated: 2026-08-19T17:29:00Z
@@ -7,7 +7,7 @@ updated: 2026-08-19T17:29:00Z
 
 ## Current Focus
 
-hypothesis: Resolved — the tune checkpoint was classifying ordinary client-side status outcomes as human verification solely from an overbroad HTTP range; the unit-test host could also execute the production launch-restoration scene; later browser evidence identified the native tune request and response-shape drift.
+hypothesis: The initial tune 400 may have resulted from the browser-proven Boolean, logical-clock header, and nested resource wrapper that were absent from the native tune contract; the correction is covered offline but not yet live-verified.
 test: Added privacy-safe exact-status, inert-test-host, and browser-proven request mutation/revert regression tests; then ran offline suites only.
 expecting: The next separately authorized native tune may use the current fixed body and non-secret logical-clock header, then stop at the existing resource-policy decision without follow-on fetching.
 next_action: Await explicit authorization before any native live request; preserve the browser session and Keychain state.
@@ -60,7 +60,7 @@ reproduction: Launch the isolated compatibility app, restore the Keychain sessio
 
 ## Resolution
 
-root_cause: An overbroad 4xx range promoted unsupported client-status outcomes to human-verification-required without evidence of a user-mediated control; the app-hosted unit-test process could run the production automatic-restoration path and erase a rejected stored session; the native tune contract omitted a browser-proven Boolean and logical-clock header and expected an outdated resource wrapper.
+root_cause: Initial overbroad 4xx classification is resolved; the candidate request cause is an omitted browser-proven Boolean and logical-clock header alongside an outdated nested resource wrapper, pending a separately authorized native retest.
 fix: Added fixed atoms for 400, 404, 409, and 422 and classify them as unknown-contract; retained strict terminal handling for 401, 403, 429, redirects, and all other unknown responses; made the XCTest app host inert before it can construct the authentication scene; added the exact Boolean, a bounded in-memory logical clock, and the observed nested resource wrapper.
 verification: Synthetic mutation/revert coverage passed; package suite 45/45; macOS suite 77/77; no native live request was made after the browser evidence.
 files_changed:
