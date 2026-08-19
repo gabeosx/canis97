@@ -265,8 +265,13 @@ final class ClosedLiveObservationAdapter {
 }
 
 private enum ClosedCatalogParser {
+    /// The current first-party player consumes a complete page graph rather than
+    /// a flat lineup. Keep the transient decode bounded, but leave enough room
+    /// for its container, set, item, image, and decoration metadata.
+    private static let maximumDocumentBytes = 8 * 1_024 * 1_024
+
     static func parse(_ body: Data) -> [ClosedCatalogChannel]? {
-        guard body.count <= 1_048_576,
+        guard body.count <= maximumDocumentBytes,
               let root = try? JSONSerialization.jsonObject(with: body)
         else { return nil }
 
@@ -307,11 +312,21 @@ private enum ClosedCatalogParser {
 
         return ClosedCatalogChannel(
             id: id,
-            displayName: safeText(entity["name"] as? String) ?? id,
+            displayName: safeText(entity["name"] as? String) ?? title(in: entity) ?? id,
             category: safeText(entity["category"] as? String),
             isFavorite: entity["isFavorite"] as? Bool,
             isAvailable: entity["isAvailable"] as? Bool
         )
+    }
+
+    /// The current first-party browse renderer reads a channel's title from
+    /// `item.entity.texts.title.default`; preserve only its bounded display
+    /// string after the surrounding page graph has been discarded.
+    private static func title(in entity: [String: Any]) -> String? {
+        guard let texts = entity["texts"] as? [String: Any],
+              let title = texts["title"] as? [String: Any]
+        else { return nil }
+        return safeText(title["default"] as? String)
     }
 
     private static func safeIdentifier(_ value: String?) -> String? {

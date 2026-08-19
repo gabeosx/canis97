@@ -205,6 +205,61 @@ final class ListeningCompositionTests: XCTestCase {
         XCTAssertEqual(adapter.state, .active)
     }
 
+    func testCatalogRunAcceptsBoundedFirstPartyPageEnvelopeWithNestedTitle() async {
+        let padding = String(repeating: "x", count: 1_048_576)
+        let body = Data(
+            """
+            {"page":{"containers":[{"sets":[{"items":[{"entity":{"id":"safe-channel-1","type":"channel-linear","texts":{"title":{"default":"Safe Channel"}}}}]}]}],"padding":"\(padding)"}}
+            """.utf8
+        )
+        let transport = RecordingCatalogTransport(
+            result: .response(statusCode: 200, contentType: "application/json", body: body)
+        )
+        let adapter = ClosedLiveObservationAdapter(
+            credentialLoader: { .available(AuthenticationCredential(volatileMaterial: Data("synthetic-credential".utf8))) },
+            transport: transport
+        )
+
+        XCTAssertEqual(adapter.begin(entitlement: .entitled), .started)
+
+        let result = await adapter.runCatalog()
+
+        XCTAssertEqual(
+            result,
+            .channels([
+                ClosedCatalogChannel(
+                    id: "safe-channel-1",
+                    displayName: "Safe Channel",
+                    category: nil,
+                    isFavorite: nil,
+                    isAvailable: nil
+                ),
+            ])
+        )
+    }
+
+    func testCatalogRunStillRejectsPageDocumentsAboveTheBoundedMaximum() async {
+        let padding = String(repeating: "x", count: 8 * 1_024 * 1_024)
+        let body = Data(
+            """
+            {"page":{"containers":[{"sets":[{"items":[{"entity":{"id":"safe-channel-1","type":"channel-linear"}}]}]}],"padding":"\(padding)"}}
+            """.utf8
+        )
+        let transport = RecordingCatalogTransport(
+            result: .response(statusCode: 200, contentType: "application/json", body: body)
+        )
+        let adapter = ClosedLiveObservationAdapter(
+            credentialLoader: { .available(AuthenticationCredential(volatileMaterial: Data("synthetic-credential".utf8))) },
+            transport: transport
+        )
+
+        XCTAssertEqual(adapter.begin(entitlement: .entitled), .started)
+
+        let result = await adapter.runCatalog()
+
+        XCTAssertEqual(result, .terminal(.malformedContract))
+    }
+
     func testCatalogRunDoesNotRequestWhenCredentialIsMissingOrInvalid() async {
         for availability in [ClosedCatalogCredentialAvailability.missing, .invalid] {
             let transport = RecordingCatalogTransport(result: .transportFailure)
