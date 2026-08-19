@@ -10,6 +10,30 @@ public protocol SiriusXMAppleMediaHandoff: Sendable {
     @MainActor func makePlayerItem() -> AVPlayerItem
 }
 
+/// Closed outcomes for an explicit current-session stream authorization.
+/// The public result carries no provider resource, header, key, or response.
+public enum LiveStreamResolutionFailure: Sendable, Equatable {
+    case authenticationUnavailable
+    case entitlementUnavailable
+    case selectionUnavailable
+    case tuneUnavailable
+    case resourceUnavailable
+    case malformedResource
+    case protectedControl
+    case networkUnavailable
+    case unsupportedProtection
+    case cancelled
+    case superseded
+}
+
+/// Semantic availability for one explicit live-stream resolution attempt.
+/// A successful resource remains usable only through the SPI media handoff.
+public enum LiveStreamResolutionAvailability: Sendable, Equatable {
+    case available
+    case unavailable
+    case failed(LiveStreamResolutionFailure)
+}
+
 /// A stable semantic identity for one selectable live channel.
 ///
 /// The identity is deliberately opaque: it is not a provider request parameter,
@@ -361,6 +385,16 @@ enum LivePlaybackResolution: Sendable, Equatable {
 
 protocol LivePlaybackResolving: Sendable {
     func resolve(_ channelID: LiveChannelID) async -> LivePlaybackResolution
+}
+
+/// Internal current-session resolution seam. Implementations must perform only
+/// the fixed contract and retain opaque resource material in memory.
+protocol LiveStreamResolving: Sendable {
+    func resolveLiveStream(for channelID: LiveChannelID) async -> LiveStreamResolutionAvailability
+}
+
+struct UnavailableLiveStreamResolver: LiveStreamResolving {
+    func resolveLiveStream(for _: LiveChannelID) async -> LiveStreamResolutionAvailability { .unavailable }
 }
 
 enum LivePlaybackDriverResult: Sendable, Equatable {

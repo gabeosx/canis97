@@ -85,8 +85,3 @@ public enum SignOutCleanupFailure: Sendable, Equatable {
 public enum MetadataAvailability: Sendable, Equatable {
     case unavailable
 }
-
-/// Semantic live-stream resolution availability.
-public enum LiveStreamResolutionAvailability: Sendable, Equatable {
-    case unavailable
-}

@@ -7,19 +7,23 @@ public typealias AuthenticationAvailability = AuthenticationOutcome
 public actor SiriusXMClient {
     private let sessionCoordinator: SessionCoordinator?
     private let catalogRefresher: any CatalogRefreshing
+    private let liveStreamResolver: any LiveStreamResolving
     private var lastValidCatalogSnapshot: LiveCatalogSnapshot?
 
     public init() {
         self.sessionCoordinator = nil
         self.catalogRefresher = UnavailableCatalogRefresher()
+        self.liveStreamResolver = UnavailableLiveStreamResolver()
     }
 
     init(
         sessionCoordinator: SessionCoordinator,
-        catalogRefresher: any CatalogRefreshing = UnavailableCatalogRefresher()
+        catalogRefresher: any CatalogRefreshing = UnavailableCatalogRefresher(),
+        liveStreamResolver: any LiveStreamResolving = UnavailableLiveStreamResolver()
     ) {
         self.sessionCoordinator = sessionCoordinator
         self.catalogRefresher = catalogRefresher
+        self.liveStreamResolver = liveStreamResolver
     }
 
     /// Composes the sole supported WebView-token/native-request authentication path.
@@ -44,6 +48,7 @@ public actor SiriusXMClient {
             diagnostics: diagnostics
         )
         catalogRefresher = UnavailableCatalogRefresher()
+        liveStreamResolver = UnavailableLiveStreamResolver()
     }
 
     /// Returns the fail-closed Phase 1 state without contacting a provider.
@@ -131,9 +136,27 @@ public actor SiriusXMClient {
         .unavailable
     }
 
-    /// Keeps live-stream resolution unavailable until the authorized content phase.
+    /// Resolves only an explicitly selected live identity after the current
+    /// session still reports entitlement. Catalog presence never authorizes it.
+    public func resolveLiveStream(for channelID: LiveChannelID) async -> LiveStreamResolutionAvailability {
+        guard let sessionCoordinator else {
+            return .failed(.authenticationUnavailable)
+        }
+        guard await sessionCoordinator.entitlementAvailability == .entitled else {
+            return .failed(.entitlementUnavailable)
+        }
+
+        let result = await liveStreamResolver.resolveLiveStream(for: channelID)
+        guard await sessionCoordinator.entitlementAvailability == .entitled else {
+            return .failed(.superseded)
+        }
+        return result
+    }
+
+    /// Compatibility spelling retained for callers that have not supplied a
+    /// semantic selection; it cannot authorize a request.
     public func resolveLiveStream() -> LiveStreamResolutionAvailability {
-        .unavailable
+        .failed(.selectionUnavailable)
     }
 }
 
