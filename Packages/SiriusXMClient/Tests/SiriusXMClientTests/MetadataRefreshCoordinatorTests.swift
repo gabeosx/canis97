@@ -4,6 +4,19 @@ import Testing
 
 @Suite("Provider-neutral metadata refresh contracts")
 struct MetadataRefreshCoordinatorTests {
+    @Test("artwork-only metadata remains independent from text presentation")
+    func artworkOnlyMetadataKeepsChannelTextFallback() async {
+        let channel = LiveChannelID("fixture-artwork-only")
+        let refresher = RecordingMetadataRefresher(results: [.current(text: nil, artworkLabel: "Fixture artwork")])
+        let coordinator = MetadataRefreshCoordinator(refresher: refresher, clock: FixedMetadataClock())
+
+        _ = await coordinator.select(channel)
+        let state = await coordinator.refresh()
+
+        #expect(state.text == .channelFallback(channel))
+        #expect(state.artwork == .current("Fixture artwork"))
+    }
+
     @Test("metadata uses channel identity as a fallback and text/artwork become current independently")
     func currentMetadataUsesIndependentRepresentations() async {
         let channel = LiveChannelID("fixture-metadata")

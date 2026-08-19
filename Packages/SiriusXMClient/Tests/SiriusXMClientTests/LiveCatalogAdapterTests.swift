@@ -54,6 +54,23 @@ struct LiveCatalogAdapterTests {
         #expect(LiveListeningAdapter.inspectPlaybackKey(control) == .unsupported(.rejected))
     }
 
+    @Test("tune semantics include only the recorded non-secret values and clock shape")
+    func tuneBodyContractStaysBounded() {
+        #expect(SiriusXMRequestContract.tune.bodyContract.fixedSemantics == [
+            "type": .string("channel-linear"),
+            "hlsVersion": .string("V3"),
+            "manifestVariant": .string("WEB"),
+            "mtcVersion": .string("V2"),
+            "trackResumeSupported": .boolean(false),
+            "x-sxm-clock": .epochCounter,
+        ])
+        #expect(SiriusXMRequestContract.liveUpdate.bodyContract.fixedSemantics == [
+            "channelId": .opaqueValue,
+            "startTimestamp": .opaqueValue,
+            "endTimestamp": .opaqueValue,
+        ])
+    }
+
     @Test("only explicitly linear classifications enter a stable ordered catalog")
     func filtersAndOrdersSemanticCandidates() {
         let adapter = LiveCatalogAdapter()

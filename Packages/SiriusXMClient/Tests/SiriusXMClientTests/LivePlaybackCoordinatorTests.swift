@@ -3,6 +3,15 @@ import Testing
 
 @Suite("Provider-neutral live playback contracts")
 struct LivePlaybackCoordinatorTests {
+    @Test("phase two contracts cannot create transport requests or provider-operation calls")
+    func phaseTwoContractsRemainOfflineScaffolding() {
+        for operation in SiriusXMRequestContract.liveListeningOperations {
+            #expect(throws: SiriusXMRequestContractError.self) {
+                try SiriusXMRequestContract.makeRequest(for: operation, authorization: "synthetic-token")
+            }
+        }
+    }
+
     @Test("tune publishes only after a fake resolver and player both confirm")
     func publishesConfirmedTuneState() async {
         let channel = LiveChannelID("fixture-command")
