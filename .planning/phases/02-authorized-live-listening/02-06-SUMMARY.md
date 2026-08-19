@@ -28,9 +28,9 @@ metrics:
   completed: "2026-08-19"
 status: complete
 actuals:
-  tokens: 5197
+  tokens: 6515
   tasks: 2
-  commits: 3
+  commits: 5
 ---
 
 # Phase 02 Plan 06: Bounded Playback Recovery Summary
@@ -49,12 +49,13 @@ The native coordinator now recovers only the current selected channel through on
    - Coalesced duplicate signals into one incident, retained only the selected identity, and generation-guarded every delay, resolution, item observation, and state publication.
    - Made offline, sleep, stop, command supersession, and terminal authorization/protection outcomes cancel recovery before later provider work.
    - Added Network path and NSWorkspace sleep/wake adapters that supply eligibility signals only; they cannot resolve media or manipulate the player directly.
-   - Commits: `7ee9117` (RED), `c6b1d9f` (GREEN), `0aa1acd` (signal-adapter correction).
+   - Follow-up coverage proves pause cancels an active recovery before it can install/play, and that one real offline-to-online transition begins one same-channel incident without needing a second stall signal.
+   - Commits: `7ee9117` (RED), `c6b1d9f` (GREEN), `0aa1acd` (signal-adapter correction), `3470dc8` (follow-up RED), `a7a4c11` (follow-up GREEN).
 
 ## Verification
 
 - `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --package-path Packages/SiriusXMClient --filter LivePlaybackCoordinatorTests` — passed, 11 tests.
-- `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild test -project SiriusMac.xcodeproj -scheme SiriusMac -destination 'platform=macOS' -only-testing:SiriusMacTests/ListeningCompositionTests` — passed, 27 tests.
+- `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild test -project SiriusMac.xcodeproj -scheme SiriusMac -destination 'platform=macOS' -only-testing:SiriusMacTests/ListeningCompositionTests` — passed, 29 tests.
 - All verification used synthetic resolver, player, and delay collaborators. No provider request, media load, live AVFoundation attempt, browser/DOM action, Keychain access, or app launch was performed.
 
 ## Deviations from Plan
@@ -67,6 +68,13 @@ The native coordinator now recovers only the current selected channel through on
    - **Fix:** Required observer seams to be Sendable and schedule only their token/monitor cancellation on the main actor after coordinator teardown.
    - **Files modified:** `SiriusMac/Listening/PlaybackCoordinator.swift`
    - **Commit:** `0aa1acd`
+
+2. **[Rule 1 - Supersession and reconnect eligibility] Closed two recovery races found during manager review.**
+   - **Found during:** Post-plan D-06/D-08 acceptance spot-check.
+   - **Issue:** A pause could leave an active recovery task able to install/play a late item; a real reconnect needed a second stall signal before recovery began.
+   - **Fix:** Pause cancels active/pending recovery and recovered-item callbacks require the current incident. An offline transition records one pending incident, consumed only by the next eligible reconnect; stop and channel switch clear it.
+   - **Files modified:** `SiriusMac/Listening/PlaybackCoordinator.swift`, `SiriusMacTests/ListeningCompositionTests.swift`
+   - **Commits:** `3470dc8`, `a7a4c11`
 
 ### Plan Drift
 
@@ -83,4 +91,4 @@ This plan is offline-complete only. AVFoundation playback/audibility remains **N
 ## Self-Check: PASSED
 
 - Required source, test, and summary artifacts exist.
-- Task commits `7ee9117`, `c6b1d9f`, and `0aa1acd` are present in history.
+- Task commits `7ee9117`, `c6b1d9f`, `0aa1acd`, `3470dc8`, and `a7a4c11` are present in history.
