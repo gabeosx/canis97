@@ -5,6 +5,7 @@ struct AuthenticationView: View {
     @State private var model: AuthenticationPresentationModel
     @State private var bridge: WebAuthenticationBridge
     @State private var closedLiveObservation = ClosedLiveObservationAdapter()
+    @State private var didStopClosedLivePreflight = false
 
     init() {
         let composition = AuthenticationComposition()
@@ -47,11 +48,12 @@ struct AuthenticationView: View {
                                 let result = closedLiveObservation.begin(entitlement: .entitled)
                                 if result == .started {
                                     closedLiveObservation.refuseUnknownCatalogContract()
+                                    didStopClosedLivePreflight = true
                                 }
                             }
-                            .disabled(closedLiveObservation.state != .idle)
+                            .disabled(didStopClosedLivePreflight)
                             .accessibilityHint("Stops safely before any live-content request without an exact approved contract.")
-                            if closedLiveObservation.state != .idle {
+                            if didStopClosedLivePreflight {
                                 Text("Live compatibility preflight stopped safely before any content request.")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
