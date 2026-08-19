@@ -1,6 +1,7 @@
+import AVFoundation
 import XCTest
+@_spi(Playback) import SiriusXMClient
 @testable import SiriusMac
-import SiriusXMClient
 
 @MainActor
 final class SemanticListeningPresentationTests: XCTestCase {
@@ -103,46 +104,140 @@ final class SemanticListeningPresentationTests: XCTestCase {
 
 @MainActor
 final class ListeningCompositionTests: XCTestCase {
-    func testStopClearsTheCurrentSelectionAndIsSafeToRepeat() async {
-        let driver = RecordingPlaybackDriver()
-        let coordinator = PlaybackCoordinator(
-            authorization: AlwaysAuthorizedPlaybackAuthorization(),
-            driver: driver
+    func testProductionCompositionConstructsAConcreteClientBackedPlaybackResolver() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: root.appendingPathComponent("SiriusMac/Authentication/AuthenticationView.swift"),
+            encoding: .utf8
         )
-        let channel = LiveChannelID("fixture-stop")
 
-        await coordinator.tune(channel)
-        XCTAssertEqual(coordinator.selectedChannelID, channel)
-
-        await coordinator.stop()
-        await coordinator.stop()
-
-        XCTAssertNil(coordinator.selectedChannelID)
-        XCTAssertEqual(coordinator.state, .stopped)
-        let stopCount = await driver.stopCount()
-        XCTAssertEqual(stopCount, 2)
+        XCTAssertTrue(source.contains("SiriusXMPlaybackResolver(client: composedClient)"))
+        XCTAssertFalse(source.contains("self.playbackCoordinator = PlaybackCoordinator()"))
     }
 
-    func testConfirmedCommandsIgnoreSupersededCompletion() async {
-        let driver = BlockingPlaybackDriver()
-        let coordinator = PlaybackCoordinator(
-            authorization: AlwaysAuthorizedPlaybackAuthorization(),
-            driver: driver
+    func testLatePlaybackConfirmationPropagatesFromCoordinatorToPresentationModel() async {
+        let resolver = ControlledPlaybackResolver()
+        let runtime = RecordingPlaybackRuntime()
+        let coordinator = PlaybackCoordinator(resolver: resolver, runtime: runtime)
+        let model = ListeningPresentationModel(
+            flow: ControlledCatalogFlow(),
+            playbackCoordinator: coordinator
         )
-        let first = LiveChannelID("fixture-channel-first")
-        let second = LiveChannelID("fixture-channel-second")
+        let channel = LiveChannelID("fixture-observed-presentation")
+        model.select(channel)
+
+        let tune = try! XCTUnwrap(model.tuneSelectedChannel())
+        await resolver.waitForResolution(of: channel)
+        await resolver.complete(channel, with: .available(FixtureMediaHandoff()))
+        await runtime.waitForObservation()
+        runtime.confirmReady()
+        runtime.confirmPlaying()
+        await tune.value
+
+        for _ in 0 ..< 10 {
+            if model.playbackState == .playing(channel) { return }
+            await Task.yield()
+        }
+        XCTFail("The presentation model did not observe the confirmed playing callback")
+    }
+
+    func testPauseSupersedesAnInFlightTuneBeforeItCanInstallOrPlay() async {
+        let resolver = ControlledPlaybackResolver()
+        let runtime = RecordingPlaybackRuntime(autoConfirm: true)
+        let coordinator = PlaybackCoordinator(resolver: resolver, runtime: runtime)
+        let channel = LiveChannelID("fixture-pause-supersedes")
+
+        let tune = Task { await coordinator.tune(channel) }
+        await resolver.waitForResolution(of: channel)
+
+        await coordinator.pause()
+        await resolver.complete(channel, with: .available(FixtureMediaHandoff()))
+        _ = await tune.value
+
+        XCTAssertEqual(runtime.installCount, 0)
+        XCTAssertNotEqual(coordinator.state, .playing(channel))
+    }
+
+    func testTuneObservesAnItemBeforeInstallationAndWaitsForConfirmedPlayback() async {
+        let resolver = ControlledPlaybackResolver()
+        let runtime = RecordingPlaybackRuntime()
+        let coordinator = PlaybackCoordinator(resolver: resolver, runtime: runtime)
+        let channel = LiveChannelID("fixture-confirmed-playback")
+
+        let tune = Task { await coordinator.tune(channel) }
+        await resolver.waitForResolution(of: channel)
+        await resolver.complete(channel, with: .available(FixtureMediaHandoff()))
+        await runtime.waitForObservation()
+
+        XCTAssertEqual(runtime.events(), [.observed])
+        XCTAssertEqual(coordinator.state, .idle)
+
+        runtime.confirmReady()
+        XCTAssertEqual(runtime.events(), [.observed, .installed, .playRequested])
+        XCTAssertEqual(coordinator.state, .idle)
+
+        runtime.confirmPlaying()
+        _ = await tune.value
+
+        XCTAssertEqual(coordinator.state, .playing(channel))
+        XCTAssertEqual(runtime.playerCount, 1)
+    }
+
+    func testResumeReresolvesTheSelectedIdentityAtTheLiveEdgeAndStopIsIdempotent() async {
+        let resolver = ControlledPlaybackResolver()
+        let runtime = RecordingPlaybackRuntime(autoConfirm: true)
+        let coordinator = PlaybackCoordinator(resolver: resolver, runtime: runtime)
+        let channel = LiveChannelID("fixture-live-edge")
+
+        let tune = Task { await coordinator.tune(channel) }
+        await resolver.waitForResolution(of: channel, count: 1)
+        await resolver.complete(channel, with: .available(FixtureMediaHandoff()))
+        _ = await tune.value
+
+        await coordinator.pause()
+        XCTAssertEqual(coordinator.state, .paused)
+
+        let resume = Task { await coordinator.resumeLiveEdge() }
+        await resolver.waitForResolution(of: channel, count: 2)
+        await resolver.complete(channel, with: .available(FixtureMediaHandoff()))
+        _ = await resume.value
+
+        let resolutionCount = await resolver.calls(for: channel)
+        XCTAssertEqual(resolutionCount, 2)
+        XCTAssertEqual(runtime.playerCount, 1)
+        XCTAssertEqual(runtime.installCount, 2)
+        XCTAssertEqual(coordinator.state, .playing(channel))
+
+        let clearsBeforeStop = runtime.clearCount
+        await coordinator.stop()
+        await coordinator.stop()
+
+        XCTAssertEqual(runtime.clearCount, clearsBeforeStop + 1)
+        XCTAssertEqual(coordinator.state, .stopped)
+        XCTAssertNil(coordinator.selectedChannelID)
+    }
+
+    func testChannelSwitchSupersedesAStaleResolutionAndFailureIsClosed() async {
+        let resolver = ControlledPlaybackResolver()
+        let runtime = RecordingPlaybackRuntime(autoConfirm: true)
+        let coordinator = PlaybackCoordinator(resolver: resolver, runtime: runtime)
+        let first = LiveChannelID("fixture-first")
+        let second = LiveChannelID("fixture-second")
 
         let firstTune = Task { await coordinator.tune(first) }
-        await driver.waitForTune(of: first)
+        await resolver.waitForResolution(of: first)
         let secondTune = Task { await coordinator.tune(second) }
-        await driver.waitForTune(of: second)
-
-        await driver.confirmTune(of: first)
-        await driver.confirmTune(of: second)
+        await resolver.waitForResolution(of: second)
+        await resolver.complete(first, with: .available(FixtureMediaHandoff()))
+        await resolver.complete(second, with: .failed(.networkUnavailable))
         _ = await firstTune.value
         _ = await secondTune.value
 
-        XCTAssertEqual(coordinator.state, .playing(second))
+        XCTAssertEqual(runtime.installCount, 0)
+        XCTAssertEqual(coordinator.selectedChannelID, second)
+        XCTAssertEqual(coordinator.state, .unavailable(.networkUnavailable))
     }
 
     func testLiveContractObservationSinkAcceptsOnlyClosedSemanticEvidence() {
@@ -610,28 +705,136 @@ final class ListeningCompositionTests: XCTestCase {
     }
 }
 
-private actor RecordingPlaybackDriver: LivePlaybackDriving {
-    private var stops = 0
+private final class FixtureMediaHandoff: SiriusXMAppleMediaHandoff, @unchecked Sendable {
+    @MainActor
+    func makePlayerItem() -> AVPlayerItem? {
+        AVPlayerItem(url: URL(fileURLWithPath: "/dev/null"))
+    }
+}
 
-    private(set) var tunedChannelIDs: [LiveChannelID] = []
-
-    func recordedChannelIDs() -> [LiveChannelID] { tunedChannelIDs }
-
-    func recordedTuneCallCount() -> Int { tunedChannelIDs.count }
-
-    func tune(_ channelID: LiveChannelID) async -> LivePlaybackDriverResult {
-        tunedChannelIDs.append(channelID)
-        return .confirmed(.playing(channelID))
+@MainActor
+private final class RecordingPlaybackRuntime: PlaybackPlayerRuntime {
+    enum Event: Equatable {
+        case observed
+        case installed
+        case playRequested
+        case pauseRequested
     }
 
-    func pause() async -> LivePlaybackDriverResult { .confirmed(.paused) }
-    func resumeLiveEdge() async -> LivePlaybackDriverResult { .confirmed(.playing(nil)) }
-    func stop() async -> LivePlaybackDriverResult {
-        stops += 1
-        return .confirmed(.stopped)
+    private let autoConfirm: Bool
+    private var ready: (@MainActor @Sendable () -> Void)?
+    private var playing: (@MainActor @Sendable () -> Void)?
+    private var paused: (@MainActor @Sendable () -> Void)?
+    private var failure: (@MainActor @Sendable (LiveListeningFailure) -> Void)?
+    private var observationWaiter: CheckedContinuation<Void, Never>?
+    private var hasInstalledItem = false
+    private var recordedEvents: [Event] = []
+
+    private(set) var playerCount = 1
+    private(set) var installCount = 0
+    private(set) var clearCount = 0
+
+    init(autoConfirm: Bool = false) {
+        self.autoConfirm = autoConfirm
     }
 
-    func stopCount() -> Int { stops }
+    func observe(
+        _: AVPlayerItem,
+        onReady: @escaping @MainActor @Sendable () -> Void,
+        onPlaying: @escaping @MainActor @Sendable () -> Void,
+        onPaused: @escaping @MainActor @Sendable () -> Void,
+        onFailure: @escaping @MainActor @Sendable (LiveListeningFailure) -> Void
+    ) -> any PlaybackItemObserving {
+        ready = onReady
+        playing = onPlaying
+        paused = onPaused
+        failure = onFailure
+        recordedEvents.append(.observed)
+        observationWaiter?.resume()
+        observationWaiter = nil
+        if autoConfirm {
+            onReady()
+        }
+        return TestItemObservation()
+    }
+
+    func install(_: AVPlayerItem) {
+        hasInstalledItem = true
+        installCount += 1
+        recordedEvents.append(.installed)
+    }
+
+    func requestPlay() {
+        recordedEvents.append(.playRequested)
+        if autoConfirm { playing?() }
+    }
+
+    func requestPause() {
+        recordedEvents.append(.pauseRequested)
+        if autoConfirm { paused?() }
+    }
+
+    func clearCurrentItem() {
+        guard hasInstalledItem else { return }
+        hasInstalledItem = false
+        clearCount += 1
+    }
+
+    func waitForObservation() async {
+        guard ready == nil else { return }
+        await withCheckedContinuation { observationWaiter = $0 }
+    }
+
+    func confirmReady() {
+        ready?()
+    }
+
+    func confirmPlaying() {
+        playing?()
+    }
+
+    func events() -> [Event] {
+        recordedEvents
+    }
+}
+
+@MainActor
+private final class TestItemObservation: PlaybackItemObserving {
+    func cancel() {}
+}
+
+private actor ControlledPlaybackResolver: PlaybackResolving {
+    private var counts: [LiveChannelID: Int] = [:]
+    private var continuations: [LiveChannelID: [CheckedContinuation<PlaybackResourceResolution, Never>]] = [:]
+    private var waiters: [LiveChannelID: [Int: CheckedContinuation<Void, Never>]] = [:]
+
+    func resolve(for channelID: LiveChannelID) async -> PlaybackResourceResolution {
+        let count = (counts[channelID] ?? 0) + 1
+        counts[channelID] = count
+        waiters[channelID]?[count]?.resume()
+        waiters[channelID]?[count] = nil
+        return await withCheckedContinuation { continuation in
+            continuations[channelID, default: []].append(continuation)
+        }
+    }
+
+    func waitForResolution(of channelID: LiveChannelID, count: Int = 1) async {
+        guard (counts[channelID] ?? 0) < count else { return }
+        await withCheckedContinuation { continuation in
+            waiters[channelID, default: [:]][count] = continuation
+        }
+    }
+
+    func complete(_ channelID: LiveChannelID, with result: PlaybackResourceResolution) {
+        guard var values = continuations[channelID], !values.isEmpty else { return }
+        let continuation = values.removeFirst()
+        continuations[channelID] = values
+        continuation.resume(returning: result)
+    }
+
+    func calls(for channelID: LiveChannelID) -> Int {
+        counts[channelID] ?? 0
+    }
 }
 
 private actor RecordingCatalogTransport: ClosedCatalogRequestPerforming {
@@ -664,43 +867,6 @@ private actor RecordingTuneTransport: ClosedTuneRequestPerforming {
     }
 
     func requestCount() -> Int { count }
-}
-
-private struct AlwaysAuthorizedPlaybackAuthorization: LivePlaybackAuthorizing {
-    func authorizePlayback(for _: LiveChannelID) async -> LivePlaybackAuthorization {
-        .authorized
-    }
-}
-
-private struct UnavailablePlaybackAuthorization: LivePlaybackAuthorizing {
-    func authorizePlayback(for _: LiveChannelID) async -> LivePlaybackAuthorization {
-        .unavailable
-    }
-}
-
-private actor BlockingPlaybackDriver: LivePlaybackDriving {
-    private var continuations: [LiveChannelID: CheckedContinuation<LivePlaybackDriverResult, Never>] = [:]
-    private var waiters: [LiveChannelID: CheckedContinuation<Void, Never>] = [:]
-    private var started: Set<LiveChannelID> = []
-
-    func tune(_ channelID: LiveChannelID) async -> LivePlaybackDriverResult {
-        started.insert(channelID)
-        waiters.removeValue(forKey: channelID)?.resume()
-        return await withCheckedContinuation { continuations[channelID] = $0 }
-    }
-
-    func pause() async -> LivePlaybackDriverResult { .confirmed(.paused) }
-    func resumeLiveEdge() async -> LivePlaybackDriverResult { .confirmed(.playing(nil)) }
-    func stop() async -> LivePlaybackDriverResult { .confirmed(.stopped) }
-
-    func waitForTune(of channelID: LiveChannelID) async {
-        guard !started.contains(channelID) else { return }
-        await withCheckedContinuation { waiters[channelID] = $0 }
-    }
-
-    func confirmTune(of channelID: LiveChannelID) {
-        continuations.removeValue(forKey: channelID)?.resume(returning: .confirmed(.playing(channelID)))
-    }
 }
 
 private actor ControlledCatalogFlow: ListeningFlow {
