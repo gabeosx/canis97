@@ -164,6 +164,11 @@ public enum ArtworkAvailability: Sendable, Equatable {
 public protocol LiveMetadataFetching: Sendable {
     func metadata(for channelID: LiveChannelID) async -> MetadataAvailability
     func artwork(for reference: ChannelArtworkReference) async -> ArtworkAvailability
+    func invalidate() async
+}
+
+public extension LiveMetadataFetching {
+    func invalidate() async {}
 }
 
 /// Presentation-only channel data supplied by a strict compatibility adapter.

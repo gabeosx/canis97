@@ -20,12 +20,20 @@ public actor SiriusXMClient {
         self.metadataFetcher = UnavailableMetadataFetcher()
     }
 
+    init(metadataFetcher: any LiveMetadataFetching) {
+        self.sessionCoordinator = nil
+        self.catalogRefresher = UnavailableCatalogRefresher()
+        self.liveStreamResolver = UnavailableLiveStreamResolver()
+        self.metadataFetcher = metadataFetcher
+    }
+
     init(
         sessionCoordinator: SessionCoordinator,
         catalogRefresher: (any CatalogRefreshing)? = nil,
         catalogTransport: (any FixedCatalogTransporting)? = nil,
         liveStreamResolver: (any LiveStreamResolving)? = nil,
-        fixedLiveTransport: (any FixedLiveTransporting)? = nil
+        fixedLiveTransport: (any FixedLiveTransporting)? = nil,
+        metadataFetcher: (any LiveMetadataFetching)? = nil
     ) {
         self.sessionCoordinator = sessionCoordinator
         self.catalogRefresher = catalogRefresher ?? CurrentSessionCatalogRefresher(
@@ -38,7 +46,7 @@ public actor SiriusXMClient {
                 transport: fixedLiveTransport ?? FixedLiveURLSessionTransport()
             )
         )
-        self.metadataFetcher = CurrentSessionMetadataFetcher(sessionCoordinator: sessionCoordinator, transport: FixedMetadataURLSessionTransport())
+        self.metadataFetcher = metadataFetcher ?? CurrentSessionMetadataFetcher(sessionCoordinator: sessionCoordinator, transport: FixedMetadataURLSessionTransport())
     }
 
     /// Composes the sole supported WebView-token/native-request authentication path.
@@ -109,13 +117,14 @@ public actor SiriusXMClient {
 
     /// Ends the empty in-memory session without scheduling retry work.
     public func signOut() async -> SignOutOutcome {
-        guard let sessionCoordinator else {
-            return .alreadySignedOut
-        }
         lastValidCatalogSnapshot = nil
         catalogRefreshGeneration &+= 1
         liveResolutionGeneration &+= 1
         await liveStreamResolver.invalidate()
+        await metadataFetcher.invalidate()
+        guard let sessionCoordinator else {
+            return .alreadySignedOut
+        }
         return await sessionCoordinator.signOut()
     }
 

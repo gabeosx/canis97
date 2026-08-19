@@ -393,7 +393,19 @@ protocol FixedMetadataTransporting: Sendable {
 
 final class FixedMetadataURLSessionTransport: FixedMetadataTransporting, @unchecked Sendable {
     private let clock = FixedLiveLogicalClock()
-    private lazy var session = URLSession(configuration: .ephemeral)
+    private lazy var session = URLSession(configuration: Self.makeConfiguration())
+
+    static func makeConfiguration() -> URLSessionConfiguration {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 15
+        configuration.timeoutIntervalForResource = 15
+        configuration.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        configuration.urlCache = nil
+        configuration.httpCookieStorage = nil
+        configuration.httpShouldSetCookies = false
+        configuration.urlCredentialStorage = nil
+        return configuration
+    }
 
     func lookaround(using credential: AuthenticationCredential) async -> NativeTransportResponse {
         guard let url = URL(string: "https://lookaround-cache-prod.streaming.siriusxm.com/playbackservices/v1/live/lookAround?delta=") else { return Self.failed }
@@ -446,12 +458,17 @@ actor CurrentSessionMetadataFetcher: LiveMetadataFetching {
         self.transport = transport
     }
 
+    func invalidate() async {
+        generation &+= 1
+    }
+
     func metadata(for channelID: LiveChannelID) async -> MetadataAvailability {
         generation &+= 1
         let expected = generation
-        switch await sessionCoordinator.withCurrentCatalogCredential({ [transport] credential in await transport.lookaround(using: credential) }) {
+        let authorization = await sessionCoordinator.withCurrentCatalogCredential({ [transport] credential in await transport.lookaround(using: credential) })
+        guard generation == expected else { return .failed(.superseded) }
+        switch authorization {
         case let .completed(response):
-            guard generation == expected else { return .failed(.superseded) }
             return LiveListeningAdapter.decodeMetadata(response, channelID: channelID)
         case .authenticationUnavailable: return .failed(.authenticationUnavailable)
         case .notEntitled: return .failed(.notEntitled)

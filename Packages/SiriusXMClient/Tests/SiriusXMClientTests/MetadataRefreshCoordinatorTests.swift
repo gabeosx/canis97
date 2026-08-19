@@ -133,9 +133,129 @@ struct MetadataRefreshCoordinatorTests {
         #expect(redirected.didObserveRedirect)
         #expect(!untouched.didObserveRedirect)
     }
+
+    @Test("client sign-out invalidates outstanding metadata work before cleanup can complete")
+    func signOutInvalidatesMetadataFetcher() async {
+        let fetcher = InvalidationRecordingMetadataFetcher()
+        let client = SiriusXMClient(metadataFetcher: fetcher)
+
+        #expect(await client.signOut() == .alreadySignedOut)
+        #expect(await fetcher.invalidationCount == 1)
+    }
+
+    @Test("sign-out rejects late artwork bytes from the current session fetcher")
+    func signOutRejectsLateArtwork() async {
+        let session = metadataSessionCoordinator()
+        let transport = BlockingMetadataTransport()
+        let fetcher = CurrentSessionMetadataFetcher(sessionCoordinator: session, transport: transport)
+        let client = SiriusXMClient(sessionCoordinator: session, metadataFetcher: fetcher)
+        let reference = ChannelArtworkReference(relativeReference: "/fixture.jpeg")
+
+        let artwork = Task { await fetcher.artwork(for: reference) }
+        await transport.waitUntilArtworkRequested()
+        #expect(await client.signOut() == .signedOut)
+        await transport.releaseArtwork(
+            NativeTransportResponse(statusCode: 200, contentType: "image/jpeg", body: fixtureArtwork.bytes)
+        )
+
+        #expect(await artwork.value == .unavailable)
+    }
+
+    @Test("metadata transport uses a closed, finite ephemeral configuration")
+    func metadataTransportConfigurationIsBounded() {
+        let configuration = FixedMetadataURLSessionTransport.makeConfiguration()
+
+        #expect(configuration.timeoutIntervalForRequest == 15)
+        #expect(configuration.timeoutIntervalForResource == 15)
+        #expect(configuration.httpCookieStorage == nil)
+        #expect(!configuration.httpShouldSetCookies)
+        #expect(configuration.urlCredentialStorage == nil)
+        #expect(configuration.urlCache == nil)
+        #expect(configuration.requestCachePolicy == .reloadIgnoringLocalAndRemoteCacheData)
+    }
 }
 
 private let fixtureArtwork = ArtworkData(bytes: Data([0xFF, 0xD8, 0xFF, 0xD9]), mediaType: .jpeg)
+
+private actor InvalidationRecordingMetadataFetcher: LiveMetadataFetching {
+    private(set) var invalidationCount = 0
+
+    func metadata(for _: LiveChannelID) async -> MetadataAvailability { .unavailable }
+    func artwork(for _: ChannelArtworkReference) async -> ArtworkAvailability { .unavailable }
+    func invalidate() async { invalidationCount += 1 }
+}
+
+private func metadataSessionCoordinator() -> SessionCoordinator {
+    SessionCoordinator(
+        credentialSource: MetadataCredentialSource(),
+        authenticationVerifier: MetadataVerifier(),
+        entitlementVerifier: MetadataVerifier(),
+        credentialStore: MetadataCredentialStore(),
+        residueCleaner: MetadataResidueCleaner(),
+        clock: MetadataSessionClock(),
+        diagnostics: MetadataDiagnostics()
+    )
+}
+
+private actor BlockingMetadataTransport: FixedMetadataTransporting {
+    private var artworkRequested = false
+    private var artworkStartWaiter: CheckedContinuation<Void, Never>?
+    private var artworkResponseWaiter: CheckedContinuation<NativeTransportResponse, Never>?
+
+    func lookaround(using _: AuthenticationCredential) async -> NativeTransportResponse {
+        NativeTransportResponse(statusCode: 0, contentType: nil, body: Data(), transportFailed: true)
+    }
+
+    func artwork(for _: ChannelArtworkReference) async -> NativeTransportResponse {
+        artworkRequested = true
+        artworkStartWaiter?.resume()
+        artworkStartWaiter = nil
+        return await withCheckedContinuation { artworkResponseWaiter = $0 }
+    }
+
+    func waitUntilArtworkRequested() async {
+        guard !artworkRequested else { return }
+        await withCheckedContinuation { artworkStartWaiter = $0 }
+    }
+
+    func releaseArtwork(_ response: NativeTransportResponse) {
+        artworkResponseWaiter?.resume(returning: response)
+        artworkResponseWaiter = nil
+    }
+}
+
+private actor MetadataCredentialSource: CredentialSource {
+    func credential() async -> AuthenticationCredential? {
+        AuthenticationCredential(volatileMaterial: Data("fixture-credential".utf8))
+    }
+}
+
+private actor MetadataVerifier: NativeAuthenticationVerifying, NativeEntitlementVerifying {
+    func verifyAuthentication(using _: AuthenticationCredential) async -> NativeTransportResponse {
+        NativeTransportResponse(statusCode: 200, contentType: "application/json", body: SanitizedNativeResponseFixtures.profileV4Authenticated)
+    }
+
+    func verifyEntitlement(using _: AuthenticationCredential) async -> NativeTransportResponse {
+        NativeTransportResponse(statusCode: 200, contentType: "application/json", body: SanitizedNativeResponseFixtures.subscriptionV1Active)
+    }
+}
+
+private actor MetadataCredentialStore: CredentialStore {
+    func save(_: AuthenticationCredential) async throws {}
+    func erase() async throws {}
+}
+
+private actor MetadataResidueCleaner: AuthenticationResidueCleaner {
+    func removeAuthenticationResidue() async -> AuthenticationResidueCleanupOutcome { .removed }
+}
+
+private struct MetadataSessionClock: SessionClock {
+    func now() -> Date { Date(timeIntervalSince1970: 1) }
+}
+
+private actor MetadataDiagnostics: SessionDiagnostics {
+    func record(_: SessionDiagnosticEvent) async {}
+}
 
 private final class MetadataRedirectDecisionBox: @unchecked Sendable {
     private let lock = NSLock()
