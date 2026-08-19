@@ -6,9 +6,9 @@ current_phase: 2
 current_phase_name: Authorized Live Listening
 status: planning
 stopped_at: Completed 01-16-PLAN.md
-last_updated: "2026-08-18T18:42:32.989Z"
+last_updated: "2026-08-19T01:14:11Z"
 last_activity: 2026-08-18
-last_activity_desc: "Completed quick task 260818-c4r: update only Phase 1's Goal line in .planning/ROADMAP.md"
+last_activity_desc: "Completed quick task 260818-tf1: improve sign-in window with responsive WebView sizing and subtler border"
 progress:
   total_phases: 2
   completed_phases: 2
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-08-16)
 Phase: 2 — Authorized Live Listening
 Plan: Not started
 Status: Ready to plan
-Last activity: 2026-08-18 — Phase 1 complete, transitioned to Phase 2
+Last activity: 2026-08-18 — Completed quick task 260818-tf1: responsive sign-in window
 
 Progress: [██████████] 100%
 
@@ -158,6 +158,7 @@ None yet.
 |---|-------------|------|--------|-----------|
 | 260817-v8g | Align Phase 1 with settled WebView-token/native-request architecture and carry Phase 0 review findings into acceptance | 2026-08-17 | b306027 | [260817-v8g-treat-webview-token-extraction-and-nativ](./quick/260817-v8g-treat-webview-token-extraction-and-nativ/) |
 | 260818-c4r | Update only Phase 1's Goal line in .planning/ROADMAP.md | 2026-08-18 | fd464e6 | [260818-c4r-update-only-phase-1-goal-line-in-plannin](./quick/260818-c4r-update-only-phase-1-goal-line-in-plannin/) |
+| 260818-tf1 | Improve sign-in window with responsive WebView sizing and subtler border | 2026-08-18 | e469deb | [260818-tf1-improve-sign-in-window-with-responsive-w](./quick/260818-tf1-improve-sign-in-window-with-responsive-w/) |
 
 ### Roadmap Evolution
 
