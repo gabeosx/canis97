@@ -1,30 +1,35 @@
 ---
-status: awaiting_human_verify
+status: resolved
 trigger: "I don't want to proceed with further testing that requires me signing-in to Sirius until you add sufficient logging to debug what is actually happening. The more times I login the more likely it becomes that Sirius will block me suspecting I am a bot"
 created: 2026-08-18T23:08:00Z
-updated: 2026-08-19T01:08:02Z
+updated: 2026-08-19T01:45:29Z
 ---
 
 ## Current Focus
 
-hypothesis: Confirmed by the second live trace and a mutation test: the current WebKit AUTH_TOKEN is boundary-safe, current, and root-path but reports isSecure false; the Phase 1 Secure-attribute gate is the remaining handoff regression.
-test: The user trace showed AUTH_TOKEN followed only by auth-cookie-insecure. Offline, the exact current non-Secure subdomain token transfers after removing the Secure gate, fails as authCookieMissing when that gate is temporarily restored, and passes again after restoration of the fix.
-expecting: A future user-authorized attempt reaches credential-transferred, then exposes the native authentication and entitlement outcome through existing secret-safe diagnostics.
-next_action: Wait for the user to choose whether to run the rebuilt app. Do not initiate or request repeated SiriusXM sign-ins; one future attempt is the maximum before interpreting its result.
+hypothesis: Confirmed by direct gateway probes and the still-authenticated WebView's network traffic: the credential handoff and native authentication succeed, but the entitlement contract calls a removed gateway route and decodes an obsolete response shape.
+test: The stale `/subscription/v1/status` route returned a gateway 404 stating that the endpoint is not configured. The signed-in web player called `/subscription/v1/subscriptions`; replaying that exact authenticated request returned HTTP 200 with `{items:[...]}`, including one `state: active` item and one `state: finished` item.
+expecting: The rebuilt client requests `/subscription/v1/subscriptions`, treats any observed active subscription as entitled, treats only finished/empty item sets as not entitled, and fails closed on unknown or malformed state shapes.
+next_action: Offer one optional end-to-end confirmation against the rebuilt app. Do not require another sign-in for diagnosis; Debug WebViews are now inspectable in Safari and the live root cause is already established.
 bug_class: bohrbug
 reasoning_checkpoint:
-  hypothesis: "The live bridge regressed both proven parts of the token policy: boundary-safe SiriusXM subdomains and acceptance independent of HTTPCookie.isSecure."
+  hypothesis: "After repairing the bridge regression, the native entitlement contract remained stale: the gateway route and JSON decoder no longer matched the current web player."
   confirming_evidence:
     - "The user-provided sequence stops at auth-cookie-missing before any native client event."
     - "The previously working policy accepted siriusxm.com and boundary-safe subdomains; c5d8e40 changed player.siriusxm.com into an explicit rejection."
     - "Production loaded the marketing root although the established browser contract uses /player."
     - "The second live trace inventories AUTH_TOKEN and then emits only auth-cookie-insecure before the generic auth-cookie-missing terminal result."
+    - "The third live trace reaches credential-transferred and native-authentication:completed, then stops at entitlement:http-client-error."
+    - "An anonymous probe returns 404 with an unconfigured-endpoint message for /subscription/v1/status."
+    - "The retained signed-in WebView calls /subscription/v1/subscriptions, and replaying it returns HTTP 200 with an items array containing active and finished states."
   falsification_test: "The exact live-shaped current root-path player-subdomain cookie with isSecure false must transfer, the same test must fail when the Secure gate is restored, lookalike domains must remain rejected, and injected tests must make no network load."
-  fix_rationale: "Restore the complete proven predicate: exact name, root path, current expiry, and a label-boundary-safe SiriusXM domain; do not impose a cookie transport attribute that the live WebKit store does not provide."
-  blind_spots: "Only a future owner-authorized attempt can confirm the subsequent native endpoints remain compatible."
+  fix_rationale: "Replace the removed route and obsolete nested-status decoder with the exact live request and the minimum observed items/state predicate; keep every other payload field ignored and fail closed on unknown shapes."
+  blind_spots: "A future provider deployment may drift again; DEBUG WebViews are now inspectable without LLDB so the current request graph can be captured from the existing session before asking for repeated sign-ins."
   candidate_causes:
     - "code: c5d8e40 rejects valid SiriusXM subdomains, requires a Secure attribute absent from the live token, and production starts on the wrong entry surface"
     - "observability: auth-cookie-missing conceals present cookie names and selector rejection reasons"
+    - "contract: /subscription/v1/status was copied from the old feasibility spike but is no longer configured in the gateway"
+    - "decoder: production expected subscription.status, while the live response is items[].state"
   and_gate: "Yes: the restrictive selector produces the missing result, and insufficient telemetry conceals that regression. Both are repaired before another live attempt."
 tdd_checkpoint: null
 
@@ -127,11 +132,31 @@ started: First confirmed against the Phase 1 app during UAT on 2026-08-18. A pri
   checked: Post-transfer native diagnostic sufficiency
   found: Commit 2b51d30 replaces coarse native failures with fixed labels for transport class, content-type class, HTTP family, authentication JSON shape, and each settled entitlement-shape boundary. A canary test proves failing URLs and error descriptions are discarded before rendering. All 35 package tests, all 46 app tests, and the build-only check pass.
   implication: One live trace now identifies both bridge selection failures and the likely native failure boundary without exposing tokens or requiring a second sign-in solely to add diagnostics.
+- timestamp: 2026-08-19T01:45:29Z
+  checked: User-provided third live trace
+  found: Credential selection reaches credential-transferred and native-authentication:completed, then entitlement:http-client-error.
+  implication: Cookie discovery, token parsing, volatile handoff, and profile-v4 authentication all succeed; only the entitlement transaction remains in the failure path.
+- timestamp: 2026-08-19T01:45:29Z
+  checked: Direct anonymous gateway probes
+  found: /subscription/v1/status returns HTTP 404 with a gateway-generated endpoint-not-configured message, while /subscription/v1/subscriptions returns HTTP 401 without authorization.
+  implication: The former path is removed and the latter is a configured authentication-protected route; the generic http-client-error label had concealed this decisive distinction.
+- timestamp: 2026-08-19T01:45:29Z
+  checked: Safari Web Inspector attached to the still-running authenticated SiriusMac WebView
+  found: The current player loads account/v3/accounts/me, identity/v1/identities/me, profile/v3/profiles/me, and subscription/v1/subscriptions. A replay of the subscriptions request with the existing in-memory credential returned HTTP 200 and a 2703-byte JSON response.
+  implication: Live network inspection located the current entitlement route without another login or speculative endpoint changes.
+- timestamp: 2026-08-19T01:45:29Z
+  checked: Redacted live subscription response schema
+  found: The response root has one items array containing two entries; the entitlement-relevant fields are items[0].state=active and items[1].state=finished.
+  implication: The obsolete subscription.status decoder must be replaced with an exact items[].state classifier that accepts the observed active-plus-finished shape.
+- timestamp: 2026-08-19T01:45:29Z
+  checked: Automated verification and Debug build instrumentation
+  found: All 35 package tests and all 47 app tests pass; the Debug app builds at /tmp/sirius-mac-derived-data/Build/Products/Debug/SiriusMac.app. The app's Debug configuration now defines DEBUG, disables optimization, and a regression test proves its authentication WebView is inspectable.
+  implication: The endpoint, decoder, exact 404 diagnostic, and permanent live-inspection path are compiled into the actual artifact without another SiriusXM sign-in.
 
 ## Resolution
 
-root_cause: Phase 1 hardening discarded two parts of the previously proven WebView handoff. It replaced boundary-safe SiriusXM-subdomain acceptance with an apex/www-only allowlist and added a Secure-attribute requirement. The current live WebKit store exposes a valid AUTH_TOKEN name but reports isSecure false, so the remaining gate rejects it before any native request. The generic auth-cookie-missing label is only the terminal policy result; auth-cookie-insecure identifies the exact failed predicate.
-fix: Restored https://www.siriusxm.com/player and the complete proven token predicate: exact AUTH_TOKEN name, root path, current expiry, and siriusxm.com or a label-boundary-safe subdomain, independent of HTTPCookie.isSecure. Cardinality and suffix-lookalike protections remain. Value-free cookie-name inventory remains, and commit 2b51d30 adds fixed secret-free transport, content, HTTP-family, JSON-shape, and entitlement-shape diagnostics so one live attempt is sufficient to locate the next compatibility boundary.
+root_cause: Two sequential compatibility regressions were present. The WebView handoff first rejected the live token because Phase 1 discarded boundary-safe subdomain acceptance and imposed an unsupported Secure-attribute gate. After that repair, the native client successfully authenticated but requested the removed `/subscription/v1/status` endpoint and expected an obsolete `subscription.status` body. The current provider contract is `/subscription/v1/subscriptions` with entitlement represented by `items[].state`.
+fix: Restored the proven token predicate, replaced the stale entitlement route with `/subscription/v1/subscriptions`, and replaced the obsolete decoder with the minimum live-observed `items[].state` classifier. Added an exact `http-not-found` diagnostic and made DEBUG authentication WebViews inspectable by default, with the telemetry launcher printing the Safari Develop path. The authenticated request copied for the probe was cleared from the pasteboard after use.
 verification:
   target_test: pass
   mutation_check:
@@ -143,7 +168,7 @@ verification:
     result: pass
     suites:
       - "SiriusXMClient package: 35 tests"
-      - "SiriusMac app: 46 tests"
+      - "SiriusMac app: 47 tests"
       - "WebAuthenticationBridge focused: 22 tests"
   revert_and_reconfirm:
     result: pass
@@ -159,11 +184,15 @@ files_changed:
   - Packages/SiriusXMClient/Sources/SiriusXMClient/Public/SiriusXMClient.swift
   - Packages/SiriusXMClient/Sources/SiriusXMClient/Session/SessionCoordinator.swift
   - Packages/SiriusXMClient/Sources/SiriusXMClient/Session/SessionState.swift
+  - Packages/SiriusXMClient/Sources/SiriusXMClient/InternalAdapters/SiriusXMRequestContract.swift
+  - Packages/SiriusXMClient/Tests/SiriusXMClientTests/SanitizedNativeResponseFixtures.swift
+  - Packages/SiriusXMClient/Tests/SiriusXMClientTests/EphemeralSessionTests.swift
   - Packages/SiriusXMClient/Tests/FixtureTests/RedactionTests.swift
   - Packages/SiriusXMClient/Tests/SiriusXMClientTests/AuthenticationOutcomeTests.swift
   - Packages/SiriusXMClient/Tests/SiriusXMClientTests/SessionCoordinatorTests.swift
   - SiriusMac/Authentication/WebAuthenticationBridge.swift
   - SiriusMac/Authentication/FirstPartyTokenCookiePolicy.swift
+  - SiriusMac.xcodeproj/project.pbxproj
   - SiriusMacTests/WebAuthenticationBridgeTests.swift
   - script/build_and_run.sh
   - .planning/phases/01-safe-interoperability-foundation/01-UAT.md

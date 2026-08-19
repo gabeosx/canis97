@@ -3,7 +3,7 @@ status: partial
 phase: 01-safe-interoperability-foundation
 source: ["01-01-SUMMARY.md", "01-02-SUMMARY.md", "01-03-SUMMARY.md", "01-04-SUMMARY.md", "01-05-SUMMARY.md", "01-06-SUMMARY.md", "01-07-SUMMARY.md", "01-08-SUMMARY.md", "01-09-SUMMARY.md", "01-10-SUMMARY.md", "01-11-SUMMARY.md", "01-12-SUMMARY.md", "01-13-SUMMARY.md", "01-14-SUMMARY.md", "01-15-SUMMARY.md", "01-16-SUMMARY.md"]
 started: 2026-08-18T22:58:14Z
-updated: 2026-08-19T01:25:12Z
+updated: 2026-08-19T01:45:29Z
 ---
 
 ## Current Test
@@ -11,13 +11,13 @@ updated: 2026-08-19T01:25:12Z
 number: 10
 name: Keychain-Backed Session Restore
 expected: |
-  Go/no-go: YES. The rebuilt app accepts the observed current root-path `AUTH_TOKEN` from any true `siriusxm.com` subdomain even when WebKit reports `isSecure == false`, and the logging is now sufficient for one controlled attempt.
+  Go/no-go: YES, but another login is optional rather than required for diagnosis. A live probe against the retained signed-in session proved the stale entitlement endpoint and current response schema; the rebuilt app contains that exact repair.
   Make exactly one live sign-in attempt with the complete privacy-safe trace:
   1. In Terminal, run `cd /Users/gabe/sirius-mac` and then `./script/build_and_run.sh --telemetry`.
   2. Wait for Sirius Mac to open and for Terminal to show the telemetry filter. Click Sign In once and complete the embedded SiriusXM login. Stop immediately if SiriusXM shows CAPTCHA, rate limiting, a bot warning, or any account-security warning.
   3. When the embedded site visibly shows you are signed in, click Use Logged-In Session exactly once. Do not click Retry Sign In or Clear Local Session.
   4. Wait for one final native screen, then press Control-C in Terminal to stop log streaming.
-  5. Send the exact final title/message and every Terminal line from `web-sign-in-started` through the last `SiriusXM client event` or bridge event. The app never logs cookie values, tokens, URLs, bodies, headers, or error text.
+  5. Send the exact final title/message and every Terminal line from `web-sign-in-started` through the last `SiriusXM client event` or bridge event. If a new upstream mismatch occurs, leave the app open: its Debug WebView is already available under Safari > Develop > SiriusMac > www.siriusxm.com, so the current request can be inspected without another login.
   Pass if the trace reaches `credential-transferred`, `native-authentication:completed`, and `entitlement:completed`, and the app shows Ready to listen. If it stops, the final fixed label identifies the transport, content, status-family, JSON-shape, or entitlement-shape boundary from this same attempt.
 awaiting: user response
 
@@ -99,8 +99,8 @@ expected: |
 result: issue
 reported: "I signed in, then clicked \"use logged-in session\" and it gave me: \"Sign-in flow unsupported. This sign-in flow is unsupported. No workaround was attempted.\""
 severity: blocker
-diagnosis: "The live trace stopped before native authentication. Commit c5d8e40 had regressed the proven cookie handoff by rejecting true SiriusXM subdomains and adding a Secure-attribute gate. The second trace contains AUTH_TOKEN followed only by auth-cookie-insecure, proving WebKit reports the current token with isSecure false."
-fix_ready: "The complete proven predicate is restored: current root-path AUTH_TOKEN from siriusxm.com or any boundary-safe subdomain, independent of WebKit's Secure attribute. Commit 2b51d30 also makes every likely post-transfer native failure boundary distinguishable with fixed secret-free labels. The exact live-shaped regression, mutation check, 46 app tests, 35 package tests, redaction canaries, and build-only pass; one live confirmation is now diagnostically sufficient."
+diagnosis: "The third live trace proves the repaired cookie handoff and profile authentication succeed. The entitlement request then calls /subscription/v1/status, which a direct probe proves is an unconfigured 404. The current signed-in player calls /subscription/v1/subscriptions and returns {items:[...]}, with active and finished state values."
+fix_ready: "The rebuilt app uses the live /subscription/v1/subscriptions route, classifies the observed items[].state shape, reports exact 404 failures as http-not-found, and exposes its Debug WebView to Safari's Web Inspector. All 35 package tests, all 47 app tests, and the build-only command pass."
 
 ### 11. Memory-First Local Session Cleanup
 expected: |
