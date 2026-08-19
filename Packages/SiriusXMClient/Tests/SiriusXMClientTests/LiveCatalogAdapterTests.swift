@@ -1,8 +1,59 @@
+import Foundation
 import Testing
 @testable import SiriusXMClient
 
 @Suite("Provider-neutral live catalog contracts")
 struct LiveCatalogAdapterTests {
+
+    @Test("supported live operations remain fixed, first-party, and non-generic")
+    func supportedOperationsStayFixed() {
+        let operations = SiriusXMRequestContract.liveListeningOperations
+
+        #expect(operations.map(\.operationID) == [
+            "catalog",
+            "tune",
+            "playback-key",
+            "live-update",
+            "channel-peek",
+            "stream-enforcement",
+        ])
+        #expect(operations.map(\.method) == ["GET", "POST", "GET", "POST", "GET", "GET"])
+        #expect(operations.map(\.pathTemplate) == [
+            "/browse/v1/pages/curated-grouping/403ab6a5-d3c9-4c2a-a722-a94a6a5fd056",
+            "/playback/play/v1/tuneSource",
+            "/playback/key/v1/{keyId}",
+            "/playback/play/v1/liveUpdate",
+            "/channel-guide/v1/channel/{channelId}/peek",
+            "/playback/stream-enforcement/v1/status",
+        ])
+        #expect(operations.allSatisfy { $0.host == "api.edge-gateway.siriusxm.com" })
+        #expect(SiriusXMRequestContract.opaqueMediaDeliveryHost == "live-akc-prod-device.streaming.siriusxm.com")
+        #expect(!SiriusXMRequestContract.all.contains { $0.operationID == "media-resource" })
+    }
+
+    @Test("playback-key decoding accepts only the recorded opaque two-string shape after preflight")
+    func playbackKeyDecoderFailsClosed() {
+        let accepted = NativeTransportResponse(
+            statusCode: 200,
+            contentType: "application/json",
+            body: Data(#"{"keyId":"fixture-key-id","key":"fixture-key-material"}"#.utf8)
+        )
+        let malformed = NativeTransportResponse(
+            statusCode: 200,
+            contentType: "application/json",
+            body: Data(#"{"keyId":"fixture-key-id","unexpected":"fixture-value"}"#.utf8)
+        )
+        let control = NativeTransportResponse(
+            statusCode: 403,
+            contentType: "application/json",
+            body: Data(#"{"fixture_marker":"blocked"}"#.utf8)
+        )
+
+        #expect(LiveListeningAdapter.inspectPlaybackKey(accepted) == .accepted)
+        #expect(LiveListeningAdapter.inspectPlaybackKey(malformed) == .unsupported(.playbackKeyUnexpectedShape))
+        #expect(LiveListeningAdapter.inspectPlaybackKey(control) == .unsupported(.rejected))
+    }
+
     @Test("only explicitly linear classifications enter a stable ordered catalog")
     func filtersAndOrdersSemanticCandidates() {
         let adapter = LiveCatalogAdapter()
