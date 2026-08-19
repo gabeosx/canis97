@@ -240,6 +240,87 @@ final class ListeningCompositionTests: XCTestCase {
         XCTAssertEqual(coordinator.state, .unavailable(.networkUnavailable))
     }
 
+    func testRecoveryCoalescesSignalsAndUsesOneBoundedSameChannelBudget() async {
+        let resolver = ControlledPlaybackResolver()
+        let runtime = RecordingPlaybackRuntime(autoConfirm: true)
+        let sleeper = ControlledRecoverySleeper()
+        let policy = PlaybackRecoveryPolicy(
+            maximumReResolutions: 2,
+            stallGrace: 8,
+            backoffs: [1, 3]
+        )
+        let coordinator = PlaybackCoordinator(
+            resolver: resolver,
+            runtime: runtime,
+            recoveryPolicy: policy,
+            sleeper: sleeper
+        )
+        let channel = LiveChannelID("fixture-bounded-recovery")
+
+        let tune = Task { await coordinator.tune(channel) }
+        await resolver.waitForResolution(of: channel, count: 1)
+        await resolver.complete(channel, with: .available(FixtureMediaHandoff()))
+        _ = await tune.value
+
+        coordinator.handleRecoverySignal(.stalled)
+        coordinator.handleRecoverySignal(.stalled)
+        coordinator.handleRecoverySignal(.networkBecameAvailable)
+        await sleeper.waitForDelay(8)
+        await sleeper.completeNext()
+        await sleeper.waitForDelay(1)
+        await sleeper.completeNext()
+        await resolver.waitForResolution(of: channel, count: 2)
+        await resolver.complete(channel, with: .failed(.networkUnavailable))
+        await sleeper.waitForDelay(3)
+        await sleeper.completeNext()
+        await resolver.waitForResolution(of: channel, count: 3)
+        await resolver.complete(channel, with: .available(FixtureMediaHandoff()))
+
+        for _ in 0 ..< 10 {
+            if coordinator.state == .playing(channel) { break }
+            await Task.yield()
+        }
+        let recoveryCalls = await resolver.calls(for: channel)
+        XCTAssertEqual(recoveryCalls, 3)
+        XCTAssertEqual(coordinator.selectedChannelID, channel)
+        XCTAssertEqual(coordinator.state, .playing(channel))
+    }
+
+    func testOfflineAndStopCancelRecoveryBeforeAnyProviderCall() async {
+        let resolver = ControlledPlaybackResolver()
+        let runtime = RecordingPlaybackRuntime(autoConfirm: true)
+        let sleeper = ControlledRecoverySleeper()
+        let coordinator = PlaybackCoordinator(
+            resolver: resolver,
+            runtime: runtime,
+            recoveryPolicy: PlaybackRecoveryPolicy(maximumReResolutions: 2, stallGrace: 8, backoffs: [1, 3]),
+            sleeper: sleeper
+        )
+        let channel = LiveChannelID("fixture-offline-recovery")
+
+        let tune = Task { await coordinator.tune(channel) }
+        await resolver.waitForResolution(of: channel, count: 1)
+        await resolver.complete(channel, with: .available(FixtureMediaHandoff()))
+        _ = await tune.value
+
+        coordinator.handleRecoverySignal(.networkBecameUnavailable)
+        coordinator.handleRecoverySignal(.stalled)
+        await Task.yield()
+        let offlineCalls = await resolver.calls(for: channel)
+        XCTAssertEqual(offlineCalls, 1)
+
+        coordinator.handleRecoverySignal(.networkBecameAvailable)
+        coordinator.handleRecoverySignal(.stalled)
+        await sleeper.waitForDelay(8)
+        await coordinator.stop()
+        await sleeper.completeNext()
+        for _ in 0 ..< 5 { await Task.yield() }
+        let stoppedCalls = await resolver.calls(for: channel)
+        XCTAssertEqual(stoppedCalls, 1)
+        XCTAssertEqual(coordinator.state, .stopped)
+        XCTAssertNil(coordinator.selectedChannelID)
+    }
+
     func testLiveContractObservationSinkAcceptsOnlyClosedSemanticEvidence() {
         let sink = LiveContractObservationSink()
         let observation = LiveContractObservation(
@@ -801,6 +882,30 @@ private final class RecordingPlaybackRuntime: PlaybackPlayerRuntime {
 @MainActor
 private final class TestItemObservation: PlaybackItemObserving {
     func cancel() {}
+}
+
+private actor ControlledRecoverySleeper: PlaybackRecoverySleeping {
+    private var delays: [TimeInterval] = []
+    private var continuations: [CheckedContinuation<Void, Never>] = []
+    private var waiters: [TimeInterval: CheckedContinuation<Void, Never>] = [:]
+
+    func sleep(for seconds: TimeInterval) async {
+        delays.append(seconds)
+        waiters.removeValue(forKey: seconds)?.resume()
+        await withCheckedContinuation { continuations.append($0) }
+    }
+
+    func waitForDelay(_ seconds: TimeInterval) async {
+        guard delays.contains(seconds) else {
+            await withCheckedContinuation { waiters[seconds] = $0 }
+            return
+        }
+    }
+
+    func completeNext() {
+        guard !continuations.isEmpty else { return }
+        continuations.removeFirst().resume()
+    }
 }
 
 private actor ControlledPlaybackResolver: PlaybackResolving {
