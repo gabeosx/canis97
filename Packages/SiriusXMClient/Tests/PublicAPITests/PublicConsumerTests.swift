@@ -7,7 +7,7 @@ import Testing
     #expect(await client.authenticate() == .waitingForAuthenticationComposition)
     #expect(await client.entitlement() == .unavailable)
     #expect(await client.signOut() == .alreadySignedOut)
-    #expect(await client.catalog() == .unavailable)
+    #expect(await client.catalog() == .failed(.authenticationUnavailable))
     #expect(await client.metadata() == .unavailable)
     #expect(await client.resolveLiveStream() == .unavailable)
 }

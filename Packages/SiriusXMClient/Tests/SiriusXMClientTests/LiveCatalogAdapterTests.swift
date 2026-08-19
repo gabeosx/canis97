@@ -217,8 +217,8 @@ struct EntitledLiveCatalogSnapshotTests {
         ])
 
         #expect(result.snapshot?.channels.map(\.id) == [
-            LiveChannelID("fixture-b"),
             LiveChannelID("fixture-a"),
+            LiveChannelID("fixture-b"),
             LiveChannelID("fixture-z"),
             LiveChannelID("fixture-news"),
         ])

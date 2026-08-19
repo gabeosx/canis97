@@ -9,6 +9,11 @@ enum LiveListeningAdapter {
         case unsupported(SafeDiagnosticOutcome)
     }
 
+    enum CatalogPreflightInspection: Sendable, Equatable {
+        case accepted
+        case unsupported(SafeDiagnosticOutcome)
+    }
+
     static func inspectPlaybackKey(_ response: NativeTransportResponse) -> PlaybackKeyInspection {
         if let failure = preflightFailure(for: response) {
             return .unsupported(failure)
@@ -20,6 +25,13 @@ enum LiveListeningAdapter {
               root["key"] is String
         else {
             return .unsupported(.playbackKeyUnexpectedShape)
+        }
+        return .accepted
+    }
+
+    static func inspectCatalogPreflight(_ response: NativeTransportResponse) -> CatalogPreflightInspection {
+        if let failure = preflightFailure(for: response) {
+            return .unsupported(failure)
         }
         return .accepted
     }

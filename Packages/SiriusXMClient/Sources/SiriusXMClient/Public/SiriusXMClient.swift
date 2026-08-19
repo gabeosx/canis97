@@ -6,13 +6,20 @@ public typealias AuthenticationAvailability = AuthenticationOutcome
 /// A semantic client for the supported SiriusXM subscriber experience.
 public actor SiriusXMClient {
     private let sessionCoordinator: SessionCoordinator?
+    private let catalogRefresher: any CatalogRefreshing
+    private var lastValidCatalogSnapshot: LiveCatalogSnapshot?
 
     public init() {
         self.sessionCoordinator = nil
+        self.catalogRefresher = UnavailableCatalogRefresher()
     }
 
-    init(sessionCoordinator: SessionCoordinator) {
+    init(
+        sessionCoordinator: SessionCoordinator,
+        catalogRefresher: any CatalogRefreshing = UnavailableCatalogRefresher()
+    ) {
         self.sessionCoordinator = sessionCoordinator
+        self.catalogRefresher = catalogRefresher
     }
 
     /// Composes the sole supported WebView-token/native-request authentication path.
@@ -36,6 +43,7 @@ public actor SiriusXMClient {
             clock: SystemSessionClock(),
             diagnostics: diagnostics
         )
+        catalogRefresher = UnavailableCatalogRefresher()
     }
 
     /// Returns the fail-closed Phase 1 state without contacting a provider.
@@ -74,12 +82,48 @@ public actor SiriusXMClient {
         guard let sessionCoordinator else {
             return .alreadySignedOut
         }
+        lastValidCatalogSnapshot = nil
         return await sessionCoordinator.signOut()
     }
 
-    /// Keeps catalog work unavailable until the authorized content phase.
-    public func catalog() -> CatalogAvailability {
-        .unavailable
+    /// Refreshes the catalog through the current authorized client transaction.
+    ///
+    /// The default refresher deliberately fails closed until a later capability
+    /// plan can supply validated opaque inputs. It does not make a provider
+    /// request, expose a request materialization API, or infer a wire schema.
+    public func catalog() async -> CatalogAvailability {
+        guard let sessionCoordinator else {
+            return .failed(.authenticationUnavailable)
+        }
+        guard await sessionCoordinator.entitlementAvailability == .entitled else {
+            return .failed(.notEntitled)
+        }
+
+        let refreshed = await catalogRefresher.refresh()
+
+        // An intervening sign-out or entitlement loss makes the attempted
+        // refresh non-authoritative, even if it returned a semantic snapshot.
+        guard await sessionCoordinator.entitlementAvailability == .entitled else {
+            return .failed(.notEntitled)
+        }
+
+        if let snapshot = refreshed.snapshot, refreshed.failure == nil {
+            lastValidCatalogSnapshot = snapshot
+            return .snapshot(snapshot)
+        }
+
+        let failure = refreshed.failure ?? .unavailable
+        if let lastValidCatalogSnapshot {
+            return .stale(
+                snapshot: LiveCatalogSnapshot(
+                    channels: lastValidCatalogSnapshot.channels,
+                    refreshedAt: lastValidCatalogSnapshot.refreshedAt,
+                    freshness: .stale
+                ),
+                failure: failure
+            )
+        }
+        return .failed(failure)
     }
 
     /// Keeps metadata work unavailable until the authorized content phase.
@@ -90,6 +134,18 @@ public actor SiriusXMClient {
     /// Keeps live-stream resolution unavailable until the authorized content phase.
     public func resolveLiveStream() -> LiveStreamResolutionAvailability {
         .unavailable
+    }
+}
+
+/// An internal semantic seam. Its implementations must not expose catalog bodies,
+/// URLs, headers, credentials, or a generic provider request surface.
+protocol CatalogRefreshing: Sendable {
+    func refresh() async -> LiveCatalogSnapshotResult
+}
+
+private struct UnavailableCatalogRefresher: CatalogRefreshing {
+    func refresh() async -> LiveCatalogSnapshotResult {
+        LiveCatalogSnapshotResult(snapshot: nil, failure: .unavailable)
     }
 }
 

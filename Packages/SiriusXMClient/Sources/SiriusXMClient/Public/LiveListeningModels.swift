@@ -18,18 +18,79 @@ public struct LiveChannelID: Sendable, Equatable, Hashable, Codable, CustomStrin
     public let rawValue: String
 
     public init(_ rawValue: String) {
+        precondition(!rawValue.isEmpty, "Live channel identities must be nonempty")
         self.rawValue = rawValue
     }
 
     public var description: String { "LiveChannelID(semantic)" }
+
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.rawValue.unicodeScalars.elementsEqual(rhs.rawValue.unicodeScalars)
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        for scalar in rawValue.unicodeScalars {
+            hasher.combine(scalar.value)
+        }
+    }
 }
 
-/// Presentation-only channel data supplied by a future compatibility adapter.
+/// A closed entitlement classification used only while filtering catalog candidates.
+public enum ChannelEntitlement: Sendable, Equatable {
+    case entitledStandard
+    case entitledAppOnly
+    case notEntitled
+    case unknown
+}
+
+/// A closed entity classification used only while filtering catalog candidates.
+enum CatalogEntityKind: Sendable, Equatable {
+    case channelLinear
+    case xtra
+    case replay
+    case onDemand
+    case nonlinear
+    case unknown
+}
+
+/// An opaque, redacted marker that artwork exists for a channel.
+///
+/// It intentionally retains no URL, resource, token, or provider field. Artwork
+/// loading and precedence remain a later presentation concern.
+public struct ChannelArtworkReference: Sendable, Equatable, Hashable, CustomStringConvertible, CustomDebugStringConvertible {
+    public init() {}
+
+    public var description: String { "ChannelArtworkReference(redacted)" }
+    public var debugDescription: String { "ChannelArtworkReference(redacted)" }
+}
+
+/// Presentation-only channel data supplied by a strict compatibility adapter.
 public struct LiveChannel: Sendable, Equatable, Hashable {
     public let id: LiveChannelID
-    public let title: String
+    public let name: String?
+    public let description: String?
     public let displayNumber: Int?
     public let category: String?
+    public let artwork: ChannelArtworkReference?
+
+    /// A presentation fallback for existing consumers. It never replaces `id`.
+    public var title: String { name ?? id.rawValue }
+
+    public init(
+        id: LiveChannelID,
+        name: String? = nil,
+        description: String? = nil,
+        displayNumber: Int? = nil,
+        category: String? = nil,
+        artwork: ChannelArtworkReference? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.description = description
+        self.displayNumber = displayNumber
+        self.category = category
+        self.artwork = artwork
+    }
 
     public init(
         id: LiveChannelID,
@@ -37,26 +98,43 @@ public struct LiveChannel: Sendable, Equatable, Hashable {
         displayNumber: Int? = nil,
         category: String? = nil
     ) {
-        self.id = id
-        self.title = title
-        self.displayNumber = displayNumber
-        self.category = category
+        self.init(id: id, name: title, displayNumber: displayNumber, category: category)
     }
 }
 
 /// The observed freshness of semantic catalog data, independent of authorization.
-public enum LiveCatalogFreshness: Sendable, Equatable {
+public enum CatalogFreshness: Sendable, Equatable {
     case fresh
     case stale
+}
+
+public typealias LiveCatalogFreshness = CatalogFreshness
+
+/// Closed, non-provider-specific reasons a catalog refresh could not publish a fresh snapshot.
+public enum CatalogFailure: Sendable, Equatable {
+    case unavailable
+    case authenticationUnavailable
+    case notEntitled
+    case collectionUnavailable
+    case malformedCandidate
+    case conflictingIdentity
+    case unsupportedResponse
+    case cancelled
 }
 
 /// A browsable catalog value that cannot authorize playback by itself.
 public struct LiveCatalogSnapshot: Sendable, Equatable {
     public let channels: [LiveChannel]
-    public let freshness: LiveCatalogFreshness
+    public let refreshedAt: Date
+    public let freshness: CatalogFreshness
 
-    public init(channels: [LiveChannel], freshness: LiveCatalogFreshness) {
+    public init(
+        channels: [LiveChannel],
+        refreshedAt: Date = .distantPast,
+        freshness: CatalogFreshness
+    ) {
         self.channels = channels
+        self.refreshedAt = refreshedAt
         self.freshness = freshness
     }
 
@@ -64,12 +142,20 @@ public struct LiveCatalogSnapshot: Sendable, Equatable {
     public var allowsPlaybackAuthorization: Bool { false }
 }
 
+/// The public result of one explicit catalog refresh. A stale snapshot is browse-only.
+public enum CatalogAvailability: Sendable, Equatable {
+    case snapshot(LiveCatalogSnapshot)
+    case stale(snapshot: LiveCatalogSnapshot, failure: CatalogFailure)
+    case failed(CatalogFailure)
+    case unavailable
+}
+
 /// Closed catalog presentation state before a live compatibility adapter exists.
 public enum LiveCatalogPresentation: Sendable, Equatable {
     case unavailable
     case snapshot(LiveCatalogSnapshot)
 
-    public var freshness: LiveCatalogFreshness? {
+    public var freshness: CatalogFreshness? {
         guard case let .snapshot(snapshot) = self else { return nil }
         return snapshot.freshness
     }
@@ -102,7 +188,7 @@ public enum LiveListeningFailure: Sendable, Equatable {
     case unsupported
 }
 
-/// An invented semantic class used only to decide whether a catalog candidate belongs in v1 lineup browsing.
+/// Compatibility spelling retained for earlier offline catalog tests.
 enum LiveCatalogClassification: Sendable, Equatable {
     case standardLinear
     case appLinear
@@ -110,40 +196,152 @@ enum LiveCatalogClassification: Sendable, Equatable {
     case ambiguous
 }
 
-/// Provider-neutral presentation data for a future compatibility adapter.
+/// A semantic, non-wire candidate delivered only by the internal catalog adapter.
 struct LiveCatalogCandidate: Sendable, Equatable {
-    let id: LiveChannelID
-    let title: String
-    let displayNumber: Int?
+    let identity: String
+    let displayNumber: Double?
+    let name: String?
+    let description: String?
     let category: String?
-    let classification: LiveCatalogClassification
+    let artwork: ChannelArtworkReference?
+    let entity: CatalogEntityKind
+    let entitlement: ChannelEntitlement
+
+    init(
+        identity: String,
+        displayNumber: Double?,
+        name: String?,
+        description: String?,
+        category: String?,
+        artwork: ChannelArtworkReference?,
+        entity: CatalogEntityKind,
+        entitlement: ChannelEntitlement
+    ) {
+        self.identity = identity
+        self.displayNumber = displayNumber
+        self.name = name
+        self.description = description
+        self.category = category
+        self.artwork = artwork
+        self.entity = entity
+        self.entitlement = entitlement
+    }
+
+    init(
+        id: LiveChannelID,
+        title: String,
+        displayNumber: Int?,
+        category: String?,
+        classification: LiveCatalogClassification
+    ) {
+        self.init(
+            identity: id.rawValue,
+            displayNumber: displayNumber.map(Double.init),
+            name: title,
+            description: nil,
+            category: category,
+            artwork: nil,
+            entity: classification == .standardLinear || classification == .appLinear ? .channelLinear : .nonlinear,
+            entitlement: classification == .standardLinear ? .entitledStandard : classification == .appLinear ? .entitledAppOnly : .notEntitled
+        )
+    }
+}
+
+/// Internal result keeps a failed refresh separate from a browsable cached snapshot.
+struct LiveCatalogSnapshotResult: Sendable, Equatable {
+    let snapshot: LiveCatalogSnapshot?
+    let failure: CatalogFailure?
 }
 
 /// Converts semantic candidates into stable browse data without claiming current playback authority.
 struct LiveCatalogAdapter: Sendable {
+    static func snapshot(from candidates: [LiveCatalogCandidate]?) -> LiveCatalogSnapshotResult {
+        guard let candidates else {
+            return LiveCatalogSnapshotResult(snapshot: nil, failure: .collectionUnavailable)
+        }
+
+        var accepted: [String: LiveCatalogCandidate] = [:]
+        for candidate in candidates {
+            guard !candidate.identity.isEmpty, isKnown(candidate) else {
+                return LiveCatalogSnapshotResult(snapshot: nil, failure: .malformedCandidate)
+            }
+            if let displayNumber = candidate.displayNumber,
+               canonicalNumber(displayNumber) == nil {
+                return LiveCatalogSnapshotResult(snapshot: nil, failure: .malformedCandidate)
+            }
+
+            guard candidate.entity == .channelLinear,
+                  candidate.entitlement == .entitledStandard || candidate.entitlement == .entitledAppOnly
+            else {
+                continue
+            }
+
+            let key = opaqueIdentityKey(candidate.identity)
+            if let existing = accepted[key], existing != candidate {
+                return LiveCatalogSnapshotResult(snapshot: nil, failure: .conflictingIdentity)
+            }
+            accepted[key] = candidate
+        }
+
+        let channels = accepted.values
+            .compactMap { candidate -> LiveChannel? in
+                let number = candidate.displayNumber.flatMap(canonicalNumber)
+                return LiveChannel(
+                    id: LiveChannelID(candidate.identity),
+                    name: candidate.name,
+                    description: candidate.description,
+                    displayNumber: number,
+                    category: candidate.category,
+                    artwork: candidate.artwork
+                )
+            }
+            .sorted(by: isOrderedBefore)
+        return LiveCatalogSnapshotResult(
+            snapshot: LiveCatalogSnapshot(channels: channels, refreshedAt: Date(), freshness: .fresh),
+            failure: nil
+        )
+    }
+
+    static func withStaleSnapshot(
+        _ snapshot: LiveCatalogSnapshot?,
+        after failure: CatalogFailure
+    ) -> LiveCatalogSnapshotResult {
+        guard let snapshot else {
+            return LiveCatalogSnapshotResult(snapshot: nil, failure: failure)
+        }
+        return LiveCatalogSnapshotResult(
+            snapshot: LiveCatalogSnapshot(channels: snapshot.channels, refreshedAt: snapshot.refreshedAt, freshness: .stale),
+            failure: failure
+        )
+    }
+
     func makeSnapshot(
         from candidates: [LiveCatalogCandidate],
         freshness: LiveCatalogFreshness
     ) -> LiveCatalogSnapshot {
-        let channels = candidates
-            .filter { $0.classification == .standardLinear || $0.classification == .appLinear }
-            .sorted(by: Self.isOrderedBefore)
-            .map {
-                LiveChannel(
-                    id: $0.id,
-                    title: $0.title,
-                    displayNumber: $0.displayNumber,
-                    category: $0.category
-                )
-            }
-        return LiveCatalogSnapshot(channels: channels, freshness: freshness)
+        let result = Self.snapshot(from: candidates)
+        return result.snapshot.map {
+            LiveCatalogSnapshot(channels: $0.channels, refreshedAt: $0.refreshedAt, freshness: freshness)
+        } ?? LiveCatalogSnapshot(channels: [], freshness: freshness)
     }
 
     func retainingForBrowsing(_ snapshot: LiveCatalogSnapshot) -> LiveCatalogSnapshot {
         LiveCatalogSnapshot(channels: snapshot.channels, freshness: .stale)
     }
 
-    private static func isOrderedBefore(_ lhs: LiveCatalogCandidate, _ rhs: LiveCatalogCandidate) -> Bool {
+    private static func canonicalNumber(_ number: Double) -> Int? {
+        return Int(exactly: number)
+    }
+
+    private static func isKnown(_ candidate: LiveCatalogCandidate) -> Bool {
+        candidate.entity != .unknown && candidate.entitlement != .unknown
+    }
+
+    private static func opaqueIdentityKey(_ identity: String) -> String {
+        identity.unicodeScalars.map { String($0.value, radix: 16) }.joined(separator: "-")
+    }
+
+    private static func isOrderedBefore(_ lhs: LiveChannel, _ rhs: LiveChannel) -> Bool {
         let leftCategory = lhs.category ?? ""
         let rightCategory = rhs.category ?? ""
         if leftCategory != rightCategory { return leftCategory < rightCategory }
@@ -151,8 +349,8 @@ struct LiveCatalogAdapter: Sendable {
         let leftNumber = lhs.displayNumber ?? .max
         let rightNumber = rhs.displayNumber ?? .max
         if leftNumber != rightNumber { return leftNumber < rightNumber }
-        if lhs.title != rhs.title { return lhs.title < rhs.title }
-        return lhs.id.rawValue < rhs.id.rawValue
+        if lhs.name != rhs.name { return (lhs.name ?? "") < (rhs.name ?? "") }
+        return lhs.id.rawValue.utf8.lexicographicallyPrecedes(rhs.id.rawValue.utf8)
     }
 }
 

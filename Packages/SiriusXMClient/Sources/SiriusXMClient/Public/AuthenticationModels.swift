@@ -81,11 +81,6 @@ public enum SignOutCleanupFailure: Sendable, Equatable {
     case both
 }
 
-/// Semantic catalog availability.
-public enum CatalogAvailability: Sendable, Equatable {
-    case unavailable
-}
-
 /// Semantic metadata availability.
 public enum MetadataAvailability: Sendable, Equatable {
     case unavailable
