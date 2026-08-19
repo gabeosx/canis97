@@ -173,7 +173,7 @@ final class ListeningCompositionTests: XCTestCase {
         XCTAssertNotEqual(coordinator.state, .playing(channel))
     }
 
-    func testTuneObservesAnItemBeforeInstallationAndWaitsForConfirmedPlayback() async {
+    func testTuneInstallsAnObservedItemBeforeReadinessAndWaitsForConfirmedPlayback() async {
         let resolver = ControlledPlaybackResolver()
         let runtime = RecordingPlaybackRuntime()
         let coordinator = PlaybackCoordinator(resolver: resolver, runtime: runtime)
@@ -184,7 +184,7 @@ final class ListeningCompositionTests: XCTestCase {
         await resolver.complete(channel, with: .available(FixtureMediaHandoff()))
         await runtime.waitForObservation()
 
-        XCTAssertEqual(runtime.events(), [.observed])
+        XCTAssertEqual(runtime.events(), [.observed, .installed])
         XCTAssertEqual(coordinator.state, .idle)
 
         runtime.confirmReady()
@@ -927,6 +927,7 @@ private final class RecordingPlaybackRuntime: PlaybackPlayerRuntime {
         hasInstalledItem = true
         installCount += 1
         recordedEvents.append(.installed)
+        if autoConfirm { ready?() }
     }
 
     func requestPlay() {
