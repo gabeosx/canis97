@@ -311,10 +311,10 @@ monitor.start(queue: monitorQueue)
 
 ## Open Questions
 
-**Resolution routing (checkpoint result):** Plan 02-02 restored the existing Keychain-backed session to the semantic ready state, then consumed its single authorized checkpoint with exactly the approved catalog GET. The response did not satisfy the bounded semantic parser and stopped at `malformed-contract` before channel selection or later content operations. The canonical sanitized [02-LIVE-CONTRACT.md](./02-LIVE-CONTRACT.md) says `Gate Result: UNSUPPORTED` and `Execution: HALT`. Plan 02-03 may not add fixed provider code; provider-dependent plans remain blocked. No raw live evidence belongs in this research file or the canonical artifact.
+**Resolution routing (checkpoint result):** Plan 02-02 restored the existing Keychain-backed session to the semantic ready state, confirmed the current catalog route, and used one owner-selected entitled linear channel for exactly one fixed tune POST. That tune stopped at `human-verification-required` before any resource, key, AVFoundation, metadata, or artwork work. The canonical sanitized [02-LIVE-CONTRACT.md](./02-LIVE-CONTRACT.md) says `Gate Result: UNSUPPORTED` and `Execution: HALT`. Plan 02-03 may not add fixed provider code; provider-dependent plans remain blocked. No raw live evidence belongs in this research file or the canonical artifact.
 
-1. **[RESOLVED — UNSUPPORTED / NOT REACHED] What are the current fixed catalog, tune, stream, metadata, artwork, and key-authorization contracts?**
-   - Result: The exact catalog transport candidate was reached, but its response was not admitted by the bounded semantic parser and stopped at `malformed-contract`. No schema, tune, resource resolution, metadata, artwork, or key authorization was retained or inferred.
+1. **[RESOLVED — UNSUPPORTED / PARTIALLY REACHED] What are the current fixed catalog, tune, stream, metadata, artwork, and key-authorization contracts?**
+   - Result: The current catalog route admitted a sanitized linear selection. The one exact tune request then stopped at `human-verification-required`; no resource resolution, metadata, artwork, or key authorization was retained or inferred.
    - Canonical record: [02-LIVE-CONTRACT.md](./02-LIVE-CONTRACT.md) — `Gate Result: UNSUPPORTED`, `Execution: HALT`.
 
 2. **[RESOLVED — UNSUPPORTED / NOT REACHED] Can AVFoundation obtain and play the authorized stream without a prohibited custom authorization mechanism?**

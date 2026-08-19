@@ -5,10 +5,10 @@ milestone_name: milestone
 current_phase: 02
 current_phase_name: Authorized Live Listening
 status: blocked
-stopped_at: "Halted 02-02-PLAN.md: malformed-contract blocks provider-dependent plans"
-last_updated: "2026-08-19T14:22:51Z"
+stopped_at: "Halted 02-02-PLAN.md: human-verification-required blocks provider-dependent plans"
+last_updated: "2026-08-19T15:15:59Z"
 last_activity: 2026-08-19
-last_activity_desc: Completed the exact catalog checkpoint and halted at malformed-contract
+last_activity_desc: Confirmed the catalog route and halted the selected tune at human-verification-required
 progress:
   total_phases: 3
   completed_phases: 2
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-08-18)
 
 Phase: 02 (Authorized Live Listening) — HALTED
 Plan: 3 of 7
-Status: Blocked by halted Plan 02-02 (`malformed-contract`)
+Status: Blocked by halted Plan 02-02 (`human-verification-required`)
 Last activity: 2026-08-18 — Phase 02 execution started
 
 Progress: [█████████░] 86%
@@ -147,7 +147,7 @@ All earlier Phase 0 feasibility-selection, proof-run, quartet, GO/NO-GO, and cal
 - [Phase ?]: Keep Wave 0 listening seams semantic and provider-neutral until the owner-visible contract checkpoint.
 - [Phase ?]: Treat catalog snapshots as browse-only; playback requires separate current authorization confirmation.
 - [Phase ?]: Use generation checks and finite recovery budgets to reject stale, superseded, and cancelled listening work.
-- [Phase 02]: Treat malformed-contract as the terminal first failure domain when the one exact catalog response cannot be admitted by the bounded semantic parser; do not retain schema data or infer later provider/AVFoundation contracts. — The restored session reached ready state, then the single authorized catalog request halted before channel selection.
+- [Phase 02]: Treat a tune-time human-verification control as terminal; do not bypass it, retain control detail, or infer resource/key/AVFoundation contracts. — The restored session reached ready state, the current catalog route admitted a selected linear channel, and the single exact tune stopped safely.
 
 ### Pending Todos
 
@@ -157,7 +157,7 @@ None yet.
 
 - Phase 1: The SiriusXM WebView/token/native-request contract remains volatile; drift must fail closed behind replaceable adapters, never trigger a new authentication-method experiment during execution.
 - Phase 5: Verify signing, notarization, stapling, immutable release, Gatekeeper, and Homebrew Cask behavior against the current release toolchain before publishing.
-- Plan 02-02 halted: the restored existing session stopped at malformed-contract after exactly one catalog request; Plans 02-03 through 02-07 are blocked.
+- Plan 02-02 halted: the restored existing session confirmed catalog selection, then the one exact tune stopped at human-verification-required; Plans 02-03 through 02-07 are blocked.
 
 ### Quick Tasks Completed
 
@@ -182,5 +182,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-08-19T13:01:50.520Z
-Stopped at: Halted 02-02-PLAN.md: malformed-contract blocks provider-dependent plans
+Stopped at: Halted 02-02-PLAN.md: human-verification-required blocks provider-dependent plans
 Resume file: None
