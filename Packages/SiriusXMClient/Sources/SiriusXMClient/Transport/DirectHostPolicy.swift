@@ -14,7 +14,9 @@ enum DirectHostPolicy {
               components.fragment == nil,
               request.httpBody == nil,
               let operation = SiriusXMRequestContract.all.first(where: {
-                  $0.path == components.path && $0.method == (request.httpMethod ?? "GET")
+                  $0.isTransportMaterializable
+                      && $0.pathTemplate == components.path
+                      && $0.method == (request.httpMethod ?? "GET")
               })
         else {
             return false

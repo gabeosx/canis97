@@ -2,7 +2,7 @@
 
 **Phase:** 02 — Authorized Live Listening
 **Scope:** Non-exhaustive, sanitized compatibility evidence for the v1 live-listening contract.
-**Status:** The canonical [02-LIVE-CONTRACT.md](02-LIVE-CONTRACT.md) is `Gate Result: SUPPORTED`. Its provider-contract evidence permits Plan 02-03; AVFoundation remains explicitly unobserved until Plan 02-05.
+**Status:** The canonical [02-LIVE-CONTRACT.md](02-LIVE-CONTRACT.md) is `Gate Result: SUPPORTED`. Its [approved fixed operation mapping](02-LIVE-CONTRACT.md#fixed-operation-mapping-approved-2026-08-19) permits offline Plan 02-03 compatibility scaffolding only; AVFoundation remains explicitly unobserved until Plan 02-05.
 
 This matrix is not a claim about the provider's exhaustive private API surface. It enumerates only capabilities implicated by Phase 02. Execution may not silently add operations beyond these rows.
 

@@ -324,16 +324,16 @@ monitor.start(queue: monitorQueue)
 **Resolution routing (checkpoint superseded):** The former Plan 02-02 halt classification was disproved by systematic debugging: the native tune outcome was an ordinary `tune-http-400`, not a human-verification control. The canonical sanitized [02-LIVE-CONTRACT.md](./02-LIVE-CONTRACT.md) now says `Gate Result: SUPPORTED` for the fixed provider transport, resource, key, and metadata roles. Plan 02-03 may add only the documented fixed adapter, strict decoders, sanitized fixtures, and opaque media handoff. Native AVFoundation behavior remains `NOT OBSERVED` and is reserved for Plan 02-05. No raw live evidence belongs in this research file or the canonical artifact.
 
 1. **[RESOLVED — SUPPORTED] What are the current fixed catalog, tune, stream, metadata, artwork, and playback-key authorization contracts?**
-   - Result: Sanitized official-client evidence supports fixed direct authenticated JSON roles for entitled linear catalog/current-channel data, tune results, HLS/AAC resource delivery, opaque playback-key authorization, and live metadata/artwork availability.
-   - Canonical record: [02-LIVE-CONTRACT.md](./02-LIVE-CONTRACT.md) — `Gate Result: SUPPORTED`.
+   - Result: Sanitized official-client evidence supports only the fixed direct authenticated JSON mappings listed in the contract: catalog, tune, playback-key, live-activity, channel-peek, and stream-enforcement. The recorded playback-key shape is exactly `{keyId,key}`; other unrecorded provider field names remain deliberately absent from code and fixtures.
+   - Canonical record: [02-LIVE-CONTRACT.md](./02-LIVE-CONTRACT.md) — `Gate Result: SUPPORTED` and [Fixed Operation Mapping](./02-LIVE-CONTRACT.md#fixed-operation-mapping-approved-2026-08-19).
 
 2. **[DEFERRED — NOT OBSERVED] Can AVFoundation obtain and play the authorized stream without a prohibited custom authorization mechanism?**
    - Result: Provider transport evidence does not establish native player behavior. Audible, pause, resume, stop, and live-edge semantics remain unobserved and must be verified by Plan 02-05 with the app's `AVPlayer`.
-   - Canonical record: [02-LIVE-CONTRACT.md](./02-LIVE-CONTRACT.md) — AVFoundation `NOT OBSERVED`.
+   - Canonical record: [02-LIVE-CONTRACT.md](./02-LIVE-CONTRACT.md) — AVFoundation `NOT OBSERVED` and [Selected Apple Media Handoff](./02-LIVE-CONTRACT.md#selected-apple-media-handoff).
 
 3. **[RESOLVED — SUPPORTED] Which app-integration boundary safely hands a resolved resource to playback?**
    - Result: Plan 02-03 may create an SPI-scoped, non-Codable, permanently redacted, memory-only opaque media handoff. It must not expose raw locations or opaque playback-key material, and it must not claim player success before Plan 02-05.
-   - Canonical record: [02-LIVE-CONTRACT.md](./02-LIVE-CONTRACT.md) — supported fixed provider handoff constraints.
+   - Canonical record: [02-LIVE-CONTRACT.md](./02-LIVE-CONTRACT.md) — [Selected Apple Media Handoff](./02-LIVE-CONTRACT.md#selected-apple-media-handoff) and the opaque media-resource row in [Fixed Operation Mapping](./02-LIVE-CONTRACT.md#fixed-operation-mapping-approved-2026-08-19).
 
 ## Environment Availability
 

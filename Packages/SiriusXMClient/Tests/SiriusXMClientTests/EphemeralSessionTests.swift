@@ -14,11 +14,11 @@ struct EphemeralSessionTests {
         #expect(configuration.requestCachePolicy == .reloadIgnoringLocalAndRemoteCacheData)
     }
 
-    @Test("only exact settled request shapes are eligible for authorization")
+    @Test("only exact materialized request shapes are eligible for authorization")
     func acceptsOnlyContractRequests() throws {
         #expect(SiriusXMRequestContract.entitlement.path == "/subscription/v1/subscriptions")
 
-        for contract in SiriusXMRequestContract.all {
+        for contract in SiriusXMRequestContract.all where contract.isTransportMaterializable {
             let request = try SiriusXMRequestContract.makeRequest(for: contract, authorization: "synthetic-token")
             #expect(DirectHostPolicy.isAuthorizedRequest(request))
         }

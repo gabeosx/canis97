@@ -30,6 +30,26 @@ The former `human-verification-required` halt was superseded after the ordinary 
 - **Playback-key result:** a two-required-string shape. The values are opaque, short-lived, memory-only, and never diagnostic or persistent data.
 - **Metadata:** current program/song information is available from both the tune result and the current-channel metadata role. Artwork availability is supported as provider metadata, with UI precedence and stale/unavailable presentation deferred to Plan 02-07.
 
+## Fixed Operation Mapping (Approved 2026-08-19)
+
+These are the complete non-sensitive operation facts approved for compatibility scaffolding. They authorize fixed semantic mapping only; they do not authorize a live request, request variation, credential/session access, browser operation, response capture, or playback attempt.
+
+| Capability | Method | Exact host | Exact path or template | Non-secret fixed semantics |
+| --- | --- | --- | --- | --- |
+| Catalog/channels | `GET` | `api.edge-gateway.siriusxm.com` | `/browse/v1/pages/curated-grouping/403ab6a5-d3c9-4c2a-a722-a94a6a5fd056` | No query or body. |
+| Tune | `POST` | `api.edge-gateway.siriusxm.com` | `/playback/play/v1/tuneSource` | `type=channel-linear`, `hlsVersion=V3`, `manifestVariant=WEB`, `mtcVersion=V2`, `trackResumeSupported=false`, plus a non-secret logical `x-sxm-clock` `[epoch,counter]`. |
+| Playback key | `GET` | `api.edge-gateway.siriusxm.com` | `/playback/key/v1/{keyId}` | Exact response shape `{keyId,key}`; values are opaque and memory-only. |
+| Live activity | `POST` | `api.edge-gateway.siriusxm.com` | `/playback/play/v1/liveUpdate` | Body shape `{channelId,startTimestamp,endTimestamp}`. |
+| Channel peek | `GET` | `api.edge-gateway.siriusxm.com` | `/channel-guide/v1/channel/{channelId}/peek` | Fixed template only. |
+| Stream enforcement | `GET` | `api.edge-gateway.siriusxm.com` | `/playback/stream-enforcement/v1/status` | No query or body. |
+| Media resource | `GET` | `live-akc-prod-device.streaming.siriusxm.com` | Opaque signed path | SPI handoff only: never a normal request builder, fixture, log, persistent value, or public accessor. |
+
+Browser-only telemetry operations and headers are omitted. The known catalog/tune/peek/live-activity values above do not supply any additional provider response field names; strict production decoding remains limited to explicitly recorded shapes, and unknown/malformed/control input terminates unsupported.
+
+## Selected Apple Media Handoff
+
+Plan 02-03 selects a `SiriusXMAppleMediaHandoff` SPI protocol that can create an `AVPlayerItem` without exposing resource, header, key, or URL material through the ordinary public API. The concrete opaque values remain inside a future internal adapter and memory only. This selects the Apple integration seam; it does **not** claim that AVFoundation loading, audibility, transport controls, or live-edge behavior works. Those observations remain exclusively for Plan 02-05.
+
 ## Safety and Implementation Limits
 
 - Runtime catalog, tune, metadata, key, enforcement, and live-activity operations are direct authenticated JSON APIs. Shipped code must not manipulate a DOM, inspect browser storage, or automate the official player.

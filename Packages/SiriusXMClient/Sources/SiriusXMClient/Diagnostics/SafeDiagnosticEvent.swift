@@ -37,6 +37,7 @@ enum SafeDiagnosticOutcome: String, Sendable, Equatable, CaseIterable {
     case subscriptionStateMissing = "subscription-state-missing"
     case subscriptionStateUnexpectedShape = "subscription-state-unexpected-shape"
     case subscriptionStateUnsupported = "subscription-state-unsupported"
+    case playbackKeyUnexpectedShape = "playback-key-unexpected-shape"
     case unsupportedPayload = "unsupported-payload"
     case unsupported
     case cancelled

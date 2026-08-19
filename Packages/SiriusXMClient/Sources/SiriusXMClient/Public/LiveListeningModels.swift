@@ -1,4 +1,14 @@
+import AVFoundation
 import Foundation
+
+/// The only app-facing resolved-media seam. This SPI is deliberately unable
+/// to expose a URL, header, key, resource value, encoder, or persistence API.
+/// Creating an item is not evidence that AVFoundation can play it; Plan 02-05
+/// owns that native verification.
+@_spi(Playback)
+public protocol SiriusXMAppleMediaHandoff: Sendable {
+    @MainActor func makePlayerItem() -> AVPlayerItem
+}
 
 /// A stable semantic identity for one selectable live channel.
 ///
