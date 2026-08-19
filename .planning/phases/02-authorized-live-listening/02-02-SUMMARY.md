@@ -12,9 +12,9 @@ provides:
   - canonical provider-dependent execution halt
 affects: [02-03, 02-04, 02-05, 02-06, 02-07]
 actuals:
-  tokens: 6884
+  tokens: 16380
   tasks: 2
-  commits: 4
+  commits: 6
 tech-stack:
   added: []
   patterns: [single-use semantic checkpoint, halted-summary dependency propagation]
@@ -24,6 +24,8 @@ key-files:
   modified:
     - script/live_compatibility_checkpoint.sh
     - SiriusMac/Listening/LiveContractObservation.swift
+    - SiriusMac/Listening/ClosedLiveObservationAdapter.swift
+    - SiriusMac/Authentication/AuthenticationView.swift
     - SiriusMacTests/ListeningCompositionTests.swift
     - .planning/phases/02-authorized-live-listening/COVERAGE.md
     - .planning/phases/02-authorized-live-listening/02-RESEARCH.md
