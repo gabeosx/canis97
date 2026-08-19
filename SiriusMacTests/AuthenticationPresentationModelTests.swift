@@ -4,6 +4,15 @@ import SiriusXMClient
 
 @MainActor
 final class AuthenticationPresentationModelTests: XCTestCase {
+    func testLaunchModeIdentifiesOnlyTheXCTestHostEnvironment() {
+        XCTAssertTrue(
+            SiriusMacLaunchMode.isUnitTestHost(
+                environment: ["XCTestConfigurationFilePath": "/private/tmp/config.xctest"]
+            )
+        )
+        XCTAssertFalse(SiriusMacLaunchMode.isUnitTestHost(environment: [:]))
+    }
+
     func testSemanticStatesHaveDistinctFixedPresentationCopy() {
         let model = AuthenticationPresentationModel()
         let states: [AuthenticationPresentationState] = [

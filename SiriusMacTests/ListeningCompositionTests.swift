@@ -459,6 +459,35 @@ final class ListeningCompositionTests: XCTestCase {
         }
     }
 
+    func testTuneRunClassifiesKnownClientStatusAtomsWithoutAssumingHumanVerification() async {
+        let cases: [(Int, ClosedTuneFailure)] = [
+            (400, .http400),
+            (404, .http404),
+            (409, .http409),
+            (422, .http422),
+        ]
+
+        for (statusCode, failure) in cases {
+            let adapter = ClosedTuneObservationAdapter(
+                credentialLoader: { .available(AuthenticationCredential(volatileMaterial: Data("synthetic-credential".utf8))) },
+                transport: RecordingTuneTransport(
+                    result: .response(
+                        statusCode: statusCode,
+                        contentType: "application/json",
+                        body: Data(#"{"untrusted":"challenge"}"#.utf8)
+                    )
+                )
+            )
+
+            XCTAssertEqual(adapter.begin(entitlement: .entitled), .started)
+            let result = await adapter.runTune()
+
+            XCTAssertEqual(result, .classifiedTerminal(.unknownContract, failure))
+            XCTAssertEqual(adapter.observations.map(\.protection), [.unknownContract])
+            XCTAssertEqual(adapter.state, .closed(.terminalObservation))
+        }
+    }
+
     private func supportedCatalogObservation() -> LiveContractObservation {
         LiveContractObservation(
             capability: .catalogRefresh,

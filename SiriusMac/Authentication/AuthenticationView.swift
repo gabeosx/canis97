@@ -189,6 +189,11 @@ struct AuthenticationView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .accessibilityLabel("Tune check stopped safely: \(protection.rawValue)")
+            case let .classifiedTerminal(protection, failure):
+                Text("Tune check stopped safely: \(failure.rawValue)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("Tune check stopped safely: \(protection.rawValue), \(failure.rawValue)")
             case .cancelled:
                 Text("Tune check cancelled safely.")
                     .font(.caption)

@@ -185,8 +185,22 @@ enum ClosedTuneSelection {
 enum ClosedTuneResult: Sendable, Equatable {
     case resourceAllowlistDecisionRequired
     case terminal(LiveProtectionClass)
+    /// This result carries only one fixed diagnostic atom. It never preserves
+    /// a response body, status value, header, URL, or provider error text.
+    case classifiedTerminal(LiveProtectionClass, ClosedTuneFailure)
     case cancelled
     case alreadyConsumed
+}
+
+/// Fixed, privacy-safe diagnostic atoms for exact client-status outcomes. A
+/// status alone cannot establish whether the provider rejected a request shape
+/// or required an unavailable account-side control, so it is never promoted
+/// beyond the closed unknown-contract failure domain.
+enum ClosedTuneFailure: String, Sendable, Equatable {
+    case http400 = "tune-http-400"
+    case http404 = "tune-http-404"
+    case http409 = "tune-http-409"
+    case http422 = "tune-http-422"
 }
 
 protocol ClosedTuneRequestPerforming: Sendable {
@@ -398,12 +412,19 @@ final class ClosedTuneObservationAdapter {
         case .transportFailure:
             return terminalTuneResult(.unknownContract)
         case let .response(statusCode, contentType, body):
-            guard (200 ... 299).contains(statusCode) else {
-                return terminalTuneResult(protection(for: statusCode))
-            }
-            guard isJSON(contentType) else { return terminalTuneResult(.malformedContract) }
             var responseBody = body
             defer { responseBody = Data() }
+
+            if let protection = terminalProtection(for: statusCode) {
+                return terminalTuneResult(protection)
+            }
+            if let failure = requestContractFailure(for: statusCode) {
+                return terminalTuneResult(.unknownContract, failure: failure)
+            }
+            guard (200 ... 299).contains(statusCode) else {
+                return terminalTuneResult(.unknownContract)
+            }
+            guard isJSON(contentType) else { return terminalTuneResult(.malformedContract) }
             guard ClosedTuneParser.hasMatchingHTTPSResource(responseBody) else {
                 return terminalTuneResult(.malformedContract)
             }
@@ -430,7 +451,10 @@ final class ClosedTuneObservationAdapter {
         }
     }
 
-    private func terminalTuneResult(_ protection: LiveProtectionClass) -> ClosedTuneResult {
+    private func terminalTuneResult(
+        _ protection: LiveProtectionClass,
+        failure: ClosedTuneFailure? = nil
+    ) -> ClosedTuneResult {
         _ = sink.record(
             LiveContractObservation(
                 capability: .tuneAuthorization,
@@ -441,17 +465,35 @@ final class ClosedTuneObservationAdapter {
                 avFoundationBehavior: .notObserved
             )
         )
+        if let failure {
+            return .classifiedTerminal(protection, failure)
+        }
         return .terminal(protection)
     }
 
-    private func protection(for statusCode: Int) -> LiveProtectionClass {
+    /// The current public playback bundle documents a separate enforcement
+    /// operation, but no tune-failure body schema that can truthfully identify
+    /// CAPTCHA, MFA, or another user-mediated control. Do not inspect opaque
+    /// provider text or upgrade an arbitrary 4xx into that classification.
+    /// Future support may add an exact, source-derived structural control
+    /// predicate here; until then every unrecognized response stops closed.
+    private func terminalProtection(for statusCode: Int) -> LiveProtectionClass? {
         switch statusCode {
         case 401: .authorizationLost
         case 403: .forbidden
         case 429: .rateLimited
         case 300 ... 399: .unknownHostOrRedirect
-        case 400 ... 499: .humanVerificationRequired
-        default: .unknownContract
+        default: nil
+        }
+    }
+
+    private func requestContractFailure(for statusCode: Int) -> ClosedTuneFailure? {
+        switch statusCode {
+        case 400: .http400
+        case 404: .http404
+        case 409: .http409
+        case 422: .http422
+        default: nil
         }
     }
 
