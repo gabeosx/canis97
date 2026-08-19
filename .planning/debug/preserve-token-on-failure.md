@@ -28,7 +28,6 @@ next_action: No live request is authorized during this fix. On the user's next d
 bug_class: bohrbug
 common_pattern_candidates: error-handling cleanup coupled to a normal failure outcome; state-management conflation of volatile session retirement with persistent credential deletion; data-validation branch deleting input on malformed storage.
 sbfl: skipped — no existing failing test or per-test coverage data is available before creating the regression test.
-reasoning_checkpoint: null
 tdd_checkpoint: null
 
 ## Symptoms
