@@ -103,6 +103,25 @@ final class SemanticListeningPresentationTests: XCTestCase {
 
 @MainActor
 final class ListeningCompositionTests: XCTestCase {
+    func testStopClearsTheCurrentSelectionAndIsSafeToRepeat() async {
+        let driver = RecordingPlaybackDriver()
+        let coordinator = PlaybackCoordinator(
+            authorization: AlwaysAuthorizedPlaybackAuthorization(),
+            driver: driver
+        )
+        let channel = LiveChannelID("fixture-stop")
+
+        await coordinator.tune(channel)
+        XCTAssertEqual(coordinator.selectedChannelID, channel)
+
+        await coordinator.stop()
+        await coordinator.stop()
+
+        XCTAssertNil(coordinator.selectedChannelID)
+        XCTAssertEqual(coordinator.state, .stopped)
+        XCTAssertEqual(await driver.stopCount(), 2)
+    }
+
     func testConfirmedCommandsIgnoreSupersededCompletion() async {
         let driver = BlockingPlaybackDriver()
         let coordinator = PlaybackCoordinator(
