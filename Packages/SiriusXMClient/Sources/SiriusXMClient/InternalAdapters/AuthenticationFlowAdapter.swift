@@ -203,7 +203,7 @@ enum AuthenticationFlowAdapter {
             )
         }
 
-        switch SubscriptionStatusResponseV1Decoder.inspect(response.body) {
+        switch SubscriptionsResponseV1Decoder.inspect(response.body) {
         case .active:
             return AdapterEntitlementClassification(result: .entitled, diagnosticOutcome: .completed)
         case .inactive:
@@ -250,6 +250,8 @@ enum AuthenticationFlowAdapter {
             return .authentication(.rejected, .rejected)
         case 429:
             return .authentication(.rateLimited, .rateLimited)
+        case 404:
+            return .authentication(.unsupported, .httpNotFound)
         case 400 ... 499:
             return .authentication(.unsupported, .httpClientError)
         case 500 ... 599:
@@ -333,9 +335,10 @@ enum ProfileResponseV4Decoder {
     }
 }
 
-/// Settled internal subscription-v1 compatibility predicate. No response
-/// fields other than the exact nested status participate in entitlement.
-enum SubscriptionStatusResponseV1Decoder {
+/// Current subscription-v1 compatibility predicate. Entitlement depends only
+/// on the state of the returned subscription items; all other fields remain
+/// deliberately ignored.
+enum SubscriptionsResponseV1Decoder {
     enum Result: Sendable, Equatable {
         case active
         case inactive
@@ -356,26 +359,34 @@ enum SubscriptionStatusResponseV1Decoder {
         guard let root = decoded as? [String: Any] else {
             return .unsupported(.payloadUnexpectedRoot)
         }
-        guard root.keys.contains("subscription") else {
-            return .unsupported(.subscriptionMissing)
+        guard root.keys.contains("items") else {
+            return .unsupported(.subscriptionsItemsMissing)
         }
-        guard let subscription = root["subscription"] as? [String: Any] else {
-            return .unsupported(.subscriptionUnexpectedShape)
-        }
-        guard subscription.keys.contains("status") else {
-            return .unsupported(.subscriptionStatusMissing)
-        }
-        guard let status = subscription["status"] as? String else {
-            return .unsupported(.subscriptionStatusUnexpectedShape)
+        guard let items = root["items"] as? [Any] else {
+            return .unsupported(.subscriptionsItemsUnexpectedShape)
         }
 
-        switch status {
-        case "active":
-            return .active
-        case "inactive":
-            return .inactive
-        default:
-            return .unsupported(.subscriptionStatusUnsupported)
+        var states: [String] = []
+        states.reserveCapacity(items.count)
+        for value in items {
+            guard let item = value as? [String: Any] else {
+                return .unsupported(.subscriptionItemUnexpectedShape)
+            }
+            guard item.keys.contains("state") else {
+                return .unsupported(.subscriptionStateMissing)
+            }
+            guard let state = item["state"] as? String else {
+                return .unsupported(.subscriptionStateUnexpectedShape)
+            }
+            states.append(state)
         }
+
+        if states.contains("active") {
+            return .active
+        }
+        if states.allSatisfy({ $0 == "finished" }) {
+            return .inactive
+        }
+        return .unsupported(.subscriptionStateUnsupported)
     }
 }

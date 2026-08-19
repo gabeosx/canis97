@@ -16,6 +16,8 @@ struct EphemeralSessionTests {
 
     @Test("only exact settled request shapes are eligible for authorization")
     func acceptsOnlyContractRequests() throws {
+        #expect(SiriusXMRequestContract.entitlement.path == "/subscription/v1/subscriptions")
+
         for contract in SiriusXMRequestContract.all {
             let request = try SiriusXMRequestContract.makeRequest(for: contract, authorization: "synthetic-token")
             #expect(DirectHostPolicy.isAuthorizedRequest(request))

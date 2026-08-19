@@ -21,7 +21,7 @@ enum SiriusXMRequestContract: CaseIterable, Sendable {
         case .authentication:
             "/profile/v4/profiles/me"
         case .entitlement:
-            "/subscription/v1/status"
+            "/subscription/v1/subscriptions"
         }
     }
 

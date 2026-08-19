@@ -50,6 +50,7 @@ case "$MODE" in
     ;;
   --telemetry|telemetry)
     open_app
+    echo "Live network inspection is available in Safari: Develop > SiriusMac > www.siriusxm.com"
     /usr/bin/log stream --info --style compact --predicate '(subsystem == "com.siriusmac.player" AND category == "authentication") OR (subsystem == "com.siriusmac.client" AND category == "diagnostics")'
     ;;
   --verify|verify)

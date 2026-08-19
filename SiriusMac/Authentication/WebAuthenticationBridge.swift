@@ -327,6 +327,12 @@ private final class WebAuthenticationWebsiteSession {
     func makeWebView() -> WKWebView {
         if let webView { return webView }
         let webView = WKWebView(frame: .zero, configuration: configuration)
+#if DEBUG
+        // Keep the owner-operated sign-in surface available to Safari's Web
+        // Inspector so upstream request drift can be diagnosed in-place without
+        // asking the user to repeat a login solely to add more telemetry.
+        webView.isInspectable = true
+#endif
         self.webView = webView
         return webView
     }

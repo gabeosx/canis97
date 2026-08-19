@@ -45,11 +45,11 @@ struct AuthenticationOutcomeTests {
         }
     }
 
-    @Test("subscription status remains exact and fail closed")
-    func entitlementAcceptsOnlySettledSubscriptionStatus() {
-        let missing = response(object: ["subscription": ["fixture_marker": "missing-status"]])
-        let nonString = response(object: ["subscription": ["status": 1]])
-        let unknown = response(object: ["subscription": ["status": "fixture-unknown"]])
+    @Test("subscription item states remain exact and fail closed")
+    func entitlementAcceptsOnlyObservedSubscriptionStates() {
+        let missing = response(object: ["items": [["fixture_marker": "missing-state"]]])
+        let nonString = response(object: ["items": [["state": 1]]])
+        let unknown = response(object: ["items": [["state": "fixture-unknown"]]])
 
         #expect(AuthenticationFlowAdapter.classifyEntitlement(missing) == .unsupported)
         #expect(AuthenticationFlowAdapter.classifyEntitlement(nonString) == .unsupported)
@@ -96,6 +96,7 @@ struct AuthenticationOutcomeTests {
                 NativeTransportResponse(statusCode: 200, contentType: "text/plain", body: Data()),
                 .unsupportedContentType
             ),
+            (response(statusCode: 404, body: Data("{}".utf8)), .httpNotFound),
             (response(statusCode: 418, body: Data("{}".utf8)), .httpClientError),
             (response(statusCode: 500, body: Data("{}".utf8)), .httpServerError),
             (response(statusCode: 302, body: Data("{}".utf8)), .unsupportedHTTPStatus),
@@ -131,17 +132,18 @@ struct AuthenticationOutcomeTests {
         }
     }
 
-    @Test("entitlement diagnostics identify the exact settled-shape boundary")
+    @Test("entitlement diagnostics identify the exact live-shape boundary")
     func entitlementDiagnosticsIdentifyPayloadShape() {
         let cases: [(NativeTransportResponse, SafeDiagnosticOutcome)] = [
             (response(body: Data()), .payloadEmpty),
             (response(body: Data("{".utf8)), .payloadMalformedJSON),
             (response(body: Data("[]".utf8)), .payloadUnexpectedRoot),
-            (response(object: [:]), .subscriptionMissing),
-            (response(object: ["subscription": "unexpected"]), .subscriptionUnexpectedShape),
-            (response(object: ["subscription": [:]]), .subscriptionStatusMissing),
-            (response(object: ["subscription": ["status": 1]]), .subscriptionStatusUnexpectedShape),
-            (response(object: ["subscription": ["status": "fixture-unknown"]]), .subscriptionStatusUnsupported),
+            (response(object: [:]), .subscriptionsItemsMissing),
+            (response(object: ["items": "unexpected"]), .subscriptionsItemsUnexpectedShape),
+            (response(object: ["items": ["unexpected"]]), .subscriptionItemUnexpectedShape),
+            (response(object: ["items": [[:]]]), .subscriptionStateMissing),
+            (response(object: ["items": [["state": 1]]]), .subscriptionStateUnexpectedShape),
+            (response(object: ["items": [["state": "fixture-unknown"]]]), .subscriptionStateUnsupported),
         ]
 
         for (nativeResponse, expectedDiagnostic) in cases {

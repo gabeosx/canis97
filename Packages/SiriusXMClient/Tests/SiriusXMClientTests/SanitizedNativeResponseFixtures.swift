@@ -16,14 +16,16 @@ enum SanitizedNativeResponseFixtures {
     static let subscriptionV1Active = Data(
         """
         {
-          "fixture_context": {
-            "fixture_marker": "subscription-v1-active-context"
-          },
-          "fixture_marker": "subscription-v1-active-body",
-          "subscription": {
-            "fixture_marker": "subscription-v1-active-inner",
-            "status": "active"
-          }
+          "items": [
+            {
+              "fixture_marker": "subscription-v1-active-item",
+              "state": "active"
+            },
+            {
+              "fixture_marker": "subscription-v1-finished-item",
+              "state": "finished"
+            }
+          ]
         }
         """.utf8
     )
@@ -31,14 +33,12 @@ enum SanitizedNativeResponseFixtures {
     static let subscriptionV1Inactive = Data(
         """
         {
-          "fixture_context": {
-            "fixture_marker": "subscription-v1-inactive-context"
-          },
-          "fixture_marker": "subscription-v1-inactive-body",
-          "subscription": {
-            "fixture_marker": "subscription-v1-inactive-inner",
-            "status": "inactive"
-          }
+          "items": [
+            {
+              "fixture_marker": "subscription-v1-finished-item",
+              "state": "finished"
+            }
+          ]
         }
         """.utf8
     )

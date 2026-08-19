@@ -15,6 +15,12 @@ final class WebAuthenticationBridgeTests: XCTestCase {
         XCTAssertEqual(store.readCount, 0)
     }
 
+    func testDebugAuthenticationWebViewSupportsLiveInspection() {
+        let bridge = WebAuthenticationBridge(cookieStore: TestCookieStore(cookies: []), credentialConsumer: { _ in })
+
+        XCTAssertTrue(bridge.makeWebView().isInspectable)
+    }
+
     func testExplicitConsentAcceptsOneCurrentBoundarySafeSiriusXMSubdomainToken() async throws {
         let recorder = CredentialRecorder()
         let now = Date()
