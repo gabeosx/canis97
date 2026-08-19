@@ -121,6 +121,7 @@ final class ListeningPresentationModel {
     }
 
     func reset() {
+        playbackCoordinator?.invalidateForSessionEnd()
         generation += 1
         refreshTask?.cancel()
         refreshTask = nil

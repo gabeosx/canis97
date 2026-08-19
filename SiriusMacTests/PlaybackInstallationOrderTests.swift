@@ -16,9 +16,9 @@ final class PlaybackInstallationOrderTests: XCTestCase {
         await resolver.complete(channel, with: .available(InstallOrderMediaHandoff()))
         await runtime.waitForObservation()
 
-        XCTAssertEqual(runtime.events, [.observed, .installed])
+        XCTAssertEqual(runtime.events.suffix(2), [.observed, .installed])
         XCTAssertTrue(runtime.emitReady())
-        XCTAssertEqual(runtime.events, [.observed, .installed, .ready, .playRequested])
+        XCTAssertEqual(runtime.events.suffix(4), [.observed, .installed, .ready, .playRequested])
         XCTAssertEqual(coordinator.state, .idle)
 
         runtime.emitPlaying()

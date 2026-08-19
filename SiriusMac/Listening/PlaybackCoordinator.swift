@@ -373,6 +373,7 @@ final class PlaybackCoordinator {
     private var recoveryTask: Task<Void, Never>?
     private var recoveryIncident: RecoveryIncident?
     private var observation: (any PlaybackItemObserving)?
+    private var observationID: UUID?
     private var installedItemGeneration: Int?
     private var networkAvailable = true
     private var sleeping = false
@@ -453,9 +454,20 @@ final class PlaybackCoordinator {
     }
 
     func stop() async {
+        guard selectedChannelID != nil || state != .stopped else { return }
         _ = supersedeActiveWork(clearItem: true)
         selectedChannelID = nil
         state = .stopped
+    }
+
+    /// Authentication session teardown must revoke playback synchronously before
+    /// its caller can suspend for credential cleanup. This coordinator owns no
+    /// credential storage; it only invalidates the active media authority.
+    func invalidateForSessionEnd() {
+        guard selectedChannelID != nil || observation != nil || state != .idle else { return }
+        _ = supersedeActiveWork(clearItem: true)
+        selectedChannelID = nil
+        state = .idle
     }
 
     /// Event sources call this method only. They never call the resolver or
@@ -514,52 +526,130 @@ final class PlaybackCoordinator {
                 state = .unavailable(.resolutionUnavailable)
                 return
             }
-            guard generation == commandGeneration, selectedChannelID == channelID else { return }
-            let observed = runtime.observe(
-                item,
-                onReady: { [weak self] in
-                    self?.installReadyItem(item, channelID: channelID, generation: commandGeneration)
-                },
-                onPlaying: { [weak self] in
-                    self?.publishPlaying(channelID: channelID, generation: commandGeneration)
-                },
-                onPaused: { [weak self] in
-                    self?.publishPaused(channelID: channelID, generation: commandGeneration)
-                },
-                onFailure: { [weak self] failure in
-                    self?.handleObservedFailure(failure, channelID: channelID, generation: commandGeneration)
-                }
-            )
-            guard generation == commandGeneration, selectedChannelID == channelID else {
-                observed.cancel()
-                return
-            }
-            observation = observed
+            observeAndInstall(item, channelID: channelID, generation: commandGeneration, incident: nil)
         case let .failed(failure):
             state = .unavailable(failure)
         }
     }
 
-    private func installReadyItem(_ item: AVPlayerItem, channelID: LiveChannelID, generation: Int) {
-        guard self.generation == generation, selectedChannelID == channelID else { return }
+    private func observeAndInstall(
+        _ item: AVPlayerItem,
+        channelID: LiveChannelID,
+        generation: Int,
+        incident: RecoveryIncident?
+    ) {
+        let identifier = UUID()
+        let observed = runtime.observe(
+            item,
+            onReady: { [weak self] in
+                self?.requestPlayForReadyItem(
+                    channelID: channelID,
+                    generation: generation,
+                    observationID: identifier,
+                    incident: incident
+                )
+            },
+            onPlaying: { [weak self] in
+                self?.publishPlaying(
+                    channelID: channelID,
+                    generation: generation,
+                    observationID: identifier,
+                    incident: incident
+                )
+            },
+            onPaused: { [weak self] in
+                self?.publishPaused(
+                    channelID: channelID,
+                    generation: generation,
+                    observationID: identifier,
+                    incident: incident
+                )
+            },
+            onFailure: { [weak self] failure in
+                self?.handleObservedFailure(
+                    failure,
+                    channelID: channelID,
+                    generation: generation,
+                    observationID: identifier,
+                    incident: incident
+                )
+            }
+        )
+        guard isCurrentItem(
+            channelID: channelID,
+            generation: generation,
+            observationID: nil,
+            incident: incident
+        ) else {
+            observed.cancel()
+            return
+        }
+        observation?.cancel()
+        observation = observed
+        observationID = identifier
         installedItemGeneration = generation
         runtime.install(item)
+    }
+
+    private func requestPlayForReadyItem(
+        channelID: LiveChannelID,
+        generation: Int,
+        observationID: UUID,
+        incident: RecoveryIncident?
+    ) {
+        guard isCurrentItem(
+            channelID: channelID,
+            generation: generation,
+            observationID: observationID,
+            incident: incident
+        ) else { return }
         runtime.requestPlay()
     }
 
-    private func publishPlaying(channelID: LiveChannelID, generation: Int) {
-        guard self.generation == generation, selectedChannelID == channelID else { return }
+    private func publishPlaying(
+        channelID: LiveChannelID,
+        generation: Int,
+        observationID: UUID,
+        incident: RecoveryIncident?
+    ) {
+        guard isCurrentItem(
+            channelID: channelID,
+            generation: generation,
+            observationID: observationID,
+            incident: incident
+        ) else { return }
         completeRecoveryIncident(for: channelID)
         state = .playing(channelID)
     }
 
-    private func publishPaused(channelID: LiveChannelID, generation: Int) {
-        guard self.generation == generation, selectedChannelID == channelID else { return }
+    private func publishPaused(
+        channelID: LiveChannelID,
+        generation: Int,
+        observationID: UUID,
+        incident: RecoveryIncident?
+    ) {
+        guard isCurrentItem(
+            channelID: channelID,
+            generation: generation,
+            observationID: observationID,
+            incident: incident
+        ) else { return }
         state = .paused
     }
 
-    private func handleObservedFailure(_ failure: LiveListeningFailure, channelID: LiveChannelID, generation: Int) {
-        guard self.generation == generation, selectedChannelID == channelID else { return }
+    private func handleObservedFailure(
+        _ failure: LiveListeningFailure,
+        channelID: LiveChannelID,
+        generation: Int,
+        observationID: UUID,
+        incident: RecoveryIncident?
+    ) {
+        guard isCurrentItem(
+            channelID: channelID,
+            generation: generation,
+            observationID: observationID,
+            incident: incident
+        ) else { return }
         state = .unavailable(failure)
         switch failure {
         case .networkUnavailable:
@@ -634,47 +724,32 @@ final class PlaybackCoordinator {
             if isCurrent(incident) { terminateRecovery(with: .resolutionUnavailable) }
             return
         }
-        let observed = runtime.observe(
+        observeAndInstall(
             item,
-            onReady: { [weak self] in
-                self?.installReadyRecoveredItem(item, incident: incident)
-            },
-            onPlaying: { [weak self] in
-                self?.publishRecoveredPlaying(incident)
-            },
-            onPaused: { [weak self] in
-                self?.publishRecoveredPaused(incident)
-            },
-            onFailure: { [weak self] failure in
-                self?.handleRecoveredFailure(failure, incident: incident)
-            }
+            channelID: incident.channelID,
+            generation: incident.generation,
+            incident: incident
         )
-        guard isCurrent(incident) else {
-            observed.cancel()
-            return
+    }
+
+    private func isCurrentItem(
+        channelID: LiveChannelID,
+        generation: Int,
+        observationID: UUID?,
+        incident: RecoveryIncident?
+    ) -> Bool {
+        guard self.generation == generation,
+              selectedChannelID == channelID,
+              installedItemGeneration == generation || observationID == nil
+        else { return false }
+
+        if let observationID, self.observationID != observationID {
+            return false
         }
-        observation?.cancel()
-        observation = observed
-    }
-
-    private func installReadyRecoveredItem(_ item: AVPlayerItem, incident: RecoveryIncident) {
-        guard isCurrent(incident) else { return }
-        installReadyItem(item, channelID: incident.channelID, generation: incident.generation)
-    }
-
-    private func publishRecoveredPlaying(_ incident: RecoveryIncident) {
-        guard isCurrent(incident) else { return }
-        publishPlaying(channelID: incident.channelID, generation: incident.generation)
-    }
-
-    private func publishRecoveredPaused(_ incident: RecoveryIncident) {
-        guard isCurrent(incident) else { return }
-        publishPaused(channelID: incident.channelID, generation: incident.generation)
-    }
-
-    private func handleRecoveredFailure(_ failure: LiveListeningFailure, incident: RecoveryIncident) {
-        guard isCurrent(incident) else { return }
-        handleObservedFailure(failure, channelID: incident.channelID, generation: incident.generation)
+        if let incident {
+            return isCurrent(incident)
+        }
+        return recoveryIncident == nil
     }
 
     private func isCurrent(_ incident: RecoveryIncident) -> Bool {
@@ -723,6 +798,7 @@ final class PlaybackCoordinator {
         recoveryPendingAfterReconnect = false
         observation?.cancel()
         observation = nil
+        observationID = nil
         installedItemGeneration = nil
         if clearItem {
             runtime.clearCurrentItem()
