@@ -172,7 +172,12 @@ Plans:
   4. Recoverable stream expiry, network interruption, sleep/wake, and stalls make bounded, cancellation-aware recovery attempts without infinite retry or synthesized listener activity.
   5. While listening, a subscriber sees the active channel, best available artwork, and current program or song text; unavailable or stale metadata is explicit and does not interrupt healthy audio.
 
-**Plans**: 4/7 plans executed
+**Plans**: 8/11 plans executed
+
+- [x] 02-08-PLAN.md
+- [ ] 02-09-PLAN.md
+- [ ] 02-10-PLAN.md
+- [ ] 02-11-PLAN.md
 
 **Wave 1 — Provider-agnostic Validation Wave 0**
 
@@ -192,15 +197,15 @@ Plans:
 
 **Wave 5 — Confirmed live playback** *(depends on Wave 4; performs the required native AVFoundation verification)*
 
-- [ ] 02-05-PLAN.md — Resolve a selected channel through current authorization and control one confirmed AVFoundation player.
+- [x] 02-05-PLAN.md — Resolve a selected channel through current authorization and control one confirmed AVFoundation player.
 
 **Wave 6 — Bounded recovery** *(blocked on Wave 5)*
 
-- [ ] 02-06-PLAN.md — Add cancellation-safe same-channel recovery with finite incident budgets and distinct failures.
+- [x] 02-06-PLAN.md — Add cancellation-safe same-channel recovery with finite incident budgets and distinct failures.
 
 **Wave 7 — Independent metadata** *(blocked on Wave 6)*
 
-- [ ] 02-07-PLAN.md — Present current text/artwork with independent fresh, stale, and unavailable states.
+- [x] 02-07-PLAN.md — Present current text/artwork with independent fresh, stale, and unavailable states.
 
 ### Phase 3: Native Mac Listening Experience
 
@@ -262,7 +267,7 @@ Active product execution proceeds 1 → 2 → 3 → 4 → 5. Phase 0 is retained
 |-------|----------------|--------|-----------|
 | 0. Authentication Feasibility Gate | 12/12 | Complete (historical) | 2026-08-17 |
 | 1. Safe Interoperability Foundation | 16/16 | Complete    | 2026-08-18 |
-| 2. Authorized Live Listening | 4/7 | In Progress|  |
+| 2. Authorized Live Listening | 8/11 | In Progress|  |
 | 3. Native Mac Listening Experience | 0/TBD | Not started | - |
 | 4. Safe Skins & Accessible Recovery | 0/TBD | Not started | - |
 | 5. Public Release & Compatibility Support | 0/TBD | Not started | - |

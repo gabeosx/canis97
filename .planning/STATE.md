@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 02
 current_phase_name: authorized-live-listening
 status: executing
-stopped_at: Completed 02-04-PLAN.md
-last_updated: "2026-08-19T21:57:09.362Z"
+stopped_at: Completed 02-08-PLAN.md
+last_updated: "2026-08-19T22:09:54.452Z"
 last_activity: 2026-08-19
 last_activity_desc: Reconciled Plan 02-02 as a supported provider-contract gate and opened Plan 02-03
 progress:
   total_phases: 3
   completed_phases: 2
   total_plans: 39
-  completed_plans: 32
+  completed_plans: 36
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-08-18)
 ## Current Position
 
 Phase: 02 (authorized-live-listening) — EXECUTING
-Plan: 5 of 7
+Plan: 2 of 11
 Status: Ready to execute
 Last activity: 2026-08-19 — Phase 02 execution started
 
-Progress: [█████████░] 91%
+Progress: [█████████░] 92%
 
 ## Performance Metrics
 
@@ -94,6 +94,7 @@ Progress: [█████████░] 91%
 | Phase 02 P02 | 9h 9m | 2 tasks | 7 files |
 | Phase 02 P03 | 6 min | 2 tasks | 12 files |
 | Phase 02 P04 | 16min | 2 tasks | 11 files |
+| Phase 02 P08 | 14 min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -156,6 +157,9 @@ All earlier Phase 0 feasibility-selection, proof-run, quartet, GO/NO-GO, and cal
 - [Phase ?]: Use an SPI AVPlayerItem factory handoff without resource, header, key, or URL access; AVFoundation proof remains in Plan 02-05.
 - [Phase ?]: Catalog browsing consumes only semantic values and fails closed until later compatibility work supplies observed opaque materialization inputs.
 - [Phase ?]: The entitled native browser shares AuthenticationComposition's client and selection performs no playback work.
+- [Phase ?]: Ordinary entitlement revalidation failures are operation-scoped and cannot retire an active session.
+- [Phase ?]: Live tune material is held only by a private context returned to its originating resolver.
+- [Phase ?]: Redirect observations are private to a single URLSession request delegate.
 
 ### Pending Todos
 
@@ -189,6 +193,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-19T18:23:54.562Z
-Stopped at: Completed 02-04-PLAN.md
+Last session: 2026-08-19T22:09:54.433Z
+Stopped at: Completed 02-08-PLAN.md
 Resume file: None
