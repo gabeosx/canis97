@@ -44,21 +44,21 @@ Phase 0 is historical. FEAS-01 records the accepted architecture; FEAS-02/03/05 
 
 ### Live Catalog
 
-- [ ] **CAT-01**: Subscriber can refresh and browse the entitled standard and app-only `channel-linear` lineup without exposing Xtra, replay, or on-demand entities as v1 channels.
-- [ ] **CAT-02**: Each channel record provides a stable SiriusXM entity identity plus available number, name, description, category, artwork reference, entitlement state, and freshness timestamp.
-- [ ] **CAT-03**: Catalog and entitlement failures are visible and do not imply that cached channel presence authorizes playback.
+- [x] **CAT-01**: Subscriber can refresh and browse the entitled standard and app-only `channel-linear` lineup without exposing Xtra, replay, or on-demand entities as v1 channels.
+- [x] **CAT-02**: Each channel record provides a stable SiriusXM entity identity plus available number, name, description, category, artwork reference, entitlement state, and freshness timestamp.
+- [x] **CAT-03**: Catalog and entitlement failures are visible and do not imply that cached channel presence authorizes playback.
 
 ### Live Playback
 
-- [ ] **PLAY-01**: Subscriber can tune an entitled linear channel and start, pause, resume, or stop its live stream from any application control surface.
-- [ ] **PLAY-02**: One playback coordinator owns the active player and serializes commands from windows, menus, keyboard shortcuts, and system media controls.
-- [ ] **PLAY-03**: Playback performs bounded cancellation-aware recovery and stream re-resolution for recoverable expiry, network, sleep/wake, and stall conditions without infinite retry or synthesized listener activity.
-- [ ] **PLAY-04**: Subscriber sees distinct actionable states for authentication, entitlement, catalog, resolution, network, decoder, buffering, and unsupported-upstream failures.
+- [x] **PLAY-01**: Subscriber can tune an entitled linear channel and start, pause, resume, or stop its live stream from any application control surface.
+- [x] **PLAY-02**: One playback coordinator owns the active player and serializes commands from windows, menus, keyboard shortcuts, and system media controls.
+- [x] **PLAY-03**: Playback performs bounded cancellation-aware recovery and stream re-resolution for recoverable expiry, network, sleep/wake, and stall conditions without infinite retry or synthesized listener activity.
+- [x] **PLAY-04**: Subscriber sees distinct actionable states for authentication, entitlement, catalog, resolution, network, decoder, buffering, and unsupported-upstream failures.
 
 ### Channel Metadata
 
-- [ ] **META-01**: Subscriber can see the active channel, current program or song text, and best available artwork while listening.
-- [ ] **META-02**: Metadata refresh is independent from healthy audio playback and presents last-known information with explicit stale or unavailable state instead of inventing values.
+- [x] **META-01**: Subscriber can see the active channel, current program or song text, and best available artwork while listening.
+- [x] **META-02**: Metadata refresh is independent from healthy audio playback and presents last-known information with explicit stale or unavailable state instead of inventing values.
 
 ### Local Library
 
@@ -162,15 +162,15 @@ Every v1 requirement maps to exactly one delivery phase in `.planning/ROADMAP.md
 | CLNT-05 | Phase 5 | Pending |
 | COMP-01 | Phase 5 | Pending |
 | COMP-02 | Phase 5 | Pending |
-| CAT-01 | Phase 2 | Pending |
-| CAT-02 | Phase 2 | Pending |
-| CAT-03 | Phase 2 | Pending |
-| PLAY-01 | Phase 2 | Pending |
-| PLAY-02 | Phase 2 | Pending |
-| PLAY-03 | Phase 2 | Pending |
-| PLAY-04 | Phase 2 | Pending |
-| META-01 | Phase 2 | Pending |
-| META-02 | Phase 2 | Pending |
+| CAT-01 | Phase 2 | Complete |
+| CAT-02 | Phase 2 | Complete |
+| CAT-03 | Phase 2 | Complete |
+| PLAY-01 | Phase 2 | Complete |
+| PLAY-02 | Phase 2 | Complete |
+| PLAY-03 | Phase 2 | Complete |
+| PLAY-04 | Phase 2 | Complete |
+| META-01 | Phase 2 | Complete |
+| META-02 | Phase 2 | Complete |
 | LIBR-01 | Phase 3 | Pending |
 | LIBR-02 | Phase 3 | Pending |
 | LIBR-03 | Phase 3 | Pending |
