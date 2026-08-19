@@ -1,6 +1,6 @@
 import AVFoundation
 import Testing
-@testable import SiriusXMClient
+@_spi(Playback) @testable import SiriusXMClient
 
 @Suite("Provider-neutral live playback contracts")
 struct LivePlaybackCoordinatorTests {

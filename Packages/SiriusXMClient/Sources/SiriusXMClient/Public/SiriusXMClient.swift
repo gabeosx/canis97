@@ -9,6 +9,7 @@ public actor SiriusXMClient {
     private let catalogRefresher: any CatalogRefreshing
     private let liveStreamResolver: any LiveStreamResolving
     private var lastValidCatalogSnapshot: LiveCatalogSnapshot?
+    private var liveResolutionGeneration = 0
 
     public init() {
         self.sessionCoordinator = nil
@@ -88,6 +89,8 @@ public actor SiriusXMClient {
             return .alreadySignedOut
         }
         lastValidCatalogSnapshot = nil
+        liveResolutionGeneration &+= 1
+        await liveStreamResolver.invalidate()
         return await sessionCoordinator.signOut()
     }
 
@@ -139,6 +142,7 @@ public actor SiriusXMClient {
     /// Resolves only an explicitly selected live identity after the current
     /// session still reports entitlement. Catalog presence never authorizes it.
     public func resolveLiveStream(for channelID: LiveChannelID) async -> LiveStreamResolutionAvailability {
+        let expectedGeneration = liveResolutionGeneration
         guard let sessionCoordinator else {
             return .failed(.authenticationUnavailable)
         }
@@ -147,7 +151,9 @@ public actor SiriusXMClient {
         }
 
         let result = await liveStreamResolver.resolveLiveStream(for: channelID)
-        guard await sessionCoordinator.entitlementAvailability == .entitled else {
+        guard liveResolutionGeneration == expectedGeneration,
+              await sessionCoordinator.entitlementAvailability == .entitled
+        else {
             return .failed(.superseded)
         }
         return result

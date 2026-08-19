@@ -7,7 +7,10 @@ import Foundation
 /// owns that native verification.
 @_spi(Playback)
 public protocol SiriusXMAppleMediaHandoff: Sendable {
-    @MainActor func makePlayerItem() -> AVPlayerItem
+    /// Returns nil after the originating resolution generation is invalidated.
+    /// The handoff deliberately exposes no resource, header, key, URL, encoder,
+    /// or persistence capability to its Apple-platform consumer.
+    @MainActor func makePlayerItem() -> AVPlayerItem?
 }
 
 /// Closed outcomes for an explicit current-session stream authorization.
@@ -29,9 +32,19 @@ public enum LiveStreamResolutionFailure: Sendable, Equatable {
 /// Semantic availability for one explicit live-stream resolution attempt.
 /// A successful resource remains usable only through the SPI media handoff.
 public enum LiveStreamResolutionAvailability: Sendable, Equatable {
-    case available
+    @_spi(Playback) case available(any SiriusXMAppleMediaHandoff)
     case unavailable
     case failed(LiveStreamResolutionFailure)
+
+    /// Equality deliberately compares only the closed semantic availability,
+    /// never the opaque handoff or any material it encloses.
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+        switch (lhs, rhs) {
+        case (.available, .available), (.unavailable, .unavailable): true
+        case let (.failed(left), .failed(right)): left == right
+        default: false
+        }
+    }
 }
 
 /// A stable semantic identity for one selectable live channel.
@@ -391,10 +404,138 @@ protocol LivePlaybackResolving: Sendable {
 /// the fixed contract and retain opaque resource material in memory.
 protocol LiveStreamResolving: Sendable {
     func resolveLiveStream(for channelID: LiveChannelID) async -> LiveStreamResolutionAvailability
+    func invalidate() async
 }
 
 struct UnavailableLiveStreamResolver: LiveStreamResolving {
     func resolveLiveStream(for _: LiveChannelID) async -> LiveStreamResolutionAvailability { .unavailable }
+    func invalidate() async {}
+}
+
+/// The only fixed semantic steps allowed to materialize one live handoff.
+/// Implementations are responsible for direct-host policy, strict transport
+/// preflight, and opaque in-memory handling; this seam never receives or
+/// returns URLs, headers, key material, bodies, or request builders.
+protocol FixedLiveStreamOperating: Sendable {
+    func authorizeTune(for channelID: LiveChannelID) async -> FixedLiveTuneAuthorization
+    func resolveResource(for channelID: LiveChannelID) async -> FixedLiveResourceResolution
+    func authorizePlaybackKey() async -> LiveStreamResolutionFailure?
+}
+
+enum FixedLiveTuneAuthorization: Sendable, Equatable {
+    case authorized
+    case failed(LiveStreamResolutionFailure)
+}
+
+enum FixedLivePlaybackKeyRequirement: Sendable, Equatable {
+    case required
+    case notRequired
+}
+
+enum FixedLiveResourceResolution: Sendable {
+    case resolved(any SiriusXMAppleMediaHandoff, keyRequirement: FixedLivePlaybackKeyRequirement)
+    case failed(LiveStreamResolutionFailure)
+}
+
+/// Serializes the approved tune -> resource -> optional-key sequence. A newer
+/// request or explicit invalidation makes all earlier resource handoffs
+/// unusable before they can escape to a player.
+actor FixedLiveStreamResolver: LiveStreamResolving {
+    private let operations: any FixedLiveStreamOperating
+    private var generation = 0
+    private var activeHandoffs: [GenerationBoundAppleMediaHandoff] = []
+
+    init(operations: any FixedLiveStreamOperating) {
+        self.operations = operations
+    }
+
+    func resolveLiveStream(for channelID: LiveChannelID) async -> LiveStreamResolutionAvailability {
+        let command = beginGeneration()
+        guard !Task.isCancelled else { return .failed(.cancelled) }
+
+        switch await operations.authorizeTune(for: channelID) {
+        case .authorized:
+            break
+        case let .failed(failure):
+            return terminal(failure, for: command)
+        }
+        guard isCurrent(command) else { return .failed(.superseded) }
+        guard !Task.isCancelled else { return .failed(.cancelled) }
+
+        let resource: (any SiriusXMAppleMediaHandoff, FixedLivePlaybackKeyRequirement)
+        switch await operations.resolveResource(for: channelID) {
+        case let .resolved(handoff, keyRequirement):
+            resource = (handoff, keyRequirement)
+        case let .failed(failure):
+            return terminal(failure, for: command)
+        }
+        guard isCurrent(command) else { return .failed(.superseded) }
+        guard !Task.isCancelled else { return .failed(.cancelled) }
+
+        if resource.1 == .required {
+            if let failure = await operations.authorizePlaybackKey() {
+                return terminal(failure, for: command)
+            }
+            guard isCurrent(command) else { return .failed(.superseded) }
+            guard !Task.isCancelled else { return .failed(.cancelled) }
+        }
+
+        let guarded = GenerationBoundAppleMediaHandoff(source: resource.0)
+        activeHandoffs.append(guarded)
+        guard isCurrent(command) else {
+            guarded.invalidate()
+            return .failed(.superseded)
+        }
+        return .available(guarded)
+    }
+
+    func invalidate() async {
+        generation &+= 1
+        invalidateActiveHandoffs()
+    }
+
+    private func beginGeneration() -> Int {
+        generation &+= 1
+        invalidateActiveHandoffs()
+        return generation
+    }
+
+    private func isCurrent(_ command: Int) -> Bool { generation == command }
+
+    private func terminal(_ failure: LiveStreamResolutionFailure, for command: Int) -> LiveStreamResolutionAvailability {
+        guard isCurrent(command) else { return .failed(.superseded) }
+        return .failed(failure)
+    }
+
+    private func invalidateActiveHandoffs() {
+        activeHandoffs.forEach { $0.invalidate() }
+        activeHandoffs.removeAll(keepingCapacity: true)
+    }
+}
+
+/// A lock-protected validity bit is deliberately the only cross-actor state.
+/// It contains no provider material and makes stale opaque handoffs fail closed.
+private final class GenerationBoundAppleMediaHandoff: SiriusXMAppleMediaHandoff, @unchecked Sendable {
+    private let source: any SiriusXMAppleMediaHandoff
+    private let lock = NSLock()
+    private var valid = true
+
+    init(source: any SiriusXMAppleMediaHandoff) {
+        self.source = source
+    }
+
+    func invalidate() {
+        lock.lock()
+        valid = false
+        lock.unlock()
+    }
+
+    @MainActor func makePlayerItem() -> AVPlayerItem? {
+        lock.lock()
+        let isValid = valid
+        lock.unlock()
+        return isValid ? source.makePlayerItem() : nil
+    }
 }
 
 enum LivePlaybackDriverResult: Sendable, Equatable {
