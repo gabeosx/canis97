@@ -50,6 +50,39 @@ final class MetadataPresentationTests: XCTestCase {
         XCTAssertNil(NativeArtworkImage.decode(invalid))
     }
 
+    func testBlockedRefreshExpiresCurrentMetadataIndependently() async {
+        let channel = LiveChannelID("fixture-channel")
+        let clock = MutableMetadataClock()
+        let sleeper = ControllableMetadataSleeper()
+        let flow = BlockingRefreshMetadataFlow(initial: .current(MetadataSnapshot(
+            channelID: channel,
+            program: LiveProgramMetadata(title: "Current title")
+        )))
+        let model = MetadataPresentationModel(flow: flow, clock: clock, sleeper: sleeper)
+
+        model.select(channel)
+        await flow.waitForMetadataRequests(count: 1)
+        await sleeper.waitForSleep(duration: 90)
+        await sleeper.waitForSleep(duration: 30)
+
+        clock.advance(by: 90)
+        await sleeper.releaseSleep(duration: 90)
+        await settleTasks()
+        XCTAssertEqual(model.state.text, .stale("Current title"))
+
+        await sleeper.releaseSleep(duration: 30)
+        await flow.waitForMetadataRequests(count: 2)
+        await sleeper.waitForSleep(duration: 210)
+        clock.advance(by: 210)
+        await sleeper.releaseSleep(duration: 210)
+        await settleTasks()
+
+        XCTAssertEqual(model.state.text, .channelFallback(channel))
+        XCTAssertEqual(model.state.artwork, .unavailable)
+        model.clear()
+        await flow.releaseBlockedRefresh()
+    }
+
     func testSelectionStartsMetadataWithoutPlaybackMutationAuthority() async {
         let flow = MetadataFlowSpy()
         let model = MetadataPresentationModel(flow: flow)
@@ -68,6 +101,10 @@ final class MetadataPresentationTests: XCTestCase {
         XCTAssertEqual(MetadataRefreshPolicy.default.pollInterval, 30)
         XCTAssertEqual(MetadataRefreshPolicy.default.staleAfter, 90)
         XCTAssertEqual(MetadataRefreshPolicy.default.unavailableAfter, 300)
+    }
+
+    private func settleTasks() async {
+        for _ in 0..<20 { await Task.yield() }
     }
 }
 
@@ -132,5 +169,66 @@ private actor ListeningMetadataFlowSpy: ListeningFlow, MetadataFlow {
     func waitForMetadataRequests(count: Int) async {
         if metadataRequests >= count { return }
         await withCheckedContinuation { metadataWaiters.append($0) }
+    }
+}
+
+private final class MutableMetadataClock: MetadataClock, @unchecked Sendable {
+    private let lock = NSLock()
+    private var instant = Date(timeIntervalSince1970: 0)
+
+    func now() -> Date { lock.withLock { instant } }
+
+    func advance(by interval: TimeInterval) {
+        lock.withLock { instant.addTimeInterval(interval) }
+    }
+}
+
+private actor ControllableMetadataSleeper: MetadataSleeping {
+    private var waits: [TimeInterval: [CheckedContinuation<Void, Error>]] = [:]
+
+    func sleep(for duration: TimeInterval) async throws {
+        try await withCheckedThrowingContinuation { waits[duration, default: []].append($0) }
+    }
+
+    func waitForSleep(duration: TimeInterval) async {
+        while waits[duration, default: []].isEmpty {
+            await Task.yield()
+        }
+    }
+
+    func releaseSleep(duration: TimeInterval) {
+        guard var continuations = waits[duration], !continuations.isEmpty else { return }
+        let continuation = continuations.removeFirst()
+        waits[duration] = continuations
+        continuation.resume()
+    }
+}
+
+private actor BlockingRefreshMetadataFlow: MetadataFlow {
+    private let initial: MetadataAvailability
+    private var metadataRequests = 0
+    private var requestWaiters: [CheckedContinuation<Void, Never>] = []
+    private var blockedRefresh: CheckedContinuation<MetadataAvailability, Never>?
+
+    init(initial: MetadataAvailability) { self.initial = initial }
+
+    func metadata(for _: LiveChannelID) async -> MetadataAvailability {
+        metadataRequests += 1
+        requestWaiters.forEach { $0.resume() }
+        requestWaiters.removeAll()
+        if metadataRequests == 1 { return initial }
+        return await withCheckedContinuation { blockedRefresh = $0 }
+    }
+
+    func artwork(for _: ChannelArtworkReference) async -> ArtworkAvailability { .unavailable }
+
+    func waitForMetadataRequests(count: Int) async {
+        if metadataRequests >= count { return }
+        await withCheckedContinuation { requestWaiters.append($0) }
+    }
+
+    func releaseBlockedRefresh() {
+        blockedRefresh?.resume(returning: .unavailable)
+        blockedRefresh = nil
     }
 }

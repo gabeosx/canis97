@@ -16,21 +16,49 @@ struct MetadataRefreshPolicy: Sendable, Equatable {
     static let `default` = Self(pollInterval: 30, staleAfter: 90, unavailableAfter: 300)
 }
 
+protocol MetadataClock: Sendable {
+    func now() -> Date
+}
+
+struct SystemMetadataClock: MetadataClock {
+    func now() -> Date { Date() }
+}
+
+protocol MetadataSleeping: Sendable {
+    func sleep(for duration: TimeInterval) async throws
+}
+
+struct SystemMetadataSleeper: MetadataSleeping {
+    func sleep(for duration: TimeInterval) async throws {
+        try await Task.sleep(for: .seconds(duration))
+    }
+}
+
 /// Presentation-owned metadata lifecycle. It deliberately has no playback collaborator.
 @MainActor
 @Observable
 final class MetadataPresentationModel {
     private let flow: any MetadataFlow
     private let policy: MetadataRefreshPolicy
+    private let clock: any MetadataClock
+    private let sleeper: any MetadataSleeping
     private var metadataTask: Task<Void, Never>?
     private var artworkTask: Task<Void, Never>?
+    private var pollTask: Task<Void, Never>?
+    private var expiryTask: Task<Void, Never>?
     private var generation = 0
-    private var refreshedAt: Date?
     private(set) var state: LiveMetadataState
 
-    init(flow: any MetadataFlow = UnavailableMetadataFlow(), policy: MetadataRefreshPolicy = .default) {
+    init(
+        flow: any MetadataFlow = UnavailableMetadataFlow(),
+        policy: MetadataRefreshPolicy = .default,
+        clock: any MetadataClock = SystemMetadataClock(),
+        sleeper: any MetadataSleeping = SystemMetadataSleeper()
+    ) {
         self.flow = flow
         self.policy = policy
+        self.clock = clock
+        self.sleeper = sleeper
         let channelID = LiveChannelID("semantic-unselected-channel")
         state = LiveMetadataState(channelID: channelID, text: .channelFallback(channelID), artwork: .unavailable, refreshedAt: nil)
     }
@@ -39,28 +67,37 @@ final class MetadataPresentationModel {
         generation &+= 1
         metadataTask?.cancel()
         artworkTask?.cancel()
+        pollTask?.cancel()
+        expiryTask?.cancel()
         state = LiveMetadataState(channelID: channelID, text: .channelFallback(channelID), artwork: .unavailable, refreshedAt: nil)
-        refreshedAt = nil
         let expected = generation
-        metadataTask = Task { [weak self] in await self?.refreshLoop(channelID: channelID, generation: expected) }
+        metadataTask = Task { [weak self] in await self?.refresh(channelID: channelID, generation: expected) }
+        pollTask = Task { [weak self] in await self?.poll(channelID: channelID, generation: expected) }
     }
 
     func clear() {
         generation &+= 1
         metadataTask?.cancel()
         artworkTask?.cancel()
+        pollTask?.cancel()
+        expiryTask?.cancel()
         metadataTask = nil
         artworkTask = nil
+        pollTask = nil
+        expiryTask = nil
         let channelID = LiveChannelID("semantic-unselected-channel")
         state = LiveMetadataState(channelID: channelID, text: .channelFallback(channelID), artwork: .unavailable, refreshedAt: nil)
-        refreshedAt = nil
     }
 
-    private func refreshLoop(channelID: LiveChannelID, generation expected: Int) async {
+    private func poll(channelID: LiveChannelID, generation expected: Int) async {
         while !Task.isCancelled, generation == expected {
-            await refresh(channelID: channelID, generation: expected)
+            do {
+                try await sleeper.sleep(for: policy.pollInterval)
+            } catch {
+                return
+            }
             guard !Task.isCancelled, generation == expected else { return }
-            try? await Task.sleep(for: .seconds(policy.pollInterval))
+            await refresh(channelID: channelID, generation: expected)
         }
     }
 
@@ -71,23 +108,14 @@ final class MetadataPresentationModel {
         case let .current(snapshot):
             let program = snapshot.program
             let text = presentationText(for: program, channelID: channelID)
-            state = LiveMetadataState(channelID: channelID, text: text, artwork: .unavailable, refreshedAt: Date())
-            refreshedAt = state.refreshedAt
+            let refreshedAt = clock.now()
+            state = LiveMetadataState(channelID: channelID, text: text, artwork: .unavailable, refreshedAt: refreshedAt)
             if let reference = program?.artwork {
-                startArtworkFetch(for: reference, channelID: channelID, generation: expected)
+                startArtworkFetch(for: reference, channelID: channelID, generation: expected, refreshedAt: refreshedAt)
             }
+            scheduleExpiry(channelID: channelID, generation: expected, refreshedAt: refreshedAt)
         case .unavailable, .failed:
-            advanceFreshness(for: channelID)
-        }
-    }
-
-    private func advanceFreshness(for channelID: LiveChannelID) {
-        guard let refreshedAt else { return }
-        let age = Date().timeIntervalSince(refreshedAt)
-        if age >= policy.unavailableAfter {
-            state = LiveMetadataState(channelID: channelID, text: .channelFallback(channelID), artwork: .unavailable, refreshedAt: nil)
-        } else if age >= policy.staleAfter {
-            state = LiveMetadataState(channelID: channelID, text: stale(state.text), artwork: stale(state.artwork), refreshedAt: refreshedAt)
+            break
         }
     }
 
@@ -105,19 +133,54 @@ final class MetadataPresentationModel {
     private func startArtworkFetch(
         for reference: ChannelArtworkReference,
         channelID: LiveChannelID,
-        generation expected: Int
+        generation expected: Int,
+        refreshedAt: Date
     ) {
         artworkTask?.cancel()
         let flow = flow
         artworkTask = Task { [weak self] in
             let result = await flow.artwork(for: reference)
-            guard let self, !Task.isCancelled, self.generation == expected, self.state.channelID == channelID else { return }
+            guard let self, !Task.isCancelled, self.generation == expected, self.state.channelID == channelID, self.state.refreshedAt == refreshedAt else { return }
             guard case let .current(artwork) = result else { return }
+            let age = self.clock.now().timeIntervalSince(refreshedAt)
+            guard age < self.policy.unavailableAfter else { return }
             self.state = LiveMetadataState(
                 channelID: channelID,
                 text: self.state.text,
-                artwork: .current(artwork),
-                refreshedAt: self.state.refreshedAt
+                artwork: age >= self.policy.staleAfter ? .stale(artwork) : .current(artwork),
+                refreshedAt: refreshedAt
+            )
+        }
+    }
+
+    private func scheduleExpiry(channelID: LiveChannelID, generation expected: Int, refreshedAt: Date) {
+        expiryTask?.cancel()
+        expiryTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await self.sleeper.sleep(for: self.policy.staleAfter)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled, self.generation == expected, self.state.channelID == channelID, self.state.refreshedAt == refreshedAt else { return }
+            self.state = LiveMetadataState(
+                channelID: channelID,
+                text: self.stale(self.state.text),
+                artwork: self.stale(self.state.artwork),
+                refreshedAt: refreshedAt
+            )
+
+            do {
+                try await self.sleeper.sleep(for: self.policy.unavailableAfter - self.policy.staleAfter)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled, self.generation == expected, self.state.channelID == channelID, self.state.refreshedAt == refreshedAt else { return }
+            self.state = LiveMetadataState(
+                channelID: channelID,
+                text: .channelFallback(channelID),
+                artwork: .unavailable,
+                refreshedAt: nil
             )
         }
     }
