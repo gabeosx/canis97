@@ -324,7 +324,10 @@ final class ListeningCompositionTests: XCTestCase {
 
         coordinator.handleRecoverySignal(.networkBecameAvailable)
         coordinator.handleRecoverySignal(.stalled)
-        await sleeper.waitForDelay(8)
+        // A pending offline incident resumes on reconnect without another stall
+        // grace period, so its first scheduled delay is the bounded retry
+        // backoff. Stopping there proves no resolver call can escape teardown.
+        await sleeper.waitForDelay(1)
         await coordinator.stop()
         await sleeper.completeNext()
         for _ in 0 ..< 5 { await Task.yield() }
