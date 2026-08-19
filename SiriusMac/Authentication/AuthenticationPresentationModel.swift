@@ -348,10 +348,8 @@ struct ComposedAuthenticationPresentationFlow: AuthenticationPresentationFlow {
             )
         case .missing:
             return .signedOut
-        case .invalidCredentialErased, .unavailable:
+        case .invalidCredential, .unavailable:
             return .unsupported
-        case .cleanupFailed:
-            return .cleanupFailed(.keychain)
         }
     }
 
@@ -372,10 +370,8 @@ struct ComposedAuthenticationPresentationFlow: AuthenticationPresentationFlow {
             )
         case .webViewRequired:
             return await beginWebViewSignIn()
-        case .invalidCredentialErased, .unavailable:
+        case .invalidCredential, .unavailable:
             return .unsupported
-        case .cleanupFailed:
-            return .cleanupFailed(.keychain)
         }
     }
 
@@ -434,14 +430,9 @@ struct ComposedAuthenticationPresentationFlow: AuthenticationPresentationFlow {
             return state
         }
 
-        guard let credentialSource else { return state }
-        switch await credentialSource.eraseRejectedRestore() {
-        case .cleanupFailed:
-            return .cleanupFailed(.keychain)
-        case .notRequired, .erased:
-            credentialSource.finishWebViewAttempt()
-            return state
-        }
+        credentialSource?.finishRejectedRestore()
+        credentialSource?.finishWebViewAttempt()
+        return state
     }
 }
 

@@ -9,23 +9,15 @@ final class RestorableAuthenticationCredentialSource: CredentialSource {
     enum ExplicitSignInCredentialPreparation: Equatable {
         case restoredCredentialReady
         case webViewRequired
-        case invalidCredentialErased
-        case cleanupFailed
+        case invalidCredential
         case unavailable
     }
 
     enum AutomaticRestoreCredentialPreparation: Equatable {
         case restoredCredentialReady
         case missing
-        case invalidCredentialErased
-        case cleanupFailed
+        case invalidCredential
         case unavailable
-    }
-
-    enum RestoreErasureOutcome: Equatable {
-        case notRequired
-        case erased
-        case cleanupFailed
     }
 
     private enum AttemptOrigin {
@@ -56,10 +48,8 @@ final class RestorableAuthenticationCredentialSource: CredentialSource {
         case .missing:
             attemptOrigin = .webViewRequired
             return .webViewRequired
-        case .invalidErased:
-            return .invalidCredentialErased
-        case .cleanupFailed:
-            return .cleanupFailed
+        case .invalid:
+            return .invalidCredential
         case .unavailable:
             return .unavailable
         }
@@ -77,10 +67,8 @@ final class RestorableAuthenticationCredentialSource: CredentialSource {
             return .restoredCredentialReady
         case .missing:
             return .missing
-        case .invalidErased:
-            return .invalidCredentialErased
-        case .cleanupFailed:
-            return .cleanupFailed
+        case .invalid:
+            return .invalidCredential
         case .unavailable:
             return .unavailable
         }
@@ -106,17 +94,10 @@ final class RestorableAuthenticationCredentialSource: CredentialSource {
         }
     }
 
-    /// Erases a rejected restored item before a terminal state becomes visible.
-    func eraseRejectedRestore() async -> RestoreErasureOutcome {
-        guard isRestoredAttempt else { return .notRequired }
+    /// Retires a rejected restored attempt without changing persistent storage.
+    func finishRejectedRestore() {
+        guard isRestoredAttempt else { return }
         attemptOrigin = .none
-
-        do {
-            try await keychain.erase()
-            return .erased
-        } catch {
-            return .cleanupFailed
-        }
     }
 
     func finishWebViewAttempt() {

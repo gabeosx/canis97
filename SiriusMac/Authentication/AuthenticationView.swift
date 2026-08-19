@@ -24,7 +24,7 @@ struct AuthenticationView: View {
                     .available(credential)
                 case .missing:
                     .missing
-                case .invalidErased, .cleanupFailed, .unavailable:
+                case .invalid, .unavailable:
                     .invalid
                 }
             }
@@ -36,7 +36,7 @@ struct AuthenticationView: View {
                     .available(credential)
                 case .missing:
                     .missing
-                case .invalidErased, .cleanupFailed, .unavailable:
+                case .invalid, .unavailable:
                     .invalid
                 }
             }

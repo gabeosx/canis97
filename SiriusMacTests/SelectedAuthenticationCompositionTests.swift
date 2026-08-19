@@ -227,11 +227,16 @@ final class SelectedAuthenticationCompositionTests: XCTestCase {
         XCTAssertEqual(signInRequestLoadCount, 0)
     }
 
-    func testInvalidAutomaticRestoreErasesAndFailsClosedWithoutWebViewFallback() async {
-        var didEraseStoredMaterial = false
+    func testInvalidAutomaticRestoreRetainsMaterialAndFailsClosedWithoutWebViewFallback() async {
+        let invalidMaterial = Data("malformed credential".utf8)
+        var storedMaterial: Data? = invalidMaterial
+        var removalCount = 0
         let keychain = KeychainCredentialStore(
-            storedCredentialReader: { Data("malformed credential".utf8) },
-            storedCredentialRemover: { didEraseStoredMaterial = true }
+            storedCredentialReader: { storedMaterial },
+            storedCredentialRemover: {
+                removalCount += 1
+                storedMaterial = nil
+            }
         )
         let cookieStore = CompositionCookieStore(cookies: [])
         var signInRequestLoadCount = 0
@@ -251,13 +256,14 @@ final class SelectedAuthenticationCompositionTests: XCTestCase {
         let events = await client.events
 
         XCTAssertEqual(state, .unsupported)
-        XCTAssertTrue(didEraseStoredMaterial)
+        XCTAssertEqual(storedMaterial, invalidMaterial)
+        XCTAssertEqual(removalCount, 0)
         XCTAssertEqual(events, [])
         XCTAssertEqual(cookieStore.allCookieReadCount, 0)
         XCTAssertEqual(signInRequestLoadCount, 0)
     }
 
-    func testRejectedAutomaticRestoreErasesAndDoesNotFallbackOrRetry() async throws {
+    func testRejectedAutomaticRestorePreservesCredentialAndDoesNotFallbackOrRetry() async throws {
         let keychain = KeychainCredentialStore(
             service: "com.siriusmac.tests.\(UUID().uuidString)",
             account: "rejected-automatic-restore"
@@ -283,13 +289,13 @@ final class SelectedAuthenticationCompositionTests: XCTestCase {
         let events = await client.events
 
         XCTAssertEqual(state, .rejected)
-        XCTAssertNil(try keychain.readStoredCredential())
+        XCTAssertEqual(try keychain.readStoredCredential(), Data("approved-restore".utf8))
         XCTAssertEqual(events, [.credential, .authenticate])
         XCTAssertEqual(cookieStore.allCookieReadCount, 0)
         XCTAssertEqual(signInRequestLoadCount, 0)
     }
 
-    func testRejectedRestoreErasesBeforeTerminalStateThenLaterExplicitRetryUsesWebView() async throws {
+    func testRejectedRestoreRetainsCredentialBeforeTerminalStateThenLaterExplicitRetryUsesIt() async throws {
         let now = Date()
         let keychain = KeychainCredentialStore(
             service: "com.siriusmac.tests.\(UUID().uuidString)",
@@ -312,15 +318,15 @@ final class SelectedAuthenticationCompositionTests: XCTestCase {
 
         try await XCTUnwrap(model.signIn()).value
         XCTAssertEqual(model.state, .rejected)
-        XCTAssertNil(try keychain.readStoredCredential())
+        XCTAssertEqual(try keychain.readStoredCredential(), Data("approved-restore".utf8))
         let cookieReadCount = cookieStore.allCookieReadCount
         XCTAssertEqual(cookieReadCount, 0)
 
         try await XCTUnwrap(model.retry()).value
-        try await XCTUnwrap(model.useLoggedInSession()).value
         let events = await client.events
 
         XCTAssertEqual(model.state, .entitled)
+        XCTAssertNil(model.useLoggedInSession())
         XCTAssertEqual(events, [.credential, .authenticate, .credential, .authenticate, .entitlement])
     }
 

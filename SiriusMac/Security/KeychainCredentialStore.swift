@@ -26,23 +26,20 @@ final class KeychainCredentialStore: CredentialStore, @unchecked Sendable {
         enum Kind: Equatable {
             case credential
             case missing
-            case invalidErased
-            case cleanupFailed
+            case invalid
             case unavailable
         }
 
         case credential(AuthenticationCredential)
         case missing
-        case invalidErased
-        case cleanupFailed
+        case invalid
         case unavailable
 
         var kind: Kind {
             switch self {
             case .credential: .credential
             case .missing: .missing
-            case .invalidErased: .invalidErased
-            case .cleanupFailed: .cleanupFailed
+            case .invalid: .invalid
             case .unavailable: .unavailable
             }
         }
@@ -112,10 +109,11 @@ final class KeychainCredentialStore: CredentialStore, @unchecked Sendable {
         }
     }
 
-    /// Loads a reusable credential only for the app's explicit sign-in orchestration.
+    /// Loads a reusable credential for app-owned authentication orchestration.
     ///
     /// Material remains inside this adapter until it becomes an opaque client handoff.
-    /// Invalid persisted bytes are removed before returning a semantic terminal result.
+    /// Invalid persisted bytes are classified fail-closed but remain in Keychain until
+    /// the owner explicitly chooses Sign Out or Clear Local Session.
     func loadStoredCredentialForAuthentication() -> StoredAuthenticationCredentialLoadOutcome {
         let storedMaterial: Data
         do {
@@ -131,12 +129,7 @@ final class KeychainCredentialStore: CredentialStore, @unchecked Sendable {
               let text = String(data: storedMaterial, encoding: .utf8),
               !text.isEmpty,
               !text.contains(where: { $0.isWhitespace }) else {
-            do {
-                try removeStoredCredential()
-                return .invalidErased
-            } catch {
-                return .cleanupFailed
-            }
+            return .invalid
         }
 
         return .credential(AuthenticationCredential(volatileMaterial: storedMaterial))

@@ -49,13 +49,21 @@ final class KeychainCredentialStoreTests: XCTestCase {
         }
     }
 
-    func testAuthenticationLoaderErasesInvalidMaterialAndSurfacesStorageFailuresSemantically() async throws {
-        let invalidStore = makeStore()
-        defer { try? invalidStore.removeStoredCredential() }
-        try await invalidStore.save(AuthenticationCredential(volatileMaterial: Data("contains whitespace".utf8)))
+    func testAuthenticationLoaderRejectsInvalidMaterialWithoutDeletingIt() throws {
+        let invalidMaterial = Data("contains whitespace".utf8)
+        var storedMaterial: Data? = invalidMaterial
+        var removalCount = 0
+        let invalidStore = KeychainCredentialStore(
+            storedCredentialReader: { storedMaterial },
+            storedCredentialRemover: {
+                removalCount += 1
+                storedMaterial = nil
+            }
+        )
 
-        XCTAssertEqual(invalidStore.loadStoredCredentialForAuthentication().kind, .invalidErased)
-        XCTAssertNil(try invalidStore.readStoredCredential())
+        XCTAssertEqual(invalidStore.loadStoredCredentialForAuthentication().kind, .invalid)
+        XCTAssertEqual(storedMaterial, invalidMaterial)
+        XCTAssertEqual(removalCount, 0)
 
         let unavailableStore = KeychainCredentialStore(
             storedCredentialReader: { throw KeychainCredentialStore.StorageError.unavailable },
@@ -63,14 +71,9 @@ final class KeychainCredentialStoreTests: XCTestCase {
         )
         XCTAssertEqual(unavailableStore.loadStoredCredentialForAuthentication().kind, .unavailable)
 
-        let cleanupFailureStore = KeychainCredentialStore(
-            storedCredentialReader: { Data() },
-            storedCredentialRemover: { throw KeychainCredentialStore.StorageError.unavailable }
-        )
-        XCTAssertEqual(cleanupFailureStore.loadStoredCredentialForAuthentication().kind, .cleanupFailed)
     }
 
-    func testAuthenticationLoaderErasesEmptyOversizedAndNonUTF8Material() async throws {
+    func testAuthenticationLoaderRejectsEmptyOversizedAndNonUTF8MaterialWithoutDeletingIt() {
         let invalidMaterials = [
             Data(),
             Data(repeating: 65, count: 8_193),
@@ -78,12 +81,19 @@ final class KeychainCredentialStoreTests: XCTestCase {
         ]
 
         for material in invalidMaterials {
-            let store = makeStore()
-            defer { try? store.removeStoredCredential() }
-            try await store.save(AuthenticationCredential(volatileMaterial: material))
+            var storedMaterial: Data? = material
+            var removalCount = 0
+            let store = KeychainCredentialStore(
+                storedCredentialReader: { storedMaterial },
+                storedCredentialRemover: {
+                    removalCount += 1
+                    storedMaterial = nil
+                }
+            )
 
-            XCTAssertEqual(store.loadStoredCredentialForAuthentication().kind, .invalidErased)
-            XCTAssertNil(try store.readStoredCredential())
+            XCTAssertEqual(store.loadStoredCredentialForAuthentication().kind, .invalid)
+            XCTAssertEqual(storedMaterial, material)
+            XCTAssertEqual(removalCount, 0)
         }
     }
 
