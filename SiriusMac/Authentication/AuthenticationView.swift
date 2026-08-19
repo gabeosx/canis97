@@ -4,6 +4,7 @@ import SiriusXMClient
 struct AuthenticationView: View {
     @State private var model: AuthenticationPresentationModel
     @State private var bridge: WebAuthenticationBridge
+    @State private var closedLiveObservation = ClosedLiveObservationAdapter()
 
     init() {
         let composition = AuthenticationComposition()
@@ -42,6 +43,20 @@ struct AuthenticationView: View {
                         VStack(alignment: .leading, spacing: 12) {
                             Label("Authentication is complete", systemImage: "checkmark.circle")
                                 .foregroundStyle(.green)
+                            Button("Run closed live compatibility preflight") {
+                                let result = closedLiveObservation.begin(entitlement: .entitled)
+                                if result == .started {
+                                    closedLiveObservation.refuseUnknownCatalogContract()
+                                }
+                            }
+                            .disabled(closedLiveObservation.state != .idle)
+                            .accessibilityHint("Stops safely before any live-content request without an exact approved contract.")
+                            if closedLiveObservation.state != .idle {
+                                Text("Live compatibility preflight stopped safely before any content request.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .accessibilityLabel("Live compatibility preflight stopped safely")
+                            }
                             Button("Sign Out") { _ = model.signOut() }
                         }
                     } else {

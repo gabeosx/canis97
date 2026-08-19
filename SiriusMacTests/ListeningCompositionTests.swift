@@ -129,6 +129,29 @@ final class ListeningCompositionTests: XCTestCase {
         XCTAssertFalse(terminal.record(supportedCatalogObservation()))
     }
 
+    func testClosedLiveObservationAdapterRequiresEntitlementAndRefusesUnknownCatalogContract() {
+        let adapter = ClosedLiveObservationAdapter()
+
+        XCTAssertEqual(adapter.begin(entitlement: .unavailable), .entitlementRequired)
+        XCTAssertEqual(adapter.state, .idle)
+
+        XCTAssertEqual(adapter.begin(entitlement: .entitled), .started)
+        adapter.refuseUnknownCatalogContract()
+
+        XCTAssertEqual(adapter.observations, [
+            LiveContractObservation(
+                capability: .catalogRefresh,
+                disposition: .unsupported,
+                requestContract: nil,
+                semanticShapes: [],
+                protection: .unknownContract,
+                avFoundationBehavior: .notObserved
+            ),
+        ])
+        XCTAssertEqual(adapter.state, .closed(.terminalObservation))
+        XCTAssertEqual(adapter.begin(entitlement: .entitled), .alreadyConsumed)
+    }
+
     private func supportedCatalogObservation() -> LiveContractObservation {
         LiveContractObservation(
             capability: .catalogRefresh,
