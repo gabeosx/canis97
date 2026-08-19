@@ -54,6 +54,57 @@ protocol PlaybackItemObserving: AnyObject {
     func cancel()
 }
 
+/// A test-injectable delay seam. Recovery never owns a timer or retry loop
+/// outside the coordinator, and production keeps the delay in-memory only.
+protocol PlaybackRecoverySleeping: Sendable {
+    func sleep(for seconds: TimeInterval) async
+}
+
+struct PlaybackRecoveryPolicy: Sendable, Equatable {
+    let maximumReResolutions: Int
+    let stallGrace: TimeInterval
+    let backoffs: [TimeInterval]
+
+    init(
+        maximumReResolutions: Int = 2,
+        stallGrace: TimeInterval = 8,
+        backoffs: [TimeInterval] = [1, 3]
+    ) {
+        self.maximumReResolutions = max(0, maximumReResolutions)
+        self.stallGrace = max(0, stallGrace)
+        self.backoffs = Array(backoffs.prefix(max(0, maximumReResolutions))).map { max(0, $0) }
+    }
+}
+
+/// All noisy media, path, and workspace notifications are reduced to this
+/// closed semantic input before the coordinator may consider re-resolution.
+enum PlaybackRecoverySignal: Sendable, Equatable {
+    case stalled
+    case resourceExpired
+    case decoderFailed
+    case networkBecameUnavailable
+    case networkBecameAvailable
+    case willSleep
+    case didWake
+    case authorizationLost
+    case entitlementLost
+    case protectedControl
+    case unsupported
+}
+
+private struct SystemPlaybackRecoverySleeper: PlaybackRecoverySleeping {
+    func sleep(for seconds: TimeInterval) async {
+        guard seconds > 0 else { return }
+        try? await Task.sleep(for: .seconds(seconds))
+    }
+}
+
+private struct RecoveryIncident: Equatable {
+    let generation: Int
+    let channelID: LiveChannelID
+    let identifier = UUID()
+}
+
 /// Narrow AVFoundation ownership used by the coordinator and deterministic
 /// offline tests. Production has exactly one implementation and one player.
 @MainActor
@@ -222,20 +273,30 @@ private final class AVFoundationItemObservation: PlaybackItemObserving {
 final class PlaybackCoordinator {
     private let resolver: any PlaybackResolving
     private let runtime: any PlaybackPlayerRuntime
+    private let recoveryPolicy: PlaybackRecoveryPolicy
+    private let sleeper: any PlaybackRecoverySleeping
     private var generation = 0
     private var resolutionTask: Task<PlaybackResourceResolution, Never>?
+    private var recoveryTask: Task<Void, Never>?
+    private var recoveryIncident: RecoveryIncident?
     private var observation: (any PlaybackItemObserving)?
     private var installedItemGeneration: Int?
+    private var networkAvailable = true
+    private var sleeping = false
 
     private(set) var state: LivePlaybackState = .idle
     private(set) var selectedChannelID: LiveChannelID?
 
     init(
         resolver: any PlaybackResolving,
-        runtime: any PlaybackPlayerRuntime = AVFoundationPlaybackRuntime()
+        runtime: any PlaybackPlayerRuntime = AVFoundationPlaybackRuntime(),
+        recoveryPolicy: PlaybackRecoveryPolicy = PlaybackRecoveryPolicy(),
+        sleeper: any PlaybackRecoverySleeping = SystemPlaybackRecoverySleeper()
     ) {
         self.resolver = resolver
         self.runtime = runtime
+        self.recoveryPolicy = recoveryPolicy
+        self.sleeper = sleeper
     }
 
     func tune(_ channelID: LiveChannelID) async {
@@ -274,6 +335,37 @@ final class PlaybackCoordinator {
         state = .stopped
     }
 
+    /// Event sources call this method only. They never call the resolver or
+    /// AVFoundation runtime directly, so duplicate/stale observations cannot
+    /// multiply provider activity.
+    func handleRecoverySignal(_ signal: PlaybackRecoverySignal) {
+        switch signal {
+        case .networkBecameUnavailable:
+            networkAvailable = false
+            cancelRecovery()
+        case .willSleep:
+            sleeping = true
+            cancelRecovery()
+        case .networkBecameAvailable:
+            networkAvailable = true
+        case .didWake:
+            sleeping = false
+            beginRecoveryIfEligible(stallGrace: false)
+        case .stalled:
+            beginRecoveryIfEligible(stallGrace: true)
+        case .resourceExpired, .decoderFailed:
+            beginRecoveryIfEligible(stallGrace: false)
+        case .authorizationLost:
+            terminateRecovery(with: .authorizationUnavailable)
+        case .entitlementLost:
+            terminateRecovery(with: .entitlementUnavailable)
+        case .protectedControl:
+            terminateRecovery(with: .protectedControl)
+        case .unsupported:
+            terminateRecovery(with: .unsupported)
+        }
+    }
+
     private func resolveAndInstall(_ channelID: LiveChannelID, commandGeneration: Int) async {
         let resolver = resolver
         let task = Task { await resolver.resolve(for: channelID) }
@@ -304,7 +396,7 @@ final class PlaybackCoordinator {
                     self?.publishPaused(channelID: channelID, generation: commandGeneration)
                 },
                 onFailure: { [weak self] failure in
-                    self?.publishFailure(failure, channelID: channelID, generation: commandGeneration)
+                    self?.handleObservedFailure(failure, channelID: channelID, generation: commandGeneration)
                 }
             )
             guard generation == commandGeneration, selectedChannelID == channelID else {
@@ -326,6 +418,7 @@ final class PlaybackCoordinator {
 
     private func publishPlaying(channelID: LiveChannelID, generation: Int) {
         guard self.generation == generation, selectedChannelID == channelID else { return }
+        completeRecoveryIncident(for: channelID)
         state = .playing(channelID)
     }
 
@@ -334,9 +427,137 @@ final class PlaybackCoordinator {
         state = .paused
     }
 
-    private func publishFailure(_ failure: LiveListeningFailure, channelID: LiveChannelID, generation: Int) {
+    private func handleObservedFailure(_ failure: LiveListeningFailure, channelID: LiveChannelID, generation: Int) {
         guard self.generation == generation, selectedChannelID == channelID else { return }
         state = .unavailable(failure)
+        switch failure {
+        case .networkUnavailable:
+            handleRecoverySignal(.resourceExpired)
+        case .decoderUnavailable:
+            handleRecoverySignal(.decoderFailed)
+        case .authorizationUnavailable:
+            handleRecoverySignal(.authorizationLost)
+        case .entitlementUnavailable:
+            handleRecoverySignal(.entitlementLost)
+        case .protectedControl:
+            handleRecoverySignal(.protectedControl)
+        case .unsupported:
+            handleRecoverySignal(.unsupported)
+        case .catalogUnavailable, .selectionUnavailable, .resolutionUnavailable,
+             .bufferingUnavailable, .cancelled, .superseded, .recoveryExhausted:
+            break
+        }
+    }
+
+    private func beginRecoveryIfEligible(stallGrace: Bool) {
+        guard recoveryIncident == nil,
+              recoveryPolicy.maximumReResolutions > 0,
+              networkAvailable,
+              !sleeping,
+              let channelID = selectedChannelID
+        else { return }
+
+        let incident = RecoveryIncident(generation: generation, channelID: channelID)
+        recoveryIncident = incident
+        if stallGrace {
+            state = .unavailable(.bufferingUnavailable)
+        }
+        recoveryTask = Task { [weak self] in
+            await self?.runRecovery(incident, waitsForStallGrace: stallGrace)
+        }
+    }
+
+    private func runRecovery(_ incident: RecoveryIncident, waitsForStallGrace: Bool) async {
+        if waitsForStallGrace {
+            await sleeper.sleep(for: recoveryPolicy.stallGrace)
+            guard isCurrent(incident) else { return }
+        }
+
+        for attempt in 0 ..< recoveryPolicy.maximumReResolutions {
+            let backoff = attempt < recoveryPolicy.backoffs.count ? recoveryPolicy.backoffs[attempt] : 0
+            await sleeper.sleep(for: backoff)
+            guard isCurrent(incident) else { return }
+
+            let resolution = await resolver.resolve(for: incident.channelID)
+            guard isCurrent(incident) else { return }
+            switch resolution {
+            case let .available(handoff):
+                installRecoveredItem(handoff, incident: incident)
+                return
+            case let .failed(failure) where isTerminalRecoveryFailure(failure):
+                terminateRecovery(with: failure)
+                return
+            case .failed:
+                continue
+            }
+        }
+
+        guard isCurrent(incident) else { return }
+        terminateRecovery(with: .recoveryExhausted)
+    }
+
+    private func installRecoveredItem(_ handoff: any SiriusXMAppleMediaHandoff, incident: RecoveryIncident) {
+        guard isCurrent(incident), let item = handoff.makePlayerItem() else {
+            if isCurrent(incident) { terminateRecovery(with: .resolutionUnavailable) }
+            return
+        }
+        let observed = runtime.observe(
+            item,
+            onReady: { [weak self] in
+                self?.installReadyItem(item, channelID: incident.channelID, generation: incident.generation)
+            },
+            onPlaying: { [weak self] in
+                self?.publishPlaying(channelID: incident.channelID, generation: incident.generation)
+            },
+            onPaused: { [weak self] in
+                self?.publishPaused(channelID: incident.channelID, generation: incident.generation)
+            },
+            onFailure: { [weak self] failure in
+                self?.handleObservedFailure(failure, channelID: incident.channelID, generation: incident.generation)
+            }
+        )
+        guard isCurrent(incident) else {
+            observed.cancel()
+            return
+        }
+        observation?.cancel()
+        observation = observed
+    }
+
+    private func isCurrent(_ incident: RecoveryIncident) -> Bool {
+        recoveryIncident == incident && generation == incident.generation &&
+            selectedChannelID == incident.channelID && networkAvailable && !sleeping && !Task.isCancelled
+    }
+
+    private func completeRecoveryIncident(for channelID: LiveChannelID) {
+        guard recoveryIncident?.channelID == channelID else { return }
+        recoveryTask = nil
+        recoveryIncident = nil
+    }
+
+    private func terminateRecovery(with failure: LiveListeningFailure) {
+        recoveryTask?.cancel()
+        recoveryTask = nil
+        recoveryIncident = nil
+        state = .unavailable(failure)
+    }
+
+    private func cancelRecovery() {
+        recoveryTask?.cancel()
+        recoveryTask = nil
+        recoveryIncident = nil
+    }
+
+    private func isTerminalRecoveryFailure(_ failure: LiveListeningFailure) -> Bool {
+        switch failure {
+        case .authorizationUnavailable, .entitlementUnavailable, .protectedControl,
+             .cancelled, .superseded, .unsupported:
+            true
+        case .catalogUnavailable, .selectionUnavailable, .resolutionUnavailable,
+             .networkUnavailable, .bufferingUnavailable, .decoderUnavailable,
+             .recoveryExhausted:
+            false
+        }
     }
 
     @discardableResult
@@ -344,6 +565,7 @@ final class PlaybackCoordinator {
         generation += 1
         resolutionTask?.cancel()
         resolutionTask = nil
+        cancelRecovery()
         observation?.cancel()
         observation = nil
         installedItemGeneration = nil
