@@ -152,7 +152,10 @@ actor SessionCoordinator {
         }
 
         let response = await entitlementVerifier.verifyEntitlement(using: credential)
-        guard case .active(activeSession) = state else {
+        guard case let .active(currentSession) = state,
+              currentSession == activeSession,
+              lastEntitlement == .entitled
+        else {
             return .failed(.superseded)
         }
 
@@ -163,12 +166,10 @@ actor SessionCoordinator {
             return .failed(.protectedControl)
         }
 
-        let entitlement = AuthenticationFlowAdapter.inspectEntitlement(response).result
-        await diagnostics.record(.entitlement(AuthenticationFlowAdapter.inspectEntitlement(response).diagnosticOutcome))
+        let inspection = AuthenticationFlowAdapter.inspectEntitlement(response)
+        let entitlement = inspection.result
+        await diagnostics.record(.entitlement(inspection.diagnosticOutcome))
         guard entitlement == .entitled else {
-            lastEntitlement = entitlement.publicOutcome
-            transientCredential = nil
-            state = .signedOut
             switch entitlement {
             case .authenticatedButNotEntitled:
                 return .failed(.entitlementUnavailable)
@@ -181,7 +182,14 @@ actor SessionCoordinator {
             }
         }
 
-        return .completed(await work(credential))
+        let value = await work(credential)
+        guard case let .active(currentSession) = state,
+              currentSession == activeSession,
+              lastEntitlement == .entitled
+        else {
+            return .failed(.superseded)
+        }
+        return .completed(value)
     }
 
     /// Performs exactly one caller-selected fixed operation using the current
