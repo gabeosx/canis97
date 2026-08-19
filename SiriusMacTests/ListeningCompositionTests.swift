@@ -129,14 +129,15 @@ final class ListeningCompositionTests: XCTestCase {
         XCTAssertFalse(terminal.record(supportedCatalogObservation()))
     }
 
-    func testClosedLiveObservationAdapterRequiresEntitlementAndRefusesUnknownCatalogContract() {
+    func testClosedLiveObservationAdapterRequiresEntitlementAndClosesWithoutCredential() async {
         let adapter = ClosedLiveObservationAdapter()
 
         XCTAssertEqual(adapter.begin(entitlement: .unavailable), .entitlementRequired)
         XCTAssertEqual(adapter.state, .idle)
 
         XCTAssertEqual(adapter.begin(entitlement: .entitled), .started)
-        adapter.refuseUnknownCatalogContract()
+        let result = await adapter.runCatalog()
+        XCTAssertEqual(result, .terminal(.authorizationLost))
 
         XCTAssertEqual(adapter.observations, [
             LiveContractObservation(
@@ -144,12 +145,100 @@ final class ListeningCompositionTests: XCTestCase {
                 disposition: .unsupported,
                 requestContract: nil,
                 semanticShapes: [],
-                protection: .unknownContract,
+                protection: .authorizationLost,
                 avFoundationBehavior: .notObserved
             ),
         ])
         XCTAssertEqual(adapter.state, .closed(.terminalObservation))
         XCTAssertEqual(adapter.begin(entitlement: .entitled), .alreadyConsumed)
+    }
+
+    func testCatalogContractAllowsOnlyTheExactCandidateRequest() throws {
+        let request = try XCTUnwrap(
+            ClosedCatalogRequestContract.makeRequest(
+                credential: AuthenticationCredential(volatileMaterial: Data("synthetic-credential".utf8))
+            )
+        )
+
+        XCTAssertEqual(request.httpMethod, "GET")
+        XCTAssertEqual(request.url?.scheme, "https")
+        XCTAssertEqual(request.url?.host, "browse-at-edge.siriusxm.com")
+        XCTAssertEqual(request.url?.path, "/v2/all-channels")
+        XCTAssertNil(request.url?.query)
+        XCTAssertNil(request.httpBody)
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Accept"), "application/json")
+    }
+
+    func testCatalogTransportCancelsEveryRedirect() {
+        XCTAssertEqual(ClosedCatalogTransport.redirectDecision, .cancel)
+    }
+
+    func testCatalogRunCollapsesOnlySanitizedChannelSemantics() async {
+        let transport = RecordingCatalogTransport(
+            result: .response(
+                statusCode: 200,
+                contentType: "application/json",
+                body: Data(#"{"channels":[{"id":"safe-channel-1","type":"channel-linear","name":"Safe Channel","category":"Music","isFavorite":true,"isAvailable":true}]}"#.utf8)
+            )
+        )
+        let adapter = ClosedLiveObservationAdapter(
+            credentialLoader: { .available(AuthenticationCredential(volatileMaterial: Data("synthetic-credential".utf8))) },
+            transport: transport
+        )
+
+        XCTAssertEqual(adapter.begin(entitlement: .entitled), .started)
+        let result = await adapter.runCatalog()
+
+        XCTAssertEqual(result, .channels([
+            ClosedCatalogChannel(
+                id: "safe-channel-1",
+                displayName: "Safe Channel",
+                category: "Music",
+                isFavorite: true,
+                isAvailable: true
+            ),
+        ]))
+        let requestCount = await transport.requestCount()
+        XCTAssertEqual(requestCount, 1)
+        XCTAssertEqual(adapter.observations.count, 1)
+        XCTAssertEqual(adapter.observations[0].requestContract?.pathTemplate, .catalog)
+        XCTAssertEqual(adapter.state, .active)
+    }
+
+    func testCatalogRunDoesNotRequestWhenCredentialIsMissingOrInvalid() async {
+        for availability in [ClosedCatalogCredentialAvailability.missing, .invalid] {
+            let transport = RecordingCatalogTransport(result: .transportFailure)
+            let adapter = ClosedLiveObservationAdapter(
+                credentialLoader: { availability },
+                transport: transport
+            )
+
+            XCTAssertEqual(adapter.begin(entitlement: .entitled), .started)
+            let result = await adapter.runCatalog()
+            let requestCount = await transport.requestCount()
+            XCTAssertEqual(result, .terminal(.authorizationLost))
+            XCTAssertEqual(requestCount, 0)
+            XCTAssertEqual(adapter.state, .closed(.terminalObservation))
+        }
+    }
+
+    func testCatalogRunCollapsesRedirectAndProtectedStatusBeforeDecoding() async {
+        for (transportResult, protection) in [
+            (ClosedCatalogTransportResult.redirect, LiveProtectionClass.unknownHostOrRedirect),
+            (.response(statusCode: 403, contentType: "text/plain", body: Data()), .forbidden),
+        ] {
+            let adapter = ClosedLiveObservationAdapter(
+                credentialLoader: { .available(AuthenticationCredential(volatileMaterial: Data("synthetic-credential".utf8))) },
+                transport: RecordingCatalogTransport(result: transportResult)
+            )
+
+            XCTAssertEqual(adapter.begin(entitlement: .entitled), .started)
+            let result = await adapter.runCatalog()
+
+            XCTAssertEqual(result, .terminal(protection))
+            XCTAssertEqual(adapter.observations.map(\.protection), [protection])
+            XCTAssertEqual(adapter.state, .closed(.terminalObservation))
+        }
     }
 
     private func supportedCatalogObservation() -> LiveContractObservation {
@@ -186,6 +275,22 @@ private actor RecordingPlaybackDriver: LivePlaybackDriving {
     func pause() async -> LivePlaybackDriverResult { .confirmed(.paused) }
     func resumeLiveEdge() async -> LivePlaybackDriverResult { .confirmed(.playing(nil)) }
     func stop() async -> LivePlaybackDriverResult { .confirmed(.stopped) }
+}
+
+private actor RecordingCatalogTransport: ClosedCatalogRequestPerforming {
+    private let result: ClosedCatalogTransportResult
+    private var count = 0
+
+    init(result: ClosedCatalogTransportResult) {
+        self.result = result
+    }
+
+    func send(_: URLRequest) async -> ClosedCatalogTransportResult {
+        count += 1
+        return result
+    }
+
+    func requestCount() -> Int { count }
 }
 
 private struct AlwaysAuthorizedPlaybackAuthorization: LivePlaybackAuthorizing {

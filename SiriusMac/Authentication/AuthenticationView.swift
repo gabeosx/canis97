@@ -4,8 +4,9 @@ import SiriusXMClient
 struct AuthenticationView: View {
     @State private var model: AuthenticationPresentationModel
     @State private var bridge: WebAuthenticationBridge
-    @State private var closedLiveObservation = ClosedLiveObservationAdapter()
-    @State private var didStopClosedLivePreflight = false
+    @State private var closedLiveObservation: ClosedLiveObservationAdapter
+    @State private var catalogResult: ClosedCatalogResult?
+    @State private var isCatalogObservationRunning = false
 
     init() {
         let composition = AuthenticationComposition()
@@ -13,12 +14,24 @@ struct AuthenticationView: View {
         _model = State(initialValue: AuthenticationPresentationModel(
             flow: composition.flow
         ))
+        _closedLiveObservation = State(initialValue: ClosedLiveObservationAdapter(
+            credentialLoader: {
+                switch composition.keychain.loadStoredCredentialForAuthentication() {
+                case let .credential(credential):
+                    .available(credential)
+                case .missing:
+                    .missing
+                case .invalidErased, .cleanupFailed, .unavailable:
+                    .invalid
+                }
+            }
+        ))
     }
 
     var body: some View {
         let copy = model.presentation(for: model.state)
 
-        Group {
+        SwiftUI.Group {
             if case .unsupported = model.state {
                 VStack(alignment: .leading, spacing: 16) {
                     UnsupportedAuthenticationView(copy: copy)
@@ -44,21 +57,19 @@ struct AuthenticationView: View {
                         VStack(alignment: .leading, spacing: 12) {
                             Label("Authentication is complete", systemImage: "checkmark.circle")
                                 .foregroundStyle(.green)
-                            Button("Run closed live compatibility preflight") {
+                            Button("Run one authorized catalog check") {
                                 let result = closedLiveObservation.begin(entitlement: .entitled)
                                 if result == .started {
-                                    closedLiveObservation.refuseUnknownCatalogContract()
-                                    didStopClosedLivePreflight = true
+                                    isCatalogObservationRunning = true
+                                    Task { @MainActor in
+                                        catalogResult = await closedLiveObservation.runCatalog()
+                                        isCatalogObservationRunning = false
+                                    }
                                 }
                             }
-                            .disabled(didStopClosedLivePreflight)
-                            .accessibilityHint("Stops safely before any live-content request without an exact approved contract.")
-                            if didStopClosedLivePreflight {
-                                Text("Live compatibility preflight stopped safely before any content request.")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .accessibilityLabel("Live compatibility preflight stopped safely")
-                            }
+                            .disabled(isCatalogObservationRunning || closedLiveObservation.state != .idle)
+                            .accessibilityHint("Makes only the approved catalog request and stops on any protected or unknown response.")
+                            catalogCheckpointResult
                             Button("Sign Out") { _ = model.signOut() }
                         }
                     } else {
@@ -90,6 +101,41 @@ struct AuthenticationView: View {
             true
         default:
             false
+        }
+    }
+
+    @ViewBuilder
+    private var catalogCheckpointResult: some View {
+        if isCatalogObservationRunning {
+            ProgressView("Checking approved catalog route")
+                .accessibilityLabel("Checking approved catalog route")
+        } else if let catalogResult {
+            switch catalogResult {
+            case let .channels(channels):
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Catalog check completed. Choose one listed channel to continue.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    ForEach(channels.prefix(5)) { channel in
+                        Text(channelSelectionLabel(for: channel))
+                            .font(.caption)
+                            .accessibilityLabel(channelSelectionLabel(for: channel))
+                    }
+                }
+            case let .terminal(protection):
+                Text("Catalog check stopped safely: \(protection.rawValue)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("Catalog check stopped safely: \(protection.rawValue)")
+            }
+        }
+    }
+
+    private func channelSelectionLabel(for channel: ClosedCatalogChannel) -> String {
+        if let category = channel.category {
+            "\(channel.displayName) (\(channel.id)) — \(category)"
+        } else {
+            "\(channel.displayName) (\(channel.id))"
         }
     }
 
@@ -134,6 +180,7 @@ struct AuthenticationView: View {
 @MainActor
 struct AuthenticationComposition {
     let bridge: WebAuthenticationBridge
+    let keychain: KeychainCredentialStore
     let credentialSource: RestorableAuthenticationCredentialSource
     let flow: ComposedAuthenticationPresentationFlow
 
@@ -157,6 +204,7 @@ struct AuthenticationComposition {
         )
 
         self.bridge = bridge
+        self.keychain = keychain
         self.credentialSource = credentialSource
         flow = ComposedAuthenticationPresentationFlow(
             bridge: bridge,

@@ -1,11 +1,154 @@
-import SiriusXMClient
+import Foundation
+@_spi(AppIntegration) import SiriusXMClient
 
-/// Temporary checkpoint-only authority for live-content observation.
-///
-/// It deliberately receives only the already-derived entitlement state, never
-/// a credential or browser/session object. Until a fixed content contract has
-/// been independently authorized, the adapter closes the single run before it
-/// can construct or send a content request.
+/// The only credential state the temporary catalog checkpoint can observe.
+/// No error, material, cookie, or Keychain result leaves the app boundary.
+enum ClosedCatalogCredentialAvailability: Sendable {
+    case available(AuthenticationCredential)
+    case missing
+    case invalid
+}
+
+/// A deliberately bounded channel shape for owner selection during the checkpoint.
+/// These values stay in memory and are validated before the UI receives them.
+struct ClosedCatalogChannel: Sendable, Equatable, Identifiable {
+    let id: String
+    let displayName: String
+    let category: String?
+    let isFavorite: Bool?
+    let isAvailable: Bool?
+}
+
+/// Closed result vocabulary for the one catalog request.
+enum ClosedCatalogResult: Sendable, Equatable {
+    case channels([ClosedCatalogChannel])
+    case terminal(LiveProtectionClass)
+}
+
+/// The testable, private request seam. Implementations must return no URL,
+/// header, error, redirect, or other raw transport material.
+protocol ClosedCatalogRequestPerforming: Sendable {
+    func send(_ request: URLRequest) async -> ClosedCatalogTransportResult
+}
+
+enum ClosedCatalogTransportResult: Sendable {
+    case response(statusCode: Int, contentType: String?, body: Data)
+    case redirect
+    case transportFailure
+}
+
+/// Exact candidate request construction. No arbitrary host, path, method,
+/// request body, query, or caller-provided header can enter this boundary.
+enum ClosedCatalogRequestContract {
+    private static let scheme = "https"
+    private static let host = "browse-at-edge.siriusxm.com"
+    private static let path = "/v2/all-channels"
+
+    static func makeRequest(credential: AuthenticationCredential) -> URLRequest? {
+        guard let url = URL(string: "\(scheme)://\(host)\(path)") else { return nil }
+        return credential.withVolatileMaterial { material in
+            guard let authorization = String(data: material, encoding: .utf8),
+                  !authorization.isEmpty,
+                  !authorization.contains(where: { $0.isWhitespace || $0.isNewline })
+            else { return nil }
+
+            var request = URLRequest(url: url)
+            request.httpMethod = "GET"
+            request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+            request.setValue("Bearer \(authorization)", forHTTPHeaderField: "Authorization")
+            return isExact(request) ? request : nil
+        }
+    }
+
+    static func isExact(_ request: URLRequest) -> Bool {
+        request.url?.scheme == scheme &&
+            request.url?.host == host &&
+            request.url?.path == path &&
+            request.url?.query == nil &&
+            request.url?.fragment == nil &&
+            request.httpMethod == "GET" &&
+            request.httpBody == nil &&
+            request.value(forHTTPHeaderField: "Accept") == "application/json" &&
+            request.value(forHTTPHeaderField: "Authorization")?.hasPrefix("Bearer ") == true
+    }
+}
+
+/// Ephemeral direct transport that cancels every redirect and returns only the
+/// status family, content type, and transient response bytes to the parser.
+final class ClosedCatalogTransport: NSObject, ClosedCatalogRequestPerforming, @unchecked Sendable {
+    enum RedirectDecision: Sendable, Equatable {
+        case cancel
+    }
+
+    static let redirectDecision: RedirectDecision = .cancel
+
+    private let redirectLock = NSLock()
+    private var redirectWasObserved = false
+    private lazy var session = URLSession(
+        configuration: Self.makeConfiguration(),
+        delegate: self,
+        delegateQueue: nil
+    )
+
+    private static func makeConfiguration() -> URLSessionConfiguration {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        configuration.httpCookieStorage = nil
+        configuration.httpShouldSetCookies = false
+        configuration.urlCredentialStorage = nil
+        configuration.timeoutIntervalForRequest = 15
+        configuration.timeoutIntervalForResource = 15
+        return configuration
+    }
+
+    func send(_ request: URLRequest) async -> ClosedCatalogTransportResult {
+        guard ClosedCatalogRequestContract.isExact(request) else { return .transportFailure }
+        setObservedRedirect(false)
+
+        do {
+            var responseData = Data()
+            defer { responseData = Data() }
+            let response: URLResponse
+            (responseData, response) = try await session.data(for: request)
+            guard let response = response as? HTTPURLResponse else { return .transportFailure }
+            return .response(
+                statusCode: response.statusCode,
+                contentType: response.value(forHTTPHeaderField: "Content-Type"),
+                body: responseData
+            )
+        } catch {
+            return observedRedirect ? .redirect : .transportFailure
+        }
+    }
+}
+
+extension ClosedCatalogTransport: URLSessionTaskDelegate {
+    func urlSession(
+        _: URLSession,
+        task _: URLSessionTask,
+        willPerformHTTPRedirection _: HTTPURLResponse,
+        newRequest _: URLRequest,
+        completionHandler: @escaping @Sendable (URLRequest?) -> Void
+    ) {
+        setObservedRedirect(true)
+        completionHandler(nil)
+    }
+
+    private var observedRedirect: Bool {
+        redirectLock.lock()
+        defer { redirectLock.unlock() }
+        return redirectWasObserved
+    }
+
+    private func setObservedRedirect(_ value: Bool) {
+        redirectLock.lock()
+        redirectWasObserved = value
+        redirectLock.unlock()
+    }
+}
+
+/// Temporary checkpoint-only authority for the exact catalog candidate.
 @MainActor
 final class ClosedLiveObservationAdapter {
     enum StartResult: Equatable {
@@ -15,34 +158,179 @@ final class ClosedLiveObservationAdapter {
     }
 
     private let sink: LiveContractObservationSink
+    private let credentialLoader: @MainActor @Sendable () -> ClosedCatalogCredentialAvailability
+    private let transport: any ClosedCatalogRequestPerforming
 
-    init(sink: LiveContractObservationSink = LiveContractObservationSink()) {
+    init(
+        sink: LiveContractObservationSink = LiveContractObservationSink(),
+        credentialLoader: @escaping @MainActor @Sendable () -> ClosedCatalogCredentialAvailability = { .missing },
+        transport: any ClosedCatalogRequestPerforming = ClosedCatalogTransport()
+    ) {
         self.sink = sink
+        self.credentialLoader = credentialLoader
+        self.transport = transport
     }
 
     var observations: [LiveContractObservation] { sink.observations }
     var state: LiveContractObservationState { sink.state }
 
-    /// Begins one checkpoint only after the native client has already derived
-    /// entitlement from its opaque restored credential.
     func begin(entitlement: EntitlementAvailability) -> StartResult {
         guard entitlement == .entitled else { return .entitlementRequired }
         return sink.begin() ? .started : .alreadyConsumed
     }
 
-    /// Fails closed before a catalog request whenever no exact provider
-    /// method/host/path contract is available. This prevents endpoint probing,
-    /// redirects, retries, and any accidental content request.
-    func refuseUnknownCatalogContract() {
+    /// Executes exactly one allow-listed catalog GET after entitlement is already
+    /// derived. Every outcome becomes a closed semantic result immediately.
+    func runCatalog() async -> ClosedCatalogResult {
+        guard state == .active else { return .terminal(.unknownContract) }
+
+        let credential: AuthenticationCredential
+        switch credentialLoader() {
+        case let .available(value): credential = value
+        case .missing, .invalid: return terminalCatalogResult(.authorizationLost)
+        }
+
+        guard let request = ClosedCatalogRequestContract.makeRequest(credential: credential) else {
+            return terminalCatalogResult(.authorizationLost)
+        }
+
+        switch await transport.send(request) {
+        case .redirect:
+            return terminalCatalogResult(.unknownHostOrRedirect)
+        case .transportFailure:
+            return terminalCatalogResult(.unknownContract)
+        case let .response(statusCode, contentType, body):
+            guard (200 ... 299).contains(statusCode) else {
+                return terminalCatalogResult(protection(for: statusCode))
+            }
+            guard isJSON(contentType) else {
+                return terminalCatalogResult(.malformedContract)
+            }
+
+            var responseBody = body
+            defer { responseBody = Data() }
+            guard let channels = ClosedCatalogParser.parse(responseBody) else {
+                return terminalCatalogResult(.malformedContract)
+            }
+            _ = sink.record(
+                LiveContractObservation(
+                    capability: .catalogRefresh,
+                    disposition: .supported,
+                    requestContract: LiveRequestContract(
+                        purpose: .catalogObservation,
+                        method: .get,
+                        authorizedHostPolicy: .firstPartyAuthenticated,
+                        pathTemplate: .catalog
+                    ),
+                    semanticShapes: [
+                        LiveSemanticShape(alias: .catalogEntity, valueType: .object, cardinality: .many),
+                        LiveSemanticShape(alias: .selectedChannel, valueType: .string, cardinality: .one),
+                    ],
+                    protection: nil,
+                    avFoundationBehavior: .notObserved
+                )
+            )
+            return .channels(channels)
+        }
+    }
+
+    private func terminalCatalogResult(_ protection: LiveProtectionClass) -> ClosedCatalogResult {
         _ = sink.record(
             LiveContractObservation(
                 capability: .catalogRefresh,
                 disposition: .unsupported,
                 requestContract: nil,
                 semanticShapes: [],
-                protection: .unknownContract,
+                protection: protection,
                 avFoundationBehavior: .notObserved
             )
         )
+        return .terminal(protection)
+    }
+
+    private func protection(for statusCode: Int) -> LiveProtectionClass {
+        switch statusCode {
+        case 401: .authorizationLost
+        case 403: .forbidden
+        case 429: .rateLimited
+        case 300 ... 399: .unknownHostOrRedirect
+        case 400 ... 499: .humanVerificationRequired
+        default: .unknownContract
+        }
+    }
+
+    private func isJSON(_ contentType: String?) -> Bool {
+        contentType?.lowercased().split(separator: ";", maxSplits: 1).first == "application/json"
+    }
+}
+
+private enum ClosedCatalogParser {
+    static func parse(_ body: Data) -> [ClosedCatalogChannel]? {
+        guard body.count <= 1_048_576,
+              let root = try? JSONSerialization.jsonObject(with: body)
+        else { return nil }
+
+        let channels = entities(in: root).compactMap(channel(from:))
+        return channels.isEmpty ? nil : channels
+    }
+
+    /// The one response establishes the provider's JSON nesting, but it is never
+    /// retained. Traverse only bounded JSON containers to find explicitly linear
+    /// entities; all emitted fields still pass the fixed semantic validators.
+    private static func entities(in root: Any) -> [[String: Any]] {
+        var results: [[String: Any]] = []
+
+        func visit(_ value: Any, depth: Int) {
+            guard depth <= 12, results.count < 2_000 else { return }
+            if let entity = value as? [String: Any] {
+                if entity["type"] as? String == "channel-linear" {
+                    results.append(entity)
+                }
+                for child in entity.values {
+                    visit(child, depth: depth + 1)
+                }
+            } else if let values = value as? [Any] {
+                for child in values {
+                    visit(child, depth: depth + 1)
+                }
+            }
+        }
+
+        visit(root, depth: 0)
+        return results
+    }
+
+    private static func channel(from entity: [String: Any]) -> ClosedCatalogChannel? {
+        guard entity["type"] as? String == "channel-linear",
+              let id = safeIdentifier(entity["id"] as? String)
+        else { return nil }
+
+        return ClosedCatalogChannel(
+            id: id,
+            displayName: safeText(entity["name"] as? String) ?? id,
+            category: safeText(entity["category"] as? String),
+            isFavorite: entity["isFavorite"] as? Bool,
+            isAvailable: entity["isAvailable"] as? Bool
+        )
+    }
+
+    private static func safeIdentifier(_ value: String?) -> String? {
+        guard let value,
+              (1 ... 96).contains(value.utf8.count),
+              value.unicodeScalars.allSatisfy({ scalar in
+                  scalar.isASCII && (CharacterSet.alphanumerics.contains(scalar) || "._-".unicodeScalars.contains(scalar))
+              })
+        else { return nil }
+        return value
+    }
+
+    private static func safeText(_ value: String?) -> String? {
+        guard let value,
+              (1 ... 128).contains(value.utf8.count),
+              value.unicodeScalars.allSatisfy({ scalar in
+                  scalar.isASCII && scalar.value >= 0x20 && scalar.value <= 0x7E
+              })
+        else { return nil }
+        return value
     }
 }
