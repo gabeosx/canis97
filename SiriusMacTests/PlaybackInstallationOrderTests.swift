@@ -214,6 +214,10 @@ final class PlaybackInstallationOrderTests: XCTestCase {
         XCTAssertEqual(coordinator.selectedChannelID, newerChannel)
 
         await coordinator.stop()
+        // The resolver double deliberately models a provider operation that
+        // does not observe cancellation. Release it after stop so the tune
+        // task can verify its generation guard and the XCTest host can exit.
+        await resolver.complete(newerChannel, with: .available(InstallOrderMediaHandoff()))
         _ = await newerTune.value
     }
 }
