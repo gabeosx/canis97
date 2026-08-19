@@ -58,8 +58,11 @@ enum ClosedCatalogTransportResult: Sendable {
 /// request body, query, or caller-provided header can enter this boundary.
 enum ClosedCatalogRequestContract {
     private static let scheme = "https"
-    private static let host = "browse-at-edge.siriusxm.com"
-    private static let path = "/v2/all-channels"
+    /// The current public player navigates its Channels entry through this
+    /// fixed browse-page route. Keep the published page identity private to
+    /// this allowlist rather than accepting caller-provided catalog targets.
+    private static let host = "api.edge-gateway.siriusxm.com"
+    private static let path = "/browse/v1/pages/curated-grouping/403ab6a5-d3c9-4c2a-a722-a94a6a5fd056"
 
     static func makeRequest(credential: AuthenticationCredential) -> URLRequest? {
         guard let url = URL(string: "\(scheme)://\(host)\(path)") else { return nil }

@@ -153,7 +153,7 @@ final class ListeningCompositionTests: XCTestCase {
         XCTAssertEqual(adapter.begin(entitlement: .entitled), .alreadyConsumed)
     }
 
-    func testCatalogContractAllowsOnlyTheExactCandidateRequest() throws {
+    func testCatalogContractAllowsOnlyTheCurrentBrowserPageRequest() throws {
         let request = try XCTUnwrap(
             ClosedCatalogRequestContract.makeRequest(
                 credential: AuthenticationCredential(volatileMaterial: Data("synthetic-credential".utf8))
@@ -162,8 +162,8 @@ final class ListeningCompositionTests: XCTestCase {
 
         XCTAssertEqual(request.httpMethod, "GET")
         XCTAssertEqual(request.url?.scheme, "https")
-        XCTAssertEqual(request.url?.host, "browse-at-edge.siriusxm.com")
-        XCTAssertEqual(request.url?.path, "/v2/all-channels")
+        XCTAssertEqual(request.url?.host, "api.edge-gateway.siriusxm.com")
+        XCTAssertEqual(request.url?.path, "/browse/v1/pages/curated-grouping/403ab6a5-d3c9-4c2a-a722-a94a6a5fd056")
         XCTAssertNil(request.url?.query)
         XCTAssertNil(request.httpBody)
         XCTAssertEqual(request.value(forHTTPHeaderField: "Accept"), "application/json")
