@@ -3,6 +3,18 @@ import Testing
 
 @Suite("Provider-neutral live playback contracts")
 struct LivePlaybackCoordinatorTests {
+    @Test("stream resolution keeps current authorization failures distinct")
+    func resolutionHasClosedCurrentAuthorizationFailures() {
+        #expect(
+            LiveStreamResolutionAvailability.failed(.authenticationUnavailable)
+                != .failed(.entitlementUnavailable)
+        )
+        #expect(
+            LiveStreamResolutionAvailability.failed(.protectedControl)
+                != .failed(.malformedResource)
+        )
+    }
+
     @Test("phase two contracts cannot create transport requests or provider-operation calls")
     func phaseTwoContractsRemainOfflineScaffolding() {
         for operation in SiriusXMRequestContract.liveListeningOperations {
