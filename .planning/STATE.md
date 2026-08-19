@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 02
 current_phase_name: authorized-live-listening
 status: executing
-stopped_at: Completed 02-08-PLAN.md
-last_updated: "2026-08-19T22:09:54.452Z"
+stopped_at: Completed 02-09-PLAN.md
+last_updated: "2026-08-19T22:21:50.745Z"
 last_activity: 2026-08-19
 last_activity_desc: Reconciled Plan 02-02 as a supported provider-contract gate and opened Plan 02-03
 progress:
   total_phases: 3
   completed_phases: 2
   total_plans: 39
-  completed_plans: 36
+  completed_plans: 37
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-08-18)
 ## Current Position
 
 Phase: 02 (authorized-live-listening) — EXECUTING
-Plan: 2 of 11
+Plan: 3 of 11
 Status: Ready to execute
 Last activity: 2026-08-19 — Phase 02 execution started
 
-Progress: [█████████░] 92%
+Progress: [██████████] 95%
 
 ## Performance Metrics
 
@@ -95,6 +95,7 @@ Progress: [█████████░] 92%
 | Phase 02 P03 | 6 min | 2 tasks | 12 files |
 | Phase 02 P04 | 16min | 2 tasks | 11 files |
 | Phase 02 P08 | 14 min | 3 tasks | 8 files |
+| Phase 02 P09 | 12 min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -160,6 +161,8 @@ All earlier Phase 0 feasibility-selection, proof-run, quartet, GO/NO-GO, and cal
 - [Phase ?]: Ordinary entitlement revalidation failures are operation-scoped and cannot retire an active session.
 - [Phase ?]: Live tune material is held only by a private context returned to its originating resolver.
 - [Phase ?]: Redirect observations are private to a single URLSession request delegate.
+- [Phase ?]: Install each current playback item before accepting readiness; only confirmed runtime callbacks publish playback.
+- [Phase ?]: Synchronous session-end invalidation revokes playback before authentication cleanup while leaving credential erasure to the authentication lifecycle.
 
 ### Pending Todos
 
@@ -193,6 +196,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-19T22:09:54.433Z
-Stopped at: Completed 02-08-PLAN.md
+Last session: 2026-08-19T22:21:50.724Z
+Stopped at: Completed 02-09-PLAN.md
 Resume file: None
