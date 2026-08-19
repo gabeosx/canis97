@@ -8,6 +8,7 @@ requires:
 provides:
   - "Finite, same-channel recovery policy with synthetic-clock coverage"
   - "Network and workspace eligibility signals routed through one coordinator"
+  - "Production-only system observer composition without test-host retention"
 affects: [03-native-control-surfaces, playback]
 tech-stack:
   added: []
@@ -18,19 +19,21 @@ key-files:
   created:
     - .planning/phases/02-authorized-live-listening/02-06-SUMMARY.md
   modified:
+    - SiriusMac/Authentication/AuthenticationView.swift
     - SiriusMac/Listening/PlaybackCoordinator.swift
     - SiriusMacTests/ListeningCompositionTests.swift
 decisions:
   - "Recovery may re-resolve only the currently selected identity, within one incident's two-attempt budget."
   - "Network and workspace callbacks are eligibility inputs only and never call the resolver directly."
+  - "Only live app composition instantiates NWPathMonitor and NSWorkspace observers; generic coordinators use inert injected seams."
 metrics:
-  duration: "~11 min"
+  duration: "~22 min"
   completed: "2026-08-19"
 status: complete
 actuals:
   tokens: 6515
   tasks: 2
-  commits: 5
+  commits: 8
 ---
 
 # Phase 02 Plan 06: Bounded Playback Recovery Summary
@@ -50,13 +53,14 @@ The native coordinator now recovers only the current selected channel through on
    - Made offline, sleep, stop, command supersession, and terminal authorization/protection outcomes cancel recovery before later provider work.
    - Added Network path and NSWorkspace sleep/wake adapters that supply eligibility signals only; they cannot resolve media or manipulate the player directly.
    - Follow-up coverage proves pause cancels an active recovery before it can install/play, and that one real offline-to-online transition begins one same-channel incident without needing a second stall signal.
-   - Commits: `7ee9117` (RED), `c6b1d9f` (GREEN), `0aa1acd` (signal-adapter correction), `3470dc8` (follow-up RED), `a7a4c11` (follow-up GREEN).
+   - System Network and workspace observers are now composed only in the live client branch. Generic coordinators—including unit-test and fake-client composition—use inert observer seams and cannot start those system services implicitly.
+   - Commits: `7ee9117` (RED), `c6b1d9f` (GREEN), `0aa1acd` (signal-adapter correction), `3470dc8` (follow-up RED), `a7a4c11` (follow-up GREEN), `8f9b4f1` (production-observer RED), `64bec83` (production-only observer GREEN), `8614460` (teardown-test correction).
 
 ## Verification
 
 - `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --package-path Packages/SiriusXMClient --filter LivePlaybackCoordinatorTests` — passed, 11 tests.
-- `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild test -project SiriusMac.xcodeproj -scheme SiriusMac -destination 'platform=macOS' -only-testing:SiriusMacTests/ListeningCompositionTests` — passed, 29 tests.
-- All verification used synthetic resolver, player, and delay collaborators. No provider request, media load, live AVFoundation attempt, browser/DOM action, Keychain access, or app launch was performed.
+- The focused Xcode suite ran under a 90-second process bound and exited `0`: `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild test -project SiriusMac.xcodeproj -scheme SiriusMac -destination 'platform=macOS' -only-testing:SiriusMacTests/ListeningCompositionTests` — passed, 30 tests; no `xcodebuild` or `SiriusMacTests` process remained.
+- All behavior verification used synthetic resolver, player, and delay collaborators. No provider request, media load, live AVFoundation attempt, browser/DOM action, Keychain access, or user application session occurred.
 
 ## Deviations from Plan
 
@@ -76,6 +80,13 @@ The native coordinator now recovers only the current selected channel through on
    - **Files modified:** `SiriusMac/Listening/PlaybackCoordinator.swift`, `SiriusMacTests/ListeningCompositionTests.swift`
    - **Commits:** `3470dc8`, `a7a4c11`
 
+3. **[Rule 1 - Test teardown] Corrected the reconnect delay expected by the offline-stop test.**
+   - **Found during:** Post-plan test-host lifecycle verification.
+   - **Issue:** Reconnect correctly starts its pending incident at the one-second retry backoff, but the test waited forever for an eight-second stall grace that cannot occur on that path, leaving the focused Xcode host alive after the visible assertions.
+   - **Fix:** The test now awaits the reconnect backoff, stops the coordinator before releasing that delay, and verifies no later resolver call can escape teardown. Separately, live system observers are explicitly composed at the production boundary and generic coordinator defaults are inert.
+   - **Files modified:** `SiriusMacTests/ListeningCompositionTests.swift`, `SiriusMac/Listening/PlaybackCoordinator.swift`, `SiriusMac/Authentication/AuthenticationView.swift`
+   - **Commits:** `8f9b4f1`, `64bec83`, `8614460`
+
 ### Plan Drift
 
 - Task 1's intended RED tests passed immediately because the post-await cancellation and supersession safeguards were already delivered in Plan 02-05. The task was verified rather than duplicated.
@@ -91,4 +102,4 @@ This plan is offline-complete only. AVFoundation playback/audibility remains **N
 ## Self-Check: PASSED
 
 - Required source, test, and summary artifacts exist.
-- Task commits `7ee9117`, `c6b1d9f`, `0aa1acd`, `3470dc8`, and `a7a4c11` are present in history.
+- Task commits `7ee9117`, `c6b1d9f`, `0aa1acd`, `3470dc8`, `a7a4c11`, `8f9b4f1`, `64bec83`, and `8614460` are present in history.
