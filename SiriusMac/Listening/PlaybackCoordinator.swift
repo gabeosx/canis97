@@ -375,6 +375,7 @@ final class PlaybackCoordinator {
     private var observation: (any PlaybackItemObserving)?
     private var observationID: UUID?
     private var installedItemGeneration: Int?
+    private var playRequestedItemGeneration: Int?
     private var networkAvailable = true
     private var sleeping = false
     private var recoveryPendingAfterReconnect = false
@@ -434,7 +435,9 @@ final class PlaybackCoordinator {
             cancelRecovery()
             recoveryPendingAfterReconnect = false
         }
-        guard installedItemGeneration == generation else {
+        guard installedItemGeneration == generation,
+              playRequestedItemGeneration == generation
+        else {
             // A pause command is a serialization boundary. An unresolved tune
             // must not later install or begin audio after the user paused.
             _ = supersedeActiveWork(clearItem: true)
@@ -603,6 +606,7 @@ final class PlaybackCoordinator {
             observationID: observationID,
             incident: incident
         ) else { return }
+        playRequestedItemGeneration = generation
         runtime.requestPlay()
     }
 
@@ -747,7 +751,9 @@ final class PlaybackCoordinator {
             return false
         }
         if let incident {
-            return isCurrent(incident)
+            guard recoveryIncident == nil || recoveryIncident == incident else { return false }
+            return self.generation == incident.generation && selectedChannelID == incident.channelID &&
+                networkAvailable && !sleeping && !Task.isCancelled
         }
         return recoveryIncident == nil
     }
@@ -800,6 +806,7 @@ final class PlaybackCoordinator {
         observation = nil
         observationID = nil
         installedItemGeneration = nil
+        playRequestedItemGeneration = nil
         if clearItem {
             runtime.clearCurrentItem()
         }

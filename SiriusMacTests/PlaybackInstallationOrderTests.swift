@@ -102,6 +102,120 @@ final class PlaybackInstallationOrderTests: XCTestCase {
         XCTAssertEqual(runtime.installCount, 2)
         XCTAssertEqual(coordinator.state, .playing(channel))
     }
+
+    func testRecoveryInstallsBeforeReadyAndOnlyConfirmedPlayingCompletesTheIncident() async {
+        let resolver = InstallOrderResolver()
+        let runtime = InstallGatedPlaybackRuntime()
+        let coordinator = PlaybackCoordinator(
+            resolver: resolver,
+            runtime: runtime,
+            recoveryPolicy: PlaybackRecoveryPolicy(maximumReResolutions: 1, stallGrace: 0, backoffs: [0])
+        )
+        let channel = LiveChannelID("fixture-recovery-install-first")
+
+        let tune = Task { await coordinator.tune(channel) }
+        await resolver.waitForResolution(of: channel, count: 1)
+        await resolver.complete(channel, with: .available(InstallOrderMediaHandoff()))
+        await runtime.waitForObservation(count: 1)
+        XCTAssertTrue(runtime.emitReady())
+        runtime.emitPlaying()
+        _ = await tune.value
+
+        coordinator.handleRecoverySignal(.decoderFailed)
+        await resolver.waitForResolution(of: channel, count: 2)
+        await resolver.complete(channel, with: .available(InstallOrderMediaHandoff()))
+        await runtime.waitForObservation(count: 2)
+
+        XCTAssertEqual(runtime.events.suffix(2), [.observed, .installed])
+        XCTAssertTrue(runtime.emitReady())
+        XCTAssertEqual(coordinator.state, .playing(channel))
+
+        runtime.emitPlaying()
+        XCTAssertEqual(coordinator.state, .playing(channel))
+    }
+
+    func testPauseStopSwitchAndSessionEndMakeLateCallbacksInertAndAreIdempotent() async {
+        let resolver = InstallOrderResolver()
+        let runtime = InstallGatedPlaybackRuntime()
+        let coordinator = PlaybackCoordinator(resolver: resolver, runtime: runtime)
+        let model = ListeningPresentationModel(flow: InstallOrderCatalogFlow(), playbackCoordinator: coordinator)
+        let first = LiveChannelID("fixture-late-first")
+        let second = LiveChannelID("fixture-late-second")
+
+        let firstTune = Task { await coordinator.tune(first) }
+        await resolver.waitForResolution(of: first)
+        await resolver.complete(first, with: .available(InstallOrderMediaHandoff()))
+        await runtime.waitForObservation(count: 1)
+
+        await coordinator.pause()
+        let playsAfterPause = runtime.playRequestCount
+        XCTAssertFalse(runtime.emitReady(observation: 0, includingCancelled: true))
+        runtime.emitPlaying(observation: 0, includingCancelled: true)
+        XCTAssertEqual(runtime.playRequestCount, playsAfterPause)
+        XCTAssertEqual(coordinator.state, .idle)
+        _ = await firstTune.value
+
+        let secondTune = Task { await coordinator.tune(second) }
+        await resolver.waitForResolution(of: second)
+        await resolver.complete(second, with: .available(InstallOrderMediaHandoff()))
+        await runtime.waitForObservation(count: 2)
+        let installsBeforeSwitchCallback = runtime.installCount
+        runtime.emitReady(observation: 0, includingCancelled: true)
+        XCTAssertEqual(runtime.installCount, installsBeforeSwitchCallback)
+        XCTAssertEqual(runtime.playRequestCount, playsAfterPause)
+
+        model.reset()
+        let clearsAfterSessionEnd = runtime.clearCount
+        model.reset()
+        await coordinator.stop()
+        let clearsAfterFirstStop = runtime.clearCount
+        await coordinator.stop()
+        runtime.emitReady(observation: 1, includingCancelled: true)
+        runtime.emitPlaying(observation: 1, includingCancelled: true)
+        runtime.emitFailure(.decoderUnavailable, observation: 1, includingCancelled: true)
+        _ = await secondTune.value
+
+        XCTAssertEqual(clearsAfterFirstStop, clearsAfterSessionEnd + 1)
+        XCTAssertEqual(runtime.clearCount, clearsAfterFirstStop)
+        XCTAssertEqual(runtime.playRequestCount, playsAfterPause)
+        XCTAssertEqual(coordinator.state, .stopped)
+        XCTAssertNil(coordinator.selectedChannelID)
+    }
+
+    func testOlderRecoveryReadyCannotPlayOrClearANewerTune() async {
+        let resolver = InstallOrderResolver()
+        let runtime = InstallGatedPlaybackRuntime()
+        let coordinator = PlaybackCoordinator(
+            resolver: resolver,
+            runtime: runtime,
+            recoveryPolicy: PlaybackRecoveryPolicy(maximumReResolutions: 1, stallGrace: 0, backoffs: [0])
+        )
+        let recoveredChannel = LiveChannelID("fixture-recovery-race")
+        let newerChannel = LiveChannelID("fixture-newer-tune")
+
+        let initialTune = Task { await coordinator.tune(recoveredChannel) }
+        await resolver.waitForResolution(of: recoveredChannel, count: 1)
+        await resolver.complete(recoveredChannel, with: .available(InstallOrderMediaHandoff()))
+        await runtime.waitForObservation(count: 1)
+        XCTAssertTrue(runtime.emitReady())
+        runtime.emitPlaying()
+        _ = await initialTune.value
+
+        coordinator.handleRecoverySignal(.resourceExpired)
+        await resolver.waitForResolution(of: recoveredChannel, count: 2)
+        await resolver.complete(recoveredChannel, with: .available(InstallOrderMediaHandoff()))
+        await runtime.waitForObservation(count: 2)
+
+        let newerTune = Task { await coordinator.tune(newerChannel) }
+        await resolver.waitForResolution(of: newerChannel)
+        let playRequestsBeforeLateReady = runtime.playRequestCount
+        XCTAssertFalse(runtime.emitReady(observation: 1, includingCancelled: true))
+        XCTAssertEqual(runtime.playRequestCount, playRequestsBeforeLateReady)
+        XCTAssertEqual(coordinator.selectedChannelID, newerChannel)
+
+        await coordinator.stop()
+        _ = await newerTune.value
+    }
 }
 
 @MainActor
@@ -122,16 +236,37 @@ private final class InstallGatedPlaybackRuntime: PlaybackPlayerRuntime {
         }
     }
 
-    private var observedItem: AVPlayerItem?
+    private final class Callbacks {
+        let item: AVPlayerItem
+        let observation: Observation
+        let onReady: @MainActor @Sendable () -> Void
+        let onPlaying: @MainActor @Sendable () -> Void
+        let onPaused: @MainActor @Sendable () -> Void
+        let onFailure: @MainActor @Sendable (LiveListeningFailure) -> Void
+
+        init(
+            item: AVPlayerItem,
+            observation: Observation,
+            onReady: @escaping @MainActor @Sendable () -> Void,
+            onPlaying: @escaping @MainActor @Sendable () -> Void,
+            onPaused: @escaping @MainActor @Sendable () -> Void,
+            onFailure: @escaping @MainActor @Sendable (LiveListeningFailure) -> Void
+        ) {
+            self.item = item
+            self.observation = observation
+            self.onReady = onReady
+            self.onPlaying = onPlaying
+            self.onPaused = onPaused
+            self.onFailure = onFailure
+        }
+    }
+
     private var installedItem: AVPlayerItem?
-    private var observation: Observation?
-    private var onReady: (@MainActor @Sendable () -> Void)?
-    private var onPlaying: (@MainActor @Sendable () -> Void)?
-    private var onPaused: (@MainActor @Sendable () -> Void)?
-    private var onFailure: (@MainActor @Sendable (LiveListeningFailure) -> Void)?
+    private var callbacks: [Callbacks] = []
     private(set) var events: [Event] = []
     private(set) var installCount = 0
     private(set) var playRequestCount = 0
+    private(set) var clearCount = 0
     private var observationCount = 0
 
     func observe(
@@ -142,13 +277,15 @@ private final class InstallGatedPlaybackRuntime: PlaybackPlayerRuntime {
         onFailure: @escaping @MainActor @Sendable (LiveListeningFailure) -> Void
     ) -> any PlaybackItemObserving {
         let observation = Observation()
-        observedItem = item
         installedItem = nil
-        self.observation = observation
-        self.onReady = onReady
-        self.onPlaying = onPlaying
-        self.onPaused = onPaused
-        self.onFailure = onFailure
+        callbacks.append(Callbacks(
+            item: item,
+            observation: observation,
+            onReady: onReady,
+            onPlaying: onPlaying,
+            onPaused: onPaused,
+            onFailure: onFailure
+        ))
         observationCount += 1
         events.append(.observed)
         return observation
@@ -166,11 +303,12 @@ private final class InstallGatedPlaybackRuntime: PlaybackPlayerRuntime {
     }
 
     func requestPause() {
-        onPaused?()
+        callbacks.last?.onPaused()
     }
 
     func clearCurrentItem() {
         installedItem = nil
+        clearCount += 1
         events.append(.clear)
     }
 
@@ -181,19 +319,35 @@ private final class InstallGatedPlaybackRuntime: PlaybackPlayerRuntime {
     }
 
     @discardableResult
-    func emitReady() -> Bool {
-        guard let observedItem, let installedItem, observedItem === installedItem,
-              observation?.isCancelled == false
+    func emitReady(observation index: Int? = nil, includingCancelled: Bool = false) -> Bool {
+        let callbacks = callbacks[index ?? callbacks.count - 1]
+        guard let installedItem, callbacks.item === installedItem,
+              includingCancelled || !callbacks.observation.isCancelled
         else { return false }
         events.append(.ready)
-        onReady?()
+        callbacks.onReady()
         return true
     }
 
-    func emitPlaying() {
-        guard observation?.isCancelled == false else { return }
-        onPlaying?()
+    func emitPlaying(observation index: Int? = nil, includingCancelled: Bool = false) {
+        let callbacks = callbacks[index ?? callbacks.count - 1]
+        guard includingCancelled || !callbacks.observation.isCancelled else { return }
+        callbacks.onPlaying()
     }
+
+    func emitFailure(
+        _ failure: LiveListeningFailure,
+        observation index: Int? = nil,
+        includingCancelled: Bool = false
+    ) {
+        let callbacks = callbacks[index ?? callbacks.count - 1]
+        guard includingCancelled || !callbacks.observation.isCancelled else { return }
+        callbacks.onFailure(failure)
+    }
+}
+
+private actor InstallOrderCatalogFlow: ListeningFlow {
+    func catalog() async -> CatalogAvailability { .unavailable }
 }
 
 private actor InstallOrderResolver: PlaybackResolving {
