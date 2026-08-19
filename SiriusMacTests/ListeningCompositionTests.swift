@@ -257,7 +257,38 @@ final class ListeningCompositionTests: XCTestCase {
 
         let result = await adapter.runCatalog()
 
-        XCTAssertEqual(result, .terminal(.malformedContract))
+        XCTAssertEqual(result, .classifiedTerminal(.malformedContract, .documentTooLarge))
+    }
+
+    func testCatalogRunClassifiesMalformedResponsesWithoutRetainingProviderData() async {
+        let cases: [(ClosedCatalogTransportResult, ClosedCatalogFailure)] = [
+            (.response(statusCode: 200, contentType: "text/plain", body: Data()), .nonJSONContent),
+            (.response(statusCode: 200, contentType: "application/json", body: Data("not-json".utf8)), .invalidJSON),
+            (.response(statusCode: 200, contentType: "application/json", body: Data("\"scalar\"".utf8)), .unsupportedRoot),
+            (.response(statusCode: 200, contentType: "application/json", body: Data(#"{}"#.utf8)), .noAdmissibleChannel),
+            (
+                .response(
+                    statusCode: 200,
+                    contentType: "application/json",
+                    body: Data(#"{"channels":[{"id":"invalid id","type":"channel-linear"}]}"#.utf8)
+                ),
+                .noValidChannelIdentity
+            ),
+        ]
+
+        for (transportResult, failure) in cases {
+            let adapter = ClosedLiveObservationAdapter(
+                credentialLoader: { .available(AuthenticationCredential(volatileMaterial: Data("synthetic-credential".utf8))) },
+                transport: RecordingCatalogTransport(result: transportResult)
+            )
+
+            XCTAssertEqual(adapter.begin(entitlement: .entitled), .started)
+            let result = await adapter.runCatalog()
+
+            XCTAssertEqual(result, .classifiedTerminal(.malformedContract, failure))
+            XCTAssertEqual(adapter.observations.map(\.protection), [.malformedContract])
+            XCTAssertEqual(adapter.state, .closed(.terminalObservation))
+        }
     }
 
     func testCatalogRunDoesNotRequestWhenCredentialIsMissingOrInvalid() async {

@@ -127,6 +127,11 @@ struct AuthenticationView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .accessibilityLabel("Catalog check stopped safely: \(protection.rawValue)")
+            case let .classifiedTerminal(protection, failure):
+                Text("Catalog check stopped safely: \(failure.rawValue)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("Catalog check stopped safely: \(protection.rawValue), \(failure.rawValue)")
             }
         }
     }

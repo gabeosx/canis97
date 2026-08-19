@@ -23,6 +23,21 @@ struct ClosedCatalogChannel: Sendable, Equatable, Identifiable {
 enum ClosedCatalogResult: Sendable, Equatable {
     case channels([ClosedCatalogChannel])
     case terminal(LiveProtectionClass)
+    /// This result may expose only a fixed, non-provider diagnostic atom. It
+    /// never includes a response value, response key, header, URL, or count.
+    case classifiedTerminal(LiveProtectionClass, ClosedCatalogFailure)
+}
+
+/// Fixed, privacy-safe reasons why an otherwise successful catalog response
+/// could not become a selectable channel list. These classify parser state,
+/// rather than preserving any provider response material.
+enum ClosedCatalogFailure: String, Sendable, Equatable {
+    case nonJSONContent = "catalog-non-json-content"
+    case documentTooLarge = "catalog-document-too-large"
+    case invalidJSON = "catalog-invalid-json"
+    case unsupportedRoot = "catalog-unsupported-root"
+    case noAdmissibleChannel = "catalog-no-admissible-channel"
+    case noValidChannelIdentity = "catalog-no-valid-channel-identity"
 }
 
 /// The testable, private request seam. Implementations must return no URL,
@@ -204,37 +219,42 @@ final class ClosedLiveObservationAdapter {
                 return terminalCatalogResult(protection(for: statusCode))
             }
             guard isJSON(contentType) else {
-                return terminalCatalogResult(.malformedContract)
+                return terminalCatalogResult(.malformedContract, failure: .nonJSONContent)
             }
 
             var responseBody = body
             defer { responseBody = Data() }
-            guard let channels = ClosedCatalogParser.parse(responseBody) else {
-                return terminalCatalogResult(.malformedContract)
-            }
-            _ = sink.record(
-                LiveContractObservation(
-                    capability: .catalogRefresh,
-                    disposition: .supported,
-                    requestContract: LiveRequestContract(
-                        purpose: .catalogObservation,
-                        method: .get,
-                        authorizedHostPolicy: .firstPartyAuthenticated,
-                        pathTemplate: .catalog
-                    ),
-                    semanticShapes: [
-                        LiveSemanticShape(alias: .catalogEntity, valueType: .object, cardinality: .many),
-                        LiveSemanticShape(alias: .selectedChannel, valueType: .string, cardinality: .one),
-                    ],
-                    protection: nil,
-                    avFoundationBehavior: .notObserved
+            switch ClosedCatalogParser.parse(responseBody) {
+            case let .channels(channels):
+                _ = sink.record(
+                    LiveContractObservation(
+                        capability: .catalogRefresh,
+                        disposition: .supported,
+                        requestContract: LiveRequestContract(
+                            purpose: .catalogObservation,
+                            method: .get,
+                            authorizedHostPolicy: .firstPartyAuthenticated,
+                            pathTemplate: .catalog
+                        ),
+                        semanticShapes: [
+                            LiveSemanticShape(alias: .catalogEntity, valueType: .object, cardinality: .many),
+                            LiveSemanticShape(alias: .selectedChannel, valueType: .string, cardinality: .one),
+                        ],
+                        protection: nil,
+                        avFoundationBehavior: .notObserved
+                    )
                 )
-            )
-            return .channels(channels)
+                return .channels(channels)
+            case let .failure(failure):
+                return terminalCatalogResult(.malformedContract, failure: failure)
+            }
         }
     }
 
-    private func terminalCatalogResult(_ protection: LiveProtectionClass) -> ClosedCatalogResult {
+    private func terminalCatalogResult(
+        _ protection: LiveProtectionClass,
+        failure: ClosedCatalogFailure? = nil
+    ) -> ClosedCatalogResult {
         _ = sink.record(
             LiveContractObservation(
                 capability: .catalogRefresh,
@@ -245,6 +265,9 @@ final class ClosedLiveObservationAdapter {
                 avFoundationBehavior: .notObserved
             )
         )
+        if let failure {
+            return .classifiedTerminal(protection, failure)
+        }
         return .terminal(protection)
     }
 
@@ -265,18 +288,33 @@ final class ClosedLiveObservationAdapter {
 }
 
 private enum ClosedCatalogParser {
+    enum Result {
+        case channels([ClosedCatalogChannel])
+        case failure(ClosedCatalogFailure)
+    }
+
     /// The current first-party player consumes a complete page graph rather than
     /// a flat lineup. Keep the transient decode bounded, but leave enough room
     /// for its container, set, item, image, and decoration metadata.
     private static let maximumDocumentBytes = 8 * 1_024 * 1_024
 
-    static func parse(_ body: Data) -> [ClosedCatalogChannel]? {
-        guard body.count <= maximumDocumentBytes,
-              let root = try? JSONSerialization.jsonObject(with: body)
-        else { return nil }
+    static func parse(_ body: Data) -> Result {
+        guard body.count <= maximumDocumentBytes else {
+            return .failure(.documentTooLarge)
+        }
+        guard let root = try? JSONSerialization.jsonObject(with: body, options: [.fragmentsAllowed]) else {
+            return .failure(.invalidJSON)
+        }
+        guard root is [String: Any] || root is [Any] else {
+            return .failure(.unsupportedRoot)
+        }
 
-        let channels = entities(in: root).compactMap(channel(from:))
-        return channels.isEmpty ? nil : channels
+        let candidates = entities(in: root)
+        guard !candidates.isEmpty else {
+            return .failure(.noAdmissibleChannel)
+        }
+        let channels = candidates.compactMap(channel(from:))
+        return channels.isEmpty ? .failure(.noValidChannelIdentity) : .channels(channels)
     }
 
     /// The one response establishes the provider's JSON nesting, but it is never
