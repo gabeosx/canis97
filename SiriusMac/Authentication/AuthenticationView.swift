@@ -161,7 +161,9 @@ struct AuthenticationComposition {
             )
             self.listeningFlow = composedClient
             self.playbackCoordinator = PlaybackCoordinator(
-                resolver: SiriusXMPlaybackResolver(client: composedClient)
+                resolver: SiriusXMPlaybackResolver(client: composedClient),
+                networkObserver: SystemNetworkPathObserver(),
+                workspaceObserver: SystemWorkspacePowerObserver()
             )
         }
     }

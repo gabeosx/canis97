@@ -109,10 +109,12 @@ protocol WorkspacePowerObserving: AnyObject, Sendable {
     func cancel()
 }
 
-/// The monitor provides only availability eligibility. Its callback cannot
-/// resolve a channel or manipulate an AVPlayer.
+/// The production monitor provides only availability eligibility. Its callback
+/// cannot resolve a channel or manipulate an AVPlayer. It is composed at the
+/// app boundary so generic coordinators and their tests never start a system
+/// monitor implicitly.
 @MainActor
-private final class SystemNetworkPathObserver: NetworkPathObserving {
+final class SystemNetworkPathObserver: NetworkPathObserving {
     private let monitor = NWPathMonitor()
     private let queue = DispatchQueue(label: "com.siriusmac.playback.recovery-path")
     private var started = false
@@ -132,10 +134,11 @@ private final class SystemNetworkPathObserver: NetworkPathObserving {
     }
 }
 
-/// Workspace power notifications are reduced to lifecycle eligibility signals;
-/// they have no direct access to the provider resolver or active item.
+/// Production workspace power notifications are reduced to lifecycle
+/// eligibility signals; they have no direct access to the provider resolver or
+/// active item. App composition opts into them explicitly.
 @MainActor
-private final class SystemWorkspacePowerObserver: WorkspacePowerObserving {
+final class SystemWorkspacePowerObserver: WorkspacePowerObserving {
     private var tokens: [NSObjectProtocol] = []
 
     func start(
@@ -159,6 +162,25 @@ private final class SystemWorkspacePowerObserver: WorkspacePowerObserving {
         tokens.forEach(center.removeObserver)
         tokens.removeAll()
     }
+}
+
+/// Generic coordinators are deliberately inert. This keeps previews, unit
+/// tests, and dependency-injected compositions from retaining XPC-backed
+/// system observers merely by constructing playback state.
+@MainActor
+private final class InertNetworkPathObserver: NetworkPathObserving {
+    func start(_: @escaping @MainActor @Sendable (Bool) -> Void) {}
+    func cancel() {}
+}
+
+@MainActor
+private final class InertWorkspacePowerObserver: WorkspacePowerObserving {
+    func start(
+        onWillSleep _: @escaping @MainActor @Sendable () -> Void,
+        onDidWake _: @escaping @MainActor @Sendable () -> Void
+    ) {}
+
+    func cancel() {}
 }
 
 private struct SystemPlaybackRecoverySleeper: PlaybackRecoverySleeping {
@@ -371,8 +393,8 @@ final class PlaybackCoordinator {
         self.runtime = runtime
         self.recoveryPolicy = recoveryPolicy
         self.sleeper = sleeper
-        let networkObserver = networkObserver ?? SystemNetworkPathObserver()
-        let workspaceObserver = workspaceObserver ?? SystemWorkspacePowerObserver()
+        let networkObserver = networkObserver ?? InertNetworkPathObserver()
+        let workspaceObserver = workspaceObserver ?? InertWorkspacePowerObserver()
         self.networkObserver = networkObserver
         self.workspaceObserver = workspaceObserver
         networkObserver.start { [weak self] available in
