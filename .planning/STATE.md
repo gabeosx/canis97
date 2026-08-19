@@ -5,7 +5,7 @@ milestone_name: milestone
 current_phase: 02
 current_phase_name: Authorized Live Listening
 status: blocked
-stopped_at: "Halted 02-02-PLAN.md: new-login-required blocks provider-dependent plans"
+stopped_at: "Halted 02-02-PLAN.md: unknown-contract blocks provider-dependent plans"
 last_updated: "2026-08-19T13:01:50.987Z"
 last_activity: 2026-08-18
 last_activity_desc: Accepted Phase 1 verification-staleness exception after 40/40 UAT and advanced to Phase 2
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-08-18)
 
 Phase: 02 (Authorized Live Listening) — HALTED
 Plan: 3 of 7
-Status: Blocked by halted Plan 02-02 (`new-login-required`)
+Status: Blocked by halted Plan 02-02 (`unknown-contract`)
 Last activity: 2026-08-18 — Phase 02 execution started
 
 Progress: [█████████░] 86%
@@ -147,7 +147,7 @@ All earlier Phase 0 feasibility-selection, proof-run, quartet, GO/NO-GO, and cal
 - [Phase ?]: Keep Wave 0 listening seams semantic and provider-neutral until the owner-visible contract checkpoint.
 - [Phase ?]: Treat catalog snapshots as browse-only; playback requires separate current authorization confirmation.
 - [Phase ?]: Use generation checks and finite recovery budgets to reject stale, superseded, and cancelled listening work.
-- [Phase 02]: Treat new-login-required as the terminal first failure domain; do not infer provider or AVFoundation contracts from an unexercised run. — The single authorized run was consumed and Plan 02-02 requires Execution: HALT on a new-login requirement.
+- [Phase 02]: Treat unknown-contract as the terminal first failure domain; do not infer provider or AVFoundation contracts from an unexercised run. — The restored session reached ready state, then the single authorized run stopped before an unallow-listed content request.
 
 ### Pending Todos
 
@@ -157,7 +157,7 @@ None yet.
 
 - Phase 1: The SiriusXM WebView/token/native-request contract remains volatile; drift must fail closed behind replaceable adapters, never trigger a new authentication-method experiment during execution.
 - Phase 5: Verify signing, notarization, stapling, immutable release, Gatekeeper, and Homebrew Cask behavior against the current release toolchain before publishing.
-- Plan 02-02 halted: the single authorized existing-session run stopped at new-login-required before content observation; Plans 02-03 through 02-07 are blocked.
+- Plan 02-02 halted: the restored existing session stopped at unknown-contract before content observation; Plans 02-03 through 02-07 are blocked.
 
 ### Quick Tasks Completed
 
@@ -182,5 +182,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-08-19T13:01:50.520Z
-Stopped at: Halted 02-02-PLAN.md: new-login-required blocks provider-dependent plans
+Stopped at: Halted 02-02-PLAN.md: unknown-contract blocks provider-dependent plans
 Resume file: None

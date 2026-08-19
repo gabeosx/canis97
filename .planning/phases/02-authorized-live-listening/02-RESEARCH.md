@@ -311,10 +311,10 @@ monitor.start(queue: monitorQueue)
 
 ## Open Questions
 
-**Resolution routing (checkpoint result):** Plan 02-02 consumed its single authorized existing-session run and stopped at `new-login-required` before any content operation. The canonical sanitized [02-LIVE-CONTRACT.md](./02-LIVE-CONTRACT.md) says `Gate Result: UNSUPPORTED` and `Execution: HALT`. Plan 02-03 may not add fixed provider code; provider-dependent plans remain blocked. No raw live evidence belongs in this research file or the canonical artifact.
+**Resolution routing (checkpoint result):** Plan 02-02 restored the existing Keychain-backed session to the semantic ready state, then consumed its single authorized preflight and stopped at `unknown-contract` before any content operation. The canonical sanitized [02-LIVE-CONTRACT.md](./02-LIVE-CONTRACT.md) says `Gate Result: UNSUPPORTED` and `Execution: HALT`. Plan 02-03 may not add fixed provider code; provider-dependent plans remain blocked. No raw live evidence belongs in this research file or the canonical artifact.
 
 1. **[RESOLVED — UNSUPPORTED / NOT REACHED] What are the current fixed catalog, tune, stream, metadata, artwork, and key-authorization contracts?**
-   - Result: Not reached. The existing-session precondition stopped at `new-login-required` before catalog observation, tune, resource resolution, metadata, artwork, or key authorization.
+   - Result: Not reached. The closed preflight stopped at `unknown-contract` before catalog observation, tune, resource resolution, metadata, artwork, or key authorization.
    - Canonical record: [02-LIVE-CONTRACT.md](./02-LIVE-CONTRACT.md) — `Gate Result: UNSUPPORTED`, `Execution: HALT`.
 
 2. **[RESOLVED — UNSUPPORTED / NOT REACHED] Can AVFoundation obtain and play the authorized stream without a prohibited custom authorization mechanism?**

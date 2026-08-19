@@ -178,7 +178,7 @@ Plans:
 
 - [x] 02-01-PLAN.md — Create all four offline contract suites and reversible semantic app seams without live provider work.
 
-**Wave 2 — Owner-visible live gate** *(halted: `new-login-required`)*
+**Wave 2 — Owner-visible live gate** *(halted: `unknown-contract`)*
 
 - [x] 02-02-PLAN.md — Run the first bounded authenticated provider/AVFoundation checkpoint and record sanitized supported or unsupported evidence.
 

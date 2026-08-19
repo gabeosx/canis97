@@ -2,7 +2,7 @@
 
 **Phase:** 02 — Authorized Live Listening
 **Scope:** Current project evidence and the v1 live-listening contract
-**Status:** Plan 02-02 reached the terminal `new-login-required` precondition stop before any live-content operation. The canonical `02-LIVE-CONTRACT.md` reports `Gate Result: UNSUPPORTED` and `Execution: HALT`; Plan 02-03 may not encode fixed provider operations or decoders.
+**Status:** Plan 02-02 reached the terminal `unknown-contract` stop before any live-content operation. The canonical `02-LIVE-CONTRACT.md` reports `Gate Result: UNSUPPORTED` and `Execution: HALT`; Plan 02-03 may not encode fixed provider operations or decoders.
 
 This matrix is not a claim about SiriusXM's exhaustive private API surface. It enumerates only capabilities implicated by the current code, Phase 02 requirements, sanitized historical evidence, and the v1 product boundary. Execution may not silently add provider operations beyond these rows.
 
@@ -15,15 +15,15 @@ This matrix is not a claim about SiriusXM's exhaustive private API surface. It e
 
 | Capability | Decision | Reason |
 |---|---|---|
-| Catalog refresh and entity filtering | UNSUPPORTED | Not reached: the existing-session precondition stopped at `new-login-required`; no catalog behavior was exercised or inferred. |
+| Catalog refresh and entity filtering | UNSUPPORTED | Not reached: the closed preflight stopped at `unknown-contract` before any catalog request; no catalog behavior was exercised or inferred. |
 | Catalog freshness and last-valid browse snapshot | INTEGRATE | Provider-independent. Preserve a last valid snapshot with explicit fresh/stale state; refresh failure remains visible and cached presence cannot authorize tuning. |
-| Tune authorization | UNSUPPORTED | Not reached: the existing-session precondition stopped at `new-login-required`; no tune behavior was exercised or inferred. |
-| Stream/manifest/resource resolution | UNSUPPORTED | Not reached: the existing-session precondition stopped at `new-login-required`; no resource behavior was exercised or inferred. |
-| Required media-key authorization | UNSUPPORTED | Not reached: the existing-session precondition stopped at `new-login-required`; no key behavior was exercised or inferred. |
-| AVFoundation compatibility for one authorized live resource | UNSUPPORTED | Not reached: the existing-session precondition stopped at `new-login-required`; AVFoundation was not exercised. |
-| Current program/song metadata text | UNSUPPORTED | Not reached: the existing-session precondition stopped at `new-login-required`; metadata was not exercised. |
-| Channel/program artwork | UNSUPPORTED | Not reached: the existing-session precondition stopped at `new-login-required`; artwork was not exercised. |
-| Stream re-resolution during bounded recovery | UNSUPPORTED | Not reached: the existing-session precondition stopped at `new-login-required`; recovery was not exercised. |
+| Tune authorization | UNSUPPORTED | Not reached: the closed preflight stopped at `unknown-contract`; no tune behavior was exercised or inferred. |
+| Stream/manifest/resource resolution | UNSUPPORTED | Not reached: the closed preflight stopped at `unknown-contract`; no resource behavior was exercised or inferred. |
+| Required media-key authorization | UNSUPPORTED | Not reached: the closed preflight stopped at `unknown-contract`; no key behavior was exercised or inferred. |
+| AVFoundation compatibility for one authorized live resource | UNSUPPORTED | Not reached: the closed preflight stopped at `unknown-contract`; AVFoundation was not exercised. |
+| Current program/song metadata text | UNSUPPORTED | Not reached: the closed preflight stopped at `unknown-contract`; metadata was not exercised. |
+| Channel/program artwork | UNSUPPORTED | Not reached: the closed preflight stopped at `unknown-contract`; artwork was not exercised. |
+| Stream re-resolution during bounded recovery | UNSUPPORTED | Not reached: the closed preflight stopped at `unknown-contract`; recovery was not exercised. |
 | Closed semantic diagnostics for catalog/resolution/metadata/playback | INTEGRATE | Provider-independent. Extend allow-listed operation/outcome enums only; raw provider and AVFoundation error material is never diagnostic data. |
 | Xtra entities as v1 channels | OPT-OUT | D-01 and CAT-01 restrict the Phase 02 lineup to entitled standard and app-only `channel-linear` entries; ambiguous/Xtra entities are excluded. |
 | Replay/time-shift programs | OPT-OUT | D-04 defines live-edge radio semantics and the project scopes replayable programs out of v1. |
@@ -35,7 +35,7 @@ This matrix is not a claim about SiriusXM's exhaustive private API surface. It e
 
 ## Live checkpoint refinement contract
 
-Plan 02-02 consumed exactly one owner-visible existing-session run. The `new-login-required` stop occurred before catalog observation or tune, so `02-LIVE-CONTRACT.md` is the canonical sanitized unsupported artifact and records no provider contract. A supported run could retain only the following evidence in that artifact, this file, and the plan summary:
+Plan 02-02 consumed exactly one owner-visible existing-session run. The `unknown-contract` stop occurred before catalog observation or tune, so `02-LIVE-CONTRACT.md` is the canonical sanitized unsupported artifact and records no provider contract. A supported run could retain only the following evidence in that artifact, this file, and the plan summary:
 
 - whether each pending capability is `SUPPORTED`, `NOT REQUIRED`, or `UNSUPPORTED`;
 - closed failure-domain and protection/control classifications;
