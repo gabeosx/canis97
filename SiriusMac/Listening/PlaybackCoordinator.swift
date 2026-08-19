@@ -32,6 +32,7 @@ final class PlaybackCoordinator {
     private var generation = 0
 
     private(set) var state: LivePlaybackState
+    private(set) var selectedChannelID: LiveChannelID?
 
     init(
         authorization: any LivePlaybackAuthorizing = UnavailablePlaybackAuthorization(),
@@ -40,10 +41,12 @@ final class PlaybackCoordinator {
         self.authorization = authorization
         self.driver = driver
         state = .awaitingLiveContract
+        selectedChannelID = nil
     }
 
     func tune(_ channelID: LiveChannelID) async {
         let currentGeneration = startCommand()
+        selectedChannelID = channelID
         guard await authorization.authorizePlayback(for: channelID) == .authorized else {
             publish(.unavailable(.authorizationUnavailable), for: currentGeneration)
             return
@@ -63,7 +66,12 @@ final class PlaybackCoordinator {
 
     func stop() async {
         let currentGeneration = startCommand()
-        publish(await driver.stop(), for: currentGeneration)
+        let result = await driver.stop()
+        guard generation == currentGeneration else { return }
+        if case .confirmed(.stopped) = result {
+            selectedChannelID = nil
+        }
+        publish(result, for: currentGeneration)
     }
 
     private func startCommand() -> Int {

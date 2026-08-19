@@ -18,6 +18,7 @@ struct ListeningView: View {
             }
 
             content
+            playbackControls
         }
         .padding(24)
         .accessibilityElement(children: .contain)
@@ -59,6 +60,31 @@ struct ListeningView: View {
     private var isLoading: Bool {
         if case .loading = model.state { return true }
         return false
+    }
+
+    private var playbackControls: some View {
+        HStack {
+            Button("Tune") { _ = model.tuneSelectedChannel() }
+                .disabled(model.selectedChannelID == nil)
+            Button("Pause") { _ = model.pausePlayback() }
+            Button("Resume Live") { _ = model.resumePlaybackAtLiveEdge() }
+            Button("Stop") { _ = model.stopPlayback() }
+            Spacer()
+            Text(playbackCopy(model.playbackState))
+                .foregroundStyle(.secondary)
+                .accessibilityLabel(playbackCopy(model.playbackState))
+        }
+    }
+
+    private func playbackCopy(_ state: LivePlaybackState) -> String {
+        switch state {
+        case .awaitingLiveContract: "Playback unavailable"
+        case .idle: "Ready"
+        case .playing: "Playing"
+        case .paused: "Paused"
+        case .stopped: "Stopped"
+        case .unavailable: "Playback unavailable"
+        }
     }
 
     private func failureCopy(_ failure: CatalogFailure) -> String {

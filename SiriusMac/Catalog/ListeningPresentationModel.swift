@@ -39,14 +39,17 @@ enum ListeningPresentationState: Equatable {
 @Observable
 final class ListeningPresentationModel {
     private let flow: any ListeningFlow
+    private let playbackCoordinator: PlaybackCoordinator?
     private var refreshTask: Task<Void, Never>?
     private var generation = 0
 
     private(set) var state: ListeningPresentationState = .idle
+    private(set) var playbackState: LivePlaybackState = .awaitingLiveContract
     var selectedChannelID: LiveChannelID?
 
-    init(flow: any ListeningFlow) {
+    init(flow: any ListeningFlow, playbackCoordinator: PlaybackCoordinator? = nil) {
         self.flow = flow
+        self.playbackCoordinator = playbackCoordinator
     }
 
     static func makeIfEntitled(
@@ -82,12 +85,44 @@ final class ListeningPresentationModel {
         selectedChannelID = channelID
     }
 
+    @discardableResult
+    func tuneSelectedChannel() -> Task<Void, Never>? {
+        guard let playbackCoordinator else {
+            playbackState = .unavailable(.unsupported)
+            return nil
+        }
+        guard let selectedChannelID else {
+            playbackState = .unavailable(.selectionUnavailable)
+            return nil
+        }
+        return Task { [weak self] in
+            await playbackCoordinator.tune(selectedChannelID)
+            self?.playbackState = playbackCoordinator.state
+        }
+    }
+
+    @discardableResult
+    func pausePlayback() -> Task<Void, Never>? {
+        command { coordinator in await coordinator.pause() }
+    }
+
+    @discardableResult
+    func resumePlaybackAtLiveEdge() -> Task<Void, Never>? {
+        command { coordinator in await coordinator.resumeLiveEdge() }
+    }
+
+    @discardableResult
+    func stopPlayback() -> Task<Void, Never>? {
+        command { coordinator in await coordinator.stop() }
+    }
+
     func reset() {
         generation += 1
         refreshTask?.cancel()
         refreshTask = nil
         selectedChannelID = nil
         state = .idle
+        playbackState = .awaitingLiveContract
     }
 
     private func apply(_ availability: CatalogAvailability) {
@@ -100,6 +135,19 @@ final class ListeningPresentationModel {
             state = .failed(failure)
         case .unavailable:
             state = .failed(.unavailable)
+        }
+    }
+
+    private func command(
+        _ operation: @escaping @MainActor @Sendable (PlaybackCoordinator) async -> Void
+    ) -> Task<Void, Never>? {
+        guard let playbackCoordinator else {
+            playbackState = .unavailable(.unsupported)
+            return nil
+        }
+        return Task { [weak self] in
+            await operation(playbackCoordinator)
+            self?.playbackState = playbackCoordinator.state
         }
     }
 }

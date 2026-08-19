@@ -119,7 +119,8 @@ final class ListeningCompositionTests: XCTestCase {
 
         XCTAssertNil(coordinator.selectedChannelID)
         XCTAssertEqual(coordinator.state, .stopped)
-        XCTAssertEqual(await driver.stopCount(), 2)
+        let stopCount = await driver.stopCount()
+        XCTAssertEqual(stopCount, 2)
     }
 
     func testConfirmedCommandsIgnoreSupersededCompletion() async {
@@ -610,6 +611,8 @@ final class ListeningCompositionTests: XCTestCase {
 }
 
 private actor RecordingPlaybackDriver: LivePlaybackDriving {
+    private var stops = 0
+
     private(set) var tunedChannelIDs: [LiveChannelID] = []
 
     func recordedChannelIDs() -> [LiveChannelID] { tunedChannelIDs }
@@ -623,7 +626,12 @@ private actor RecordingPlaybackDriver: LivePlaybackDriving {
 
     func pause() async -> LivePlaybackDriverResult { .confirmed(.paused) }
     func resumeLiveEdge() async -> LivePlaybackDriverResult { .confirmed(.playing(nil)) }
-    func stop() async -> LivePlaybackDriverResult { .confirmed(.stopped) }
+    func stop() async -> LivePlaybackDriverResult {
+        stops += 1
+        return .confirmed(.stopped)
+    }
+
+    func stopCount() -> Int { stops }
 }
 
 private actor RecordingCatalogTransport: ClosedCatalogRequestPerforming {

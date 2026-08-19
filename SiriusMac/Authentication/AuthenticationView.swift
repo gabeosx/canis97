@@ -10,7 +10,10 @@ struct AuthenticationView: View {
         let composition = AuthenticationComposition()
         _bridge = State(initialValue: composition.bridge)
         _model = State(initialValue: AuthenticationPresentationModel(flow: composition.flow))
-        _listeningModel = State(initialValue: ListeningPresentationModel(flow: composition.listeningFlow))
+        _listeningModel = State(initialValue: ListeningPresentationModel(
+            flow: composition.listeningFlow,
+            playbackCoordinator: composition.playbackCoordinator
+        ))
     }
 
     var body: some View {
@@ -118,6 +121,7 @@ struct AuthenticationComposition {
     let credentialSource: RestorableAuthenticationCredentialSource
     let flow: ComposedAuthenticationPresentationFlow
     let listeningFlow: any ListeningFlow
+    let playbackCoordinator: PlaybackCoordinator
 
     init() {
         self.init(bridge: WebAuthenticationBridge(), keychain: KeychainCredentialStore())
@@ -144,6 +148,7 @@ struct AuthenticationComposition {
             credentialSource: credentialSource
         )
         self.listeningFlow = (composedClient as? any ListeningFlow) ?? UnavailableListeningFlow()
+        self.playbackCoordinator = PlaybackCoordinator()
     }
 }
 
