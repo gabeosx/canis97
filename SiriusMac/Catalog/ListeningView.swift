@@ -1,10 +1,24 @@
 import SwiftUI
+import AppKit
 import SiriusXMClient
 
 /// A compact native browser for semantic catalog snapshots. Row selection only
 /// stores a stable identity; playback authority remains in a later tune flow.
 struct ListeningView: View {
     @Bindable var model: ListeningPresentationModel
+
+    var channelSelection: Binding<LiveChannelID?> {
+        Binding(
+            get: { model.selectedChannelID },
+            set: { selection in
+                if let selection {
+                    model.select(selection)
+                } else {
+                    model.clearSelection()
+                }
+            }
+        )
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -38,7 +52,7 @@ struct ListeningView: View {
         case let .failed(failure):
             ContentUnavailableView("Channels unavailable", systemImage: "exclamationmark.triangle", description: Text(failureCopy(failure)))
         case let .available(snapshot), let .stale(snapshot, _):
-            List(snapshot.channels, id: \.id, selection: $model.selectedChannelID) { channel in
+            List(snapshot.channels, id: \.id, selection: channelSelection) { channel in
                 ChannelRow(channel: channel)
                     .tag(channel.id)
             }
@@ -82,12 +96,24 @@ struct ListeningView: View {
         return VStack(alignment: .leading, spacing: 4) {
             Text(metadataText(state.text))
                 .accessibilityLabel("Current metadata: \(metadataText(state.text))")
-            Text(metadataArtwork(state.artwork))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .accessibilityLabel(metadataArtwork(state.artwork))
+            artworkView(state.artwork)
         }
         .accessibilityElement(children: .contain)
+    }
+
+    @ViewBuilder
+    private func artworkView(_ artwork: LiveMetadataArtwork) -> some View {
+        switch artwork {
+        case let .current(data), let .stale(data):
+            NativeArtworkImage(artwork: data)
+                .frame(width: 52, height: 52)
+                .accessibilityLabel(metadataArtwork(artwork))
+        case .unavailable:
+            Text(metadataArtwork(artwork))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .accessibilityLabel(metadataArtwork(artwork))
+        }
     }
 
     private func metadataText(_ text: LiveMetadataText) -> String {
@@ -126,6 +152,26 @@ struct ListeningView: View {
         case .unavailable, .collectionUnavailable, .malformedCandidate, .conflictingIdentity, .unsupportedResponse:
             "The channel lineup could not be refreshed safely."
         }
+    }
+}
+
+struct NativeArtworkImage: View {
+    let artwork: ArtworkData
+
+    var body: some View {
+        if let image = Self.decode(artwork) {
+            Image(nsImage: image)
+                .resizable()
+                .scaledToFit()
+        } else {
+            Image(systemName: "photo")
+                .foregroundStyle(.secondary)
+                .accessibilityLabel("Artwork unavailable")
+        }
+    }
+
+    static func decode(_ artwork: ArtworkData) -> NSImage? {
+        NSImage(data: artwork.bytes)
     }
 }
 

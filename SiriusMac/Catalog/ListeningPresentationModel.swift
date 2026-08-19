@@ -46,7 +46,7 @@ final class ListeningPresentationModel {
     private(set) var state: ListeningPresentationState = .idle
     private(set) var playbackState: LivePlaybackState = .awaitingLiveContract
     let metadataPresentation: MetadataPresentationModel
-    var selectedChannelID: LiveChannelID?
+    private(set) var selectedChannelID: LiveChannelID?
 
     init(flow: any ListeningFlow, playbackCoordinator: PlaybackCoordinator? = nil) {
         self.flow = flow
@@ -87,6 +87,11 @@ final class ListeningPresentationModel {
     func select(_ channelID: LiveChannelID) {
         selectedChannelID = channelID
         metadataPresentation.select(channelID)
+    }
+
+    func clearSelection() {
+        selectedChannelID = nil
+        metadataPresentation.clear()
     }
 
     @discardableResult

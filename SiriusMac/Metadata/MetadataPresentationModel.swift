@@ -22,7 +22,8 @@ struct MetadataRefreshPolicy: Sendable, Equatable {
 final class MetadataPresentationModel {
     private let flow: any MetadataFlow
     private let policy: MetadataRefreshPolicy
-    private var task: Task<Void, Never>?
+    private var metadataTask: Task<Void, Never>?
+    private var artworkTask: Task<Void, Never>?
     private var generation = 0
     private var refreshedAt: Date?
     private(set) var state: LiveMetadataState
@@ -36,17 +37,20 @@ final class MetadataPresentationModel {
 
     func select(_ channelID: LiveChannelID) {
         generation &+= 1
-        task?.cancel()
+        metadataTask?.cancel()
+        artworkTask?.cancel()
         state = LiveMetadataState(channelID: channelID, text: .channelFallback(channelID), artwork: .unavailable, refreshedAt: nil)
         refreshedAt = nil
         let expected = generation
-        task = Task { [weak self] in await self?.refreshLoop(channelID: channelID, generation: expected) }
+        metadataTask = Task { [weak self] in await self?.refreshLoop(channelID: channelID, generation: expected) }
     }
 
     func clear() {
         generation &+= 1
-        task?.cancel()
-        task = nil
+        metadataTask?.cancel()
+        artworkTask?.cancel()
+        metadataTask = nil
+        artworkTask = nil
         let channelID = LiveChannelID("semantic-unselected-channel")
         state = LiveMetadataState(channelID: channelID, text: .channelFallback(channelID), artwork: .unavailable, refreshedAt: nil)
         refreshedAt = nil
@@ -66,11 +70,12 @@ final class MetadataPresentationModel {
         switch result {
         case let .current(snapshot):
             let program = snapshot.program
-            let text = program.map { program in
-                program.artist.map { LiveMetadataText.current("\($0) — \(program.title)") } ?? .current(program.title)
-            } ?? .channelFallback(channelID)
-            state = LiveMetadataState(channelID: channelID, text: text, artwork: program?.artwork == nil ? .unavailable : .current("Artwork available"), refreshedAt: Date())
+            let text = presentationText(for: program, channelID: channelID)
+            state = LiveMetadataState(channelID: channelID, text: text, artwork: .unavailable, refreshedAt: Date())
             refreshedAt = state.refreshedAt
+            if let reference = program?.artwork {
+                startArtworkFetch(for: reference, channelID: channelID, generation: expected)
+            }
         case .unavailable, .failed:
             advanceFreshness(for: channelID)
         }
@@ -88,6 +93,34 @@ final class MetadataPresentationModel {
 
     private func stale(_ text: LiveMetadataText) -> LiveMetadataText { if case let .current(value) = text { return .stale(value) }; return text }
     private func stale(_ artwork: LiveMetadataArtwork) -> LiveMetadataArtwork { if case let .current(value) = artwork { return .stale(value) }; return artwork }
+
+    private func presentationText(for program: LiveProgramMetadata?, channelID: LiveChannelID) -> LiveMetadataText {
+        guard let program, !program.title.isEmpty else { return .channelFallback(channelID) }
+        if let artist = program.artist, !artist.isEmpty {
+            return .current("\(artist) — \(program.title)")
+        }
+        return .current(program.title)
+    }
+
+    private func startArtworkFetch(
+        for reference: ChannelArtworkReference,
+        channelID: LiveChannelID,
+        generation expected: Int
+    ) {
+        artworkTask?.cancel()
+        let flow = flow
+        artworkTask = Task { [weak self] in
+            let result = await flow.artwork(for: reference)
+            guard let self, !Task.isCancelled, self.generation == expected, self.state.channelID == channelID else { return }
+            guard case let .current(artwork) = result else { return }
+            self.state = LiveMetadataState(
+                channelID: channelID,
+                text: self.state.text,
+                artwork: .current(artwork),
+                refreshedAt: self.state.refreshedAt
+            )
+        }
+    }
 }
 
 private final class UnavailableMetadataFlow: MetadataFlow, @unchecked Sendable {

@@ -756,10 +756,11 @@ public enum LiveMetadataText: Sendable, Equatable {
     case unavailable
 }
 
-/// Artwork is represented only by an app-owned display label until a supported adapter exists.
+/// Artwork contains only bounded, validated image bytes suitable for native rendering.
+/// It deliberately carries no source URL, request headers, or provider response data.
 public enum LiveMetadataArtwork: Sendable, Equatable {
-    case current(String)
-    case stale(String)
+    case current(ArtworkData)
+    case stale(ArtworkData)
     case unavailable
 }
 
@@ -778,7 +779,7 @@ public struct LiveMetadataState: Sendable, Equatable {
 }
 
 public enum LiveMetadataRefreshResult: Sendable, Equatable {
-    case current(text: String?, artworkLabel: String?)
+    case current(text: String?, artwork: ArtworkData?)
     case unavailable
 }
 
@@ -833,11 +834,11 @@ public actor MetadataRefreshCoordinator {
         guard generation == command else { return currentState }
 
         switch result {
-        case let .current(text, artworkLabel):
+        case let .current(text, artwork):
             currentState = LiveMetadataState(
                 channelID: channelID,
                 text: text.map(LiveMetadataText.current) ?? .channelFallback(channelID),
-                artwork: artworkLabel.map(LiveMetadataArtwork.current) ?? .unavailable,
+                artwork: artwork.map(LiveMetadataArtwork.current) ?? .unavailable,
                 refreshedAt: clock.now()
             )
         case .unavailable:

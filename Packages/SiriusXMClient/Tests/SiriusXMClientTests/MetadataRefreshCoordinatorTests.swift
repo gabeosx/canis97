@@ -33,21 +33,22 @@ struct MetadataRefreshCoordinatorTests {
     @Test("artwork-only metadata remains independent from text presentation")
     func artworkOnlyMetadataKeepsChannelTextFallback() async {
         let channel = LiveChannelID("fixture-artwork-only")
-        let refresher = RecordingMetadataRefresher(results: [.current(text: nil, artworkLabel: "Fixture artwork")])
+        let artwork = fixtureArtwork
+        let refresher = RecordingMetadataRefresher(results: [.current(text: nil, artwork: artwork)])
         let coordinator = MetadataRefreshCoordinator(refresher: refresher, clock: FixedMetadataClock())
 
         _ = await coordinator.select(channel)
         let state = await coordinator.refresh()
 
         #expect(state.text == .channelFallback(channel))
-        #expect(state.artwork == .current("Fixture artwork"))
+        #expect(state.artwork == .current(artwork))
     }
 
     @Test("metadata uses channel identity as a fallback and text/artwork become current independently")
     func currentMetadataUsesIndependentRepresentations() async {
         let channel = LiveChannelID("fixture-metadata")
         let clock = FixedMetadataClock(now: Date(timeIntervalSince1970: 42))
-        let refresher = RecordingMetadataRefresher(results: [.current(text: "Fixture title", artworkLabel: nil)])
+        let refresher = RecordingMetadataRefresher(results: [.current(text: "Fixture title", artwork: nil)])
         let coordinator = MetadataRefreshCoordinator(refresher: refresher, clock: clock)
 
         #expect(await coordinator.select(channel).text == .channelFallback(channel))
@@ -61,8 +62,9 @@ struct MetadataRefreshCoordinatorTests {
     @Test("unavailable refreshes transition last known metadata through stale to unavailable")
     func unavailableMetadataDoesNotLookCurrentForever() async {
         let channel = LiveChannelID("fixture-stale")
+        let artwork = fixtureArtwork
         let refresher = RecordingMetadataRefresher(results: [
-            .current(text: "Fixture title", artworkLabel: "Fixture artwork"),
+            .current(text: "Fixture title", artwork: artwork),
             .unavailable,
             .unavailable,
         ])
@@ -74,7 +76,7 @@ struct MetadataRefreshCoordinatorTests {
         let unavailable = await coordinator.refresh()
 
         #expect(stale.text == .stale("Fixture title"))
-        #expect(stale.artwork == .stale("Fixture artwork"))
+        #expect(stale.artwork == .stale(artwork))
         #expect(unavailable.text == .unavailable)
         #expect(unavailable.artwork == .unavailable)
     }
@@ -90,7 +92,7 @@ struct MetadataRefreshCoordinatorTests {
         let refresh = Task { await coordinator.refresh() }
         await refresher.waitUntilStarted()
         _ = await coordinator.select(second)
-        await refresher.release(.current(text: "Old title", artworkLabel: "Old artwork"))
+        await refresher.release(.current(text: "Old title", artwork: fixtureArtwork))
         _ = await refresh.value
 
         #expect(await coordinator.currentState.channelID == second)
@@ -100,7 +102,7 @@ struct MetadataRefreshCoordinatorTests {
     @Test("metadata refresh has no audio collaborator or audio mutation surface")
     func metadataStaysOutsideAudioControl() async {
         let channel = LiveChannelID("fixture-isolated")
-        let refresher = RecordingMetadataRefresher(results: [.current(text: nil, artworkLabel: "Fixture artwork")])
+        let refresher = RecordingMetadataRefresher(results: [.current(text: nil, artwork: fixtureArtwork)])
         let coordinator = MetadataRefreshCoordinator(refresher: refresher, clock: FixedMetadataClock())
 
         _ = await coordinator.select(channel)
@@ -132,6 +134,8 @@ struct MetadataRefreshCoordinatorTests {
         #expect(!untouched.didObserveRedirect)
     }
 }
+
+private let fixtureArtwork = ArtworkData(bytes: Data([0xFF, 0xD8, 0xFF, 0xD9]), mediaType: .jpeg)
 
 private final class MetadataRedirectDecisionBox: @unchecked Sendable {
     private let lock = NSLock()
