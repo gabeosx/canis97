@@ -9,7 +9,7 @@ import Testing
     #expect(await client.signOut() == .alreadySignedOut)
     #expect(await client.catalog() == .failed(.authenticationUnavailable))
     #expect(await client.metadata() == .unavailable)
-    #expect(await client.resolveLiveStream() == .unavailable)
+    #expect(await client.resolveLiveStream() == .failed(.selectionUnavailable))
 }
 
 @Test func credentialDescriptionIsRedacted() {
