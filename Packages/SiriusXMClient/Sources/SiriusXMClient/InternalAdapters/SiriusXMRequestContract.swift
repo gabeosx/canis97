@@ -151,13 +151,37 @@ enum SiriusXMRequestBodyContract: Sendable, Equatable {
     case liveActivity
 
     var fixedFieldNames: [String] {
+        fixedSemantics.keys.sorted()
+    }
+
+    /// Values are modeled only when the canonical contract records them. The
+    /// opaque and logical cases deliberately contain no provider material.
+    var fixedSemantics: [String: SiriusXMFixedRequestSemantic] {
         switch self {
         case .none:
-            []
+            [:]
         case .tuneSource:
-            ["type", "hlsVersion", "manifestVariant", "mtcVersion", "trackResumeSupported", "x-sxm-clock"]
+            [
+                "type": .string("channel-linear"),
+                "hlsVersion": .string("V3"),
+                "manifestVariant": .string("WEB"),
+                "mtcVersion": .string("V2"),
+                "trackResumeSupported": .boolean(false),
+                "x-sxm-clock": .epochCounter,
+            ]
         case .liveActivity:
-            ["channelId", "startTimestamp", "endTimestamp"]
+            [
+                "channelId": .opaqueValue,
+                "startTimestamp": .opaqueValue,
+                "endTimestamp": .opaqueValue,
+            ]
         }
     }
+}
+
+enum SiriusXMFixedRequestSemantic: Sendable, Equatable {
+    case string(String)
+    case boolean(Bool)
+    case epochCounter
+    case opaqueValue
 }

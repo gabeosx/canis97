@@ -7,7 +7,7 @@ struct LivePlaybackCoordinatorTests {
     func phaseTwoContractsRemainOfflineScaffolding() {
         for operation in SiriusXMRequestContract.liveListeningOperations {
             #expect(throws: SiriusXMRequestContractError.self) {
-                try SiriusXMRequestContract.makeRequest(for: operation, authorization: "synthetic-token")
+                try SiriusXMRequestContract.makeRequest(for: operation, authorization: "fixture-material")
             }
         }
     }

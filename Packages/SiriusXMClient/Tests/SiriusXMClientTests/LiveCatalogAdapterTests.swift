@@ -54,6 +54,30 @@ struct LiveCatalogAdapterTests {
         #expect(LiveListeningAdapter.inspectPlaybackKey(control) == .unsupported(.rejected))
     }
 
+    @Test("playback-key preflight stops redirects, controls, and non-JSON before shape inspection")
+    func playbackKeyPreflightStopsUnsafeInputs() {
+        let redirect = NativeTransportResponse(
+            statusCode: 200,
+            contentType: "application/json",
+            body: Data(#"{"keyId":"fixture-key-id","key":"fixture-key-material"}"#.utf8),
+            redirectLocation: "fixture-redirect"
+        )
+        let html = NativeTransportResponse(
+            statusCode: 200,
+            contentType: "text/html",
+            body: Data("fixture-html".utf8)
+        )
+        let challenge = NativeTransportResponse(
+            statusCode: 200,
+            contentType: "application/json",
+            body: Data(#"{"challenge":"captcha"}"#.utf8)
+        )
+
+        #expect(LiveListeningAdapter.inspectPlaybackKey(redirect) == .unsupported(.redirectDrift))
+        #expect(LiveListeningAdapter.inspectPlaybackKey(html) == .unsupported(.contentTypeHTML))
+        #expect(LiveListeningAdapter.inspectPlaybackKey(challenge) == .unsupported(.challengeRequired))
+    }
+
     @Test("tune semantics include only the recorded non-secret values and clock shape")
     func tuneBodyContractStaysBounded() {
         #expect(SiriusXMRequestContract.tune.bodyContract.fixedSemantics == [
