@@ -25,8 +25,9 @@ struct AuthenticationView: View {
                         clearLocalSessionButton
                     }
                 }
+                .frame(maxWidth: 520, alignment: .leading)
             } else {
-                VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: 16) {
                     Label(copy.title, systemImage: copy.iconName)
                         .font(.title2)
                         .accessibilityAddTraits(.isHeader)
@@ -48,11 +49,16 @@ struct AuthenticationView: View {
                         authenticationActions
                     }
                 }
-                .frame(maxWidth: 520, alignment: .leading)
+                .frame(
+                    maxWidth: AuthenticationLayout.maximumContentWidth,
+                    maxHeight: .infinity,
+                    alignment: .topLeading
+                )
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .disabled(model.isAttemptInFlight)
-        .padding()
+        .padding(AuthenticationLayout.contentPadding)
     }
 
     private var isVerifying: Bool {
@@ -141,11 +147,35 @@ private struct WebViewAuthenticationContainer: View {
     let bridge: WebAuthenticationBridge
 
     var body: some View {
-        GroupBox("Native sign-in") {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Native sign-in")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 4)
+
             WebAuthenticationView(bridge: bridge)
-                .frame(maxWidth: .infinity, minHeight: 180)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipShape(.rect(cornerRadius: AuthenticationLayout.webViewCornerRadius))
+                .overlay {
+                    RoundedRectangle(cornerRadius: AuthenticationLayout.webViewCornerRadius)
+                        .strokeBorder(.secondary.opacity(0.2), lineWidth: 1)
+                }
         }
-        .accessibilityElement(children: .combine)
+        .frame(
+            maxWidth: .infinity,
+            minHeight: AuthenticationLayout.minimumWebViewHeight,
+            maxHeight: .infinity,
+            alignment: .topLeading
+        )
+        .layoutPriority(1)
+        .accessibilityElement(children: .contain)
         .accessibilityLabel("Native SiriusXM sign-in area")
     }
+}
+
+private enum AuthenticationLayout {
+    static let contentPadding: CGFloat = 24
+    static let maximumContentWidth: CGFloat = 1_200
+    static let minimumWebViewHeight: CGFloat = 420
+    static let webViewCornerRadius: CGFloat = 8
 }
