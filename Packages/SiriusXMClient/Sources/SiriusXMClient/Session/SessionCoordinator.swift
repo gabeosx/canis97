@@ -67,11 +67,12 @@ actor SessionCoordinator {
         defer {
             if isCurrent(lease) {
                 attemptLease = nil
-                transientCredential = nil
                 pendingVerification = nil
                 if case .active = state {
-                    // An active session is already an immutable, fully verified value.
+                    // The verified credential remains actor-owned for fixed current-session
+                    // operations. It is never returned through the public client API.
                 } else {
+                    transientCredential = nil
                     state = .signedOut
                 }
             }
@@ -136,6 +137,51 @@ actor SessionCoordinator {
             await diagnostics.record(.credentialPersistenceFailed)
         }
         return .active
+    }
+
+    /// Revalidates entitlement immediately before a fixed live operation and
+    /// invokes the supplied work while keeping the credential actor-owned.
+    func withCurrentEntitledCredential<Value: Sendable>(
+        _ work: @Sendable (AuthenticationCredential) async -> Value
+    ) async -> CurrentEntitledOperationResult<Value> {
+        guard case let .active(activeSession) = state,
+              lastEntitlement == .entitled,
+              let credential = transientCredential
+        else {
+            return .failed(.authenticationUnavailable)
+        }
+
+        let response = await entitlementVerifier.verifyEntitlement(using: credential)
+        guard case .active(activeSession) = state else {
+            return .failed(.superseded)
+        }
+
+        if let transportFailure = response.transportFailure {
+            return .failed(transportFailure == .cancelled ? .cancelled : .networkUnavailable)
+        }
+        guard response.redirectLocation == nil else {
+            return .failed(.protectedControl)
+        }
+
+        let entitlement = AuthenticationFlowAdapter.inspectEntitlement(response).result
+        await diagnostics.record(.entitlement(AuthenticationFlowAdapter.inspectEntitlement(response).diagnosticOutcome))
+        guard entitlement == .entitled else {
+            lastEntitlement = entitlement.publicOutcome
+            transientCredential = nil
+            state = .signedOut
+            switch entitlement {
+            case .authenticatedButNotEntitled:
+                return .failed(.entitlementUnavailable)
+            case .rejected:
+                return .failed(.authenticationUnavailable)
+            case .challengeRequired, .rateLimited, .botControlDetected:
+                return .failed(.protectedControl)
+            case .redirectDrift, .unsupported, .entitled:
+                return .failed(.entitlementUnavailable)
+            }
+        }
+
+        return .completed(await work(credential))
     }
 
     /// Retires all actor-owned material before attempting each app-owned cleaner once.

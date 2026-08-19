@@ -39,3 +39,11 @@ enum SessionDiagnosticEvent: Sendable, Equatable {
     case entitlement(SafeDiagnosticOutcome)
     case credentialPersistenceFailed
 }
+
+/// Internal result of one current-session operation. The credential remains
+/// inside `SessionCoordinator`; callers receive only their semantic result or
+/// a closed failure classification.
+enum CurrentEntitledOperationResult<Value: Sendable>: Sendable {
+    case completed(Value)
+    case failed(LiveStreamResolutionFailure)
+}

@@ -20,11 +20,17 @@ public actor SiriusXMClient {
     init(
         sessionCoordinator: SessionCoordinator,
         catalogRefresher: any CatalogRefreshing = UnavailableCatalogRefresher(),
-        liveStreamResolver: any LiveStreamResolving = UnavailableLiveStreamResolver()
+        liveStreamResolver: (any LiveStreamResolving)? = nil,
+        fixedLiveTransport: (any FixedLiveTransporting)? = nil
     ) {
         self.sessionCoordinator = sessionCoordinator
         self.catalogRefresher = catalogRefresher
-        self.liveStreamResolver = liveStreamResolver
+        self.liveStreamResolver = liveStreamResolver ?? FixedLiveStreamResolver(
+            operations: CurrentSessionFixedLiveOperations(
+                sessionCoordinator: sessionCoordinator,
+                transport: fixedLiveTransport ?? FixedLiveURLSessionTransport()
+            )
+        )
     }
 
     /// Composes the sole supported WebView-token/native-request authentication path.
@@ -39,7 +45,7 @@ public actor SiriusXMClient {
     ) {
         let diagnostics = OSLogSessionDiagnostics()
         let verifier = NativeRequestVerifier(transport: EphemeralURLSessionTransport())
-        sessionCoordinator = SessionCoordinator(
+        let coordinator = SessionCoordinator(
             credentialSource: credentialSource,
             authenticationVerifier: verifier,
             entitlementVerifier: verifier,
@@ -48,8 +54,14 @@ public actor SiriusXMClient {
             clock: SystemSessionClock(),
             diagnostics: diagnostics
         )
+        sessionCoordinator = coordinator
         catalogRefresher = UnavailableCatalogRefresher()
-        liveStreamResolver = UnavailableLiveStreamResolver()
+        liveStreamResolver = FixedLiveStreamResolver(
+            operations: CurrentSessionFixedLiveOperations(
+                sessionCoordinator: coordinator,
+                transport: FixedLiveURLSessionTransport()
+            )
+        )
     }
 
     /// Returns the fail-closed Phase 1 state without contacting a provider.
