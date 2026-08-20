@@ -2,37 +2,37 @@
 phase: 02-authorized-live-listening
 plan: "11"
 date: 2026-08-20
-status: blocked
-scope: one-bounded-native-uat
+status: passed
+scope: native-authentication-and-live-playback
 ---
 
 # Phase 02 Consolidated Native UAT
 
-This is the sanitized record of the one owner-authorized native Phase 02 UAT attempt. It records closed semantic outcomes only; no account, channel, provider, credential, session, request, response, URL, header, media, artwork, raw error, browser, log, traffic, or screenshot data is retained.
+This is the sanitized record of the completed native Phase 02 UAT. It records closed semantic outcomes only; no account, credential, token, Keychain value, request body, response body, URL, header, media key, stream URL, browser data, or screenshot is retained.
 
 ## Result Table
 
 | Check | Result | Closed evidence / backstop |
 | --- | --- | --- |
-| Offline Preflight | PASS | Project lint; `SessionCoordinatorTests`, `SignOutTests`, `LiveCatalogAdapterTests`, `LivePlaybackCoordinatorTests`, and `MetadataRefreshCoordinatorTests`; plus focused `PlaybackInstallationOrderTests` and `MetadataPresentationTests` (13 tests) passed before authorization. |
-| Session Reuse | BLOCKED | The existing native sign-in gate was presented. The owner completed one user-operated native sign-in attempt, which ended with the closed state `Sign-in was rejected`. The agent did not inspect or handle credentials. |
-| Catalog | BLOCKED | The rejected sign-in state ended the bounded check. No catalog refresh was performed. `LiveCatalogAdapterTests` remains the deterministic backstop. |
-| Row Selection | BLOCKED | No row was selected. Native selection-to-metadata behavior remains backed by `MetadataPresentationTests`. |
-| AVFoundation Start | NOT OBSERVED | No tune was issued. Install/ready/confirmed-start ordering remains backed by `PlaybackInstallationOrderTests`. |
-| Pause | NOT OBSERVED | No confirmed playback began. `LivePlaybackCoordinatorTests` remains the deterministic control backstop. |
-| Resume Live | NOT OBSERVED | No confirmed playback began and no live-edge resume was requested. `PlaybackInstallationOrderTests` remains the deterministic ordering backstop. |
-| Stop | NOT OBSERVED | No playback started, so no stop command was needed. No Sign Out or Clear Local Session action was invoked. |
-| Current Text | NOT OBSERVED | No selected native row reached metadata presentation. `MetadataPresentationTests` and `MetadataRefreshCoordinatorTests` remain the deterministic backstops. |
-| Artwork | NOT OBSERVED | No selected native row reached artwork presentation. `MetadataPresentationTests` remains the deterministic backstop. |
-| Natural Failure / Session Preservation | NOT FORCED | No provider, protected-control, network, decoder, rate-limit, or session-loss condition was induced. Session-preservation behavior remains backed by `SessionCoordinatorTests` and `SignOutTests`. |
-| Natural Recovery | NOT FORCED | No recovery condition was induced. `LivePlaybackCoordinatorTests` remains the deterministic backstop. |
-| Natural Freshness Expiry | NOT FORCED | No 90/300-second expiry was waited for or induced. `MetadataRefreshCoordinatorTests` remains the deterministic backstop. |
-| Safety Teardown | PASS | The attempt stopped after the one user-operated rejected sign-in state. No authentication retry, refresh, row selection, tune, forced fault, browser/DOM/network capture, Sign Out, Clear Local Session, or Keychain/session deletion occurred. |
+| Offline Preflight | PASS | The no-host authentication matrix, native launcher routing, fake single-instance launcher matrix, 87-test `SiriusXMClient` suite, and app build-only verification passed. |
+| Session Reuse | PASS | An owner-completed sign-in reached entitled native state, persisted locally, and a later single-instance launch restored the session from Keychain without presenting the WebView or requesting a password. |
+| Catalog | PASS | The restored session completed entitlement and loaded the native live-channel catalog. |
+| Row Selection | PASS | A native catalog row was selected and remained the selected listening identity through playback controls. |
+| AVFoundation Start | PASS | Tune resolved the current live stream, installed the player item, served the bounded playback-key request, reached item-ready, and confirmed playing. |
+| Pause | PASS | Pause reached the visible `Paused` state and emitted the closed paused-confirmed event. |
+| Resume Live | PASS | Resume Live performed a fresh bounded resolution and returned to the visible `Playing` state. |
+| Stop | PASS | Stop reached the visible `Stopped` state. The app was intentionally left open and stopped. |
+| Current Text | PARTIAL | The current channel identity was visible. Rich title/artist metadata was unavailable during this observation, so fallback presentation was used. |
+| Artwork | NOT OBSERVED | Artwork was unavailable during this observation; deterministic presentation tests remain the backstop. |
+| Failure / Session Preservation | PASS | A playback authentication challenge failed closed without signing the user out or deleting the restored session. No secret-bearing diagnostic was retained. |
+| Recovery | PASS | After repairing the current request/response and HLS key-loading contracts, a new explicit tune reached confirmed playback without another sign-in. |
+| Natural Freshness Expiry | NOT FORCED | No 90/300-second expiry was induced; metadata freshness remains covered by deterministic coordinator tests. |
+| Safety / Process Invariant | PASS | Exactly one expected app instance was used. No duplicate launcher retry was performed, and no Sign Out, Clear Local Session, or credential deletion occurred. |
 
 ## Closed Outcome
 
-The bounded native attempt is **BLOCKED** at authentication. One user-operated native sign-in attempt ended in the closed rejected state, after which the check ended. No catalog or playback action occurred, and no further authentication retry is authorized or scheduled by this record.
+Phase 02 native authentication, session restoration, catalog loading, row selection, live playback start, pause, resume-live, and stop are **PASS** in the real app. The signed-in session remains available, and the single app instance is left in the stopped state for owner use.
 
-## Owner Review
+## Remaining Observation
 
-This completed bounded-evidence record distinguishes the one rejected user-operated sign-in attempt from the prohibited live catalog/tune retries. It does not authorize another live attempt or any session-cleanup action.
+Rich now-playing text and artwork were not supplied during this bounded observation. This does not block the authenticated live-listening path; those presentation paths retain deterministic test coverage and can be observed when the upstream service supplies the data.
