@@ -126,6 +126,7 @@ final class AuthenticationPresentationModel {
              .unsupported,
              .localCredentialInvalid,
              .localCredentialUnavailable,
+             .webSessionResetFailed,
              .signedOut,
              .cleanupFailed:
             true
@@ -161,6 +162,7 @@ enum AuthenticationPresentationState: Equatable {
     case localCredentialMissing
     case localCredentialInvalid
     case localCredentialUnavailable
+    case webSessionResetFailed
     case waitingForWebView
     case verifyingAuthentication
     case verifyingEntitlement
@@ -183,6 +185,7 @@ private extension AuthenticationPresentationState {
         case .localCredentialMissing: .localCredentialMissing
         case .localCredentialInvalid: .localCredentialInvalid
         case .localCredentialUnavailable: .localCredentialUnavailable
+        case .webSessionResetFailed: .webSessionResetFailed
         case .waitingForWebView: .waitingForWebView
         case .verifyingAuthentication: .verifyingAuthentication
         case .verifyingEntitlement: .verifyingEntitlement
@@ -262,8 +265,7 @@ struct ComposedAuthenticationPresentationFlow: AuthenticationPresentationFlow {
     }
 
     func beginWebViewSignIn() async -> AuthenticationPresentationState {
-        await bridge.beginUserOperatedSignIn()
-        return .waitingForWebView
+        await bridge.beginUserOperatedSignIn() ? .waitingForWebView : .webSessionResetFailed
     }
 
     func restoreStoredCredential(

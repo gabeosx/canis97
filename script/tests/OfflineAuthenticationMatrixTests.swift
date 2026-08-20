@@ -17,12 +17,19 @@ struct OfflineAuthenticationMatrixTests {
             ("local unavailable stays out of WebView", testUnavailableLocalCredential),
             ("local restore completes without WebView", testValidLocalCredential),
         ]
+        let webCases: [(String, () -> Void)] = [
+            ("web missing is fixed", testWebMissing),
+            ("web malformed is fixed", testWebMalformed),
+            ("web ambiguous is fixed", testWebAmbiguous),
+            ("web transfer is single-consumption", testWebTransferred),
+            ("web reset failure is terminal", testWebResetFailure),
+        ]
 
         let selected: [(String, () -> Void)]
         switch requestedScope {
         case "--oracle-only": selected = cases
         case "--local-only": selected = localCases
-        default: selected = cases + localCases
+        default: selected = cases + localCases + webCases
         }
         for (name, test) in selected {
             test()
@@ -93,6 +100,30 @@ struct OfflineAuthenticationMatrixTests {
         expect(outcome.terminal, equals: .restoreCompleted)
         expect(outcome.webViewLoads, equals: 0)
         expect(outcome.nativeTransactions, equals: 1)
+    }
+
+    private static func testWebMissing() {
+        expect(ClosedAuthenticationOracle.webOutcome(for: .missing).statusLabel, equals: "web-credential-missing")
+    }
+
+    private static func testWebMalformed() {
+        expect(ClosedAuthenticationOracle.webOutcome(for: .malformed).statusLabel, equals: "web-credential-malformed")
+    }
+
+    private static func testWebAmbiguous() {
+        expect(ClosedAuthenticationOracle.webOutcome(for: .ambiguous).statusLabel, equals: "web-credential-ambiguous")
+    }
+
+    private static func testWebTransferred() {
+        let outcome = ClosedAuthenticationOracle.webOutcome(for: .transferred)
+        expect(outcome.statusLabel, equals: "web-credential-transferred")
+        expect(outcome.isSingleConsumption, equals: true)
+    }
+
+    private static func testWebResetFailure() {
+        let outcome = ClosedAuthenticationOracle.webOutcome(for: .resetFailed)
+        expect(outcome.statusLabel, equals: "web-session-reset-failed")
+        expect(outcome.allowsPlayerLoad, equals: false)
     }
 
     private static func expect<T: Equatable>(_ actual: T, equals expected: T) {

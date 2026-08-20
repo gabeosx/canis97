@@ -10,27 +10,20 @@ enum AuthenticationBridgeDiagnostic: String, CaseIterable, Equatable {
     case authCookieIssuerRejected = "auth-cookie-issuer-rejected"
     case authCookiePathRejected = "auth-cookie-path-rejected"
     case authCookieExpired = "auth-cookie-expired"
-    case firstPartyCookieInventoryEmpty = "first-party-cookie-inventory-empty"
-    case firstPartyCookieInventoryTruncated = "first-party-cookie-inventory-truncated"
     case authCookieMissing = "auth-cookie-missing"
     case ambiguousCredentials = "ambiguous-credentials"
     case malformedCredential = "malformed-credential"
     case selectionCancelled = "selection-cancelled"
     case credentialAlreadyConsumed = "credential-already-consumed"
     case credentialTransferred = "credential-transferred"
+    case websiteSessionResetFailed = "web-session-reset-failed"
 }
 
 @MainActor
 struct AuthenticationBridgeTelemetry {
     private let recorder: (AuthenticationBridgeDiagnostic) -> Void
-    private let firstPartyCookieNameRecorder: (String) -> Void
-
-    init(
-        recordFirstPartyCookieName: @escaping (String) -> Void = { _ in },
-        record: @escaping (AuthenticationBridgeDiagnostic) -> Void = { _ in }
-    ) {
+    init(record: @escaping (AuthenticationBridgeDiagnostic) -> Void = { _ in }) {
         recorder = record
-        firstPartyCookieNameRecorder = recordFirstPartyCookieName
     }
 
     static let disabled = AuthenticationBridgeTelemetry()
@@ -39,48 +32,15 @@ struct AuthenticationBridgeTelemetry {
             subsystem: Bundle.main.bundleIdentifier ?? "com.siriusmac.player",
             category: "authentication"
         )
-        return AuthenticationBridgeTelemetry(
-            recordFirstPartyCookieName: { name in
-                logger.info("Sirius Mac first-party cookie name \(name, privacy: .public)")
-            },
-            record: { event in
+        return AuthenticationBridgeTelemetry(record: { event in
                 logger.info("Sirius Mac auth bridge event \(event.rawValue, privacy: .public)")
-            }
-        )
+        })
     }()
 
     func record(_ event: AuthenticationBridgeDiagnostic) {
         recorder(event)
     }
 
-    func recordFirstPartyCookieInventory(_ cookies: [HTTPCookie]) {
-        let names = Set(cookies.lazy
-            .filter(FirstPartyTokenCookiePolicy.isFirstParty)
-            .compactMap { Self.safeCookieName($0.name) })
-            .sorted()
-
-        guard !names.isEmpty else {
-            record(.firstPartyCookieInventoryEmpty)
-            return
-        }
-
-        for name in names.prefix(32) {
-            firstPartyCookieNameRecorder(name)
-        }
-        if names.count > 32 {
-            record(.firstPartyCookieInventoryTruncated)
-        }
-    }
-
-    private static func safeCookieName(_ name: String) -> String? {
-        guard (1 ... 64).contains(name.utf8.count),
-              name.unicodeScalars.allSatisfy({ scalar in
-                  scalar.isASCII && (CharacterSet.alphanumerics.contains(scalar) || "_-".unicodeScalars.contains(scalar))
-              }) else {
-            return nil
-        }
-        return name
-    }
 }
 
 @MainActor
@@ -173,14 +133,19 @@ final class WebAuthenticationBridge {
 
     /// Starts the sole owner-operated authentication path without reading browser state.
     /// A new explicit attempt discards any volatile prior handoff before re-arming selection.
-    func beginUserOperatedSignIn() async {
+    func beginUserOperatedSignIn() async -> Bool {
         telemetry.record(.webSignInStarted)
-        // Keep selection fail-closed while the actor erases stale material.
+        // Keep selection fail-closed while stale handoff and website state retire.
         let reservation = beginSelection()
         await handoffDisposer()
+        guard await retireAuthenticationWebsiteSession() else {
+            telemetry.record(.websiteSessionResetFailed)
+            return false
+        }
         completeUncommittedSelection(reservation)
-        guard let url = URL(string: "https://www.siriusxm.com/player") else { return }
+        guard let url = URL(string: "https://www.siriusxm.com/player") else { return false }
         signInRequestLoader(URLRequest(url: url))
+        return true
     }
 
     /// The only action that reads the WebView-owned cookie store.
@@ -193,57 +158,35 @@ final class WebAuthenticationBridge {
         let reservation = beginSelection()
         defer { completeUncommittedSelection(reservation) }
 
-        let currentTime = now()
         let cookies = await cookieStore.allCookies()
-        telemetry.recordFirstPartyCookieInventory(cookies)
-        let candidates = FirstPartyTokenCookiePolicy.matchingCookies(in: cookies, now: currentTime)
         guard !Task.isCancelled else {
             telemetry.record(.selectionCancelled)
             return .cancelled
         }
-        switch candidates.count {
-        case 0:
-            for reason in FirstPartyTokenCookiePolicy.rejectionReasons(in: cookies, now: currentTime) {
+        switch WebCredentialSelectionPolicy.select(from: cookies, now: now()) {
+        case let .missing(reasons):
+            for reason in reasons {
                 telemetry.record(reason.bridgeDiagnostic)
             }
             telemetry.record(.authCookieMissing)
             return .authCookieMissing
-        case 1: break
-        default:
+        case .ambiguous:
             telemetry.record(.ambiguousCredentials)
             return .ambiguousCredentials
-        }
-
-        var encodedCookieValue = candidates[0].value
-        defer { encodedCookieValue = "" }
-        guard encodedCookieValue.utf8.count <= 16_384,
-              var decodedCookieValue = encodedCookieValue.removingPercentEncoding,
-              decodedCookieValue.utf8.count <= 8_192 else {
+        case .malformed:
             telemetry.record(.malformedCredential)
             return .malformedCredential
-        }
-        defer { decodedCookieValue = "" }
+        case let .credential(credential):
+            guard !Task.isCancelled else {
+                telemetry.record(.selectionCancelled)
+                return .cancelled
+            }
 
-        var payloadData: Data? = Data(decodedCookieValue.utf8)
-        defer { payloadData = nil }
-        guard let payloadData,
-              let payload = try? JSONDecoder().decode(TokenCookiePayload.self, from: payloadData),
-              payload.session.accessToken.utf8.count <= 8_192,
-              !payload.session.accessToken.isEmpty,
-              !payload.session.accessToken.contains(where: { $0.isWhitespace }) else {
-            telemetry.record(.malformedCredential)
-            return .malformedCredential
+            selectionState = .consumed
+            await credentialConsumer(credential)
+            telemetry.record(.credentialTransferred)
+            return .credentialTransferred
         }
-        guard !Task.isCancelled else {
-            telemetry.record(.selectionCancelled)
-            return .cancelled
-        }
-
-        let credential = AuthenticationCredential(volatileMaterial: Data(payload.session.accessToken.utf8))
-        selectionState = .consumed
-        await credentialConsumer(credential)
-        telemetry.record(.credentialTransferred)
-        return .credentialTransferred
     }
 
     private func beginSelection() -> Int {
@@ -327,12 +270,6 @@ private final class WebAuthenticationWebsiteSession {
     func makeWebView() -> WKWebView {
         if let webView { return webView }
         let webView = WKWebView(frame: .zero, configuration: configuration)
-#if DEBUG
-        // Keep the owner-operated sign-in surface available to Safari's Web
-        // Inspector so upstream request drift can be diagnosed in-place without
-        // asking the user to repeat a login solely to add more telemetry.
-        webView.isInspectable = true
-#endif
         self.webView = webView
         return webView
     }
@@ -353,14 +290,6 @@ private final class WebAuthenticationWebsiteSession {
         webView = nil
         configuration = WebAuthenticationBridge.makeConfiguration()
         generation &+= 1
-    }
-}
-
-private struct TokenCookiePayload: Decodable {
-    let session: TokenSession
-
-    struct TokenSession: Decodable {
-        let accessToken: String
     }
 }
 

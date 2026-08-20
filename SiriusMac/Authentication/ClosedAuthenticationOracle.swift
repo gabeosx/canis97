@@ -16,6 +16,11 @@ enum ClosedAuthenticationTerminal: String, CaseIterable, Equatable {
     case localCredentialMissing
     case localCredentialInvalid
     case localCredentialUnavailable
+    case webCredentialMissing
+    case webCredentialMalformed
+    case webCredentialAmbiguous
+    case webCredentialTransferred
+    case webSessionResetFailed
     case waitingForWebView
     case verifyingAuthentication
     case verifyingEntitlement
@@ -32,6 +37,20 @@ enum ClosedAuthenticationTerminal: String, CaseIterable, Equatable {
     case unsupported
     case signedOut
     case cleanupFailed
+}
+
+enum ClosedWebCredentialOutcome: Equatable {
+    case missing
+    case malformed
+    case ambiguous
+    case transferred
+    case resetFailed
+}
+
+struct ClosedWebOutcome: Equatable {
+    let statusLabel: String
+    let isSingleConsumption: Bool
+    let allowsPlayerLoad: Bool
 }
 
 enum LocalCredentialAvailability: Equatable {
@@ -57,6 +76,21 @@ struct AuthenticationPresentationCopy: Equatable {
 }
 
 enum ClosedAuthenticationOracle {
+    static func webOutcome(for outcome: ClosedWebCredentialOutcome) -> ClosedWebOutcome {
+        switch outcome {
+        case .missing:
+            ClosedWebOutcome(statusLabel: "web-credential-missing", isSingleConsumption: false, allowsPlayerLoad: false)
+        case .malformed:
+            ClosedWebOutcome(statusLabel: "web-credential-malformed", isSingleConsumption: false, allowsPlayerLoad: false)
+        case .ambiguous:
+            ClosedWebOutcome(statusLabel: "web-credential-ambiguous", isSingleConsumption: false, allowsPlayerLoad: false)
+        case .transferred:
+            ClosedWebOutcome(statusLabel: "web-credential-transferred", isSingleConsumption: true, allowsPlayerLoad: false)
+        case .resetFailed:
+            ClosedWebOutcome(statusLabel: "web-session-reset-failed", isSingleConsumption: false, allowsPlayerLoad: false)
+        }
+    }
+
     static func restoreOutcome(for availability: LocalCredentialAvailability) -> ClosedRestoreOutcome {
         switch availability {
         case .missing:
@@ -92,10 +126,55 @@ enum ClosedAuthenticationOracle {
             )
         case .localCredentialUnavailable:
             AuthenticationPresentationCopy(
-                title: "Saved sign-in unavailable",
+                title: "Saved sign-in cannot be accessed",
                 message: "Sirius Mac cannot access the saved sign-in.",
                 iconName: "exclamationmark.triangle",
                 statusLabel: "local-credential-unavailable",
+                isReady: false,
+                canSignOut: false
+            )
+        case .webCredentialMissing:
+            AuthenticationPresentationCopy(
+                title: "Sign-in is incomplete",
+                message: "Sirius Mac could not find a usable sign-in.",
+                iconName: "exclamationmark.triangle",
+                statusLabel: "web-credential-missing",
+                isReady: false,
+                canSignOut: false
+            )
+        case .webCredentialMalformed:
+            AuthenticationPresentationCopy(
+                title: "Sign-in is incomplete",
+                message: "Sirius Mac could not use this sign-in.",
+                iconName: "exclamationmark.triangle",
+                statusLabel: "web-credential-malformed",
+                isReady: false,
+                canSignOut: false
+            )
+        case .webCredentialAmbiguous:
+            AuthenticationPresentationCopy(
+                title: "Sign-in needs attention",
+                message: "Sirius Mac could not choose one sign-in.",
+                iconName: "exclamationmark.triangle",
+                statusLabel: "web-credential-ambiguous",
+                isReady: false,
+                canSignOut: false
+            )
+        case .webCredentialTransferred:
+            AuthenticationPresentationCopy(
+                title: "Verifying sign-in",
+                message: "Checking your signed-in session.",
+                iconName: "checkmark.shield",
+                statusLabel: "web-credential-transferred",
+                isReady: false,
+                canSignOut: false
+            )
+        case .webSessionResetFailed:
+            AuthenticationPresentationCopy(
+                title: "Sign-in could not start",
+                message: "Sirius Mac could not start a fresh sign-in session.",
+                iconName: "exclamationmark.triangle",
+                statusLabel: "web-session-reset-failed",
                 isReady: false,
                 canSignOut: false
             )
@@ -146,7 +225,7 @@ enum ClosedAuthenticationOracle {
             )
         case .restoreCompleted:
             AuthenticationPresentationCopy(
-                title: "Ready to listen",
+                title: "Restored sign-in ready",
                 message: "Your stored sign-in is ready.",
                 iconName: "checkmark.circle",
                 statusLabel: "restore-completed",

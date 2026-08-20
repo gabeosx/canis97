@@ -16,6 +16,10 @@ final class AuthenticationPresentationModelTests: XCTestCase {
     func testSemanticStatesHaveDistinctFixedPresentationCopy() {
         let model = AuthenticationPresentationModel()
         let states: [AuthenticationPresentationState] = [
+            .localCredentialMissing,
+            .localCredentialInvalid,
+            .localCredentialUnavailable,
+            .webSessionResetFailed,
             .waitingForWebView,
             .verifyingAuthentication,
             .verifyingEntitlement,
@@ -44,6 +48,10 @@ final class AuthenticationPresentationModelTests: XCTestCase {
     func testOnlyEntitledStateExposesReadinessOrSignOut() {
         let model = AuthenticationPresentationModel()
         let nonEntitledStates: [AuthenticationPresentationState] = [
+            .localCredentialMissing,
+            .localCredentialInvalid,
+            .localCredentialUnavailable,
+            .webSessionResetFailed,
             .waitingForWebView,
             .verifyingAuthentication,
             .verifyingEntitlement,
