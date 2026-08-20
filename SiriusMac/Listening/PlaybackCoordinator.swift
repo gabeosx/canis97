@@ -394,7 +394,7 @@ private final class AVFoundationItemObservation: PlaybackItemObserving {
         self.onPaused = onPaused
         self.onFailure = onFailure
         self.telemetry = telemetry
-        itemStatusObservation = item.observe(\.status, options: [.new]) { [weak self] item, _ in
+        itemStatusObservation = item.observe(\.status, options: [.initial, .new]) { [weak self] item, _ in
             Task { @MainActor [weak self] in
                 self?.handleItemStatus(item.status)
             }
@@ -479,6 +479,18 @@ private final class AVFoundationItemObservation: PlaybackItemObserving {
 @MainActor
 @Observable
 final class PlaybackCoordinator {
+    private struct PendingReady {
+        let channelID: LiveChannelID
+        let generation: Int
+        let observationID: UUID
+        let incident: RecoveryIncident?
+    }
+
+    private struct PreInstallationFailure {
+        let failure: LiveListeningFailure
+        let observationID: UUID
+    }
+
     private let resolver: any PlaybackResolving
     private let runtime: any PlaybackPlayerRuntime
     private let recoveryPolicy: PlaybackRecoveryPolicy
@@ -493,6 +505,8 @@ final class PlaybackCoordinator {
     private var observationID: UUID?
     private var installedItemGeneration: Int?
     private var playRequestedItemGeneration: Int?
+    private var pendingReady: PendingReady?
+    private var preInstallationFailure: PreInstallationFailure?
     private var networkAvailable = true
     private var sleeping = false
     private var recoveryPendingAfterReconnect = false
@@ -659,10 +673,17 @@ final class PlaybackCoordinator {
         incident: RecoveryIncident?
     ) {
         let identifier = UUID()
+        observation?.cancel()
+        observation = nil
+        observationID = identifier
+        installedItemGeneration = nil
+        playRequestedItemGeneration = nil
+        pendingReady = nil
+        preInstallationFailure = nil
         let observed = runtime.observe(
             item,
             onReady: { [weak self] in
-                self?.requestPlayForReadyItem(
+                self?.handleReadySignal(
                     channelID: channelID,
                     generation: generation,
                     observationID: identifier,
@@ -695,20 +716,87 @@ final class PlaybackCoordinator {
                 )
             }
         )
-        guard isCurrentItem(
+        guard isCurrentObservation(
             channelID: channelID,
             generation: generation,
-            observationID: nil,
+            observationID: identifier,
             incident: incident
         ) else {
             observed.cancel()
+            clearPreInstallationState(for: identifier)
             return
         }
-        observation?.cancel()
+        if preInstallationFailure?.observationID == identifier {
+            observed.cancel()
+            clearPreInstallationState(for: identifier)
+            observationID = nil
+            return
+        }
         observation = observed
-        observationID = identifier
-        installedItemGeneration = generation
         runtime.install(item)
+        guard isCurrentObservation(
+            channelID: channelID,
+            generation: generation,
+            observationID: identifier,
+            incident: incident
+        ) else { return }
+        installedItemGeneration = generation
+        consumePendingReady(
+            channelID: channelID,
+            generation: generation,
+            observationID: identifier,
+            incident: incident
+        )
+    }
+
+    private func handleReadySignal(
+        channelID: LiveChannelID,
+        generation: Int,
+        observationID: UUID,
+        incident: RecoveryIncident?
+    ) {
+        guard isCurrentObservation(
+            channelID: channelID,
+            generation: generation,
+            observationID: observationID,
+            incident: incident
+        ) else { return }
+        guard installedItemGeneration == generation else {
+            pendingReady = PendingReady(
+                channelID: channelID,
+                generation: generation,
+                observationID: observationID,
+                incident: incident
+            )
+            return
+        }
+        requestPlayForReadyItem(
+            channelID: channelID,
+            generation: generation,
+            observationID: observationID,
+            incident: incident
+        )
+    }
+
+    private func consumePendingReady(
+        channelID: LiveChannelID,
+        generation: Int,
+        observationID: UUID,
+        incident: RecoveryIncident?
+    ) {
+        guard let pendingReady,
+              pendingReady.channelID == channelID,
+              pendingReady.generation == generation,
+              pendingReady.observationID == observationID,
+              pendingReady.incident == incident
+        else { return }
+        self.pendingReady = nil
+        requestPlayForReadyItem(
+            channelID: channelID,
+            generation: generation,
+            observationID: observationID,
+            incident: incident
+        )
     }
 
     private func requestPlayForReadyItem(
@@ -723,6 +811,7 @@ final class PlaybackCoordinator {
             observationID: observationID,
             incident: incident
         ) else { return }
+        guard playRequestedItemGeneration != generation else { return }
         playRequestedItemGeneration = generation
         runtime.requestPlay()
     }
@@ -765,12 +854,20 @@ final class PlaybackCoordinator {
         observationID: UUID,
         incident: RecoveryIncident?
     ) {
-        guard isCurrentItem(
+        guard isCurrentObservation(
             channelID: channelID,
             generation: generation,
             observationID: observationID,
             incident: incident
         ) else { return }
+        clearPreInstallationState(for: observationID)
+        if installedItemGeneration != generation {
+            preInstallationFailure = PreInstallationFailure(failure: failure, observationID: observationID)
+        }
+        publishObservedFailure(failure)
+    }
+
+    private func publishObservedFailure(_ failure: LiveListeningFailure) {
         state = .unavailable(failure)
         switch failure {
         case .networkUnavailable:
@@ -859,11 +956,26 @@ final class PlaybackCoordinator {
         observationID: UUID?,
         incident: RecoveryIncident?
     ) -> Bool {
-        guard self.generation == generation,
-              selectedChannelID == channelID,
-              installedItemGeneration == generation || observationID == nil
+        guard isCurrentObservation(
+            channelID: channelID,
+            generation: generation,
+            observationID: observationID,
+            incident: incident
+        ), installedItemGeneration == generation || observationID == nil
         else { return false }
 
+        return true
+    }
+
+    private func isCurrentObservation(
+        channelID: LiveChannelID,
+        generation: Int,
+        observationID: UUID?,
+        incident: RecoveryIncident?
+    ) -> Bool {
+        guard self.generation == generation,
+              selectedChannelID == channelID
+        else { return false }
         if let observationID, self.observationID != observationID {
             return false
         }
@@ -873,6 +985,15 @@ final class PlaybackCoordinator {
                 networkAvailable && !sleeping && !Task.isCancelled
         }
         return recoveryIncident == nil
+    }
+
+    private func clearPreInstallationState(for observationID: UUID) {
+        if pendingReady?.observationID == observationID {
+            pendingReady = nil
+        }
+        if preInstallationFailure?.observationID == observationID {
+            preInstallationFailure = nil
+        }
     }
 
     private func isCurrent(_ incident: RecoveryIncident) -> Bool {
@@ -924,6 +1045,8 @@ final class PlaybackCoordinator {
         observationID = nil
         installedItemGeneration = nil
         playRequestedItemGeneration = nil
+        pendingReady = nil
+        preInstallationFailure = nil
         if clearItem {
             runtime.clearCurrentItem()
         }
