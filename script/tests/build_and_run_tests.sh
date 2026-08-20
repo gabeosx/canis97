@@ -46,6 +46,38 @@ printf 'path:%s\n' "$1" >> "$SIL_TEST_STATE/events"
 awk -F: -v pid="$1" '$1 == pid { print substr($0, length(pid) + 2); exit }' "$SIL_TEST_STATE/pids"
 HOOK
 
+cat > "$HOOKS/lsof" <<'HOOK'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'lsof:%s\n' "$*" >> "$SIL_TEST_STATE/events"
+
+pid=""
+while (( $# > 0 )); do
+  case "$1" in
+    -p)
+      shift
+      pid="$1"
+      ;;
+  esac
+  shift
+done
+
+case "${SIL_TEST_LSOF_MODE:-exact}" in
+  exact)
+    printf 'p%s\nn%s\n' "$pid" "$SIL_TEST_EXACT_BINARY"
+    ;;
+  wrong-path)
+    printf 'p%s\nn%s\n' "$pid" "$SIL_TEST_WRONG_BINARY"
+    ;;
+  missing)
+    printf 'p%s\n' "$pid"
+    ;;
+  *)
+    exit 91
+    ;;
+esac
+HOOK
+
 cat > "$HOOKS/open" <<'HOOK'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -82,6 +114,7 @@ reset_state() {
   rm -f "$STATE/release-open"
   unset SIL_TEST_STICKY
   unset SIL_TEST_HOLD_OPEN
+  unset SIL_TEST_LSOF_MODE
   export SIL_TEST_OPEN_MODE=exact
 }
 
@@ -104,6 +137,8 @@ assert_file_empty() {
 configure_fake_hooks() {
   export SIL_TEST_STATE="$STATE"
   export SIL_TEST_EXACT_BINARY="$TEST_ROOT/SiriusMac.app/Contents/MacOS/SiriusMac"
+  export SIL_TEST_WRONG_BINARY="$TEST_ROOT/SiriusMac.app/Contents/MacOS/NotSiriusMac"
+  export SIL_TEST_HELPER="$HELPER"
   export SIL_APP_NAME="SiriusMac"
   export SIL_APP_BUNDLE="$TEST_ROOT/SiriusMac.app"
   export SIL_APP_BINARY="$SIL_TEST_EXACT_BINARY"
@@ -119,6 +154,7 @@ configure_fake_hooks() {
 
 source "$HELPER"
 configure_fake_hooks
+RESOLVER="$ROOT_DIR/script/lib/resolve_process_binary.sh"
 
 # The test guard rejects accidental fallback to system process or launch tools.
 if rg -n --fixed-strings '/usr/bin/open' "$HELPER" >/dev/null ||
@@ -182,6 +218,62 @@ for mode in zero two wrong-path; do
   assert_file_empty "$STATE/pids" "post-launch $mode is cleaned"
   grep -qx 'terminate' "$STATE/events"
 done
+
+# The resolver must read the mapped text executable, never argv[0]. The
+# initial structural check makes the red phase safe: it avoids executing the
+# old hard-coded `/bin/ps` implementation against the host process table.
+if rg -q '/bin/ps.*command=' "$RESOLVER" || ! rg -q 'SIL_LSOF' "$RESOLVER"; then
+  echo "FAIL: process resolver must use an injectable mapped-text executable query" >&2
+  exit 1
+fi
+
+reset_state
+actual="$(SIL_LSOF="$HOOKS/lsof" "$RESOLVER" 401)"
+assert_eq "$SIL_TEST_EXACT_BINARY" "$actual" "resolver returns mapped executable path"
+assert_eq 'lsof:-a -p 401 -d txt -Fn' "$(cat "$STATE/events")" "resolver queries only the mapped text executable"
+
+reset_state
+export SIL_TEST_LSOF_MODE=wrong-path
+actual="$(SIL_LSOF="$HOOKS/lsof" "$RESOLVER" 401)"
+assert_eq "$SIL_TEST_WRONG_BINARY" "$actual" "resolver does not substitute argv text"
+
+reset_state
+export SIL_TEST_LSOF_MODE=missing
+if SIL_LSOF="$HOOKS/lsof" "$RESOLVER" 401 >/dev/null; then
+  echo "FAIL: resolver must fail closed when no mapped executable is available" >&2
+  exit 1
+fi
+
+# This child shell is deliberately independent from this test's conditional
+# context. With `set -e`, a launch stage that fails before a later side effect
+# must terminate the wrapper rather than being converted to a zero status.
+cat > "$TEST_ROOT/failure-propagation-probe.sh" <<'PROBE'
+#!/usr/bin/env bash
+set -euo pipefail
+source "$SIL_TEST_HELPER"
+
+failing_stage() {
+  false
+  printf 'continued\n' > "$SIL_TEST_STATE/failure-stage-continued"
+}
+
+single_instance_with_lock failing_stage
+PROBE
+chmod +x "$TEST_ROOT/failure-propagation-probe.sh"
+
+reset_state
+if "$TEST_ROOT/failure-propagation-probe.sh"; then
+  echo "FAIL: lock wrapper must preserve launch-stage failure" >&2
+  exit 1
+fi
+if [[ -e "$STATE/failure-stage-continued" ]]; then
+  echo "FAIL: lock wrapper continued after a failing launch stage" >&2
+  exit 1
+fi
+if [[ -d "$SIL_LOCK_PATH" ]]; then
+  echo "FAIL: lock wrapper did not release its lock after a failing launch stage" >&2
+  exit 1
+fi
 
 reset_state
 single_instance_build_only true

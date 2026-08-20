@@ -103,7 +103,8 @@ single_instance_with_lock() (
   trap 'sil_release_lock' EXIT
   trap 'sil_close_all_and_wait || true; exit 130' HUP INT TERM
   sil_acquire_launch_lock || exit 1
-  "$@" || status=$?
+  "$@"
+  status=$?
   exit "$status"
 )
 
