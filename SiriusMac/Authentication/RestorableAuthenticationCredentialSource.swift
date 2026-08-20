@@ -47,6 +47,7 @@ final class RestorableAuthenticationCredentialSource: CredentialSource {
     private let webViewSource: WebAuthenticationBridge
     private let telemetry: RestorableAuthenticationCredentialTelemetry
     private var attemptOrigin: AttemptOrigin = .none
+    private var isStoredCredentialQuarantined = false
 
     init(
         keychain: KeychainCredentialStore,
@@ -61,6 +62,14 @@ final class RestorableAuthenticationCredentialSource: CredentialSource {
     /// Reads the Keychain only after a user explicitly starts Sign In.
     func prepareForExplicitSignIn() -> ExplicitSignInCredentialPreparation {
         guard case .none = attemptOrigin else { return .unavailable }
+
+        // A native rejection proves that re-reading the same stored material in
+        // this process cannot advance the user. Preserve it in Keychain, but
+        // require the next explicit attempt to obtain a fresh WebView session.
+        if isStoredCredentialQuarantined {
+            attemptOrigin = .webViewRequired
+            return .webViewRequired
+        }
 
         switch keychain.loadStoredCredentialForAuthentication() {
         case let .credential(credential):
@@ -113,6 +122,7 @@ final class RestorableAuthenticationCredentialSource: CredentialSource {
     }
 
     func finalizeSuccessfulRestore() {
+        isStoredCredentialQuarantined = false
         if case .restoredInFlight = attemptOrigin {
             attemptOrigin = .none
             telemetry.record(.restoreCompleted)
@@ -123,6 +133,7 @@ final class RestorableAuthenticationCredentialSource: CredentialSource {
     func finishRejectedRestore() {
         guard isRestoredAttempt else { return }
         attemptOrigin = .none
+        isStoredCredentialQuarantined = true
     }
 
     func finishWebViewAttempt() {

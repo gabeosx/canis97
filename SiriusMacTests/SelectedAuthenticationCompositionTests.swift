@@ -301,7 +301,7 @@ final class SelectedAuthenticationCompositionTests: XCTestCase {
         XCTAssertEqual(signInRequestLoadCount, 0)
     }
 
-    func testRejectedRestoreRetainsCredentialBeforeTerminalStateThenLaterExplicitRetryUsesIt() async throws {
+    func testRejectedRestoreRetainsCredentialButExplicitRetryUsesFreshWebViewSession() async throws {
         let now = Date()
         let keychain = KeychainCredentialStore(
             service: "com.siriusmac.tests.\(UUID().uuidString)",
@@ -311,7 +311,13 @@ final class SelectedAuthenticationCompositionTests: XCTestCase {
         try await keychain.save(AuthenticationCredential(volatileMaterial: Data("approved-restore".utf8)))
 
         let cookieStore = CompositionCookieStore(cookies: [try tokenCookie(expires: now.addingTimeInterval(60))])
-        let bridge = WebAuthenticationBridge(cookieStore: cookieStore, now: { now }, credentialConsumer: { _ in })
+        var signInRequestLoadCount = 0
+        let bridge = WebAuthenticationBridge(
+            cookieStore: cookieStore,
+            now: { now },
+            credentialConsumer: { _ in },
+            signInRequestLoader: { _ in signInRequestLoadCount += 1 }
+        )
         let source = RestorableAuthenticationCredentialSource(keychain: keychain, webViewSource: bridge)
         let client = CompositionClient(
             credentialSource: source,
@@ -322,14 +328,20 @@ final class SelectedAuthenticationCompositionTests: XCTestCase {
             flow: ComposedAuthenticationPresentationFlow(bridge: bridge, client: client, credentialSource: source)
         )
 
-        try await XCTUnwrap(model.signIn()).value
+        try await XCTUnwrap(model.restoreStoredCredentialOnLaunch()).value
         XCTAssertEqual(model.state, .profileAuthorizationRejected)
         XCTAssertEqual(try keychain.readStoredCredential(), Data("approved-restore".utf8))
         let cookieReadCount = cookieStore.allCookieReadCount
         XCTAssertEqual(cookieReadCount, 0)
 
         try await XCTUnwrap(model.retry()).value
-        let events = await client.events
+        XCTAssertEqual(model.state, .waitingForWebView)
+        XCTAssertEqual(signInRequestLoadCount, 1)
+        var events = await client.events
+        XCTAssertEqual(events, [.credential, .authenticate])
+
+        try await XCTUnwrap(model.useLoggedInSession()).value
+        events = await client.events
 
         XCTAssertEqual(model.state, .entitled)
         XCTAssertNil(model.useLoggedInSession())
