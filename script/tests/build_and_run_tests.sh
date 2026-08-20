@@ -201,3 +201,20 @@ fi
 assert_file_empty "$STATE/pids" "guard leak is cleaned"
 
 echo "PASS: fake single-instance launcher matrix"
+
+# The production entry point is checked structurally here.  Executing a run
+# mode is intentionally forbidden during this autonomous plan.
+BUILD_SCRIPT="$ROOT_DIR/script/build_and_run.sh"
+if ! rg -q 'source .*single_instance_launcher\.sh' "$BUILD_SCRIPT" ||
+   ! rg -q 'single_instance_with_lock build_and_launch' "$BUILD_SCRIPT" ||
+   ! rg -q 'single_instance_build_only build_exact_bundle' "$BUILD_SCRIPT"; then
+  echo "FAIL: all build/run modes must route through the single-instance helper" >&2
+  exit 1
+fi
+if rg -n --fixed-strings 'open -n' "$BUILD_SCRIPT" >/dev/null ||
+   rg -n -e '(^|[[:space:];])pkill([[:space:];]|$)|(^|[[:space:];])pgrep([[:space:];]|$)' "$BUILD_SCRIPT" >/dev/null; then
+  echo "FAIL: build/run entry point retains a duplicate-prone lifecycle command" >&2
+  exit 1
+fi
+
+echo "PASS: build/run routing contract"
