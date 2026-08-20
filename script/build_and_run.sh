@@ -7,9 +7,9 @@ APP_BUNDLE_IDENTIFIER="com.siriusmac.player"
 DEVELOPER_DIR_PATH="/Applications/Xcode.app/Contents/Developer"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT_PATH="$ROOT_DIR/SiriusMac.xcodeproj"
-DERIVED_DATA_PATH="/tmp/sirius-mac-derived-data"
-CLANG_CACHE_PATH="/tmp/sirius-mac-clang-cache"
-SWIFTPM_CACHE_PATH="/tmp/sirius-mac-swiftpm-cache"
+DERIVED_DATA_PATH="${SIL_DERIVED_DATA_PATH:-/tmp/sirius-mac-derived-data}"
+CLANG_CACHE_PATH="${SIL_CLANG_CACHE_PATH:-/tmp/sirius-mac-clang-cache}"
+SWIFTPM_CACHE_PATH="${SIL_SWIFTPM_CACHE_PATH:-/tmp/sirius-mac-swiftpm-cache}"
 APP_BUNDLE="$DERIVED_DATA_PATH/Build/Products/Debug/$APP_NAME.app"
 APP_BINARY="$APP_BUNDLE/Contents/MacOS/$APP_NAME"
 NATIVE_LAUNCHER_SOURCE="$ROOT_DIR/script/native_single_instance_launcher.swift"
@@ -20,6 +20,7 @@ export SIL_LOG="${SIL_LOG:-/usr/bin/log}"
 export SIL_KILL="${SIL_KILL:-/bin/kill}"
 
 TELEMETRY_PID=""
+LAUNCH_LOCK_HELD=0
 
 cleanup_telemetry() {
   if [[ -n "$TELEMETRY_PID" ]]; then
@@ -29,7 +30,10 @@ cleanup_telemetry() {
 }
 cleanup_launcher() {
   cleanup_telemetry
-  rmdir "$LAUNCH_LOCK_PATH" 2>/dev/null || true
+  if (( LAUNCH_LOCK_HELD )); then
+    rmdir "$LAUNCH_LOCK_PATH" 2>/dev/null || true
+    LAUNCH_LOCK_HELD=0
+  fi
 }
 if [[ "${SIL_BUILD_AND_RUN_SOURCE_ONLY:-0}" != "1" ]]; then
   trap cleanup_launcher EXIT
@@ -40,10 +44,12 @@ report_process_stage() {
 }
 
 acquire_launch_lock() {
-  if ! mkdir "$LAUNCH_LOCK_PATH" 2>/dev/null; then
-    report_process_stage lock-acquisition-failed
-    return 1
+  if mkdir "$LAUNCH_LOCK_PATH" 2>/dev/null; then
+    LAUNCH_LOCK_HELD=1
+    return 0
   fi
+  report_process_stage lock-acquisition-failed
+  return 1
 }
 
 build_native_launcher() {
