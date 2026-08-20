@@ -33,7 +33,8 @@ final class AuthenticationPresentationModelTests: XCTestCase {
             .challengeRequired,
             .unsupported,
             .signedOut,
-            .cleanupFailed(.both)
+            .cleanupFailed(.both),
+            .finishingCleanup
         ]
 
         let copies = states.map { model.presentation(for: $0) }
@@ -60,7 +61,8 @@ final class AuthenticationPresentationModelTests: XCTestCase {
             .challengeRequired,
             .unsupported,
             .signedOut,
-            .cleanupFailed(.keychain)
+            .cleanupFailed(.keychain),
+            .finishingCleanup
         ]
 
         for state in nonEntitledStates {
@@ -184,12 +186,44 @@ final class AuthenticationPresentationModelTests: XCTestCase {
         XCTAssertEqual(model.state, .cleanupFailed(.browserResidue))
         XCTAssertEqual(model.presentation(for: model.state).message, "You are signed out. Local cleanup was incomplete.")
     }
+
+    func testCleanupShowsOneFixedStateAndBlocksEveryAuthenticationActionUntilItFinishes() async throws {
+        let flow = AuthenticationFlowSpy(beginResult: .entitled, holdSignOut: true, signOutResult: .signedOut)
+        let model = AuthenticationPresentationModel(flow: flow)
+
+        await model.signIn()?.value
+        XCTAssertEqual(model.state, .entitled)
+
+        let cleanup = try XCTUnwrap(model.signOut())
+        await flow.waitUntilSignOutStarted()
+
+        XCTAssertTrue(model.isAttemptInFlight)
+        XCTAssertEqual(model.presentation(for: model.state).statusLabel, "cleanup-in-progress")
+        XCTAssertNil(model.signIn())
+        XCTAssertNil(model.useLoggedInSession())
+        XCTAssertNil(model.retry())
+        XCTAssertNil(model.restoreStoredCredentialOnLaunch())
+        XCTAssertNil(model.signOut())
+        XCTAssertNil(model.clearLocalSession())
+
+        await flow.finishSignOut()
+        await cleanup.value
+
+        XCTAssertEqual(model.state, .signedOut)
+        XCTAssertFalse(model.isAttemptInFlight)
+        let counts = await flow.callCounts()
+        XCTAssertEqual(counts.signOut, 1)
+    }
 }
 
 private actor AuthenticationFlowSpy: AuthenticationPresentationFlow {
     private var beginResults: [AuthenticationPresentationState]
     private let holdBegin: Bool
     private var beginContinuation: CheckedContinuation<Void, Never>?
+    private let holdSignOut: Bool
+    private var signOutContinuation: CheckedContinuation<Void, Never>?
+    private var signOutStarted = false
+    private var signOutStartContinuation: CheckedContinuation<Void, Never>?
     private let automaticRestoreResult: AuthenticationPresentationState
     private let loggedInSessionResult: AuthenticationPresentationState
     private let signOutResult: SignOutOutcome
@@ -203,12 +237,14 @@ private actor AuthenticationFlowSpy: AuthenticationPresentationFlow {
         beginResult: AuthenticationPresentationState = .waitingForWebView,
         beginResults: [AuthenticationPresentationState]? = nil,
         holdBegin: Bool = false,
+        holdSignOut: Bool = false,
         automaticRestoreResult: AuthenticationPresentationState = .signedOut,
         loggedInSessionResult: AuthenticationPresentationState = .waitingForWebView,
         signOutResult: SignOutOutcome = .alreadySignedOut
     ) {
         self.beginResults = beginResults ?? [beginResult]
         self.holdBegin = holdBegin
+        self.holdSignOut = holdSignOut
         self.automaticRestoreResult = automaticRestoreResult
         self.loggedInSessionResult = loggedInSessionResult
         self.signOutResult = signOutResult
@@ -245,12 +281,32 @@ private actor AuthenticationFlowSpy: AuthenticationPresentationFlow {
 
     func signOut() async -> SignOutOutcome {
         signOutCallCount += 1
+        signOutStarted = true
+        signOutStartContinuation?.resume()
+        signOutStartContinuation = nil
+        if holdSignOut {
+            await withCheckedContinuation { continuation in
+                signOutContinuation = continuation
+            }
+        }
         return signOutResult
     }
 
     func finishBegin() {
         beginContinuation?.resume()
         beginContinuation = nil
+    }
+
+    func waitUntilSignOutStarted() async {
+        if signOutStarted { return }
+        await withCheckedContinuation { continuation in
+            signOutStartContinuation = continuation
+        }
+    }
+
+    func finishSignOut() {
+        signOutContinuation?.resume()
+        signOutContinuation = nil
     }
 
     func callCounts() -> (automaticRestore: Int, begin: Int, loggedInSession: Int, signOut: Int) {

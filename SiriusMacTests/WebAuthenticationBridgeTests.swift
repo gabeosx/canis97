@@ -110,7 +110,8 @@ final class WebAuthenticationBridgeTests: XCTestCase {
 
         XCTAssertFalse(didBegin)
         XCTAssertTrue(loadedRequests.isEmpty)
-        XCTAssertEqual(await bridge.useLoggedInSession(), .alreadyConsumed)
+        let selection = await bridge.useLoggedInSession()
+        XCTAssertEqual(selection, .alreadyConsumed)
     }
 
     func testExplicitNewAttemptDiscardsAnUnconsumedHandoffAndRearmsOneTransfer() async throws {

@@ -76,7 +76,7 @@ struct AuthenticationView: View {
 
     private var isVerifying: Bool {
         switch model.state {
-        case .verifyingAuthentication, .verifyingEntitlement: true
+        case .verifyingAuthentication, .verifyingEntitlement, .finishingCleanup: true
         default: false
         }
     }
@@ -89,17 +89,31 @@ struct AuthenticationView: View {
                 Button("Use This Window’s Session") { _ = model.useLoggedInSession() }
                 clearLocalSessionButton
             }
-        case .authenticatedButNotEntitled, .rejected, .challengeRequired, .cleanupFailed:
+        case .localCredentialInvalid,
+             .localCredentialUnavailable,
+             .webSessionResetFailed,
+             .authenticatedButNotEntitled,
+             .profileAuthorizationRejected,
+             .entitlementAuthorizationRejected,
+             .credentialNotDurable,
+             .rejected,
+             .challengeRequired,
+             .cleanupFailed:
             HStack {
                 Button("Retry Sign In") { _ = model.retry() }
                 clearLocalSessionButton
             }
-        case .signedOut:
+        case .localCredentialMissing, .signedOut:
             HStack {
                 Button("Sign In") { _ = model.signIn() }
                 clearLocalSessionButton
             }
-        case .verifyingAuthentication, .verifyingEntitlement, .entitled, .unsupported:
+        case .verifyingAuthentication,
+             .verifyingEntitlement,
+             .finishingCleanup,
+             .entitled,
+             .restoreCompleted,
+             .unsupported:
             EmptyView()
         }
     }

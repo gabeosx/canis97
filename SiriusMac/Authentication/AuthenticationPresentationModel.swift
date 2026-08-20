@@ -56,7 +56,7 @@ final class AuthenticationPresentationModel {
                     self?.state = .verifyingEntitlement
                 }
             )
-            self?.finishAttempt(identifier, with: result)
+            self?.finishAttempt(identifier, with: result == .entitled ? .restoreCompleted : result)
         }
     }
 
@@ -85,7 +85,7 @@ final class AuthenticationPresentationModel {
     func signOut() -> Task<Void, Never>? {
         guard state == .entitled, !isAttemptInFlight else { return nil }
 
-        let identifier = startAttempt(at: .entitled)
+        let identifier = startAttempt(at: .finishingCleanup)
         let flow = flow
         return Task { [weak self, flow] in
             let result = await flow.signOut()
@@ -97,7 +97,7 @@ final class AuthenticationPresentationModel {
     func clearLocalSession() -> Task<Void, Never>? {
         guard state != .entitled, !isAttemptInFlight else { return nil }
 
-        let identifier = startAttempt(at: state)
+        let identifier = startAttempt(at: .finishingCleanup)
         let flow = flow
         return Task { [weak self, flow] in
             let result = await flow.signOut()
@@ -117,7 +117,8 @@ final class AuthenticationPresentationModel {
 
     private var isRetryableTerminalState: Bool {
         switch state {
-        case .authenticatedButNotEntitled,
+        case .localCredentialMissing,
+             .authenticatedButNotEntitled,
              .profileAuthorizationRejected,
              .entitlementAuthorizationRejected,
              .credentialNotDurable,
@@ -133,7 +134,9 @@ final class AuthenticationPresentationModel {
         case .waitingForWebView,
              .verifyingAuthentication,
              .verifyingEntitlement,
-             .entitled:
+             .entitled,
+             .restoreCompleted,
+             .finishingCleanup:
             false
         }
     }
@@ -177,6 +180,7 @@ enum AuthenticationPresentationState: Equatable {
     case unsupported
     case signedOut
     case cleanupFailed(SignOutCleanupFailure)
+    case finishingCleanup
 }
 
 private extension AuthenticationPresentationState {
@@ -200,6 +204,7 @@ private extension AuthenticationPresentationState {
         case .unsupported: .unsupported
         case .signedOut: .signedOut
         case .cleanupFailed: .cleanupFailed
+        case .finishingCleanup: .finishingCleanup
         }
     }
 }

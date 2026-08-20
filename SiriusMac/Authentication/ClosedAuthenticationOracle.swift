@@ -37,6 +37,7 @@ enum ClosedAuthenticationTerminal: String, CaseIterable, Equatable {
     case unsupported
     case signedOut
     case cleanupFailed
+    case finishingCleanup
 }
 
 enum ClosedWebCredentialOutcome: Equatable {
@@ -301,6 +302,15 @@ enum ClosedAuthenticationOracle {
                 message: "You are signed out. Local cleanup was incomplete.",
                 iconName: "exclamationmark.triangle",
                 statusLabel: "cleanup-incomplete",
+                isReady: false,
+                canSignOut: false
+            )
+        case .finishingCleanup:
+            AuthenticationPresentationCopy(
+                title: "Finishing local cleanup",
+                message: "Sirius Mac is finishing local sign-out cleanup.",
+                iconName: "hourglass",
+                statusLabel: "cleanup-in-progress",
                 isReady: false,
                 canSignOut: false
             )
