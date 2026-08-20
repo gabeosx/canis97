@@ -89,29 +89,33 @@ single_instance_launch_locked() {
   fi
 }
 
-single_instance_launch() {
+single_instance_launch() (
   local status=0
-  sil_acquire_launch_lock || return 1
+  trap 'sil_release_lock' EXIT
+  trap 'sil_close_all_and_wait || true; exit 130' HUP INT TERM
+  sil_acquire_launch_lock || exit 1
   single_instance_launch_locked || status=$?
-  sil_release_lock
-  return "$status"
-}
+  exit "$status"
+)
 
-single_instance_with_lock() {
+single_instance_with_lock() (
   local status=0
-  sil_acquire_launch_lock || return 1
+  trap 'sil_release_lock' EXIT
+  trap 'sil_close_all_and_wait || true; exit 130' HUP INT TERM
+  sil_acquire_launch_lock || exit 1
   "$@" || status=$?
-  sil_release_lock
-  return "$status"
-}
+  exit "$status"
+)
 
 single_instance_build_only() {
   "$@"
 }
 
-single_instance_guard_app_host() {
+single_instance_guard_app_host() (
   local status=0 zero_status=0
-  sil_acquire_launch_lock || return 1
+  trap 'sil_release_lock' EXIT
+  trap 'sil_close_all_and_wait || true; exit 130' HUP INT TERM
+  sil_acquire_launch_lock || exit 1
   sil_close_all_and_wait || status=1
   if (( status == 0 )); then
     "$@" || status=$?
@@ -121,6 +125,5 @@ single_instance_guard_app_host() {
     sil_close_all_and_wait || true
     status=1
   fi
-  sil_release_lock
-  return "$status"
-}
+  exit "$status"
+)

@@ -126,6 +126,11 @@ if rg -n --fixed-strings '/usr/bin/open' "$HELPER" >/dev/null ||
   echo "FAIL: helper may not invoke real process or launch commands" >&2
   exit 1
 fi
+if ! rg -q "trap 'sil_release_lock' EXIT" "$HELPER" ||
+   ! rg -q "sil_close_all_and_wait.*exit 130" "$HELPER"; then
+  echo "FAIL: lifecycle helper must release its lock and clean fake copies on interruption" >&2
+  exit 1
+fi
 
 run_launch() {
   single_instance_launch
