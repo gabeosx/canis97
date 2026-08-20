@@ -232,6 +232,58 @@ final class ListeningCompositionTests: XCTestCase {
         XCTAssertNil(coordinator.selectedChannelID)
     }
 
+    func testPauseDoesNotResumeAcrossAConnectivityTransition() async {
+        let resolver = ControlledPlaybackResolver()
+        let runtime = RecordingPlaybackRuntime(autoConfirm: true)
+        let coordinator = PlaybackCoordinator(resolver: resolver, runtime: runtime)
+        let channel = LiveChannelID("fixture-paused-network")
+
+        let tune = Task { await coordinator.tune(channel) }
+        await resolver.waitForResolution(of: channel)
+        await resolver.complete(channel, with: .available(FixtureMediaHandoff()))
+        _ = await tune.value
+        await coordinator.pause()
+
+        let callsBeforeSignals = await resolver.calls(for: channel)
+        let installsBeforeSignals = runtime.installCount
+        let eventsBeforeSignals = runtime.events()
+        coordinator.handleRecoverySignal(.networkBecameUnavailable)
+        coordinator.handleRecoverySignal(.networkBecameAvailable)
+        for _ in 0 ..< 5 { await Task.yield() }
+
+        let callsAfterSignals = await resolver.calls(for: channel)
+        XCTAssertEqual(callsAfterSignals, callsBeforeSignals)
+        XCTAssertEqual(runtime.installCount, installsBeforeSignals)
+        XCTAssertEqual(runtime.events(), eventsBeforeSignals)
+        XCTAssertEqual(coordinator.state, .paused)
+    }
+
+    func testPauseDoesNotResumeAcrossSleepAndWake() async {
+        let resolver = ControlledPlaybackResolver()
+        let runtime = RecordingPlaybackRuntime(autoConfirm: true)
+        let coordinator = PlaybackCoordinator(resolver: resolver, runtime: runtime)
+        let channel = LiveChannelID("fixture-paused-sleep")
+
+        let tune = Task { await coordinator.tune(channel) }
+        await resolver.waitForResolution(of: channel)
+        await resolver.complete(channel, with: .available(FixtureMediaHandoff()))
+        _ = await tune.value
+        await coordinator.pause()
+
+        let callsBeforeSignals = await resolver.calls(for: channel)
+        let installsBeforeSignals = runtime.installCount
+        let eventsBeforeSignals = runtime.events()
+        coordinator.handleRecoverySignal(.willSleep)
+        coordinator.handleRecoverySignal(.didWake)
+        for _ in 0 ..< 5 { await Task.yield() }
+
+        let callsAfterSignals = await resolver.calls(for: channel)
+        XCTAssertEqual(callsAfterSignals, callsBeforeSignals)
+        XCTAssertEqual(runtime.installCount, installsBeforeSignals)
+        XCTAssertEqual(runtime.events(), eventsBeforeSignals)
+        XCTAssertEqual(coordinator.state, .paused)
+    }
+
     func testChannelSwitchSupersedesAStaleResolutionAndFailureIsClosed() async {
         let resolver = ControlledPlaybackResolver()
         let runtime = RecordingPlaybackRuntime(autoConfirm: true)

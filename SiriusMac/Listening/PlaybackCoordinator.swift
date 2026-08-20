@@ -510,6 +510,7 @@ final class PlaybackCoordinator {
     private var networkAvailable = true
     private var sleeping = false
     private var recoveryPendingAfterReconnect = false
+    private var playbackMayRecover = false
 
     private(set) var state: LivePlaybackState = .idle
     private(set) var selectedChannelID: LiveChannelID?
@@ -559,6 +560,7 @@ final class PlaybackCoordinator {
             state = .unavailable(.selectionUnavailable)
             return
         }
+        playbackMayRecover = false
         // A pause is a user command boundary even when the currently audible
         // item predates the recovery task. It prevents a late recovered item
         // from installing or restarting playback after the user pauses.
@@ -611,10 +613,11 @@ final class PlaybackCoordinator {
         switch signal {
         case .networkBecameUnavailable:
             networkAvailable = false
-            recoveryPendingAfterReconnect = selectedChannelID != nil
+            recoveryPendingAfterReconnect = playbackMayRecover
             cancelRecovery()
         case .willSleep:
             sleeping = true
+            recoveryPendingAfterReconnect = playbackMayRecover
             cancelRecovery()
         case .networkBecameAvailable:
             networkAvailable = true
@@ -625,8 +628,6 @@ final class PlaybackCoordinator {
             sleeping = false
             if recoveryPendingAfterReconnect, beginRecoveryIfEligible(stallGrace: false) {
                 recoveryPendingAfterReconnect = false
-            } else {
-                _ = beginRecoveryIfEligible(stallGrace: false)
             }
         case .stalled:
             beginRecoveryIfEligible(stallGrace: true)
@@ -829,6 +830,7 @@ final class PlaybackCoordinator {
             incident: incident
         ) else { return }
         completeRecoveryIncident(for: channelID)
+        playbackMayRecover = true
         state = .playing(channelID)
     }
 
@@ -844,6 +846,9 @@ final class PlaybackCoordinator {
             observationID: observationID,
             incident: incident
         ) else { return }
+        playbackMayRecover = false
+        recoveryPendingAfterReconnect = false
+        cancelRecovery()
         state = .paused
     }
 
@@ -891,6 +896,7 @@ final class PlaybackCoordinator {
     @discardableResult
     private func beginRecoveryIfEligible(stallGrace: Bool) -> Bool {
         guard recoveryIncident == nil,
+              playbackMayRecover,
               recoveryPolicy.maximumReResolutions > 0,
               networkAvailable,
               !sleeping,
@@ -1012,6 +1018,7 @@ final class PlaybackCoordinator {
         recoveryTask = nil
         recoveryIncident = nil
         recoveryPendingAfterReconnect = false
+        playbackMayRecover = false
         state = .unavailable(failure)
     }
 
@@ -1040,6 +1047,7 @@ final class PlaybackCoordinator {
         resolutionTask = nil
         cancelRecovery()
         recoveryPendingAfterReconnect = false
+        playbackMayRecover = false
         observation?.cancel()
         observation = nil
         observationID = nil
