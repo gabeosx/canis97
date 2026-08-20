@@ -1,9 +1,11 @@
 ---
 phase: 02-authorized-live-listening
-reviewed: 2026-08-20T00:00:00Z
+reviewed: 2026-08-20T21:36:07Z
 depth: standard
-files_reviewed: 19
+files_reviewed: 35
 files_reviewed_list:
+  - Packages/SiriusXMClient/Sources/SiriusXMClient/Diagnostics/SafeDiagnosticEvent.swift
+  - Packages/SiriusXMClient/Sources/SiriusXMClient/InternalAdapters/AuthenticationFlowAdapter.swift
   - Packages/SiriusXMClient/Sources/SiriusXMClient/InternalAdapters/LiveListeningAdapter.swift
   - Packages/SiriusXMClient/Sources/SiriusXMClient/InternalAdapters/SiriusXMRequestContract.swift
   - Packages/SiriusXMClient/Sources/SiriusXMClient/Public/LiveListeningModels.swift
@@ -15,14 +17,28 @@ files_reviewed_list:
   - Packages/SiriusXMClient/Tests/SiriusXMClientTests/SessionCoordinatorTests.swift
   - Packages/SiriusXMClient/Tests/SiriusXMClientTests/SignOutTests.swift
   - SiriusMac.xcodeproj/project.pbxproj
+  - SiriusMac/Authentication/AuthenticationPresentationModel.swift
   - SiriusMac/Authentication/AuthenticationView.swift
+  - SiriusMac/Authentication/ClosedAuthenticationOracle.swift
+  - SiriusMac/Authentication/RestorableAuthenticationCredentialSource.swift
+  - SiriusMac/Authentication/WebAuthenticationBridge.swift
+  - SiriusMac/Authentication/WebCredentialSelectionPolicy.swift
   - SiriusMac/Catalog/ListeningPresentationModel.swift
   - SiriusMac/Catalog/ListeningView.swift
   - SiriusMac/Listening/PlaybackCoordinator.swift
   - SiriusMac/Metadata/MetadataPresentationModel.swift
+  - SiriusMacTests/AuthenticationPresentationModelTests.swift
   - SiriusMacTests/ListeningCompositionTests.swift
   - SiriusMacTests/MetadataPresentationTests.swift
   - SiriusMacTests/PlaybackInstallationOrderTests.swift
+  - SiriusMacTests/SelectedAuthenticationCompositionTests.swift
+  - SiriusMacTests/WebAuthenticationBridgeTests.swift
+  - script/build_and_run.sh
+  - script/lib/resolve_process_binary.sh
+  - script/lib/single_instance_launcher.sh
+  - script/test_offline_auth_matrix.sh
+  - script/tests/OfflineAuthenticationMatrixTests.swift
+  - script/tests/build_and_run_tests.sh
 findings:
   critical: 2
   warning: 1
@@ -33,69 +49,92 @@ status: issues_found
 
 # Phase 02: Code Review Report
 
-**Reviewed:** 2026-08-20T00:00:00Z
+**Reviewed:** 2026-08-20T21:36:07Z
 **Depth:** standard
-**Files Reviewed:** 19
+**Files Reviewed:** 35
 **Status:** issues_found
 
 ## Summary
 
-Static review of the Phase 02 library, macOS playback integration, and focused tests found two lifecycle failures that can respectively erase a newly authenticated local session and leave playback permanently idle. The review did not launch SiriusMac, run Xcode, contact SiriusXM, or retry UAT.
+The Phase 02 source set contains two release-blocking lifecycle defects: a failed or build-only invocation can remove another launcher's lock, and recovery can restart audio after the user deliberately paused it. A catalog race can also retain and later surface a prior session's lineup after an account switch.
 
 ## Critical Issues
 
-### CR-01: Previous sign-out cleanup can erase a newly authenticated session
+### CR-01: Cleanup removes a lock owned by another launcher
 
-**File:** `/Users/gabe/sirius-mac/Packages/SiriusXMClient/Sources/SiriusXMClient/Session/SessionCoordinator.swift:223`
+**File:** `/Users/gabe/sirius-mac/script/build_and_run.sh:30-35,42-46,144-151`
 
-**Issue:** `signOut()` clears actor state and then starts Keychain/residue cleanup in a detached task (lines 233-257). `attemptSession()` does not wait for that task. A user can therefore start a new sign-in while the previous cleanup is blocked; the new attempt saves its credential at line 135, and the older detached cleanup can subsequently call `credentialStore.erase()` and remove that new credential (and may clear the new WebView residue). This leaves an apparently active in-memory session without its persisted credential and makes the next launch unexpectedly signed out.
+**Issue:** The EXIT trap always calls `rmdir "$LAUNCH_LOCK_PATH"`, even when this invocation never acquired the lock. A second `run` invocation that fails `mkdir` at line 43 removes the first invocation's lock while that first build/launch is still in progress. `--build-only` also installs the same trap without acquiring a lock, so it can remove a concurrent launch's lock. A third invocation can then enter the launch path concurrently, defeating the single-instance protection and allowing the duplicate SiriusMac processes this phase is meant to prevent.
 
-**Fix:** Serialize authentication attempts behind outstanding cleanup, or make cleanup generation-aware so it cannot remove material created by a newer session. For example, await the existing cleanup task before accepting a new attempt:
+**Fix:** Track lock ownership and release only a lock acquired by this process. Keep build-only outside the lock cleanup path.
 
-```swift
-func attemptSession() async -> SessionAttemptOutcome {
-    if let cleanupTask {
-        _ = await cleanupTask.value
-    }
-    // acquire the attempt lease and continue with authentication
+```bash
+LAUNCH_LOCK_HELD=0
+
+cleanup_launcher() {
+  cleanup_telemetry
+  if (( LAUNCH_LOCK_HELD )); then
+    rmdir "$LAUNCH_LOCK_PATH" 2>/dev/null || true
+    LAUNCH_LOCK_HELD=0
+  fi
+}
+
+acquire_launch_lock() {
+  if mkdir "$LAUNCH_LOCK_PATH" 2>/dev/null; then
+    LAUNCH_LOCK_HELD=1
+    return 0
+  fi
+  report_process_stage lock-acquisition-failed
+  return 1
 }
 ```
 
-Add a regression test with a blocking `CredentialStore.erase()`: call `signOut()`, complete a fresh successful `attemptSession()` before releasing erase, then assert the new credential remains stored after the original cleanup finishes.
+Add a regression case that holds the first invocation's lock, runs a second failing invocation (and `--build-only`), and asserts the first lock directory still exists.
 
-### CR-02: A player item that is already ready never receives a play request
+### CR-02: Reconnect and wake can autoplay a deliberately paused stream
 
-**File:** `/Users/gabe/sirius-mac/SiriusMac/Listening/PlaybackCoordinator.swift:292`
+**File:** `/Users/gabe/sirius-mac/SiriusMac/Listening/PlaybackCoordinator.swift:612-630,891-908`
 
-**Issue:** `AVFoundationItemObservation` observes `AVPlayerItem.status` using only `.new`. If the item has already transitioned to `.readyToPlay` before the observer is installed, no status change occurs and `onReady()` is never called. The coordinator installs that item but never calls `requestPlay()`, leaving it indefinitely in `.idle`. This is a normal AVFoundation timing race for cached or rapidly prepared assets; the focused fake runtime only emits readiness after installation, so it cannot expose it.
+**Issue:** `networkBecameUnavailable` sets `recoveryPendingAfterReconnect` whenever a channel remains selected, including while `state == .paused`. On reconnect, `networkBecameAvailable` re-resolves and plays that channel. Independently, `didWake` starts recovery for every selected channel even when no recovery was pending. Because pausing retains `selectedChannelID`, a paused stream restarts and begins audio after a network transition or Mac wake without a Resume command.
 
-**Fix:** Request the initial KVO value and explicitly stage an early-ready signal until installation has completed. Merely adding `.initial` is insufficient here: its callback can run during `runtime.observe`, before the coordinator records the observation identity and installs the item. Record the observation identity before subscribing, make `onReady` set a `readyPendingInstall` flag when the item is not yet installed, then consume that flag immediately after `runtime.install(item)`:
+**Fix:** Track whether playback was active/recoverable before the interruption, and gate automatic recovery on that state instead of selection alone. Do not schedule recovery from `.paused`, `.idle`, or `.stopped`.
 
 ```swift
-itemStatusObservation = item.observe(\\.status, options: [.initial, .new]) { [weak self] item, _ in
-    Task { @MainActor in self?.handleItemStatus(item.status) }
-}
-// After runtime.install(item): if readyPendingInstall { requestPlayForReadyItem(...) }
+private var shouldResumeAfterInterruption = false
+
+case .networkBecameUnavailable, .willSleep:
+    shouldResumeAfterInterruption = isActivelyPlayingOrRecovering
+    cancelRecovery()
+
+case .networkBecameAvailable, .didWake:
+    guard shouldResumeAfterInterruption else { return }
+    shouldResumeAfterInterruption = false
+    _ = beginRecoveryIfEligible(stallGrace: false)
 ```
 
-Add a runtime test that invokes the ready callback during observation setup (before installation) and asserts the coordinator requests play exactly once after, never before, the item is installed.
+Add deterministic tests that pause a confirmed item, then emit unavailable/available and will-sleep/did-wake signals; assert no additional resolver call, install, or play request occurs.
 
 ## Warnings
 
-### WR-01: The Xcode test group points to a nonexistent file-reference object
+### WR-01: An old catalog refresh can become the new account's stale snapshot
 
-**File:** `/Users/gabe/sirius-mac/SiriusMac.xcodeproj/project.pbxproj:69`
+**File:** `/Users/gabe/sirius-mac/Packages/SiriusXMClient/Sources/SiriusXMClient/Public/SiriusXMClient.swift:139-170`
 
-**Issue:** The `SiriusMacTests` group references `020700020000000000001` for `MetadataPresentationTests.swift`, but the declared `PBXFileReference` and the test build file both use `020700020000000000000001` (line 53). The group has a dangling object ID, so the test appears as a broken/missing entry in Xcode even though the build phase happens to use the correct ID.
+**Issue:** `catalog()` captures `expectedGeneration` but never compares it after awaiting `catalogRefresher.refresh()`. If Account A's refresh remains in flight, the user signs out and signs in as Account B, and Account A's request then succeeds, the post-await entitlement check passes for Account B and line 158 stores Account A's snapshot as `lastValidCatalogSnapshot`. A later failed refresh can show that prior-account lineup through the stale branch at lines 163-171. This is a cross-session authorization/presentation race; the existing sign-out test does not cover re-authentication before the old request completes.
 
-**Fix:** Replace the group child ID with the declared 24-character file-reference ID:
+**Fix:** Reject the completion unless the catalog generation is still current, before writing either fresh or stale state.
 
-```text
-020700020000000000000001 /* MetadataPresentationTests.swift */,
+```swift
+let refreshed = await catalogRefresher.refresh()
+guard catalogRefreshGeneration == expectedGeneration,
+      await sessionCoordinator.entitlementAvailability == .entitled
+else { return .failed(.cancelled) }
 ```
+
+Add a test that blocks Account A's catalog transport, signs out, completes Account B authentication, then releases Account A's response and verifies no old snapshot is cached or surfaced.
 
 ---
 
-_Reviewed: 2026-08-20T00:00:00Z_
+_Reviewed: 2026-08-20T21:36:07Z_
 _Reviewer: the agent (gsd-code-reviewer)_
 _Depth: standard_
