@@ -6,7 +6,7 @@ current_phase: 02
 current_phase_name: authorized-live-listening
 status: executing
 stopped_at: Completed 02-16-PLAN.md
-last_updated: "2026-08-20T20:09:02.060Z"
+last_updated: "2026-08-20T20:17:40.580Z"
 last_activity: 2026-08-20
 last_activity_desc: Closed Plan 02-11 with sanitized blocked-at-authentication UAT evidence and no retry
 progress:
@@ -193,6 +193,7 @@ None yet.
 - Phase 1: The SiriusXM WebView/token/native-request contract remains volatile; drift must fail closed behind replaceable adapters, never trigger a new authentication-method experiment during execution.
 - Phase 5: Verify signing, notarization, stapling, immutable release, Gatekeeper, and Homebrew Cask behavior against the current release toolchain before publishing.
 - Phase 02 remains volatile: unknown hosts, redirects, protected controls, malformed contracts, authorization loss, and DRM ambiguity must continue to fail closed behind repairable adapters.
+- Plan 02-18: final exact-process verification found two SiriusMac processes after the bounded restore/listening observation; both were closed and no relaunch is authorized.
 
 ### Quick Tasks Completed
 
