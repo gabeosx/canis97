@@ -17,13 +17,26 @@ enum AuthenticationBridgeDiagnostic: String, CaseIterable, Equatable {
     case credentialAlreadyConsumed = "credential-already-consumed"
     case credentialTransferred = "credential-transferred"
     case websiteSessionResetFailed = "web-session-reset-failed"
+    case webNavigationStarted = "web-navigation-started"
+    case webNavigationRequested = "web-navigation-requested"
+    case webNavigationCommitted = "web-navigation-committed"
+    case webNavigationFinished = "web-navigation-finished"
+    case webNavigationProvisionalFailed = "web-navigation-provisional-failed"
+    case webNavigationFailed = "web-navigation-failed"
+    case webContentProcessTerminated = "web-content-process-terminated"
 }
 
 @MainActor
 struct AuthenticationBridgeTelemetry {
     private let recorder: (AuthenticationBridgeDiagnostic) -> Void
-    init(record: @escaping (AuthenticationBridgeDiagnostic) -> Void = { _ in }) {
+    private let failureRecorder: (AuthenticationBridgeDiagnostic, String, Int) -> Void
+
+    init(
+        record: @escaping (AuthenticationBridgeDiagnostic) -> Void = { _ in },
+        recordFailure: @escaping (AuthenticationBridgeDiagnostic, String, Int) -> Void = { _, _, _ in }
+    ) {
         recorder = record
+        failureRecorder = recordFailure
     }
 
     static let disabled = AuthenticationBridgeTelemetry()
@@ -34,11 +47,18 @@ struct AuthenticationBridgeTelemetry {
         )
         return AuthenticationBridgeTelemetry(record: { event in
                 logger.info("Sirius Mac auth bridge event \(event.rawValue, privacy: .public)")
+        }, recordFailure: { event, domain, code in
+            logger.error("Sirius Mac auth bridge event \(event.rawValue, privacy: .public) error-domain=\(domain, privacy: .public) error-code=\(code, privacy: .public)")
         })
     }()
 
     func record(_ event: AuthenticationBridgeDiagnostic) {
         recorder(event)
+    }
+
+    func recordFailure(_ event: AuthenticationBridgeDiagnostic, error: Error) {
+        let error = error as NSError
+        failureRecorder(event, error.domain, error.code)
     }
 
 }
@@ -92,6 +112,7 @@ final class WebAuthenticationBridge {
         credentialConsumer = { credential in
             await handoff.store(credential)
         }
+        websiteSession.installNavigationObserver(WebAuthenticationNavigationObserver(telemetry: telemetry))
     }
 
     init(
@@ -120,6 +141,7 @@ final class WebAuthenticationBridge {
             await handoff.store(credential)
             await credentialConsumer(credential)
         }
+        websiteSession.installNavigationObserver(WebAuthenticationNavigationObserver(telemetry: telemetry))
     }
 
     static func makeConfiguration() -> WKWebViewConfiguration {
@@ -156,6 +178,7 @@ final class WebAuthenticationBridge {
     func loadPendingSignInRequestIfNeeded() {
         guard let request = pendingSignInRequest else { return }
         pendingSignInRequest = nil
+        telemetry.record(.webNavigationRequested)
         signInRequestLoader(request)
     }
 
@@ -277,10 +300,17 @@ private final class WebAuthenticationWebsiteSession {
     private(set) var configuration: WKWebViewConfiguration = WebAuthenticationBridge.makeConfiguration()
     private(set) var generation = 0
     private var webView: WKWebView?
+    private var navigationObserver: WebAuthenticationNavigationObserver?
+
+    func installNavigationObserver(_ observer: WebAuthenticationNavigationObserver) {
+        navigationObserver = observer
+        webView?.navigationDelegate = observer
+    }
 
     func makeWebView() -> WKWebView {
         if let webView { return webView }
         let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.navigationDelegate = navigationObserver
         self.webView = webView
         return webView
     }
@@ -301,6 +331,39 @@ private final class WebAuthenticationWebsiteSession {
         webView = nil
         configuration = WebAuthenticationBridge.makeConfiguration()
         generation &+= 1
+    }
+}
+
+@MainActor
+private final class WebAuthenticationNavigationObserver: NSObject, WKNavigationDelegate {
+    private let telemetry: AuthenticationBridgeTelemetry
+
+    init(telemetry: AuthenticationBridgeTelemetry) {
+        self.telemetry = telemetry
+    }
+
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        telemetry.record(.webNavigationStarted)
+    }
+
+    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        telemetry.record(.webNavigationCommitted)
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        telemetry.record(.webNavigationFinished)
+    }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        telemetry.recordFailure(.webNavigationProvisionalFailed, error: error)
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        telemetry.recordFailure(.webNavigationFailed, error: error)
+    }
+
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        telemetry.record(.webContentProcessTerminated)
     }
 }
 

@@ -105,6 +105,23 @@ final class AuthenticationPresentationModelTests: XCTestCase {
         XCTAssertEqual(counts.loggedInSession, 0)
     }
 
+    func testRestoredReadyStateCanEnterThePlayerAndSignOut() async throws {
+        let flow = AuthenticationFlowSpy(
+            automaticRestoreResult: .entitled,
+            signOutResult: .signedOut
+        )
+        let model = AuthenticationPresentationModel(flow: flow)
+
+        await model.restoreStoredCredentialOnLaunch()?.value
+
+        XCTAssertEqual(model.state, .restoreCompleted)
+        XCTAssertTrue(model.isReady)
+        try await XCTUnwrap(model.signOut()).value
+        XCTAssertEqual(model.state, .signedOut)
+        let counts = await flow.callCounts()
+        XCTAssertEqual(counts.signOut, 1)
+    }
+
     func testTerminalLaunchRestorationDoesNotRetryOrStartTheWebViewPath() async {
         let flow = AuthenticationFlowSpy(automaticRestoreResult: .unsupported)
         let model = AuthenticationPresentationModel(flow: flow)
@@ -130,6 +147,7 @@ final class AuthenticationPresentationModelTests: XCTestCase {
         await Task.yield()
 
         XCTAssertTrue(model.isAttemptInFlight)
+        XCTAssertEqual(model.state, .signedOut, "the WebView state must not be published before its request is queued")
         XCTAssertNil(secondAttempt)
         let pendingCounts = await flow.callCounts()
         XCTAssertEqual(pendingCounts.begin, 1)

@@ -13,6 +13,10 @@ final class AuthenticationPresentationModel {
     private(set) var isAttemptInFlight = false
     private(set) var backgroundRetryCount = 0
 
+    var isReady: Bool {
+        presentation(for: state).isReady
+    }
+
     init(flow: any AuthenticationPresentationFlow = UncomposedAuthenticationPresentationFlow()) {
         self.flow = flow
     }
@@ -20,7 +24,10 @@ final class AuthenticationPresentationModel {
     @discardableResult
     func signIn() -> Task<Void, Never>? {
         guard canStartWebViewSignIn else { return nil }
-        let identifier = startAttempt(at: .waitingForWebView)
+        // Keep the current terminal/signed-out subtree mounted until the bridge
+        // has retired its old session and queued the new request. Publishing
+        // waitingForWebView here would create the representable too early.
+        let identifier = startAttempt()
         let flow = flow
         return Task { [weak self, flow] in
             let result = await flow.prepareForExplicitSignIn(
@@ -77,13 +84,12 @@ final class AuthenticationPresentationModel {
     @discardableResult
     func retry() -> Task<Void, Never>? {
         guard isRetryableTerminalState else { return nil }
-        state = .waitingForWebView
         return signIn()
     }
 
     @discardableResult
     func signOut() -> Task<Void, Never>? {
-        guard state == .entitled, !isAttemptInFlight else { return nil }
+        guard isReady, !isAttemptInFlight else { return nil }
 
         let identifier = startAttempt(at: .finishingCleanup)
         let flow = flow
@@ -107,12 +113,7 @@ final class AuthenticationPresentationModel {
 
     private var canStartWebViewSignIn: Bool {
         guard !isAttemptInFlight else { return false }
-        return switch state {
-        case .waitingForWebView, .signedOut, .localCredentialMissing:
-            true
-        default:
-            false
-        }
+        return state == .waitingForWebView || isRetryableTerminalState
     }
 
     private var isRetryableTerminalState: Bool {
@@ -141,11 +142,13 @@ final class AuthenticationPresentationModel {
         }
     }
 
-    private func startAttempt(at state: AuthenticationPresentationState) -> UUID {
+    private func startAttempt(at state: AuthenticationPresentationState? = nil) -> UUID {
         let identifier = UUID()
         attemptID = identifier
         isAttemptInFlight = true
-        self.state = state
+        if let state {
+            self.state = state
+        }
         return identifier
     }
 

@@ -18,7 +18,7 @@ struct AuthenticationView: View {
 
     var body: some View {
         SwiftUI.Group {
-            if model.state == .entitled {
+            if model.isReady {
                 VStack(alignment: .leading, spacing: 12) {
                     ListeningView(model: listeningModel)
                     HStack {
