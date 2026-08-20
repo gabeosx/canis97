@@ -172,7 +172,7 @@ Plans:
   4. Recoverable stream expiry, network interruption, sleep/wake, and stalls make bounded, cancellation-aware recovery attempts without infinite retry or synthesized listener activity.
   5. While listening, a subscriber sees the active channel, best available artwork, and current program or song text; unavailable or stale metadata is explicit and does not interrupt healthy audio.
 
-**Plans**: 11/17 plans executed
+**Plans**: 11/18 plans executed
 
 - [x] 02-08-PLAN.md
 - [x] 02-09-PLAN.md
@@ -220,13 +220,17 @@ Plans:
 
 - [ ] 02-14-PLAN.md — Serialize explicit cleanup before later authentication so a new credential survives.
 
-**Wave 14 — Playback blocker closure** *(depends on Plan 02-14)*
+**Wave 14 — Authentication-only live checkpoint** *(depends on Plans 02-14 and 02-15; halts Phase 02 unless durable authentication succeeds)*
 
-- [ ] 02-16-PLAN.md — Handle already-ready AVFoundation items and repair the dangling Xcode test reference.
+- [ ] 02-17-PLAN.md — Run one owner-authorized fresh sign-in/handoff and prove native authentication, entitlement, and credential persistence without listening work.
 
-**Wave 15 — One bounded native recheck** *(depends on Plans 02-14, 02-15, and 02-16)*
+**Wave 15 — Playback blocker closure** *(depends on successful Plan 02-17)*
 
-- [ ] 02-17-PLAN.md — Run one owner-authorized fresh diagnostic UAT after every offline gate is green.
+- [ ] 02-16-PLAN.md — Handle already-ready AVFoundation items and repair the dangling Xcode test reference offline with zero app-host leakage.
+
+**Wave 16 — Automatic restore and listening checkpoint** *(depends on successful Plans 02-17 and 02-16; no second login)*
+
+- [ ] 02-18-PLAN.md — Run one separately authorized exact-build relaunch, prove automatic restoration, then exercise one bounded listening and current-metadata path.
 
 ### Phase 3: Native Mac Listening Experience
 
