@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 9
+open_count: 10
 waived_count: 0
 fixed_count: 1
-total_count: 10
-last_updated: 2026-08-18T18:11:48.668Z
+total_count: 11
+last_updated: 2026-08-20T15:04:40.471Z
 ---
 
 # Broken Windows Ledger
@@ -25,6 +25,7 @@ last_updated: 2026-08-18T18:11:48.668Z
 | 8 | 01 | stub | SiriusMac/Authentication/AuthenticationPresentationModel.swift | 234 | UncomposedAuthenticationPresentationFlow remains waiting-only until Plan 01-06 wires the nonpersistent WebKit bridge. | open |  | 2026-08-18T04:19:55.786Z |  |
 | 9 | 01 | unrun-verify | SiriusMacTests/SelectedAuthenticationCompositionTests.swift |  | Focused XCTest composition verification is blocked by existing SiriusMacTests test-host linker configuration | open |  | 2026-08-18T11:28:29.131Z |  |
 | 10 | 01 | deviation | SiriusMac.xcodeproj/project.pbxproj |  | Corrected a mismatched group file-reference identifier for RestorableAuthenticationCredentialSource.swift. | open |  | 2026-08-18T18:11:48.668Z |  |
+| 11 | 02 | deviation | SiriusMac/Authentication/AuthenticationPresentationModel.swift | 420 | Build-only verification exposed a non-exhaustive credential persistence outcome; mapped it to the closed unsupported presentation. | open |  | 2026-08-20T15:04:40.471Z |  |
 
 ````json
 [
@@ -146,6 +147,18 @@ last_updated: 2026-08-18T18:11:48.668Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-18T18:11:48.668Z",
+    "resolved_at": null
+  },
+  {
+    "id": 11,
+    "kind": "deviation",
+    "phase": "02",
+    "file": "SiriusMac/Authentication/AuthenticationPresentationModel.swift",
+    "line": 420,
+    "description": "Build-only verification exposed a non-exhaustive credential persistence outcome; mapped it to the closed unsupported presentation.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-20T15:04:40.471Z",
     "resolved_at": null
   }
 ]
