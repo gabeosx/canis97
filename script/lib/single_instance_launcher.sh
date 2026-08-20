@@ -134,6 +134,25 @@ sil_exact_binary_matches_only_pid() {
   fi
 }
 
+sil_wait_for_exact_binary_match() {
+  local attempts="${SIL_RESOLVE_ATTEMPTS:-10}"
+  while (( attempts >= 0 )); do
+    if sil_exact_binary_matches_only_pid; then
+      return 0
+    fi
+    # A missing mapping can be transient immediately after the selected GUI
+    # PID registers. A mismatched executable is an identity failure and must
+    # fail closed without retrying or reopening the bundle.
+    if [[ "${SIL_LAST_INVARIANT_STAGE:-}" != "mapped-path-missing" ]]; then
+      return 1
+    fi
+    (( attempts == 0 )) && break
+    "$(sil_value SIL_SLEEP)" "${SIL_POLL_INTERVAL:-0.1}"
+    ((attempts -= 1))
+  done
+  return 1
+}
+
 single_instance_launch_locked() {
   # This protocol performs no build itself.  A caller that needs the lock to
   # span a build invokes its build function between acquire and this function.
@@ -155,7 +174,7 @@ single_instance_launch_locked() {
     sil_close_all_and_wait || true
     return 1
   fi
-  if ! sil_exact_binary_matches_only_pid; then
+  if ! sil_wait_for_exact_binary_match; then
     sil_report_invariant_stage "${SIL_LAST_INVARIANT_STAGE:-mapped-path-missing}" || true
     sil_close_all_and_wait || true
     return 1

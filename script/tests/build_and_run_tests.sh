@@ -50,9 +50,21 @@ cat > "$HOOKS/path" <<'HOOK'
 #!/usr/bin/env bash
 set -euo pipefail
 printf 'path:%s\n' "$1" >> "$SIL_TEST_STATE/events"
-if [[ "${SIL_TEST_PATH_MODE:-exact}" == "missing" ]]; then
-  exit 1
-fi
+case "${SIL_TEST_PATH_MODE:-exact}" in
+  missing)
+    exit 1
+    ;;
+  delayed-missing)
+    calls_file="$SIL_TEST_STATE/path-calls"
+    calls=0
+    [[ -f "$calls_file" ]] && calls=$(cat "$calls_file")
+    calls=$((calls + 1))
+    printf '%s' "$calls" > "$calls_file"
+    if (( calls <= ${SIL_TEST_RESOLVE_READY_AFTER:-1} )); then
+      exit 1
+    fi
+    ;;
+esac
 awk -F: -v pid="$1" '$1 == pid { print substr($0, length(pid) + 2); exit }' "$SIL_TEST_STATE/pids"
 HOOK
 
@@ -74,13 +86,13 @@ done
 
 case "${SIL_TEST_LSOF_MODE:-exact}" in
   exact)
-    printf 'p%s\nn%s\n' "$pid" "$SIL_TEST_EXACT_BINARY"
+    printf 'p%s\nftxt\nn%s\nftxt\nn/usr/lib/dyld\n' "$pid" "${SIL_TEST_MAPPED_BINARY:-$SIL_TEST_EXACT_BINARY}"
     ;;
   wrong-path)
-    printf 'p%s\nn%s\n' "$pid" "$SIL_TEST_WRONG_BINARY"
+    printf 'p%s\nftxt\nn%s\nftxt\nn/usr/lib/dyld\n' "$pid" "$SIL_TEST_WRONG_BINARY"
     ;;
   multiple-mappings)
-    printf 'p%s\nn%s.debug.dylib\nn%s\n' "$pid" "$SIL_TEST_EXACT_BINARY" "$SIL_TEST_EXACT_BINARY"
+    printf 'p%s\nftxt\nn%s.debug.dylib\nftxt\nn%s\nftxt\nn/usr/lib/dyld\n' "$pid" "${SIL_TEST_MAPPED_BINARY:-$SIL_TEST_EXACT_BINARY}" "${SIL_TEST_MAPPED_BINARY:-$SIL_TEST_EXACT_BINARY}"
     ;;
   missing)
     printf 'p%s\n' "$pid"
@@ -184,11 +196,13 @@ reset_state() {
   : > "$STATE/reports"
   printf '0' > "$STATE/terminate-calls"
   printf '0' > "$STATE/sleep-calls"
-  rm -f "$STATE/release-open" "$STATE/opened"
+  rm -f "$STATE/release-open" "$STATE/opened" "$STATE/path-calls"
   unset SIL_TEST_STICKY
   unset SIL_TEST_HOLD_OPEN
   unset SIL_TEST_LSOF_MODE
+  unset SIL_TEST_MAPPED_BINARY
   unset SIL_TEST_PATH_MODE
+  unset SIL_TEST_RESOLVE_READY_AFTER
   unset SIL_TEST_DELAYED_READY_AFTER
   unset SIL_TEST_BUILD_MODE
   unset SIL_TEST_KILL_MODE
@@ -221,6 +235,7 @@ configure_fake_hooks() {
   export SIL_APP_BINARY="$SIL_TEST_EXACT_BINARY"
   export SIL_LOCK_PATH="$TEST_ROOT/launcher.lock"
   export SIL_DRAIN_ATTEMPTS=2
+  export SIL_RESOLVE_ATTEMPTS=2
   export SIL_LOCK_ATTEMPTS=2
   export SIL_PGREP="$HOOKS/pgrep"
   export SIL_TERMINATE_ALL="$HOOKS/terminate"
@@ -265,12 +280,42 @@ assert_eq "401:$SIL_TEST_EXACT_BINARY" "$(cat "$STATE/pids")" "delayed exact pro
 assert_file_empty "$STATE/reports" "delayed exact launch emits no failure stage"
 
 reset_state
+export SIL_TEST_PATH_MODE=delayed-missing
+export SIL_TEST_RESOLVE_READY_AFTER=1
+if ! run_launch; then
+  echo "FAIL: delayed mapped executable must be retried without reopening" >&2
+  exit 1
+fi
+assert_eq 1 "$(wc -l < "$STATE/opens" | tr -d ' ')" "delayed mapped executable launch opens once"
+assert_eq "401:$SIL_TEST_EXACT_BINARY" "$(cat "$STATE/pids")" "delayed mapped executable is accepted"
+assert_file_empty "$STATE/reports" "delayed mapped executable launch emits no failure stage"
+
+reset_state
+mkdir -p "$(dirname "$SIL_TEST_EXACT_BINARY")"
+: > "$SIL_TEST_EXACT_BINARY"
+chmod +x "$SIL_TEST_EXACT_BINARY"
+export SIL_TEST_MAPPED_BINARY="$(/bin/realpath "$SIL_TEST_EXACT_BINARY")"
 export SIL_PID_PATH="$RESOLVER"
 export SIL_LSOF="$HOOKS/lsof"
 export SIL_TEST_LSOF_MODE=multiple-mappings
 run_launch
 assert_eq "401:$SIL_TEST_EXACT_BINARY" "$(cat "$STATE/pids")" "multiple text mappings retain the exact executable"
 assert_file_empty "$STATE/reports" "multiple text mappings emit no failure stage"
+export SIL_PID_PATH="$HOOKS/path"
+unset SIL_LSOF
+
+reset_state
+mkdir -p "$(dirname "$SIL_TEST_EXACT_BINARY")"
+: > "$SIL_TEST_EXACT_BINARY"
+chmod +x "$SIL_TEST_EXACT_BINARY"
+export SIL_PID_PATH="$RESOLVER"
+export SIL_LSOF="$HOOKS/lsof"
+export SIL_TEST_LSOF_MODE=wrong-path
+if run_launch; then
+  echo "FAIL: wrong mapped executable must fail without reopening" >&2
+  exit 1
+fi
+assert_eq 'mapped-path-mismatch' "$(cat "$STATE/reports")" "wrong mapped executable reports mismatch rather than missing"
 export SIL_PID_PATH="$HOOKS/path"
 unset SIL_LSOF
 
@@ -394,8 +439,20 @@ assert_eq "$SIL_TEST_WRONG_BINARY" "$actual" "resolver does not substitute argv 
 
 reset_state
 export SIL_TEST_LSOF_MODE=multiple-mappings
+mkdir -p "$(dirname "$SIL_TEST_EXACT_BINARY")"
+: > "$SIL_TEST_EXACT_BINARY"
+chmod +x "$SIL_TEST_EXACT_BINARY"
+export SIL_TEST_MAPPED_BINARY="$(/bin/realpath "$SIL_TEST_EXACT_BINARY")"
 actual="$(SIL_LSOF="$HOOKS/lsof" "$RESOLVER" 401 "$SIL_TEST_EXACT_BINARY")"
 assert_eq "$SIL_TEST_EXACT_BINARY" "$actual" "resolver selects the expected executable from multiple text mappings"
+
+reset_state
+export SIL_TEST_LSOF_MODE=wrong-path
+mkdir -p "$(dirname "$SIL_TEST_EXACT_BINARY")"
+: > "$SIL_TEST_EXACT_BINARY"
+chmod +x "$SIL_TEST_EXACT_BINARY"
+actual="$(SIL_LSOF="$HOOKS/lsof" "$RESOLVER" 401 "$SIL_TEST_EXACT_BINARY")"
+assert_eq "$SIL_TEST_WRONG_BINARY" "$actual" "resolver returns a present wrong mapping for caller mismatch handling"
 
 reset_state
 export SIL_TEST_LSOF_MODE=missing
@@ -403,6 +460,31 @@ if SIL_LSOF="$HOOKS/lsof" "$RESOLVER" 401 >/dev/null; then
   echo "FAIL: resolver must fail closed when no mapped executable is available" >&2
   exit 1
 fi
+
+# Darwin's /tmp is a compatibility symlink to /private/tmp. The production
+# build path deliberately uses /tmp, while lsof reports the mapped physical
+# executable. Exercise the actual lsof query and parser against a harmless
+# system executable reached through a temporary alias; this never starts or
+# inspects SiriusMac.
+reset_state
+(
+  synthetic_alias_root="$(mktemp -d "${TMPDIR:-/tmp}/sirius-resolver-alias.XXXXXX")"
+  synthetic_alias="$synthetic_alias_root/SyntheticRunner"
+  ln -s /bin/sleep "$synthetic_alias"
+  "$synthetic_alias" 20 &
+  synthetic_alias_pid=$!
+  cleanup_synthetic_alias() {
+    /bin/kill "$synthetic_alias_pid" 2>/dev/null || true
+    wait "$synthetic_alias_pid" 2>/dev/null || true
+    rm -rf "$synthetic_alias_root"
+  }
+  trap cleanup_synthetic_alias EXIT
+  if ! actual="$(SIL_LSOF=/usr/sbin/lsof "$RESOLVER" "$synthetic_alias_pid" "$synthetic_alias")"; then
+    echo "FAIL: resolver must accept the physical mapped executable for a logical expected path" >&2
+    exit 1
+  fi
+  assert_eq "$synthetic_alias" "$actual" "resolver accepts the physical mapped executable for a logical expected path"
+)
 
 # This child shell is deliberately independent from this test's conditional
 # context. With `set -e`, a launch stage that fails before a later side effect
