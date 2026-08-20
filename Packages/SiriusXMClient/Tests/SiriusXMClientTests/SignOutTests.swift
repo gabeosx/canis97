@@ -87,6 +87,48 @@ struct SignOutTests {
         #expect(await cleaner.callCount == 2)
     }
 
+    @Test("a new attempt waits for blocked cleanup before reading or replacing persisted material")
+    func waitsForBlockedCleanupBeforeStartingNewAttempt() async {
+        let events = OperationLog()
+        let source = CountingCredentialSource(events: events)
+        let authentication = CountingAuthenticationVerifier(events: events)
+        let entitlement = CountingEntitlementVerifier(events: events)
+        let store = BlockingGenerationCredentialStore(events: events)
+        let coordinator = SessionCoordinator(
+            credentialSource: source,
+            authenticationVerifier: authentication,
+            entitlementVerifier: entitlement,
+            credentialStore: store,
+            residueCleaner: TrackingResidueCleaner(),
+            clock: FixedSessionClock(),
+            diagnostics: NoopDiagnostics()
+        )
+
+        #expect(await coordinator.attemptSession() == .active)
+        #expect(await store.storedGeneration == 1)
+        await events.clear()
+
+        let signOut = Task { await coordinator.signOut() }
+        await store.waitUntilEraseStarted()
+
+        let replacement = Task.detached { await coordinator.attemptSession() }
+        for _ in 0 ..< 10 {
+            await Task.yield()
+        }
+
+        #expect(await source.requestCount == 1)
+        #expect(await authentication.callCount == 1)
+        #expect(await entitlement.callCount == 1)
+        #expect(await store.saveCount == 1)
+
+        await store.releaseErase()
+
+        #expect(await signOut.value == .signedOut)
+        #expect(await replacement.value == .active)
+        #expect(await store.storedGeneration == 2)
+        #expect(await events.values == ["erase-old", "read-2", "authenticate-2", "entitle-2", "save-2"])
+    }
+
     @Test("partial and complete cleanup failures remain explicit after memory is retired")
     func reportsAggregateCleanupFailures() async {
         let keychainFailure = makeActiveCoordinator(
@@ -187,6 +229,63 @@ private actor StaticCredentialSource: CredentialSource {
     }
 }
 
+private actor CountingCredentialSource: CredentialSource {
+    private let events: OperationLog
+    private(set) var requestCount = 0
+
+    init(events: OperationLog) {
+        self.events = events
+    }
+
+    func credential() async -> AuthenticationCredential? {
+        requestCount += 1
+        await events.append("read-\(requestCount)")
+        return AuthenticationCredential(volatileMaterial: Data("synthetic-\(requestCount)".utf8))
+    }
+}
+
+private actor CountingAuthenticationVerifier: NativeAuthenticationVerifying {
+    private let events: OperationLog
+    private(set) var callCount = 0
+
+    init(events: OperationLog) {
+        self.events = events
+    }
+
+    func verifyAuthentication(using _: AuthenticationCredential) async -> NativeTransportResponse {
+        callCount += 1
+        await events.append("authenticate-\(callCount)")
+        return nativeResponse(SanitizedNativeResponseFixtures.profileV4Authenticated)
+    }
+}
+
+private actor CountingEntitlementVerifier: NativeEntitlementVerifying {
+    private let events: OperationLog
+    private(set) var callCount = 0
+
+    init(events: OperationLog) {
+        self.events = events
+    }
+
+    func verifyEntitlement(using _: AuthenticationCredential) async -> NativeTransportResponse {
+        callCount += 1
+        await events.append("entitle-\(callCount)")
+        return nativeResponse(SanitizedNativeResponseFixtures.subscriptionV1Active)
+    }
+}
+
+private actor OperationLog {
+    private(set) var values: [String] = []
+
+    func append(_ value: String) {
+        values.append(value)
+    }
+
+    func clear() {
+        values = []
+    }
+}
+
 private actor StaticAuthenticationVerifier: NativeAuthenticationVerifying {
     func verifyAuthentication(using _: AuthenticationCredential) async -> NativeTransportResponse {
         nativeResponse(SanitizedNativeResponseFixtures.profileV4Authenticated)
@@ -263,6 +362,42 @@ private actor TrackingCredentialStore: CredentialStore {
     func erase() async throws {
         eraseCount += 1
         if shouldFail { throw CleanupFailureError.failed }
+    }
+}
+
+private actor BlockingGenerationCredentialStore: CredentialStore {
+    private let events: OperationLog
+    private var eraseWaiter: CheckedContinuation<Void, Never>?
+    private var eraseStarted = false
+    private(set) var saveCount = 0
+    private(set) var storedGeneration: Int?
+
+    init(events: OperationLog) {
+        self.events = events
+    }
+
+    func save(_: AuthenticationCredential) async throws {
+        saveCount += 1
+        storedGeneration = saveCount
+        await events.append("save-\(saveCount)")
+    }
+
+    func erase() async throws {
+        eraseStarted = true
+        await withCheckedContinuation { eraseWaiter = $0 }
+        storedGeneration = nil
+        await events.append("erase-old")
+    }
+
+    func waitUntilEraseStarted() async {
+        while !eraseStarted {
+            await Task.yield()
+        }
+    }
+
+    func releaseErase() {
+        eraseWaiter?.resume()
+        eraseWaiter = nil
     }
 }
 

@@ -57,6 +57,14 @@ actor SessionCoordinator {
     }
 
     func attemptSession() async -> SessionAttemptOutcome {
+        if let cleanupTask {
+            _ = await cleanupTask.value
+            guard !Task.isCancelled else {
+                await diagnostics.record(.authentication(.cancelled))
+                return .authentication(.cancelled)
+            }
+        }
+
         guard attemptLease == nil else {
             return .attemptInProgress
         }
