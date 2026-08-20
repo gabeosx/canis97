@@ -172,7 +172,7 @@ Plans:
   4. Recoverable stream expiry, network interruption, sleep/wake, and stalls make bounded, cancellation-aware recovery attempts without infinite retry or synthesized listener activity.
   5. While listening, a subscriber sees the active channel, best available artwork, and current program or song text; unavailable or stale metadata is explicit and does not interrupt healthy audio.
 
-**Plans**: 15/18 plans executed
+**Plans**: 16/18 plans executed
 
 - [x] 02-08-PLAN.md
 - [x] 02-09-PLAN.md
@@ -222,7 +222,7 @@ Plans:
 
 **Wave 14 — Authentication-only live checkpoint** *(depends on Plans 02-14 and 02-15; halts Phase 02 unless durable authentication succeeds)*
 
-- [ ] 02-17-PLAN.md — Run one owner-authorized fresh sign-in/handoff and prove native authentication, entitlement, and credential persistence without listening work.
+- [x] 02-17-PLAN.md — Run one owner-authorized fresh sign-in/handoff and prove native authentication, entitlement, and credential persistence without listening work.
 
 **Wave 15 — Playback blocker closure** *(depends on successful Plan 02-17)*
 
@@ -292,7 +292,7 @@ Active product execution proceeds 1 → 2 → 3 → 4 → 5. Phase 0 is retained
 |-------|----------------|--------|-----------|
 | 0. Authentication Feasibility Gate | 12/12 | Complete (historical) | 2026-08-17 |
 | 1. Safe Interoperability Foundation | 16/16 | Complete    | 2026-08-18 |
-| 2. Authorized Live Listening | 15/18 | In Progress|  |
+| 2. Authorized Live Listening | 16/18 | In Progress|  |
 | 3. Native Mac Listening Experience | 0/TBD | Not started | - |
 | 4. Safe Skins & Accessible Recovery | 0/TBD | Not started | - |
 | 5. Public Release & Compatibility Support | 0/TBD | Not started | - |
