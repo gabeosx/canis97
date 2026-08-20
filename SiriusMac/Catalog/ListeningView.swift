@@ -28,6 +28,8 @@ struct ListeningView: View {
                 Spacer()
                 freshnessLabel
                 Button("Refresh") { _ = model.refresh() }
+                    .accessibilityIdentifier("listening.refresh")
+                    .accessibilityLabel("Refresh Channels")
                     .disabled(isLoading)
             }
 
@@ -80,10 +82,18 @@ struct ListeningView: View {
     private var playbackControls: some View {
         HStack {
             Button("Tune") { _ = model.tuneSelectedChannel() }
+                .accessibilityIdentifier("listening.tune")
+                .accessibilityLabel("Tune selected channel")
                 .disabled(model.selectedChannelID == nil)
             Button("Pause") { _ = model.pausePlayback() }
+                .accessibilityIdentifier("listening.pause")
+                .accessibilityLabel("Pause playback")
             Button("Resume Live") { _ = model.resumePlaybackAtLiveEdge() }
+                .accessibilityIdentifier("listening.resume-live")
+                .accessibilityLabel("Resume at live edge")
             Button("Stop") { _ = model.stopPlayback() }
+                .accessibilityIdentifier("listening.stop")
+                .accessibilityLabel("Stop playback")
             Spacer()
             Text(playbackCopy(model.playbackState))
                 .foregroundStyle(.secondary)

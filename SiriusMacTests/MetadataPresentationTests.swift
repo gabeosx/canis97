@@ -4,6 +4,42 @@ import SiriusXMClient
 
 @MainActor
 final class MetadataPresentationTests: XCTestCase {
+    func testListeningControlsDeclareDistinctAccessibilityContractsOnTheirButtons() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: root.appending(path: "SiriusMac/Catalog/ListeningView.swift"),
+            encoding: .utf8
+        )
+        let controls = [
+            (title: "Refresh", identifier: "listening.refresh", label: "Refresh Channels"),
+            (title: "Tune", identifier: "listening.tune", label: "Tune selected channel"),
+            (title: "Pause", identifier: "listening.pause", label: "Pause playback"),
+            (title: "Resume Live", identifier: "listening.resume-live", label: "Resume at live edge"),
+            (title: "Stop", identifier: "listening.stop", label: "Stop playback"),
+        ]
+
+        XCTAssertEqual(Set(controls.map(\.identifier)).count, controls.count)
+
+        for control in controls {
+            let buttonPrefix = "Button(\"\(control.title)\")"
+            let start = try XCTUnwrap(source.range(of: buttonPrefix)?.lowerBound)
+            let remaining = String(source[start...])
+            let nextButton = remaining.dropFirst(buttonPrefix.count).range(of: "Button(")?.lowerBound
+            let buttonDefinition = nextButton.map { String(remaining[..<$0]) } ?? remaining
+
+            XCTAssertTrue(
+                buttonDefinition.contains(".accessibilityIdentifier(\"\(control.identifier)\")"),
+                "\(control.title) must expose its stable identifier on the Button"
+            )
+            XCTAssertTrue(
+                buttonDefinition.contains(".accessibilityLabel(\"\(control.label)\")"),
+                "\(control.title) must expose its human-readable label on the Button"
+            )
+        }
+    }
+
     func testViewSelectionBindingStartsExactlyOneSemanticMetadataRequest() async {
         let flow = ListeningMetadataFlowSpy()
         let model = ListeningPresentationModel(flow: flow)
