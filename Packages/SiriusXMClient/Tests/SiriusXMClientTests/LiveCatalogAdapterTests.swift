@@ -426,7 +426,32 @@ struct FixedCatalogRefreshTests {
             body: fixturePage(items: [item(id: "fixture-obsolete")])
         ))
 
-        #expect(await refresh.value == .failed(.notEntitled))
+        #expect(await refresh.value == .failed(.cancelled))
+    }
+
+    @Test("a prior session catalog completion cannot seed a later session's stale snapshot")
+    func reauthenticatedSessionRejectsPriorCatalogCompletion() async {
+        let refresher = BlockingThenFailingCatalogRefresher()
+        let coordinator = await makeActiveCatalogSession()
+        let client = SiriusXMClient(sessionCoordinator: coordinator, catalogRefresher: refresher)
+
+        let firstRefresh = Task { await client.catalog() }
+        await refresher.waitUntilRequested()
+
+        #expect(await client.signOut() == .signedOut)
+        #expect(await client.authenticate() == .authenticatedPendingEntitlement)
+        #expect(await client.entitlement() == .entitled)
+
+        await refresher.release(LiveCatalogSnapshotResult(
+            snapshot: LiveCatalogSnapshot(
+                channels: [LiveChannel(id: LiveChannelID("fixture-prior-session"))],
+                freshness: .fresh
+            ),
+            failure: nil
+        ))
+
+        #expect(await firstRefresh.value == .failed(.cancelled))
+        #expect(await client.catalog() == .failed(.unavailable))
     }
 
     @Test("catalog snapshots and safe results retain no request or response material")
@@ -531,6 +556,34 @@ private actor BlockingCatalogTransport: FixedCatalogTransporting {
 
     func release(_ response: NativeTransportResponse) {
         responseWaiter?.resume(returning: response)
+        responseWaiter = nil
+    }
+}
+
+private actor BlockingThenFailingCatalogRefresher: CatalogRefreshing {
+    private var refreshCount = 0
+    private var started = false
+    private var startWaiter: CheckedContinuation<Void, Never>?
+    private var responseWaiter: CheckedContinuation<LiveCatalogSnapshotResult, Never>?
+
+    func refresh() async -> LiveCatalogSnapshotResult {
+        refreshCount += 1
+        guard refreshCount == 1 else {
+            return LiveCatalogSnapshotResult(snapshot: nil, failure: .unavailable)
+        }
+        started = true
+        startWaiter?.resume()
+        startWaiter = nil
+        return await withCheckedContinuation { responseWaiter = $0 }
+    }
+
+    func waitUntilRequested() async {
+        guard !started else { return }
+        await withCheckedContinuation { startWaiter = $0 }
+    }
+
+    func release(_ result: LiveCatalogSnapshotResult) {
+        responseWaiter?.resume(returning: result)
         responseWaiter = nil
     }
 }

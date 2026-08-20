@@ -148,10 +148,13 @@ public actor SiriusXMClient {
 
         let refreshed = await catalogRefresher.refresh()
 
-        // An intervening sign-out or entitlement loss makes the attempted
-        // refresh non-authoritative, even if it returned a semantic snapshot.
-        guard await sessionCoordinator.entitlementAvailability == .entitled else {
-            return .failed(.notEntitled)
+        // An intervening sign-out, reauthentication, or entitlement loss makes
+        // the attempted refresh non-authoritative, even if it returned a
+        // semantic snapshot. Never cache a prior session's catalog.
+        guard catalogRefreshGeneration == expectedGeneration,
+              await sessionCoordinator.entitlementAvailability == .entitled
+        else {
+            return .failed(.cancelled)
         }
 
         if let snapshot = refreshed.snapshot, refreshed.failure == nil {
