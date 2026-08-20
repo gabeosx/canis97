@@ -5,6 +5,31 @@ import XCTest
 
 @MainActor
 final class PlaybackInstallationOrderTests: XCTestCase {
+    func testRuntimeFailureTelemetryKeepsOnlyBoundedDomainAndCode() {
+        XCTAssertEqual(
+            PlaybackRuntimeTelemetry.failureLabel(
+                NSError(domain: NSURLErrorDomain, code: NSURLErrorCannotConnectToHost)
+            ),
+            "item-failed-url-loading--1004-resource-unknown"
+        )
+        XCTAssertEqual(
+            PlaybackRuntimeTelemetry.failureLabel(
+                NSError(domain: "provider-secret.invalid", code: 7),
+                resourceURI: "https://secret.invalid/playback/key/v1/secret-material"
+            ),
+            "item-failed-other-7-resource-key"
+        )
+        XCTAssertEqual(PlaybackRuntimeTelemetry.failureLabel(nil), "item-failed-no-error")
+        XCTAssertEqual(
+            PlaybackRuntimeTelemetry.resourceKind("https://secret.invalid/live/opaque.m3u8?token=secret"),
+            "resource-manifest"
+        )
+        XCTAssertEqual(
+            PlaybackRuntimeTelemetry.resourceKind("https://secret.invalid/live/opaque.aac?token=secret"),
+            "resource-media"
+        )
+    }
+
     func testInitialTuneInstallsBeforeReadyRequestsPlayAndPublishesOnlyAfterConfirmation() async {
         let resolver = InstallOrderResolver()
         let runtime = InstallGatedPlaybackRuntime()

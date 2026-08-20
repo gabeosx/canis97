@@ -82,7 +82,7 @@ build_exact_bundle() {
 start_authentication_telemetry() {
   SIL_TELEMETRY_FAILURE_STAGE=""
   "$SIL_LOG" stream --info --style compact \
-    --predicate '(subsystem == "com.siriusmac.player" AND category == "authentication") OR (subsystem == "com.siriusmac.client" AND category == "diagnostics")' &
+    --predicate '(subsystem == "com.siriusmac.player" AND (category == "authentication" OR category == "playback")) OR (subsystem == "com.siriusmac.client" AND category == "diagnostics")' &
   TELEMETRY_PID=$!
   if ! "$SIL_KILL" -0 "$TELEMETRY_PID" 2>/dev/null; then
     SIL_TELEMETRY_FAILURE_STAGE="telemetry-start-failed"

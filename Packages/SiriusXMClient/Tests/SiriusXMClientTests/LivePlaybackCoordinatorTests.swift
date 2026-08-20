@@ -367,7 +367,7 @@ private actor RecordingProductionLiveTransport: FixedLiveTransporting {
     ) async -> NativeTransportResponse {
         operations.append(.tune)
         return response(
-            #"{"source":{"id":"\#(channelID.rawValue)","type":"channel-linear","streams":[{"urls":[{"url":"https://live-akc-prod-device.streaming.siriusxm.com/fixture","encryptionKeyId":"fixture-key"}]}]}}"#
+            #"{"id":"\#(channelID.rawValue)","type":"channel-linear","streams":[{"urls":[{"url":"https://live-akc-prod-device.streaming.siriusxm.com/fixture","encryptionKeyId":"fixture-key"}]}]}"#
         )
     }
 
@@ -376,7 +376,7 @@ private actor RecordingProductionLiveTransport: FixedLiveTransporting {
         using _: AuthenticationCredential
     ) async -> NativeTransportResponse {
         operations.append(.playbackKey)
-        return response(#"{"keyId":"fixture-key","key":"fixture-key-material"}"#)
+        return response(#"{"keyId":"fixture-key","key":"Zml4dHVyZS1rZXktbWF0ZXJpYWw="}"#)
     }
 
     private func response(_ body: String) -> NativeTransportResponse {

@@ -28,6 +28,9 @@ struct LiveCatalogAdapterTests {
         ])
         #expect(operations.allSatisfy { $0.host == "api.edge-gateway.siriusxm.com" })
         #expect(SiriusXMRequestContract.opaqueMediaDeliveryHost == "live-akc-prod-device.streaming.siriusxm.com")
+        #expect(SiriusXMRequestContract.isOpaqueMediaDeliveryHost("live-secondary.streaming.siriusxm.com"))
+        #expect(!SiriusXMRequestContract.isOpaqueMediaDeliveryHost("lookaround-cache-prod.streaming.siriusxm.com"))
+        #expect(!SiriusXMRequestContract.isOpaqueMediaDeliveryHost("live-secondary.streaming.siriusxm.com.attacker.invalid"))
         #expect(!SiriusXMRequestContract.all.contains { $0.operationID == "media-resource" })
     }
 
@@ -93,6 +96,43 @@ struct LiveCatalogAdapterTests {
             "startTimestamp": .opaqueValue,
             "endTimestamp": .opaqueValue,
         ])
+    }
+
+    @Test("production tune request serializes one source directly")
+    func productionTuneRequestUsesCurrentDirectSourceBody() throws {
+        let credential = AuthenticationCredential(
+            volatileMaterial: Data("fixture-credential".utf8)
+        )
+        let request = try #require(
+            FixedLiveRequestFactory.tune(
+                for: LiveChannelID("fixture-channel"),
+                using: credential
+            )
+        )
+        let body = try #require(request.httpBody)
+        let source = try #require(
+            JSONSerialization.jsonObject(with: body) as? [String: Any]
+        )
+
+        #expect(Set(source.keys) == [
+            "id",
+            "type",
+            "hlsVersion",
+            "manifestVariant",
+            "mtcVersion",
+            "trackResumeSupported",
+        ])
+        #expect(source["id"] as? String == "fixture-channel")
+        #expect(source["type"] as? String == "channel-linear")
+        #expect(source["hlsVersion"] as? String == "V3")
+        #expect(source["manifestVariant"] as? String == "WEB")
+        #expect(source["mtcVersion"] as? String == "V2")
+        #expect(source["trackResumeSupported"] as? Bool == false)
+        #expect(source["sources"] == nil)
+        #expect(request.value(forHTTPHeaderField: "x-sxm-clock")?.range(
+            of: #"^\[\d+,\d+\]$"#,
+            options: .regularExpression
+        ) != nil)
     }
 
     @Test("only explicitly linear classifications enter a stable ordered catalog")

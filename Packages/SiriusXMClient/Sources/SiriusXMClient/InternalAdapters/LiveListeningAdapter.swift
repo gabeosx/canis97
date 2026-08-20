@@ -1,5 +1,8 @@
 import AVFoundation
 import Foundation
+import ObjectiveC
+import OSLog
+import UniformTypeIdentifiers
 
 /// A one-request redirect observer. It deliberately stores only a boolean,
 /// never the redirect target or request, and cancels every redirect follow-up.
@@ -517,7 +520,7 @@ private final class CurrentSessionLiveOperationContext: FixedLiveOperationContex
 
     init(selection: FixedLiveResourceSelection) {
         resource = selection
-        handoff = FixedLiveAppleMediaHandoff(url: selection.url)
+        handoff = FixedLiveAppleMediaHandoff(url: selection.url, keyID: selection.keyID)
     }
 }
 
@@ -592,11 +595,14 @@ actor CurrentSessionFixedLiveOperations: FixedLiveStreamOperating {
 /// construction. No ordinary API can inspect its URL or key material.
 private final class FixedLiveAppleMediaHandoff: SiriusXMAppleMediaHandoff, @unchecked Sendable {
     private let url: URL
+    private let keyID: FixedLivePlaybackKeyID
     private let lock = NSLock()
     private var authorizedKey: Data?
+    nonisolated(unsafe) private static var loaderAssociationKey: UInt8 = 0
 
-    init(url: URL) {
+    init(url: URL, keyID: FixedLivePlaybackKeyID) {
         self.url = url
+        self.keyID = keyID
     }
 
     func attachAuthorizedKey(_ key: Data) {
@@ -607,13 +613,54 @@ private final class FixedLiveAppleMediaHandoff: SiriusXMAppleMediaHandoff, @unch
 
     @MainActor func makePlayerItem() -> AVPlayerItem? {
         lock.lock()
-        let canCreateItem = authorizedKey != nil
+        let key = authorizedKey
         lock.unlock()
-        guard canCreateItem else { return nil }
+        guard let key else { return nil }
 
-        // The contract does not authorize synthesizing resource-loader headers
-        // or a DRM/key mapping. AVFoundation receives only the fixed signed URL.
-        return AVPlayerItem(asset: AVURLAsset(url: url))
+        let asset = AVURLAsset(url: url)
+        let loader = FixedLivePlaybackKeyLoader(keyID: keyID, key: key)
+        asset.resourceLoader.setDelegate(loader, queue: loader.queue)
+        let item = AVPlayerItem(asset: asset)
+        objc_setAssociatedObject(
+            item,
+            &Self.loaderAssociationKey,
+            loader,
+            .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+        )
+        return item
+    }
+}
+
+private final class FixedLivePlaybackKeyLoader: NSObject, AVAssetResourceLoaderDelegate, @unchecked Sendable {
+    let queue = DispatchQueue(label: "com.siriusmac.playback.key-loader")
+    private let keyID: FixedLivePlaybackKeyID
+    private let key: Data
+    private let logger = Logger(subsystem: "com.siriusmac.client", category: "diagnostics")
+
+    init(keyID: FixedLivePlaybackKeyID, key: Data) {
+        self.keyID = keyID
+        self.key = key
+    }
+
+    func resourceLoader(
+        _: AVAssetResourceLoader,
+        shouldWaitForLoadingOfRequestedResource loadingRequest: AVAssetResourceLoadingRequest
+    ) -> Bool {
+        guard let url = loadingRequest.request.url,
+              url.path.hasPrefix("/playback/key/v1/"),
+              url.lastPathComponent.removingPercentEncoding == keyID.value,
+              let dataRequest = loadingRequest.dataRequest
+        else { return false }
+
+        if let information = loadingRequest.contentInformationRequest {
+            information.contentType = UTType.data.identifier
+            information.contentLength = Int64(key.count)
+            information.isByteRangeAccessSupported = false
+        }
+        dataRequest.respond(with: key)
+        loadingRequest.finishLoading()
+        logger.info("SiriusXM client playback key loader handled")
+        return true
     }
 }
 
@@ -624,6 +671,7 @@ private enum FixedLiveOperation {
 
 private enum FixedLiveResponseDecoder {
     private static let maximumBodyBytes = 1_048_576
+    private static let logger = Logger(subsystem: "com.siriusmac.client", category: "diagnostics")
 
     static func failure(
         for response: NativeTransportResponse,
@@ -655,22 +703,58 @@ private enum FixedLiveResponseDecoder {
         from body: Data,
         expectedChannelID: LiveChannelID
     ) -> FixedLiveResourceSelection? {
-        guard body.count <= maximumBodyBytes,
-              let root = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
-              let source = root["source"] as? [String: Any],
-              source["id"] as? String == expectedChannelID.rawValue,
-              source["type"] as? String == "channel-linear",
-              let streams = source["streams"] as? [[String: Any]]
-        else { return nil }
+        guard body.count <= maximumBodyBytes else {
+            recordTuneShape("payload-too-large")
+            return nil
+        }
+        guard let source = try? JSONSerialization.jsonObject(with: body) as? [String: Any] else {
+            recordTuneShape("payload-not-object")
+            return nil
+        }
+        guard source["id"] as? String == expectedChannelID.rawValue else {
+            recordTuneShape(source["source"] is [String: Any] ? "legacy-source-envelope" : "identity-mismatch")
+            return nil
+        }
+        guard source["type"] as? String == "channel-linear" else {
+            recordTuneShape("type-mismatch")
+            return nil
+        }
+        guard let streams = source["streams"] as? [[String: Any]], !streams.isEmpty else {
+            recordTuneShape("streams-missing")
+            return nil
+        }
+
+        var sawURLCollection = false
+        var sawHTTPSCandidate = false
+        var sawApprovedHost = false
+        var sawSiriusXMSecondaryHost = false
+        var sawAkamaiSecondaryHost = false
+        var sawKeylessCandidate = false
 
         for stream in streams {
             guard let urls = stream["urls"] as? [[String: Any]] else { continue }
+            sawURLCollection = true
             for candidate in urls {
                 guard let value = candidate["url"] as? String,
-                      let url = validMediaURL(value),
-                      let keyID = candidate["encryptionKeyId"] as? String,
-                      !keyID.isEmpty
+                      let url = URL(string: value),
+                      url.scheme?.lowercased() == "https",
+                      url.port == nil,
+                      url.user == nil,
+                      url.password == nil,
+                      !url.path.isEmpty
                 else { continue }
+                sawHTTPSCandidate = true
+                switch mediaHostKind(url.host) {
+                case .approved: sawApprovedHost = true
+                case .siriusXMSecondary: sawSiriusXMSecondaryHost = true
+                case .akamaiSecondary: sawAkamaiSecondaryHost = true
+                case .unknown: break
+                }
+                guard let url = validMediaURL(value) else { continue }
+                guard let keyID = candidate["encryptionKeyId"] as? String, !keyID.isEmpty else {
+                    sawKeylessCandidate = true
+                    continue
+                }
                 return FixedLiveResourceSelection(
                     channelID: expectedChannelID,
                     url: url,
@@ -678,6 +762,21 @@ private enum FixedLiveResponseDecoder {
                 )
             }
         }
+        let label: String
+        if sawApprovedHost && sawKeylessCandidate {
+            label = "approved-host-key-missing"
+        } else if sawSiriusXMSecondaryHost {
+            label = "siriusxm-secondary-host"
+        } else if sawAkamaiSecondaryHost {
+            label = "akamai-secondary-host"
+        } else if sawHTTPSCandidate {
+            label = "unknown-resource-host"
+        } else if sawURLCollection {
+            label = "resource-url-malformed"
+        } else {
+            label = "resource-urls-missing"
+        }
+        recordTuneShape(label)
         return nil
     }
 
@@ -689,23 +788,42 @@ private enum FixedLiveResponseDecoder {
               let value = root["key"] as? String,
               !value.isEmpty
         else { return nil }
-        return Data(value.utf8)
+        return Data(base64Encoded: value)
     }
 
     static func isCurrent(resource: FixedLiveResourceSelection, for channelID: LiveChannelID) -> Bool {
-        resource.channelID == channelID && resource.url.host == SiriusXMRequestContract.opaqueMediaDeliveryHost
+        resource.channelID == channelID && SiriusXMRequestContract.isOpaqueMediaDeliveryHost(resource.url.host)
     }
 
     private static func validMediaURL(_ value: String) -> URL? {
         guard let url = URL(string: value),
               url.scheme?.lowercased() == "https",
-              url.host?.lowercased() == SiriusXMRequestContract.opaqueMediaDeliveryHost,
+              SiriusXMRequestContract.isOpaqueMediaDeliveryHost(url.host),
               url.port == nil,
               url.user == nil,
               url.password == nil,
               !url.path.isEmpty
         else { return nil }
         return url
+    }
+
+    private enum MediaHostKind {
+        case approved
+        case siriusXMSecondary
+        case akamaiSecondary
+        case unknown
+    }
+
+    private static func mediaHostKind(_ host: String?) -> MediaHostKind {
+        guard let host = host?.lowercased() else { return .unknown }
+        if SiriusXMRequestContract.isOpaqueMediaDeliveryHost(host) { return .approved }
+        if host.hasSuffix(".streaming.siriusxm.com") { return .siriusXMSecondary }
+        if host.hasSuffix(".akamaized.net") { return .akamaiSecondary }
+        return .unknown
+    }
+
+    private static func recordTuneShape(_ label: String) {
+        logger.info("SiriusXM client tune shape \(label, privacy: .public)")
     }
 
     private static func containsProtectedControl(_ body: Data) -> Bool {
@@ -776,7 +894,7 @@ final class FixedLiveURLSessionTransport: FixedLiveTransporting, @unchecked Send
     }
 }
 
-private enum FixedLiveRequestFactory {
+enum FixedLiveRequestFactory {
     private static let host = SiriusXMRequestContract.host
     private static let scheme = "https"
     private static let logicalClock = FixedLiveLogicalClock()
@@ -793,7 +911,7 @@ private enum FixedLiveRequestFactory {
                 "mtcVersion": "V2",
                 "trackResumeSupported": false,
             ]
-            guard let body = try? JSONSerialization.data(withJSONObject: ["sources": [source]]) else { return nil }
+            guard let body = try? JSONSerialization.data(withJSONObject: source) else { return nil }
             var request = URLRequest(url: url)
             request.httpMethod = "POST"
             request.httpBody = body

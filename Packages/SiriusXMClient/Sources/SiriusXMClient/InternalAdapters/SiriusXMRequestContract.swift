@@ -16,6 +16,12 @@ enum SiriusXMRequestContract: CaseIterable, Sendable {
     static let host = "api.edge-gateway.siriusxm.com"
     static let opaqueMediaDeliveryHost = "live-akc-prod-device.streaming.siriusxm.com"
 
+    static func isOpaqueMediaDeliveryHost(_ host: String?) -> Bool {
+        guard let host = host?.lowercased() else { return false }
+        return host == opaqueMediaDeliveryHost ||
+            (host.hasPrefix("live-") && host.hasSuffix(".streaming.siriusxm.com"))
+    }
+
     static var all: [Self] { Array(allCases) }
 
     /// The only provider operations approved for Phase 02. Path-template values

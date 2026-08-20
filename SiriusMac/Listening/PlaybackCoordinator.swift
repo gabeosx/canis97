@@ -3,6 +3,7 @@ import AppKit
 import Foundation
 import Network
 import Observation
+import OSLog
 @_spi(Playback) import SiriusXMClient
 
 /// The only app-side boundary that can consume the package's opaque playback
@@ -22,15 +23,24 @@ enum PlaybackResourceResolution: Sendable {
 /// resource, and optional-key validation.
 struct SiriusXMPlaybackResolver: PlaybackResolving {
     let client: SiriusXMClient
+    private let telemetry: PlaybackResolutionTelemetry
+
+    init(client: SiriusXMClient, telemetry: PlaybackResolutionTelemetry = .live) {
+        self.client = client
+        self.telemetry = telemetry
+    }
 
     func resolve(for channelID: LiveChannelID) async -> PlaybackResourceResolution {
         switch await client.resolveLiveStream(for: channelID) {
         case let .available(handoff):
-            .available(handoff)
+            telemetry.record("available")
+            return .available(handoff)
         case .unavailable:
-            .failed(.resolutionUnavailable)
+            telemetry.record("unavailable")
+            return .failed(.resolutionUnavailable)
         case let .failed(failure):
-            .failed(Self.map(failure))
+            telemetry.record(failure.safePlaybackLabel)
+            return .failed(Self.map(failure))
         }
     }
 
@@ -45,6 +55,46 @@ struct SiriusXMPlaybackResolver: PlaybackResolving {
         case .unsupportedProtection: .unsupported
         case .cancelled: .cancelled
         case .superseded: .superseded
+        }
+    }
+}
+
+struct PlaybackResolutionTelemetry: Sendable {
+    private let recorder: @Sendable (String) -> Void
+
+    init(record: @escaping @Sendable (String) -> Void = { _ in }) {
+        recorder = record
+    }
+
+    static let live: PlaybackResolutionTelemetry = {
+        let logger = Logger(
+            subsystem: Bundle.main.bundleIdentifier ?? "com.siriusmac.player",
+            category: "playback"
+        )
+        return PlaybackResolutionTelemetry { label in
+            logger.info("Sirius Mac playback resolution \(label, privacy: .public)")
+        }
+    }()
+
+    func record(_ label: String) {
+        recorder(label)
+    }
+}
+
+private extension LiveStreamResolutionFailure {
+    var safePlaybackLabel: String {
+        switch self {
+        case .authenticationUnavailable: "authentication-unavailable"
+        case .entitlementUnavailable: "entitlement-unavailable"
+        case .selectionUnavailable: "selection-unavailable"
+        case .tuneUnavailable: "tune-unavailable"
+        case .resourceUnavailable: "resource-unavailable"
+        case .malformedResource: "malformed-resource"
+        case .protectedControl: "protected-control"
+        case .networkUnavailable: "network-unavailable"
+        case .unsupportedProtection: "unsupported-protection"
+        case .cancelled: "cancelled"
+        case .superseded: "superseded"
         }
     }
 }
@@ -217,7 +267,12 @@ protocol PlaybackPlayerRuntime: AnyObject {
 @MainActor
 final class AVFoundationPlaybackRuntime: PlaybackPlayerRuntime {
     private let player = AVPlayer()
+    private let telemetry: PlaybackRuntimeTelemetry
     private var activeObservation: AVFoundationItemObservation?
+
+    init(telemetry: PlaybackRuntimeTelemetry = .live) {
+        self.telemetry = telemetry
+    }
 
     func observe(
         _ item: AVPlayerItem,
@@ -233,17 +288,20 @@ final class AVFoundationPlaybackRuntime: PlaybackPlayerRuntime {
             onReady: onReady,
             onPlaying: onPlaying,
             onPaused: onPaused,
-            onFailure: onFailure
+            onFailure: onFailure,
+            telemetry: telemetry
         )
         activeObservation = observation
         return observation
     }
 
     func install(_ item: AVPlayerItem) {
+        telemetry.record("item-installed")
         player.replaceCurrentItem(with: item)
     }
 
     func requestPlay() {
+        telemetry.record("play-requested")
         activeObservation?.requestPlayConfirmation()
         player.play()
     }
@@ -261,6 +319,50 @@ final class AVFoundationPlaybackRuntime: PlaybackPlayerRuntime {
     }
 }
 
+struct PlaybackRuntimeTelemetry: Sendable {
+    private let recorder: @Sendable (String) -> Void
+
+    init(record: @escaping @Sendable (String) -> Void = { _ in }) {
+        recorder = record
+    }
+
+    static let live: PlaybackRuntimeTelemetry = {
+        let logger = Logger(
+            subsystem: Bundle.main.bundleIdentifier ?? "com.siriusmac.player",
+            category: "playback"
+        )
+        return PlaybackRuntimeTelemetry { label in
+            logger.info("Sirius Mac playback runtime \(label, privacy: .public)")
+        }
+    }()
+
+    func record(_ label: String) {
+        recorder(label)
+    }
+
+    static func failureLabel(_ error: Error?, resourceURI: String? = nil) -> String {
+        guard let error = error as NSError? else { return "item-failed-no-error" }
+        let domain: String
+        switch error.domain {
+        case AVFoundationErrorDomain: domain = "avfoundation"
+        case NSURLErrorDomain: domain = "url-loading"
+        case "CoreMediaErrorDomain": domain = "core-media"
+        default: domain = "other"
+        }
+        return "item-failed-\(domain)-\(error.code)-\(resourceKind(resourceURI))"
+    }
+
+    static func resourceKind(_ uri: String?) -> String {
+        guard let uri, let path = URL(string: uri)?.path.lowercased() else { return "resource-unknown" }
+        if path.contains("/playback/key/v1/") { return "resource-key" }
+        if path.hasSuffix(".m3u8") { return "resource-manifest" }
+        if path.hasSuffix(".aac") || path.hasSuffix(".ts") || path.hasSuffix(".m4s") {
+            return "resource-media"
+        }
+        return "resource-other"
+    }
+}
+
 @MainActor
 private final class AVFoundationItemObservation: PlaybackItemObserving {
     private var itemStatusObservation: NSKeyValueObservation?
@@ -275,6 +377,7 @@ private final class AVFoundationItemObservation: PlaybackItemObserving {
     private let onPlaying: @MainActor @Sendable () -> Void
     private let onPaused: @MainActor @Sendable () -> Void
     private let onFailure: @MainActor @Sendable (LiveListeningFailure) -> Void
+    private let telemetry: PlaybackRuntimeTelemetry
 
     init(
         item: AVPlayerItem,
@@ -282,13 +385,15 @@ private final class AVFoundationItemObservation: PlaybackItemObserving {
         onReady: @escaping @MainActor @Sendable () -> Void,
         onPlaying: @escaping @MainActor @Sendable () -> Void,
         onPaused: @escaping @MainActor @Sendable () -> Void,
-        onFailure: @escaping @MainActor @Sendable (LiveListeningFailure) -> Void
+        onFailure: @escaping @MainActor @Sendable (LiveListeningFailure) -> Void,
+        telemetry: PlaybackRuntimeTelemetry
     ) {
         self.player = player
         self.onReady = onReady
         self.onPlaying = onPlaying
         self.onPaused = onPaused
         self.onFailure = onFailure
+        self.telemetry = telemetry
         itemStatusObservation = item.observe(\.status, options: [.new]) { [weak self] item, _ in
             Task { @MainActor [weak self] in
                 self?.handleItemStatus(item.status)
@@ -329,8 +434,10 @@ private final class AVFoundationItemObservation: PlaybackItemObserving {
         switch status {
         case .readyToPlay where !deliveredReady:
             deliveredReady = true
+            telemetry.record("item-ready")
             onReady()
         case .failed:
+            telemetry.record(failureLabel())
             onFailure(.decoderUnavailable)
         case .unknown, .readyToPlay:
             break
@@ -339,18 +446,28 @@ private final class AVFoundationItemObservation: PlaybackItemObserving {
         }
     }
 
+    private func failureLabel() -> String {
+        let item = player.currentItem
+        return PlaybackRuntimeTelemetry.failureLabel(
+            item?.error,
+            resourceURI: item?.errorLog()?.events.last?.uri
+        )
+    }
+
     private func confirmPlayerState() {
         guard !isCancelled else { return }
         if expectsPlaying,
            player.timeControlStatus == .playing,
            player.rate > 0 {
             expectsPlaying = false
+            telemetry.record("playing-confirmed")
             onPlaying()
         } else if expectsPaused,
                   player.currentItem != nil,
                   player.timeControlStatus != .playing,
                   player.rate == 0 {
             expectsPaused = false
+            telemetry.record("paused-confirmed")
             onPaused()
         }
     }
