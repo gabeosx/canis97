@@ -21,6 +21,13 @@ cat > "$HOOKS/pgrep" <<'HOOK'
 #!/usr/bin/env bash
 set -euo pipefail
 printf 'pgrep\n' >> "$SIL_TEST_STATE/events"
+if [[ "${SIL_TEST_OPEN_MODE:-exact}" == "delayed-one" && -f "$SIL_TEST_STATE/opened" ]]; then
+  sleep_calls=0
+  [[ -f "$SIL_TEST_STATE/sleep-calls" ]] && sleep_calls=$(cat "$SIL_TEST_STATE/sleep-calls")
+  if (( sleep_calls >= ${SIL_TEST_DELAYED_READY_AFTER:-1} )); then
+    printf '401:%s\n' "$SIL_TEST_EXACT_BINARY" > "$SIL_TEST_STATE/pids"
+  fi
+fi
 [[ -s "$SIL_TEST_STATE/pids" ]] || exit 1
 cut -d: -f1 "$SIL_TEST_STATE/pids"
 HOOK
@@ -43,6 +50,9 @@ cat > "$HOOKS/path" <<'HOOK'
 #!/usr/bin/env bash
 set -euo pipefail
 printf 'path:%s\n' "$1" >> "$SIL_TEST_STATE/events"
+if [[ "${SIL_TEST_PATH_MODE:-exact}" == "missing" ]]; then
+  exit 1
+fi
 awk -F: -v pid="$1" '$1 == pid { print substr($0, length(pid) + 2); exit }' "$SIL_TEST_STATE/pids"
 HOOK
 
@@ -69,6 +79,9 @@ case "${SIL_TEST_LSOF_MODE:-exact}" in
   wrong-path)
     printf 'p%s\nn%s\n' "$pid" "$SIL_TEST_WRONG_BINARY"
     ;;
+  multiple-mappings)
+    printf 'p%s\nn%s.debug.dylib\nn%s\n' "$pid" "$SIL_TEST_EXACT_BINARY" "$SIL_TEST_EXACT_BINARY"
+    ;;
   missing)
     printf 'p%s\n' "$pid"
     ;;
@@ -91,9 +104,14 @@ case "${SIL_TEST_OPEN_MODE:-exact}" in
       while [[ ! -f "$SIL_TEST_STATE/release-open" ]]; do :; done
     fi
     ;;
+  delayed-one)
+    touch "$SIL_TEST_STATE/opened"
+    : > "$SIL_TEST_STATE/pids"
+    ;;
   zero) : > "$SIL_TEST_STATE/pids" ;;
   two) printf '401:%s\n402:%s\n' "$SIL_TEST_EXACT_BINARY" "$SIL_TEST_EXACT_BINARY" > "$SIL_TEST_STATE/pids" ;;
   wrong-path) printf '401:/tmp/not-the-built-binary\n' > "$SIL_TEST_STATE/pids" ;;
+  fail) exit 9 ;;
   *) exit 91 ;;
 esac
 HOOK
@@ -102,6 +120,20 @@ cat > "$HOOKS/sleep" <<'HOOK'
 #!/usr/bin/env bash
 set -euo pipefail
 printf 'sleep\n' >> "$SIL_TEST_STATE/events"
+sleep_calls_file="$SIL_TEST_STATE/sleep-calls"
+sleep_calls=0
+[[ -f "$sleep_calls_file" ]] && sleep_calls=$(cat "$sleep_calls_file")
+printf '%s' "$((sleep_calls + 1))" > "$sleep_calls_file"
+HOOK
+
+cat > "$HOOKS/report" <<'HOOK'
+#!/usr/bin/env bash
+set -euo pipefail
+case "$1" in
+  prelaunch-cleanup-failed|launch-command-failed|zero-after-open|multiple-after-open|unexpected-count-after-open|pid-selection-failed|mapped-path-missing|mapped-path-mismatch) ;;
+  *) exit 92 ;;
+esac
+printf '%s\n' "$1" >> "$SIL_TEST_STATE/reports"
 HOOK
 
 chmod +x "$HOOKS"/*
@@ -110,11 +142,15 @@ reset_state() {
   : > "$STATE/pids"
   : > "$STATE/events"
   : > "$STATE/opens"
+  : > "$STATE/reports"
   printf '0' > "$STATE/terminate-calls"
-  rm -f "$STATE/release-open"
+  printf '0' > "$STATE/sleep-calls"
+  rm -f "$STATE/release-open" "$STATE/opened"
   unset SIL_TEST_STICKY
   unset SIL_TEST_HOLD_OPEN
   unset SIL_TEST_LSOF_MODE
+  unset SIL_TEST_PATH_MODE
+  unset SIL_TEST_DELAYED_READY_AFTER
   export SIL_TEST_OPEN_MODE=exact
 }
 
@@ -150,6 +186,7 @@ configure_fake_hooks() {
   export SIL_PID_PATH="$HOOKS/path"
   export SIL_OPEN="$HOOKS/open"
   export SIL_SLEEP="$HOOKS/sleep"
+  export SIL_INVARIANT_REPORT="$HOOKS/report"
 }
 
 source "$HELPER"
@@ -176,6 +213,25 @@ reset_state
 run_launch
 assert_eq 1 "$(wc -l < "$STATE/opens" | tr -d ' ')" "exact launch opens once"
 assert_eq "401:$SIL_TEST_EXACT_BINARY" "$(cat "$STATE/pids")" "exact binary survives"
+assert_file_empty "$STATE/reports" "exact launch emits no failure stage"
+
+reset_state
+export SIL_TEST_OPEN_MODE=delayed-one
+export SIL_TEST_DELAYED_READY_AFTER=1
+run_launch
+assert_eq 1 "$(wc -l < "$STATE/opens" | tr -d ' ')" "delayed exact launch opens once"
+assert_eq "401:$SIL_TEST_EXACT_BINARY" "$(cat "$STATE/pids")" "delayed exact process is accepted"
+assert_file_empty "$STATE/reports" "delayed exact launch emits no failure stage"
+
+reset_state
+export SIL_PID_PATH="$RESOLVER"
+export SIL_LSOF="$HOOKS/lsof"
+export SIL_TEST_LSOF_MODE=multiple-mappings
+run_launch
+assert_eq "401:$SIL_TEST_EXACT_BINARY" "$(cat "$STATE/pids")" "multiple text mappings retain the exact executable"
+assert_file_empty "$STATE/reports" "multiple text mappings emit no failure stage"
+export SIL_PID_PATH="$HOOKS/path"
+unset SIL_LSOF
 
 reset_state
 printf '111:%s\n' "$SIL_TEST_EXACT_BINARY" > "$STATE/pids"
@@ -192,6 +248,7 @@ if run_launch; then
 fi
 assert_eq 0 "$(wc -l < "$STATE/opens" | tr -d ' ')" "sticky old process opens nothing"
 grep -qx 'terminate' "$STATE/events"
+assert_eq 'prelaunch-cleanup-failed' "$(cat "$STATE/reports")" "sticky old process reports its fixed stage"
 unset SIL_TEST_STICKY
 
 reset_state
@@ -217,7 +274,30 @@ for mode in zero two wrong-path; do
   fi
   assert_file_empty "$STATE/pids" "post-launch $mode is cleaned"
   grep -qx 'terminate' "$STATE/events"
+  case "$mode" in
+    zero) expected_stage='zero-after-open' ;;
+    two) expected_stage='multiple-after-open' ;;
+    wrong-path) expected_stage='mapped-path-mismatch' ;;
+  esac
+  assert_eq "$expected_stage" "$(cat "$STATE/reports")" "post-launch $mode reports its fixed stage"
 done
+
+reset_state
+export SIL_TEST_OPEN_MODE=fail
+if run_launch; then
+  echo "FAIL: failed open command must fail" >&2
+  exit 1
+fi
+assert_eq 'launch-command-failed' "$(cat "$STATE/reports")" "failed open command reports its fixed stage"
+
+reset_state
+export SIL_TEST_PATH_MODE=missing
+if run_launch; then
+  echo "FAIL: missing mapped executable must fail" >&2
+  exit 1
+fi
+assert_file_empty "$STATE/pids" "missing mapped executable is cleaned"
+assert_eq 'mapped-path-missing' "$(cat "$STATE/reports")" "missing mapped executable reports its fixed stage"
 
 # The resolver must read the mapped text executable, never argv[0]. The
 # initial structural check makes the red phase safe: it avoids executing the
@@ -236,6 +316,11 @@ reset_state
 export SIL_TEST_LSOF_MODE=wrong-path
 actual="$(SIL_LSOF="$HOOKS/lsof" "$RESOLVER" 401)"
 assert_eq "$SIL_TEST_WRONG_BINARY" "$actual" "resolver does not substitute argv text"
+
+reset_state
+export SIL_TEST_LSOF_MODE=multiple-mappings
+actual="$(SIL_LSOF="$HOOKS/lsof" "$RESOLVER" 401 "$SIL_TEST_EXACT_BINARY")"
+assert_eq "$SIL_TEST_EXACT_BINARY" "$actual" "resolver selects the expected executable from multiple text mappings"
 
 reset_state
 export SIL_TEST_LSOF_MODE=missing

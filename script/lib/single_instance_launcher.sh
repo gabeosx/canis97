@@ -22,9 +22,11 @@ sil_pid_count() {
 }
 
 sil_wait_for_count() {
-  local expected="$1" attempts="${SIL_DRAIN_ATTEMPTS:-20}" count
+  local expected="$1" attempts="${SIL_DRAIN_ATTEMPTS:-100}" count
+  SIL_LAST_PID_COUNT=""
   while (( attempts >= 0 )); do
     count="$(sil_pid_count)"
+    SIL_LAST_PID_COUNT="$count"
     if [[ "$count" == "$expected" ]]; then
       return 0
     fi
@@ -33,6 +35,31 @@ sil_wait_for_count() {
     ((attempts -= 1))
   done
   return 1
+}
+
+sil_report_invariant_stage() {
+  local stage="$1"
+  case "$stage" in
+    prelaunch-cleanup-failed|launch-command-failed|zero-after-open|multiple-after-open|unexpected-count-after-open|pid-selection-failed|mapped-path-missing|mapped-path-mismatch) ;;
+    *)
+      echo "single-instance launcher received an unknown invariant stage" >&2
+      return 2
+      ;;
+  esac
+
+  if [[ -n "${SIL_INVARIANT_REPORT:-}" ]]; then
+    "$SIL_INVARIANT_REPORT" "$stage"
+  else
+    printf 'process-stage: %s\n' "$stage" >&2
+  fi
+}
+
+sil_after_open_count_failure_stage() {
+  case "${SIL_LAST_PID_COUNT:-}" in
+    0) printf '%s\n' 'zero-after-open' ;;
+    ''|*[!0-9]*) printf '%s\n' 'unexpected-count-after-open' ;;
+    *) printf '%s\n' 'multiple-after-open' ;;
+  esac
 }
 
 sil_release_lock() {
@@ -67,23 +94,44 @@ sil_close_all_and_wait() {
 
 sil_exact_binary_matches_only_pid() {
   local pids pid actual expected path_hook
+  SIL_LAST_INVARIANT_STAGE=""
   pids="$(sil_pid_list)"
   pid="$(printf '%s\n' "$pids" | awk 'NF { print; exit }')"
+  if [[ -z "$pid" ]]; then
+    SIL_LAST_INVARIANT_STAGE="pid-selection-failed"
+    return 1
+  fi
   expected="$(sil_value SIL_APP_BINARY)" || return
   path_hook="$(sil_value SIL_PID_PATH)" || return
-  actual="$("$path_hook" "$pid")" || return 1
-  [[ "$actual" == "$expected" ]]
+  if ! actual="$("$path_hook" "$pid" "$expected")"; then
+    SIL_LAST_INVARIANT_STAGE="mapped-path-missing"
+    return 1
+  fi
+  if [[ "$actual" != "$expected" ]]; then
+    SIL_LAST_INVARIANT_STAGE="mapped-path-mismatch"
+    return 1
+  fi
 }
 
 single_instance_launch_locked() {
   # This protocol performs no build itself.  A caller that needs the lock to
   # span a build invokes its build function between acquire and this function.
-  sil_close_all_and_wait || return 1
-  "$(sil_value SIL_OPEN)" "$(sil_value SIL_APP_BUNDLE)" || {
+  if ! sil_close_all_and_wait; then
+    sil_report_invariant_stage prelaunch-cleanup-failed || true
+    return 1
+  fi
+  if ! "$(sil_value SIL_OPEN)" "$(sil_value SIL_APP_BUNDLE)"; then
+    sil_report_invariant_stage launch-command-failed || true
     sil_close_all_and_wait || true
     return 1
-  }
-  if ! sil_wait_for_count 1 || ! sil_exact_binary_matches_only_pid; then
+  fi
+  if ! sil_wait_for_count 1; then
+    sil_report_invariant_stage "$(sil_after_open_count_failure_stage)" || true
+    sil_close_all_and_wait || true
+    return 1
+  fi
+  if ! sil_exact_binary_matches_only_pid; then
+    sil_report_invariant_stage "${SIL_LAST_INVARIANT_STAGE:-mapped-path-missing}" || true
     sil_close_all_and_wait || true
     return 1
   fi
