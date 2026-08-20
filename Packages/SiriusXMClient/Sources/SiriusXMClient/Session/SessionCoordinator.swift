@@ -127,15 +127,21 @@ actor SessionCoordinator {
             return .authentication(.cancelled)
         }
 
-        let activeSession = ActiveSession(establishedAt: clock.now())
-        state = .active(activeSession)
-        lastEntitlement = .entitled
-
         do {
             try await credentialStore.save(credential)
         } catch {
             await diagnostics.record(.credentialPersistenceFailed)
+            return .credentialPersistenceFailed
         }
+
+        guard isCurrent(lease), !Task.isCancelled else {
+            await diagnostics.record(.authentication(.cancelled))
+            return .authentication(.cancelled)
+        }
+
+        state = .active(ActiveSession(establishedAt: clock.now()))
+        lastEntitlement = .entitled
+        await diagnostics.record(.credentialPersistenceCompleted)
         return .active
     }
 

@@ -11,13 +11,14 @@ struct SessionCoordinatorTests {
         let authentication = RecordingAuthenticationVerifier(sequence: sequence, response: response(body: SanitizedNativeResponseFixtures.profileV4Authenticated))
         let entitlement = RecordingEntitlementVerifier(sequence: sequence, response: response(body: SanitizedNativeResponseFixtures.subscriptionV1Active))
         let store = RecordingCredentialStore()
+        let diagnostics = RecordingDiagnostics()
         let coordinator = SessionCoordinator(
             credentialSource: source,
             authenticationVerifier: authentication,
             entitlementVerifier: entitlement,
             credentialStore: store,
             clock: FixedSessionClock(),
-            diagnostics: RecordingDiagnostics()
+            diagnostics: diagnostics
         )
 
         #expect(await coordinator.attemptSession() == .active)
@@ -26,6 +27,11 @@ struct SessionCoordinatorTests {
         #expect(await entitlement.callCount == 1)
         #expect(await sequence.events == [.authentication, .entitlement])
         #expect(await store.saveCount == 1)
+        #expect(await diagnostics.events == [
+            .authentication(.completed),
+            .entitlement(.completed),
+            .credentialPersistenceCompleted,
+        ])
     }
 
     @Test("authentication success does not publish a session before entitlement")
@@ -68,6 +74,96 @@ struct SessionCoordinatorTests {
         #expect(await coordinator.attemptSession() == .entitlement(.authenticatedButNotEntitled))
         #expect(await coordinator.snapshot == .signedOut)
         #expect(await store.saveCount == 0)
+    }
+
+    @Test("profile authorization rejection short-circuits entitlement and persistence")
+    func profileAuthorizationRejectionNeverContinues() async {
+        for (statusCode, diagnostic) in [(401, SafeDiagnosticOutcome.httpUnauthorized), (403, .httpForbidden)] {
+            let entitlement = RecordingEntitlementVerifier(response: response(body: SanitizedNativeResponseFixtures.subscriptionV1Active))
+            let store = RecordingCredentialStore()
+            let diagnostics = RecordingDiagnostics()
+            let coordinator = SessionCoordinator(
+                credentialSource: RecordingCredentialSource(),
+                authenticationVerifier: RecordingAuthenticationVerifier(
+                    response: NativeTransportResponse(statusCode: statusCode, contentType: "application/json", body: Data())
+                ),
+                entitlementVerifier: entitlement,
+                credentialStore: store,
+                clock: FixedSessionClock(),
+                diagnostics: diagnostics
+            )
+
+            #expect(await coordinator.attemptSession() == .authentication(.rejected))
+            #expect(await entitlement.callCount == 0)
+            #expect(await store.saveCount == 0)
+            #expect(await diagnostics.events == [.authentication(diagnostic)])
+        }
+    }
+
+    @Test("entitlement authorization rejection short-circuits persistence")
+    func entitlementAuthorizationRejectionNeverPersists() async {
+        for (statusCode, diagnostic) in [(401, SafeDiagnosticOutcome.httpUnauthorized), (403, .httpForbidden)] {
+            let store = RecordingCredentialStore()
+            let diagnostics = RecordingDiagnostics()
+            let coordinator = SessionCoordinator(
+                credentialSource: RecordingCredentialSource(),
+                authenticationVerifier: RecordingAuthenticationVerifier(response: response(body: SanitizedNativeResponseFixtures.profileV4Authenticated)),
+                entitlementVerifier: RecordingEntitlementVerifier(
+                    response: NativeTransportResponse(statusCode: statusCode, contentType: "application/json", body: Data())
+                ),
+                credentialStore: store,
+                clock: FixedSessionClock(),
+                diagnostics: diagnostics
+            )
+
+            #expect(await coordinator.attemptSession() == .entitlement(.rejected))
+            #expect(await store.saveCount == 0)
+            #expect(await diagnostics.events == [.authentication(.completed), .entitlement(diagnostic)])
+        }
+    }
+
+    @Test("persistence failure is terminal and never publishes an active session")
+    func persistenceFailureDoesNotProduceActiveSession() async {
+        let diagnostics = RecordingDiagnostics()
+        let coordinator = SessionCoordinator(
+            credentialSource: RecordingCredentialSource(),
+            authenticationVerifier: RecordingAuthenticationVerifier(response: response(body: SanitizedNativeResponseFixtures.profileV4Authenticated)),
+            entitlementVerifier: RecordingEntitlementVerifier(response: response(body: SanitizedNativeResponseFixtures.subscriptionV1Active)),
+            credentialStore: FailingCredentialStore(),
+            clock: FixedSessionClock(),
+            diagnostics: diagnostics
+        )
+
+        let client = SiriusXMClient(sessionCoordinator: coordinator)
+
+        #expect(await client.authenticate() == .credentialPersistenceFailed)
+        #expect(await coordinator.snapshot == .signedOut)
+        #expect(await diagnostics.events == [
+            .authentication(.completed),
+            .entitlement(.completed),
+            .credentialPersistenceFailed,
+        ])
+    }
+
+    @Test("cancellation while persistence is pending cannot publish an active session")
+    func cancellationBeforePersistenceCompletesNeverPublishesActiveSession() async {
+        let store = BlockingCredentialStore()
+        let coordinator = SessionCoordinator(
+            credentialSource: RecordingCredentialSource(),
+            authenticationVerifier: RecordingAuthenticationVerifier(response: response(body: SanitizedNativeResponseFixtures.profileV4Authenticated)),
+            entitlementVerifier: RecordingEntitlementVerifier(response: response(body: SanitizedNativeResponseFixtures.subscriptionV1Active)),
+            credentialStore: store,
+            clock: FixedSessionClock(),
+            diagnostics: RecordingDiagnostics()
+        )
+
+        let attempt = Task { await coordinator.attemptSession() }
+        await store.waitUntilSaveStarted()
+        attempt.cancel()
+        await store.releaseSave()
+
+        #expect(await attempt.value == .authentication(.cancelled))
+        #expect(await coordinator.snapshot == .signedOut)
     }
 
     @Test("parallel attempts are rejected before collaborator work")
@@ -290,6 +386,43 @@ private actor RecordingCredentialStore: CredentialStore {
 
     func save(_: AuthenticationCredential) async throws { saveCount += 1 }
     func erase() async throws { eraseCount += 1 }
+}
+
+private actor FailingCredentialStore: CredentialStore {
+    func save(_: AuthenticationCredential) async throws {
+        throw FixtureStoreError.saveFailed
+    }
+
+    func erase() async throws {}
+}
+
+private actor BlockingCredentialStore: CredentialStore {
+    private var started = false
+    private var startWaiter: CheckedContinuation<Void, Never>?
+    private var saveWaiter: CheckedContinuation<Void, Never>?
+
+    func save(_: AuthenticationCredential) async throws {
+        started = true
+        startWaiter?.resume()
+        startWaiter = nil
+        await withCheckedContinuation { saveWaiter = $0 }
+    }
+
+    func erase() async throws {}
+
+    func waitUntilSaveStarted() async {
+        if started { return }
+        await withCheckedContinuation { startWaiter = $0 }
+    }
+
+    func releaseSave() {
+        saveWaiter?.resume()
+        saveWaiter = nil
+    }
+}
+
+private enum FixtureStoreError: Error {
+    case saveFailed
 }
 
 private struct FixedSessionClock: SessionClock {

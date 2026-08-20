@@ -97,6 +97,12 @@ struct OSLogSessionDiagnostics: SessionDiagnostics {
                 outcome: outcome,
                 handle: SafeDiagnosticHandle()
             )
+        case .credentialPersistenceCompleted:
+            safeEvent = SafeDiagnosticEvent(
+                operation: .nativeAuthentication,
+                outcome: .completed,
+                handle: SafeDiagnosticHandle()
+            )
         case .credentialPersistenceFailed:
             safeEvent = SafeDiagnosticEvent(
                 operation: .nativeAuthentication,

@@ -13,6 +13,7 @@ enum SessionState: Sendable, Equatable {
 
 enum SessionAttemptOutcome: Sendable, Equatable {
     case active
+    case credentialPersistenceFailed
     case authentication(AuthenticationOutcome)
     case entitlement(EntitlementAvailability)
     case attemptInProgress
@@ -37,6 +38,7 @@ protocol SessionDiagnostics: Sendable {
 enum SessionDiagnosticEvent: Sendable, Equatable {
     case authentication(SafeDiagnosticOutcome)
     case entitlement(SafeDiagnosticOutcome)
+    case credentialPersistenceCompleted
     case credentialPersistenceFailed
 }
 

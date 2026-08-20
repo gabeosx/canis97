@@ -50,6 +50,7 @@ public enum AuthenticationResidueCleanupOutcome: Sendable, Equatable {
 public enum AuthenticationOutcome: Sendable, Equatable {
     case waitingForAuthenticationComposition
     case authenticatedPendingEntitlement
+    case credentialPersistenceFailed
     case rejected
     case challengeRequired
     case unsupported

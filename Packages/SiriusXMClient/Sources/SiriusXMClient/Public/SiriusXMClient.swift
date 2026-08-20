@@ -100,6 +100,8 @@ public actor SiriusXMClient {
         case .active, .entitlement:
             // Entitlement remains separately observable through `entitlement()`.
             return .authenticatedPendingEntitlement
+        case .credentialPersistenceFailed:
+            return .credentialPersistenceFailed
         case let .authentication(outcome):
             return outcome
         case .attemptInProgress:
