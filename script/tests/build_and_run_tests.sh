@@ -29,7 +29,12 @@ cat > "$HOOKS/terminate" <<'HOOK'
 #!/usr/bin/env bash
 set -euo pipefail
 printf 'terminate\n' >> "$SIL_TEST_STATE/events"
-if [[ "${SIL_TEST_STICKY:-0}" != "1" ]]; then
+calls_file="$SIL_TEST_STATE/terminate-calls"
+calls=0
+[[ -f "$calls_file" ]] && calls=$(cat "$calls_file")
+calls=$((calls + 1))
+printf '%s' "$calls" > "$calls_file"
+if [[ "${SIL_TEST_STICKY:-0}" != "1" || "$calls" -gt 1 ]]; then
   : > "$SIL_TEST_STATE/pids"
 fi
 HOOK
@@ -48,7 +53,12 @@ printf 'open:%s\n' "$1" >> "$SIL_TEST_STATE/events"
 count=$(wc -l < "$SIL_TEST_STATE/opens" | tr -d ' ')
 printf '%s\n' "$1" >> "$SIL_TEST_STATE/opens"
 case "${SIL_TEST_OPEN_MODE:-exact}" in
-  exact) printf '401:%s\n' "$SIL_TEST_EXACT_BINARY" > "$SIL_TEST_STATE/pids" ;;
+  exact)
+    printf '401:%s\n' "$SIL_TEST_EXACT_BINARY" > "$SIL_TEST_STATE/pids"
+    if [[ "${SIL_TEST_HOLD_OPEN:-0}" == "1" ]]; then
+      while [[ ! -f "$SIL_TEST_STATE/release-open" ]]; do :; done
+    fi
+    ;;
   zero) : > "$SIL_TEST_STATE/pids" ;;
   two) printf '401:%s\n402:%s\n' "$SIL_TEST_EXACT_BINARY" "$SIL_TEST_EXACT_BINARY" > "$SIL_TEST_STATE/pids" ;;
   wrong-path) printf '401:/tmp/not-the-built-binary\n' > "$SIL_TEST_STATE/pids" ;;
@@ -68,7 +78,10 @@ reset_state() {
   : > "$STATE/pids"
   : > "$STATE/events"
   : > "$STATE/opens"
+  printf '0' > "$STATE/terminate-calls"
+  rm -f "$STATE/release-open"
   unset SIL_TEST_STICKY
+  unset SIL_TEST_HOLD_OPEN
   export SIL_TEST_OPEN_MODE=exact
 }
 
@@ -109,7 +122,7 @@ configure_fake_hooks
 
 # The test guard rejects accidental fallback to system process or launch tools.
 if rg -n --fixed-strings '/usr/bin/open' "$HELPER" >/dev/null ||
-   rg -nE '(^|[[:space:];])pkill([[:space:];]|$)|(^|[[:space:];])pgrep([[:space:];]|$)' "$HELPER" >/dev/null; then
+   rg -n -e '(^|[[:space:];])pkill([[:space:];]|$)|(^|[[:space:];])pgrep([[:space:];]|$)' "$HELPER" >/dev/null; then
   echo "FAIL: helper may not invoke real process or launch commands" >&2
   exit 1
 fi
@@ -127,7 +140,6 @@ reset_state
 printf '111:%s\n' "$SIL_TEST_EXACT_BINARY" > "$STATE/pids"
 run_launch
 assert_eq 1 "$(wc -l < "$STATE/opens" | tr -d ' ')" "drained old process opens once"
-assert_file_empty "$STATE/pids" "placeholder"
 assert_eq "401:$SIL_TEST_EXACT_BINARY" "$(cat "$STATE/pids")" "new exact process survives"
 
 reset_state
@@ -140,6 +152,20 @@ fi
 assert_eq 0 "$(wc -l < "$STATE/opens" | tr -d ' ')" "sticky old process opens nothing"
 grep -qx 'terminate' "$STATE/events"
 unset SIL_TEST_STICKY
+
+reset_state
+export SIL_TEST_HOLD_OPEN=1
+run_launch &
+launch_pid=$!
+while ! grep -q '^open:' "$STATE/events"; do :; done
+if run_launch; then
+  echo "FAIL: concurrent lock contender must not launch" >&2
+  exit 1
+fi
+assert_eq 1 "$(wc -l < "$STATE/opens" | tr -d ' ')" "concurrent invocations open once"
+touch "$STATE/release-open"
+wait "$launch_pid"
+unset SIL_TEST_HOLD_OPEN
 
 for mode in zero two wrong-path; do
   reset_state
@@ -168,8 +194,7 @@ fi
 assert_file_empty "$STATE/pids" "guard failure leaves zero"
 
 reset_state
-single_instance_guard_app_host bash -c 'printf "999:%s\\n" "$SIL_TEST_EXACT_BINARY" > "$SIL_TEST_STATE/pids"'
-if [[ $? -eq 0 ]]; then
+if single_instance_guard_app_host bash -c 'printf "999:%s\\n" "$SIL_TEST_EXACT_BINARY" > "$SIL_TEST_STATE/pids"'; then
   echo "FAIL: guard leak must fail" >&2
   exit 1
 fi
