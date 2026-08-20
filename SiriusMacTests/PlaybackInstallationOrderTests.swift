@@ -52,6 +52,25 @@ final class PlaybackInstallationOrderTests: XCTestCase {
         XCTAssertEqual(coordinator.state, .playing(channel))
     }
 
+    func testSynchronousReadyDuringObservationWaitsForInitialInstallBeforePlaying() async {
+        let resolver = InstallOrderResolver()
+        let runtime = InstallGatedPlaybackRuntime(readySynchronouslyDuringObservation: true)
+        let coordinator = PlaybackCoordinator(resolver: resolver, runtime: runtime)
+        let channel = LiveChannelID("fixture-initial-ready-before-install")
+
+        let tune = Task { await coordinator.tune(channel) }
+        await resolver.waitForResolution(of: channel)
+        await resolver.complete(channel, with: .available(InstallOrderMediaHandoff()))
+        await runtime.waitForObservation()
+        _ = await tune.value
+
+        XCTAssertEqual(runtime.events.suffix(4), [.observed, .ready, .installed, .playRequested])
+        XCTAssertEqual(runtime.playRequestCount, 1)
+        XCTAssertTrue(runtime.emitReady())
+        XCTAssertEqual(runtime.playRequestCount, 1)
+        XCTAssertEqual(coordinator.state, .idle)
+    }
+
     func testInstallAndReadyDoNotOptimisticallyPublishPlaying() async {
         let resolver = InstallOrderResolver()
         let runtime = InstallGatedPlaybackRuntime()
@@ -128,6 +147,31 @@ final class PlaybackInstallationOrderTests: XCTestCase {
         XCTAssertEqual(coordinator.state, .playing(channel))
     }
 
+    func testSynchronousReadyDuringObservationWaitsForResumeInstallBeforePlaying() async {
+        let resolver = InstallOrderResolver()
+        let runtime = InstallGatedPlaybackRuntime(readySynchronouslyDuringObservation: true)
+        let coordinator = PlaybackCoordinator(resolver: resolver, runtime: runtime)
+        let channel = LiveChannelID("fixture-resume-ready-before-install")
+
+        let tune = Task { await coordinator.tune(channel) }
+        await resolver.waitForResolution(of: channel, count: 1)
+        await resolver.complete(channel, with: .available(InstallOrderMediaHandoff()))
+        await runtime.waitForObservation(count: 1)
+        runtime.emitPlaying()
+        _ = await tune.value
+
+        let resume = Task { await coordinator.resumeLiveEdge() }
+        await resolver.waitForResolution(of: channel, count: 2)
+        await resolver.complete(channel, with: .available(InstallOrderMediaHandoff()))
+        await runtime.waitForObservation(count: 2)
+        _ = await resume.value
+
+        let resolutionCount = await resolver.calls(for: channel)
+        XCTAssertEqual(runtime.events.suffix(4), [.observed, .ready, .installed, .playRequested])
+        XCTAssertEqual(runtime.playRequestCount, 2)
+        XCTAssertEqual(resolutionCount, 2)
+    }
+
     func testRecoveryInstallsBeforeReadyAndOnlyConfirmedPlayingCompletesTheIncident() async {
         let resolver = InstallOrderResolver()
         let runtime = InstallGatedPlaybackRuntime()
@@ -153,6 +197,36 @@ final class PlaybackInstallationOrderTests: XCTestCase {
 
         XCTAssertEqual(runtime.events.suffix(2), [.observed, .installed])
         XCTAssertTrue(runtime.emitReady())
+        XCTAssertEqual(coordinator.state, .playing(channel))
+
+        runtime.emitPlaying()
+        XCTAssertEqual(coordinator.state, .playing(channel))
+    }
+
+    func testSynchronousReadyDuringObservationWaitsForRecoveredInstallBeforePlaying() async {
+        let resolver = InstallOrderResolver()
+        let runtime = InstallGatedPlaybackRuntime(readySynchronouslyDuringObservation: true)
+        let coordinator = PlaybackCoordinator(
+            resolver: resolver,
+            runtime: runtime,
+            recoveryPolicy: PlaybackRecoveryPolicy(maximumReResolutions: 1, stallGrace: 0, backoffs: [0])
+        )
+        let channel = LiveChannelID("fixture-recovery-ready-before-install")
+
+        let tune = Task { await coordinator.tune(channel) }
+        await resolver.waitForResolution(of: channel, count: 1)
+        await resolver.complete(channel, with: .available(InstallOrderMediaHandoff()))
+        await runtime.waitForObservation(count: 1)
+        runtime.emitPlaying()
+        _ = await tune.value
+
+        coordinator.handleRecoverySignal(.decoderFailed)
+        await resolver.waitForResolution(of: channel, count: 2)
+        await resolver.complete(channel, with: .available(InstallOrderMediaHandoff()))
+        await runtime.waitForObservation(count: 2)
+
+        XCTAssertEqual(runtime.events.suffix(4), [.observed, .ready, .installed, .playRequested])
+        XCTAssertEqual(runtime.playRequestCount, 2)
         XCTAssertEqual(coordinator.state, .playing(channel))
 
         runtime.emitPlaying()
@@ -297,6 +371,11 @@ private final class InstallGatedPlaybackRuntime: PlaybackPlayerRuntime {
     private(set) var playRequestCount = 0
     private(set) var clearCount = 0
     private var observationCount = 0
+    private let readySynchronouslyDuringObservation: Bool
+
+    init(readySynchronouslyDuringObservation: Bool = false) {
+        self.readySynchronouslyDuringObservation = readySynchronouslyDuringObservation
+    }
 
     func observe(
         _ item: AVPlayerItem,
@@ -317,6 +396,10 @@ private final class InstallGatedPlaybackRuntime: PlaybackPlayerRuntime {
         ))
         observationCount += 1
         events.append(.observed)
+        if readySynchronouslyDuringObservation {
+            events.append(.ready)
+            onReady()
+        }
         return observation
     }
 
