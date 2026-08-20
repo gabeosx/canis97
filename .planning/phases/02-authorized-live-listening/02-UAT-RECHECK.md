@@ -99,3 +99,23 @@ process_invariant: passed
 ## Latest Closed Outcome
 
 This fresh owner-authorized attempt is **BLOCKED** at the fixed automatic-restore stage. It performed exactly one guarded production launch and retained exactly one expected process. Because restore did not reach the native listening composition, the checkpoint did not refresh the catalog, select a channel, tune, control playback, or observe metadata. No second launch, sign-in, WebView, cleanup, fault induction, request variation, traffic capture, or secret inspection is authorized by this record.
+
+## Final PID-Bound Accessibility Addendum
+
+| Check | Result | Fixed evidence |
+| --- | --- | --- |
+| Existing exact process | PASS | One SiriusMac PID mapped to the approved `/private/tmp` build before every interaction. |
+| Automatic restoration | PASS | The existing process was foregrounded by numeric PID and exposed the native listening window without a WebView or password entry. |
+| Catalog refresh | PASS | One native refresh produced an entitled catalog. |
+| Channel selection | PASS | One native catalog row was selected through the existing process. |
+| Tune | NOT ATTEMPTED | The PID-bound accessibility tree exposed no exact `Tune` title, description, or identifier. The checkpoint stopped rather than guess or issue an unverified tune action. |
+| WebView/password/credential handling | NOT INVOKED | No sign-in, credential inspection, sign-out, local-session clearing, or Keychain operation occurred. |
+| Final process cleanup | PASS | The one approved SiriusMac PID was terminated and the process table returned to zero. |
+
+restore: completed
+catalog_refresh: passed
+channel_selection: passed
+tune: not_attempted
+process_cleanup: passed
+
+This addendum supersedes the immediately preceding restore-stage claim for this one PID-bound continuation only. The checkpoint remains **BLOCKED** because its strict one-tune control sequence could not be verified safely without stable accessibility labels or identifiers. No relaunch, rebuild, second tune, playback control, or Plan 02-18 summary is authorized by this record.
