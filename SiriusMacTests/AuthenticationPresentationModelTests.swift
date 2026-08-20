@@ -88,7 +88,7 @@ final class AuthenticationPresentationModelTests: XCTestCase {
         await firstAttempt?.value
 
         XCTAssertNil(repeatedAttempt)
-        XCTAssertEqual(model.state, .entitled)
+        XCTAssertEqual(model.state, .restoreCompleted)
         let counts = await flow.callCounts()
         XCTAssertEqual(counts.automaticRestore, 1)
         XCTAssertEqual(counts.begin, 0)

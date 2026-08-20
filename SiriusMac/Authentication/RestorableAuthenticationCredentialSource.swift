@@ -1,5 +1,20 @@
 import SiriusXMClient
 
+@MainActor
+struct RestorableAuthenticationCredentialTelemetry {
+    private let recorder: (ClosedAuthenticationTerminal) -> Void
+
+    init(record: @escaping (ClosedAuthenticationTerminal) -> Void = { _ in }) {
+        recorder = record
+    }
+
+    static let disabled = RestorableAuthenticationCredentialTelemetry()
+
+    func record(_ terminal: ClosedAuthenticationTerminal) {
+        recorder(terminal)
+    }
+}
+
 /// The sole app-owned credential source used for native authentication attempts.
 ///
 /// A saved Keychain item is merely a one-shot opaque input: the client still owns
@@ -30,11 +45,17 @@ final class RestorableAuthenticationCredentialSource: CredentialSource {
 
     private let keychain: KeychainCredentialStore
     private let webViewSource: WebAuthenticationBridge
+    private let telemetry: RestorableAuthenticationCredentialTelemetry
     private var attemptOrigin: AttemptOrigin = .none
 
-    init(keychain: KeychainCredentialStore, webViewSource: WebAuthenticationBridge) {
+    init(
+        keychain: KeychainCredentialStore,
+        webViewSource: WebAuthenticationBridge,
+        telemetry: RestorableAuthenticationCredentialTelemetry = .disabled
+    ) {
         self.keychain = keychain
         self.webViewSource = webViewSource
+        self.telemetry = telemetry
     }
 
     /// Reads the Keychain only after a user explicitly starts Sign In.
@@ -66,10 +87,13 @@ final class RestorableAuthenticationCredentialSource: CredentialSource {
             attemptOrigin = .restoredStaged(credential)
             return .restoredCredentialReady
         case .missing:
+            telemetry.record(.localCredentialMissing)
             return .missing
         case .invalid:
+            telemetry.record(.localCredentialInvalid)
             return .invalidCredential
         case .unavailable:
+            telemetry.record(.localCredentialUnavailable)
             return .unavailable
         }
     }
@@ -91,6 +115,7 @@ final class RestorableAuthenticationCredentialSource: CredentialSource {
     func finalizeSuccessfulRestore() {
         if case .restoredInFlight = attemptOrigin {
             attemptOrigin = .none
+            telemetry.record(.restoreCompleted)
         }
     }
 

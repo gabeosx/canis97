@@ -13,6 +13,9 @@ enum ClosedAuthenticationStage: String, CaseIterable, Equatable {
 }
 
 enum ClosedAuthenticationTerminal: String, CaseIterable, Equatable {
+    case localCredentialMissing
+    case localCredentialInvalid
+    case localCredentialUnavailable
     case waitingForWebView
     case verifyingAuthentication
     case verifyingEntitlement
@@ -31,6 +34,19 @@ enum ClosedAuthenticationTerminal: String, CaseIterable, Equatable {
     case cleanupFailed
 }
 
+enum LocalCredentialAvailability: Equatable {
+    case missing
+    case invalid
+    case unavailable
+    case credential
+}
+
+struct ClosedRestoreOutcome: Equatable {
+    let terminal: ClosedAuthenticationTerminal
+    let webViewLoads: Int
+    let nativeTransactions: Int
+}
+
 struct AuthenticationPresentationCopy: Equatable {
     let title: String
     let message: String
@@ -41,8 +57,48 @@ struct AuthenticationPresentationCopy: Equatable {
 }
 
 enum ClosedAuthenticationOracle {
+    static func restoreOutcome(for availability: LocalCredentialAvailability) -> ClosedRestoreOutcome {
+        switch availability {
+        case .missing:
+            ClosedRestoreOutcome(terminal: .localCredentialMissing, webViewLoads: 0, nativeTransactions: 0)
+        case .invalid:
+            ClosedRestoreOutcome(terminal: .localCredentialInvalid, webViewLoads: 0, nativeTransactions: 0)
+        case .unavailable:
+            ClosedRestoreOutcome(terminal: .localCredentialUnavailable, webViewLoads: 0, nativeTransactions: 0)
+        case .credential:
+            ClosedRestoreOutcome(terminal: .restoreCompleted, webViewLoads: 0, nativeTransactions: 1)
+        }
+    }
+
     static func presentation(for terminal: ClosedAuthenticationTerminal) -> AuthenticationPresentationCopy {
         switch terminal {
+        case .localCredentialMissing:
+            AuthenticationPresentationCopy(
+                title: "No saved sign-in",
+                message: "Sign in to SiriusXM to continue.",
+                iconName: "lock",
+                statusLabel: "local-credential-missing",
+                isReady: false,
+                canSignOut: false
+            )
+        case .localCredentialInvalid:
+            AuthenticationPresentationCopy(
+                title: "Saved sign-in unavailable",
+                message: "The saved sign-in cannot be used.",
+                iconName: "exclamationmark.triangle",
+                statusLabel: "local-credential-invalid",
+                isReady: false,
+                canSignOut: false
+            )
+        case .localCredentialUnavailable:
+            AuthenticationPresentationCopy(
+                title: "Saved sign-in unavailable",
+                message: "Sirius Mac cannot access the saved sign-in.",
+                iconName: "exclamationmark.triangle",
+                statusLabel: "local-credential-unavailable",
+                isReady: false,
+                canSignOut: false
+            )
         case .waitingForWebView:
             AuthenticationPresentationCopy(
                 title: "Sign in to SiriusXM",

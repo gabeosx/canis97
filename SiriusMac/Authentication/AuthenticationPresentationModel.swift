@@ -108,7 +108,7 @@ final class AuthenticationPresentationModel {
     private var canStartWebViewSignIn: Bool {
         guard !isAttemptInFlight else { return false }
         return switch state {
-        case .waitingForWebView, .signedOut:
+        case .waitingForWebView, .signedOut, .localCredentialMissing:
             true
         default:
             false
@@ -118,9 +118,14 @@ final class AuthenticationPresentationModel {
     private var isRetryableTerminalState: Bool {
         switch state {
         case .authenticatedButNotEntitled,
+             .profileAuthorizationRejected,
+             .entitlementAuthorizationRejected,
+             .credentialNotDurable,
              .rejected,
              .challengeRequired,
              .unsupported,
+             .localCredentialInvalid,
+             .localCredentialUnavailable,
              .signedOut,
              .cleanupFailed:
             true
@@ -153,6 +158,9 @@ final class AuthenticationPresentationModel {
 }
 
 enum AuthenticationPresentationState: Equatable {
+    case localCredentialMissing
+    case localCredentialInvalid
+    case localCredentialUnavailable
     case waitingForWebView
     case verifyingAuthentication
     case verifyingEntitlement
@@ -172,6 +180,9 @@ enum AuthenticationPresentationState: Equatable {
 private extension AuthenticationPresentationState {
     var closedTerminal: ClosedAuthenticationTerminal {
         switch self {
+        case .localCredentialMissing: .localCredentialMissing
+        case .localCredentialInvalid: .localCredentialInvalid
+        case .localCredentialUnavailable: .localCredentialUnavailable
         case .waitingForWebView: .waitingForWebView
         case .verifyingAuthentication: .verifyingAuthentication
         case .verifyingEntitlement: .verifyingEntitlement
@@ -270,9 +281,11 @@ struct ComposedAuthenticationPresentationFlow: AuthenticationPresentationFlow {
                 onEntitlementVerification: onEntitlementVerification
             )
         case .missing:
-            return .signedOut
-        case .invalidCredential, .unavailable:
-            return .unsupported
+            return .localCredentialMissing
+        case .invalidCredential:
+            return .localCredentialInvalid
+        case .unavailable:
+            return .localCredentialUnavailable
         }
     }
 

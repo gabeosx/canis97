@@ -56,7 +56,7 @@ final class SelectedAuthenticationCompositionTests: XCTestCase {
 
         try await XCTUnwrap(model.signIn()).value
         try await XCTUnwrap(model.useLoggedInSession()).value
-        XCTAssertEqual(model.state, .rejected)
+        XCTAssertEqual(model.state, .profileAuthorizationRejected)
         let terminalEvents = await client.events
         XCTAssertEqual(terminalEvents, [.authenticate])
 
@@ -180,7 +180,12 @@ final class SelectedAuthenticationCompositionTests: XCTestCase {
             credentialConsumer: { _ in },
             signInRequestLoader: { _ in signInRequestLoadCount += 1 }
         )
-        let source = RestorableAuthenticationCredentialSource(keychain: keychain, webViewSource: bridge)
+        var lifecycleEvents: [ClosedAuthenticationTerminal] = []
+        let source = RestorableAuthenticationCredentialSource(
+            keychain: keychain,
+            webViewSource: bridge,
+            telemetry: RestorableAuthenticationCredentialTelemetry { lifecycleEvents.append($0) }
+        )
         let client = CompositionClient(credentialSource: source)
         let flow = ComposedAuthenticationPresentationFlow(bridge: bridge, client: client, credentialSource: source)
 
@@ -190,11 +195,12 @@ final class SelectedAuthenticationCompositionTests: XCTestCase {
         )
         let events = await client.events
 
-        XCTAssertEqual(state, .entitled)
+        XCTAssertEqual(state, .restoreCompleted)
         XCTAssertEqual(events, [.credential, .authenticate, .entitlement])
         XCTAssertEqual(storedCredentialReadCount, 1)
         XCTAssertEqual(cookieStore.allCookieReadCount, 0)
         XCTAssertEqual(signInRequestLoadCount, 0)
+        XCTAssertEqual(lifecycleEvents, [.restoreCompleted])
         let subsequentCredential = await source.credential()
         XCTAssertNil(subsequentCredential)
     }
@@ -221,7 +227,7 @@ final class SelectedAuthenticationCompositionTests: XCTestCase {
         )
         let events = await client.events
 
-        XCTAssertEqual(state, .signedOut)
+        XCTAssertEqual(state, .localCredentialMissing)
         XCTAssertEqual(events, [])
         XCTAssertEqual(cookieStore.allCookieReadCount, 0)
         XCTAssertEqual(signInRequestLoadCount, 0)
@@ -255,7 +261,7 @@ final class SelectedAuthenticationCompositionTests: XCTestCase {
         )
         let events = await client.events
 
-        XCTAssertEqual(state, .unsupported)
+        XCTAssertEqual(state, .localCredentialInvalid)
         XCTAssertEqual(storedMaterial, invalidMaterial)
         XCTAssertEqual(removalCount, 0)
         XCTAssertEqual(events, [])
@@ -288,7 +294,7 @@ final class SelectedAuthenticationCompositionTests: XCTestCase {
         )
         let events = await client.events
 
-        XCTAssertEqual(state, .rejected)
+        XCTAssertEqual(state, .profileAuthorizationRejected)
         XCTAssertEqual(try keychain.readStoredCredential(), Data("approved-restore".utf8))
         XCTAssertEqual(events, [.credential, .authenticate])
         XCTAssertEqual(cookieStore.allCookieReadCount, 0)
@@ -317,7 +323,7 @@ final class SelectedAuthenticationCompositionTests: XCTestCase {
         )
 
         try await XCTUnwrap(model.signIn()).value
-        XCTAssertEqual(model.state, .rejected)
+        XCTAssertEqual(model.state, .profileAuthorizationRejected)
         XCTAssertEqual(try keychain.readStoredCredential(), Data("approved-restore".utf8))
         let cookieReadCount = cookieStore.allCookieReadCount
         XCTAssertEqual(cookieReadCount, 0)
@@ -352,7 +358,7 @@ final class SelectedAuthenticationCompositionTests: XCTestCase {
         )
         let events = await client.events
 
-        XCTAssertEqual(state, .unsupported)
+        XCTAssertEqual(state, .localCredentialUnavailable)
         XCTAssertEqual(events, [])
         XCTAssertEqual(cookieStore.allCookieReadCount, 0)
         XCTAssertEqual(signInRequestLoadCount, 0)

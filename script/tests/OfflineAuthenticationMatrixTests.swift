@@ -11,8 +11,19 @@ struct OfflineAuthenticationMatrixTests {
             ("oracle durable restore is ready", testRestoreCompletion),
             ("oracle labels do not retain canary material", testCanaryRedaction),
         ]
+        let localCases: [(String, () -> Void)] = [
+            ("local missing stays out of WebView", testMissingLocalCredential),
+            ("local invalid stays out of WebView", testInvalidLocalCredential),
+            ("local unavailable stays out of WebView", testUnavailableLocalCredential),
+            ("local restore completes without WebView", testValidLocalCredential),
+        ]
 
-        let selected = requestedScope == "--oracle-only" ? cases : cases
+        let selected: [(String, () -> Void)]
+        switch requestedScope {
+        case "--oracle-only": selected = cases
+        case "--local-only": selected = localCases
+        default: selected = cases + localCases
+        }
         for (name, test) in selected {
             test()
             print("PASS: \(name)")
@@ -54,6 +65,34 @@ struct OfflineAuthenticationMatrixTests {
             let surface = [presentation.title, presentation.message, presentation.statusLabel].joined(separator: "|")
             expect(surface.contains(canary), equals: false)
         }
+    }
+
+    private static func testMissingLocalCredential() {
+        let outcome = ClosedAuthenticationOracle.restoreOutcome(for: .missing)
+        expect(outcome.terminal, equals: .localCredentialMissing)
+        expect(outcome.webViewLoads, equals: 0)
+        expect(outcome.nativeTransactions, equals: 0)
+    }
+
+    private static func testInvalidLocalCredential() {
+        let outcome = ClosedAuthenticationOracle.restoreOutcome(for: .invalid)
+        expect(outcome.terminal, equals: .localCredentialInvalid)
+        expect(outcome.webViewLoads, equals: 0)
+        expect(outcome.nativeTransactions, equals: 0)
+    }
+
+    private static func testUnavailableLocalCredential() {
+        let outcome = ClosedAuthenticationOracle.restoreOutcome(for: .unavailable)
+        expect(outcome.terminal, equals: .localCredentialUnavailable)
+        expect(outcome.webViewLoads, equals: 0)
+        expect(outcome.nativeTransactions, equals: 0)
+    }
+
+    private static func testValidLocalCredential() {
+        let outcome = ClosedAuthenticationOracle.restoreOutcome(for: .credential)
+        expect(outcome.terminal, equals: .restoreCompleted)
+        expect(outcome.webViewLoads, equals: 0)
+        expect(outcome.nativeTransactions, equals: 1)
     }
 
     private static func expect<T: Equatable>(_ actual: T, equals expected: T) {
