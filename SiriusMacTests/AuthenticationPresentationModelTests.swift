@@ -21,6 +21,10 @@ final class AuthenticationPresentationModelTests: XCTestCase {
             .verifyingEntitlement,
             .authenticatedButNotEntitled,
             .entitled,
+            .restoreCompleted,
+            .profileAuthorizationRejected,
+            .entitlementAuthorizationRejected,
+            .credentialNotDurable,
             .rejected,
             .challengeRequired,
             .unsupported,
@@ -57,13 +61,19 @@ final class AuthenticationPresentationModelTests: XCTestCase {
         }
     }
 
-    func testSafeDiagnosticsAcceptOnlyFixedClassifications() {
+    func testClosedOracleUsesFixedStageSpecificClassifications() {
         let model = AuthenticationPresentationModel()
 
-        model.record(.challengeRequired)
-        model.record(.cleanupFailed)
-
-        XCTAssertEqual(model.diagnostics, [.challengeRequired, .cleanupFailed])
+        XCTAssertEqual(
+            model.presentation(for: .profileAuthorizationRejected).statusLabel,
+            "profile-authorization-rejected"
+        )
+        XCTAssertEqual(
+            model.presentation(for: .entitlementAuthorizationRejected).statusLabel,
+            "entitlement-authorization-rejected"
+        )
+        XCTAssertFalse(model.presentation(for: .credentialNotDurable).isReady)
+        XCTAssertTrue(model.presentation(for: .restoreCompleted).isReady)
     }
 
     func testLaunchRestorationRunsExactlyOnceWithoutUsingTheWebViewSession() async {

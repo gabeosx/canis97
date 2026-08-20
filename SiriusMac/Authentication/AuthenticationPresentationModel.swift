@@ -10,7 +10,6 @@ final class AuthenticationPresentationModel {
     private var hasAttemptedLaunchRestore = false
 
     private(set) var state: AuthenticationPresentationState = .signedOut
-    private(set) var diagnostics: [SafeAuthenticationDiagnostic] = []
     private(set) var isAttemptInFlight = false
     private(set) var backgroundRetryCount = 0
 
@@ -149,92 +148,7 @@ final class AuthenticationPresentationModel {
     }
 
     func presentation(for state: AuthenticationPresentationState) -> AuthenticationPresentationCopy {
-        switch state {
-        case .waitingForWebView:
-            AuthenticationPresentationCopy(
-                title: "Sign in to SiriusXM",
-                message: "Sign in in the native window to continue.",
-                iconName: "lock",
-                isReady: false,
-                canSignOut: false
-            )
-        case .verifyingAuthentication:
-            AuthenticationPresentationCopy(
-                title: "Verifying sign-in",
-                message: "Checking your signed-in session.",
-                iconName: "checkmark.shield",
-                isReady: false,
-                canSignOut: false
-            )
-        case .verifyingEntitlement:
-            AuthenticationPresentationCopy(
-                title: "Checking subscription",
-                message: "Confirming that this account can listen.",
-                iconName: "checkmark.seal",
-                isReady: false,
-                canSignOut: false
-            )
-        case .authenticatedButNotEntitled:
-            AuthenticationPresentationCopy(
-                title: "Subscription unavailable",
-                message: "This signed-in account is not currently entitled to listen.",
-                iconName: "person.crop.circle.badge.exclamationmark",
-                isReady: false,
-                canSignOut: false
-            )
-        case .entitled:
-            AuthenticationPresentationCopy(
-                title: "Ready to listen",
-                message: "Your account is signed in and ready.",
-                iconName: "checkmark.circle",
-                isReady: true,
-                canSignOut: true
-            )
-        case .rejected:
-            AuthenticationPresentationCopy(
-                title: "Sign-in was rejected",
-                message: "SiriusXM did not accept this sign-in attempt.",
-                iconName: "xmark.circle",
-                isReady: false,
-                canSignOut: false
-            )
-        case .challengeRequired:
-            AuthenticationPresentationCopy(
-                title: "Additional verification is required",
-                message: "This sign-in needs a challenge that Sirius Mac does not handle.",
-                iconName: "exclamationmark.shield",
-                isReady: false,
-                canSignOut: false
-            )
-        case .unsupported:
-            AuthenticationPresentationCopy(
-                title: "Sign-in flow unsupported",
-                message: "This sign-in flow is unsupported. No workaround was attempted.",
-                iconName: "exclamationmark.triangle",
-                isReady: false,
-                canSignOut: false
-            )
-        case .signedOut:
-            AuthenticationPresentationCopy(
-                title: "Signed out",
-                message: "You are signed out of Sirius Mac.",
-                iconName: "rectangle.portrait.and.arrow.right",
-                isReady: false,
-                canSignOut: false
-            )
-        case .cleanupFailed:
-            AuthenticationPresentationCopy(
-                title: "Signed out with cleanup warning",
-                message: "You are signed out. Local cleanup was incomplete.",
-                iconName: "exclamationmark.triangle",
-                isReady: false,
-                canSignOut: false
-            )
-        }
-    }
-
-    func record(_ diagnostic: SafeAuthenticationDiagnostic) {
-        diagnostics.append(diagnostic)
+        ClosedAuthenticationOracle.presentation(for: state.closedTerminal)
     }
 }
 
@@ -244,6 +158,10 @@ enum AuthenticationPresentationState: Equatable {
     case verifyingEntitlement
     case authenticatedButNotEntitled
     case entitled
+    case restoreCompleted
+    case profileAuthorizationRejected
+    case entitlementAuthorizationRejected
+    case credentialNotDurable
     case rejected
     case challengeRequired
     case unsupported
@@ -251,21 +169,25 @@ enum AuthenticationPresentationState: Equatable {
     case cleanupFailed(SignOutCleanupFailure)
 }
 
-struct AuthenticationPresentationCopy: Equatable {
-    let title: String
-    let message: String
-    let iconName: String
-    let isReady: Bool
-    let canSignOut: Bool
-}
-
-enum SafeAuthenticationDiagnostic: Equatable {
-    case signInStarted
-    case authenticationRejected
-    case challengeRequired
-    case unsupported
-    case signedOut
-    case cleanupFailed
+private extension AuthenticationPresentationState {
+    var closedTerminal: ClosedAuthenticationTerminal {
+        switch self {
+        case .waitingForWebView: .waitingForWebView
+        case .verifyingAuthentication: .verifyingAuthentication
+        case .verifyingEntitlement: .verifyingEntitlement
+        case .authenticatedButNotEntitled: .authenticatedButNotEntitled
+        case .entitled: .durableReady
+        case .restoreCompleted: .restoreCompleted
+        case .profileAuthorizationRejected: .profileUnauthorized
+        case .entitlementAuthorizationRejected: .entitlementUnauthorized
+        case .credentialNotDurable: .persistenceFailed
+        case .rejected: .rejected
+        case .challengeRequired: .challengeRequired
+        case .unsupported: .unsupported
+        case .signedOut: .signedOut
+        case .cleanupFailed: .cleanupFailed
+        }
+    }
 }
 
 protocol AuthenticationPresentationFlow: Sendable {
@@ -344,6 +266,7 @@ struct ComposedAuthenticationPresentationFlow: AuthenticationPresentationFlow {
             onAuthenticationVerification()
             return await completeClientTransaction(
                 credentialSource: credentialSource,
+                isAutomaticRestore: true,
                 onEntitlementVerification: onEntitlementVerification
             )
         case .missing:
@@ -366,6 +289,7 @@ struct ComposedAuthenticationPresentationFlow: AuthenticationPresentationFlow {
             onAuthenticationVerification()
             return await completeClientTransaction(
                 credentialSource: credentialSource,
+                isAutomaticRestore: false,
                 onEntitlementVerification: onEntitlementVerification
             )
         case .webViewRequired:
@@ -384,6 +308,7 @@ struct ComposedAuthenticationPresentationFlow: AuthenticationPresentationFlow {
         }
         return await completeClientTransaction(
             credentialSource: credentialSource,
+            isAutomaticRestore: false,
             onEntitlementVerification: onEntitlementVerification
         )
     }
@@ -399,7 +324,7 @@ struct ComposedAuthenticationPresentationFlow: AuthenticationPresentationFlow {
         case .authenticatedButNotEntitled:
             .authenticatedButNotEntitled
         case .rejected:
-            .rejected
+            .entitlementAuthorizationRejected
         case .challengeRequired:
             .challengeRequired
         case .unavailable, .unsupported, .cancelled:
@@ -409,6 +334,7 @@ struct ComposedAuthenticationPresentationFlow: AuthenticationPresentationFlow {
 
     private func completeClientTransaction(
         credentialSource: RestorableAuthenticationCredentialSource?,
+        isAutomaticRestore: Bool,
         onEntitlementVerification: @MainActor @escaping @Sendable () -> Void
     ) async -> AuthenticationPresentationState {
         let state: AuthenticationPresentationState
@@ -419,25 +345,28 @@ struct ComposedAuthenticationPresentationFlow: AuthenticationPresentationFlow {
         case .waitingForAuthenticationComposition, .unsupported, .cancelled:
             state = .unsupported
         case .credentialPersistenceFailed:
-            // A non-durable session must never reach Ready. The existing closed
-            // unsupported presentation is intentionally used rather than
-            // exposing Keychain details to the user interface.
-            state = .unsupported
+            state = .credentialNotDurable
         case .rejected:
-            state = .rejected
+            state = .profileAuthorizationRejected
         case .challengeRequired:
             state = .challengeRequired
         }
 
-        guard state != .entitled else {
+        guard state == .entitled else {
+            credentialSource?.finishRejectedRestore()
+            credentialSource?.finishWebViewAttempt()
+            return state
+        }
+
+        guard isAutomaticRestore else {
             credentialSource?.finalizeSuccessfulRestore()
             credentialSource?.finishWebViewAttempt()
             return state
         }
 
-        credentialSource?.finishRejectedRestore()
+        credentialSource?.finalizeSuccessfulRestore()
         credentialSource?.finishWebViewAttempt()
-        return state
+        return .restoreCompleted
     }
 }
 
