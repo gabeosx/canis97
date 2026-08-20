@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 02
 current_phase_name: authorized-live-listening
 status: executing
-stopped_at: Completed 02-13-PLAN.md
-last_updated: "2026-08-20T15:22:23.973Z"
+stopped_at: Completed 02-14-PLAN.md
+last_updated: "2026-08-20T15:33:15.913Z"
 last_activity: 2026-08-20
 last_activity_desc: Closed Plan 02-11 with sanitized blocked-at-authentication UAT evidence and no retry
 progress:
   total_phases: 3
   completed_phases: 2
   total_plans: 46
-  completed_plans: 42
+  completed_plans: 43
 ---
 
 # Project State
@@ -32,7 +32,7 @@ Plan: 14 of 18
 Status: Ready to execute
 Last activity: 2026-08-20 — Plan 02-12 closed Incremental Gate 1 with green no-host package authentication tests
 
-Progress: [█████████░] 91%
+Progress: [█████████░] 93%
 
 ## Performance Metrics
 
@@ -101,6 +101,7 @@ Progress: [█████████░] 91%
 | Phase 02 P12 | 4 min | 2 tasks | 8 files |
 | Phase 02-authorized-live-listening P15 | 15min | 2 tasks | 5 files |
 | Phase 02 P13 | 10 min | 3 tasks | 11 files |
+| Phase 02 P14 | 17min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -177,6 +178,8 @@ All earlier Phase 0 feasibility-selection, proof-run, quartet, GO/NO-GO, and cal
 - [Phase ?]: Publish a durable active session only after opaque credential persistence succeeds.
 - [Phase 02-authorized-live-listening]: Require exact executable-path identity and an atomic lock for bounded SiriusMac launch safety. — A matching process name cannot distinguish stale or duplicate builds.
 - [Phase ?]: Use a closed enum-only authentication oracle and rotate the nonpersistent WebView session before each explicit sign-in.
+- [Phase ?]: Await the current explicit cleanup before acquiring an authentication lease or credential source material.
+- [Phase ?]: Expose cleanup as a fixed in-progress state and reject every auth action until it settles.
 
 ### Pending Todos
 
@@ -210,6 +213,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-20T15:22:23.955Z
-Stopped at: Completed 02-13-PLAN.md
+Last session: 2026-08-20T15:33:15.890Z
+Stopped at: Completed 02-14-PLAN.md
 Resume file: None
