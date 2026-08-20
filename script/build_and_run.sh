@@ -3,6 +3,7 @@ set -euo pipefail
 
 MODE="${1:-run}"
 APP_NAME="SiriusMac"
+APP_BUNDLE_IDENTIFIER="com.siriusmac.player"
 DEVELOPER_DIR_PATH="/Applications/Xcode.app/Contents/Developer"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT_PATH="$ROOT_DIR/SiriusMac.xcodeproj"
@@ -11,17 +12,9 @@ CLANG_CACHE_PATH="/tmp/sirius-mac-clang-cache"
 SWIFTPM_CACHE_PATH="/tmp/sirius-mac-swiftpm-cache"
 APP_BUNDLE="$DERIVED_DATA_PATH/Build/Products/Debug/$APP_NAME.app"
 APP_BINARY="$APP_BUNDLE/Contents/MacOS/$APP_NAME"
-source "$ROOT_DIR/script/lib/single_instance_launcher.sh"
-
-export SIL_APP_NAME="$APP_NAME"
-export SIL_APP_BUNDLE="$APP_BUNDLE"
-export SIL_APP_BINARY="$APP_BINARY"
-export SIL_LOCK_PATH="${SIL_LOCK_PATH:-/tmp/sirius-mac-launch.lock}"
-export SIL_PGREP="${SIL_PGREP:-/usr/bin/pgrep}"
-export SIL_TERMINATE_ALL="${SIL_TERMINATE_ALL:-/usr/bin/pkill}"
-export SIL_PID_PATH="${SIL_PID_PATH:-$ROOT_DIR/script/lib/resolve_process_binary.sh}"
-export SIL_OPEN="${SIL_OPEN:-/usr/bin/open}"
-export SIL_SLEEP="${SIL_SLEEP:-/bin/sleep}"
+NATIVE_LAUNCHER_SOURCE="$ROOT_DIR/script/native_single_instance_launcher.swift"
+NATIVE_LAUNCHER_BINARY="${SIL_NATIVE_LAUNCHER_BINARY:-/tmp/sirius-mac-native-launcher}"
+LAUNCH_LOCK_PATH="${SIL_LOCK_PATH:-/tmp/sirius-mac-launch.lock}"
 export SIL_XCODEBUILD="${SIL_XCODEBUILD:-xcodebuild}"
 export SIL_LOG="${SIL_LOG:-/usr/bin/log}"
 export SIL_KILL="${SIL_KILL:-/bin/kill}"
@@ -34,9 +27,33 @@ cleanup_telemetry() {
     TELEMETRY_PID=""
   fi
 }
+cleanup_launcher() {
+  cleanup_telemetry
+  rmdir "$LAUNCH_LOCK_PATH" 2>/dev/null || true
+}
 if [[ "${SIL_BUILD_AND_RUN_SOURCE_ONLY:-0}" != "1" ]]; then
-  trap cleanup_telemetry EXIT
+  trap cleanup_launcher EXIT
 fi
+
+report_process_stage() {
+  printf 'process-stage: %s\n' "$1" >&2
+}
+
+acquire_launch_lock() {
+  if ! mkdir "$LAUNCH_LOCK_PATH" 2>/dev/null; then
+    report_process_stage lock-acquisition-failed
+    return 1
+  fi
+}
+
+build_native_launcher() {
+  if ! CLANG_MODULE_CACHE_PATH="$CLANG_CACHE_PATH" \
+    SWIFT_MODULE_CACHE_PATH="$SWIFTPM_CACHE_PATH" \
+    xcrun swiftc -parse-as-library "$NATIVE_LAUNCHER_SOURCE" -framework AppKit -o "$NATIVE_LAUNCHER_BINARY"; then
+    report_process_stage native-launcher-build-failed
+    return 1
+  fi
+}
 
 build_exact_bundle() {
   SIL_BUILD_FAILURE_STAGE=""
@@ -75,33 +92,33 @@ start_authentication_telemetry() {
 }
 
 launch_after_build() {
-  single_instance_launch_locked
+  "$NATIVE_LAUNCHER_BINARY" launch "$APP_BUNDLE" "$APP_BUNDLE_IDENTIFIER" "$APP_BINARY"
 }
 
 build_and_launch() {
   local mode="$1" launch_status=0
   if ! build_exact_bundle >/dev/null; then
-    sil_report_invariant_stage "${SIL_BUILD_FAILURE_STAGE:-build-command-failed}" || true
+    report_process_stage "${SIL_BUILD_FAILURE_STAGE:-build-command-failed}"
+    return 1
+  fi
+  if ! build_native_launcher; then
     return 1
   fi
   if [[ "$mode" == "--telemetry" || "$mode" == "telemetry" ]]; then
     if ! start_authentication_telemetry; then
-      sil_report_invariant_stage "${SIL_TELEMETRY_FAILURE_STAGE:-telemetry-start-failed}" || true
+      report_process_stage "${SIL_TELEMETRY_FAILURE_STAGE:-telemetry-start-failed}"
       return 1
     fi
   fi
-  launch_after_build
-  launch_status=$?
+  local launched_pid=""
+  launched_pid="$(launch_after_build)" || launch_status=$?
   if (( launch_status != 0 )); then
-    if [[ -z "${SIL_REPORTED_INVARIANT_STAGE:-}" ]]; then
-      sil_report_invariant_stage launch-wrapper-no-stage-failed || true
-    fi
     return "$launch_status"
   fi
 
   case "$mode" in
     --debug|debug)
-      lldb -p "$(sil_pid_list | awk 'NF { print; exit }')"
+      lldb -p "$launched_pid"
       ;;
     --logs|logs)
       /usr/bin/log stream --info --style compact --predicate 'process == "SiriusMac"'
@@ -110,7 +127,7 @@ build_and_launch() {
       wait "$TELEMETRY_PID"
       ;;
     --verify|verify)
-      echo "verified exact SiriusMac launch"
+      echo "verified exact SiriusMac launch (pid $launched_pid)"
       ;;
     run)
       ;;
@@ -126,10 +143,12 @@ fi
 
 case "$MODE" in
   --build-only|build-only)
-    single_instance_build_only build_exact_bundle
+    build_exact_bundle
+    build_native_launcher
     ;;
   run|--debug|debug|--logs|logs|--telemetry|telemetry|--verify|verify)
-    single_instance_with_lock build_and_launch "$MODE"
+    acquire_launch_lock
+    build_and_launch "$MODE"
     ;;
   *)
     echo "usage: $0 [run|--build-only|--debug|--logs|--telemetry|--verify]" >&2
