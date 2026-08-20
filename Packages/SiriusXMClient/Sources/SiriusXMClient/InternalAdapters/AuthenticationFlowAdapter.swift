@@ -246,8 +246,10 @@ enum AuthenticationFlowAdapter {
         }
 
         switch response.statusCode {
-        case 401, 403:
-            return .authentication(.rejected, .rejected)
+        case 401:
+            return .authentication(.rejected, .httpUnauthorized)
+        case 403:
+            return .authentication(.rejected, .httpForbidden)
         case 429:
             return .authentication(.rateLimited, .rateLimited)
         case 404:

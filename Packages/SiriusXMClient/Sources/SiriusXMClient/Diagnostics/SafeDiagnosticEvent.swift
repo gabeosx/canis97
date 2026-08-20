@@ -11,6 +11,8 @@ enum SafeDiagnosticOperation: String, Sendable, Equatable {
 enum SafeDiagnosticOutcome: String, Sendable, Equatable, CaseIterable {
     case completed
     case rejected
+    case httpUnauthorized = "http-unauthorized"
+    case httpForbidden = "http-forbidden"
     case challengeRequired = "challenge-required"
     case rateLimited = "rate-limited"
     case redirectDrift = "redirect-drift"

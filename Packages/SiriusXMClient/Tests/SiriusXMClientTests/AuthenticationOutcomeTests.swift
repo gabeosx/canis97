@@ -115,6 +115,41 @@ struct AuthenticationOutcomeTests {
         #expect(AuthenticationFlowAdapter.inspectEntitlement(inactive).diagnosticOutcome == .notEntitled)
     }
 
+    @Test("401 and 403 diagnostics retain the native stage without response material")
+    func authorizationRejectionsAreStageSpecificAndRedacted() {
+        let canary = "synthetic-response-canary"
+        let cases: [(Int, SafeDiagnosticOutcome)] = [
+            (401, .httpUnauthorized),
+            (403, .httpForbidden),
+        ]
+
+        for (statusCode, expectedOutcome) in cases {
+            let nativeResponse = response(statusCode: statusCode, object: ["fixture": canary])
+
+            let profile = AuthenticationFlowAdapter.inspectAuthentication(nativeResponse)
+            #expect(profile.result == .rejected)
+            #expect(profile.diagnosticOutcome == expectedOutcome)
+            let profileEvent = SafeDiagnosticEvent(
+                operation: .nativeAuthentication,
+                outcome: profile.diagnosticOutcome,
+                handle: SafeDiagnosticHandle()
+            )
+            #expect(profileEvent.rendered == "native-authentication:\(expectedOutcome.rawValue)")
+            #expect(!profileEvent.rendered.contains(canary))
+
+            let entitlement = AuthenticationFlowAdapter.inspectEntitlement(nativeResponse)
+            #expect(entitlement.result == .rejected)
+            #expect(entitlement.diagnosticOutcome == expectedOutcome)
+            let entitlementEvent = SafeDiagnosticEvent(
+                operation: .entitlement,
+                outcome: entitlement.diagnosticOutcome,
+                handle: SafeDiagnosticHandle()
+            )
+            #expect(entitlementEvent.rendered == "entitlement:\(expectedOutcome.rawValue)")
+            #expect(!entitlementEvent.rendered.contains(canary))
+        }
+    }
+
     @Test("transport errors become bounded labels without retaining error detail")
     func transportErrorsMapToSafeClasses() {
         let cases: [(URLError.Code, SafeDiagnosticOutcome)] = [
