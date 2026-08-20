@@ -75,6 +75,7 @@ final class WebAuthenticationBridge {
     private let usesLiveCookieStore: Bool
     private var selectionState: CredentialSelectionState = .available
     private var selectionGeneration = 0
+    private var pendingSignInRequest: URLRequest?
 
     init() {
         let handoff = VolatileWebCredentialHandoff()
@@ -137,6 +138,7 @@ final class WebAuthenticationBridge {
         telemetry.record(.webSignInStarted)
         // Keep selection fail-closed while stale handoff and website state retire.
         let reservation = beginSelection()
+        pendingSignInRequest = nil
         await handoffDisposer()
         guard await retireAuthenticationWebsiteSession() else {
             telemetry.record(.websiteSessionResetFailed)
@@ -144,8 +146,17 @@ final class WebAuthenticationBridge {
         }
         completeUncommittedSelection(reservation)
         guard let url = URL(string: "https://www.siriusxm.com/player") else { return false }
-        signInRequestLoader(URLRequest(url: url))
+        pendingSignInRequest = URLRequest(url: url)
         return true
+    }
+
+    /// Starts the queued request only after SwiftUI has installed this bridge's
+    /// current WebView in the visible AppKit host. Repeated view updates cannot
+    /// issue a second navigation.
+    func loadPendingSignInRequestIfNeeded() {
+        guard let request = pendingSignInRequest else { return }
+        pendingSignInRequest = nil
+        signInRequestLoader(request)
     }
 
     /// The only action that reads the WebView-owned cookie store.

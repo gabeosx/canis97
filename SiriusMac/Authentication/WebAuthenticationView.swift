@@ -24,10 +24,12 @@ struct WebAuthenticationView: NSViewRepresentable {
     func makeNSView(context: Context) -> WebAuthenticationWebViewHost {
         let host = WebAuthenticationWebViewHost(frame: .zero)
         host.install(bridge.makeWebView())
+        bridge.loadPendingSignInRequestIfNeeded()
         return host
     }
 
     func updateNSView(_ nsView: WebAuthenticationWebViewHost, context: Context) {
         nsView.install(bridge.makeWebView())
+        bridge.loadPendingSignInRequestIfNeeded()
     }
 }

@@ -62,7 +62,7 @@ final class WebAuthenticationBridgeTests: XCTestCase {
         XCTAssertEqual(snapshot.count, 1)
     }
 
-    func testExplicitSignInLoadsTheEstablishedPlayerEntryWithoutUsingTheNetworkInTests() async {
+    func testExplicitSignInLoadsTheEstablishedPlayerEntryOnlyAfterVisibleWebViewInstallation() async {
         var loadedRequests: [URLRequest] = []
         let bridge = WebAuthenticationBridge(
             cookieStore: TestCookieStore(cookies: []),
@@ -71,8 +71,16 @@ final class WebAuthenticationBridgeTests: XCTestCase {
         )
 
         await bridge.beginUserOperatedSignIn()
+        XCTAssertTrue(loadedRequests.isEmpty)
+
+        let host = WebAuthenticationWebViewHost(frame: .zero)
+        let visibleWebView = bridge.makeWebView()
+        host.install(visibleWebView)
+        bridge.loadPendingSignInRequestIfNeeded()
+        bridge.loadPendingSignInRequestIfNeeded()
 
         XCTAssertEqual(loadedRequests.map(\.url), [URL(string: "https://www.siriusxm.com/player")])
+        XCTAssertTrue(host.subviews.first === visibleWebView)
     }
 
     func testExplicitSignInRetiresAndRotatesBeforeOnePlayerLoad() async {
@@ -90,6 +98,7 @@ final class WebAuthenticationBridgeTests: XCTestCase {
         let initialGeneration = bridge.websiteSessionGeneration
 
         let didBegin = await bridge.beginUserOperatedSignIn()
+        bridge.loadPendingSignInRequestIfNeeded()
 
         XCTAssertTrue(didBegin)
         XCTAssertEqual(retireCount, 1)

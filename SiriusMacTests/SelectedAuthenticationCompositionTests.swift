@@ -336,6 +336,10 @@ final class SelectedAuthenticationCompositionTests: XCTestCase {
 
         try await XCTUnwrap(model.retry()).value
         XCTAssertEqual(model.state, .waitingForWebView)
+        XCTAssertEqual(signInRequestLoadCount, 0)
+        let host = WebAuthenticationWebViewHost(frame: .zero)
+        host.install(bridge.makeWebView())
+        bridge.loadPendingSignInRequestIfNeeded()
         XCTAssertEqual(signInRequestLoadCount, 1)
         var events = await client.events
         XCTAssertEqual(events, [.credential, .authenticate])
