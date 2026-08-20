@@ -78,3 +78,24 @@ The one-process invariant remained satisfied. The exact intended app is left run
 | Replacement attachment proof | PASS | A PID-targeted System Events accessibility query attached to an already-running harmless macOS process without launching or activating another application. |
 
 The duplicate source is therefore isolated to app-name lookup in the Computer Use connector, not the native single-instance launcher. Any future recheck must avoid Computer Use app lookup entirely and target only the existing SiriusMac PID through System Events. This addendum authorizes no launch by itself.
+
+## PID-Targeted Authorized Recheck Addendum
+
+| Check | Result | Fixed evidence |
+| --- | --- | --- |
+| Zero-before launch invariant | PASS | The process table contained zero SiriusMac processes before the authorized launcher ran. |
+| Exact telemetry-first launch | PASS | The native single-instance launcher produced one exact SiriusMac PID mapped to the freshly built bundle. |
+| PID-targeted accessibility binding | PASS | System Events bound only through the numeric PID; no application-name lookup, Computer Use connector, `open`, or alternate launcher was used. |
+| Automatic restoration | BLOCKED | The automatic restore did not settle to native ready composition within this checkpoint. The exact process exposed zero accessibility windows and zero fixed listening/sign-in controls, so no catalog or playback action was possible. |
+| WebView/password/sign-in handoff | NOT INVOKED | No WebView, password entry, credential handling, retry, Sign Out, Clear Local Session, or Keychain modification occurred. |
+| Final process invariant | PASS | One SiriusMac process remained, and its executable path matched the newly built bundle. |
+
+automatic_restore: blocked
+catalog_refresh: not_observed
+listening_controls: not_observed
+current_metadata: not_observed
+process_invariant: passed
+
+## Latest Closed Outcome
+
+This fresh owner-authorized attempt is **BLOCKED** at the fixed automatic-restore stage. It performed exactly one guarded production launch and retained exactly one expected process. Because restore did not reach the native listening composition, the checkpoint did not refresh the catalog, select a channel, tune, control playback, or observe metadata. No second launch, sign-in, WebView, cleanup, fault induction, request variation, traffic capture, or secret inspection is authorized by this record.
