@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 02
 current_phase_name: authorized-live-listening
 status: executing
-stopped_at: Completed 02-12-PLAN.md
-last_updated: "2026-08-20T14:56:27.407Z"
+stopped_at: Completed 02-15-PLAN.md
+last_updated: "2026-08-20T15:04:15.232Z"
 last_activity: 2026-08-20
 last_activity_desc: Closed Plan 02-11 with sanitized blocked-at-authentication UAT evidence and no retry
 progress:
   total_phases: 3
   completed_phases: 2
   total_plans: 46
-  completed_plans: 40
+  completed_plans: 41
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-08-18)
 ## Current Position
 
 Phase: 02 (authorized-live-listening) — EXECUTING
-Plan: 12 of 18
+Plan: 13 of 18
 Status: Ready to execute
 Last activity: 2026-08-20 — Plan 02-12 closed Incremental Gate 1 with green no-host package authentication tests
 
-Progress: [█████████░] 87%
+Progress: [█████████░] 89%
 
 ## Performance Metrics
 
@@ -99,6 +99,7 @@ Progress: [█████████░] 87%
 | Phase 02 P10 | ~10 min | 3 tasks | 8 files |
 | Phase 02 P11 | ~5 min | 1 tasks | 2 files |
 | Phase 02 P12 | 4 min | 2 tasks | 8 files |
+| Phase 02-authorized-live-listening P15 | 15min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -173,6 +174,7 @@ All earlier Phase 0 feasibility-selection, proof-run, quartet, GO/NO-GO, and cal
 - [Phase ?]: Keep playback, metadata, recovery, failure, and expiry statuses truthful: NOT OBSERVED or NOT FORCED unless actually observed.
 - [Phase ?]: Use closed 401/403 stage labels while preserving public rejected semantics.
 - [Phase ?]: Publish a durable active session only after opaque credential persistence succeeds.
+- [Phase 02-authorized-live-listening]: Require exact executable-path identity and an atomic lock for bounded SiriusMac launch safety. — A matching process name cannot distinguish stale or duplicate builds.
 
 ### Pending Todos
 
@@ -206,6 +208,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-20T14:56:27.388Z
-Stopped at: Completed 02-12-PLAN.md
+Last session: 2026-08-20T15:04:15.215Z
+Stopped at: Completed 02-15-PLAN.md
 Resume file: None
