@@ -2,7 +2,7 @@
 status: blocked
 trigger: "ok go"
 created: 2026-08-20T16:20:00-04:00
-updated: 2026-08-20T13:30:17-04:00
+updated: 2026-08-20T14:20:52-04:00
 ---
 
 # Debug Session: Launcher Process Invariant
@@ -54,7 +54,7 @@ candidate_causes:
 and_gate: no — each candidate alone can produce the visible post-cleanup zero-process result.
 test: fake-only coverage must prove distinct `lock-acquisition-failed`, `launcher-configuration-missing`, `build-command-failed`, `build-output-missing`, `telemetry-start-failed`, `launch-wrapper-no-stage-failed`, and true `launch-command-failed` labels, with no production commands reachable; then run the no-host authentication matrix and build-only. Do not launch or inspect SiriusMac in this session.
 expecting: an absent inner stage is reported only as `launch-wrapper-no-stage-failed`, never as `launch-command-failed`; each pre-open path emits its own allow-listed fixed label.
-next_action: the offline stage-propagation contract is green. Preserve `02-AUTH-UAT.md` as blocked and do not request or run another native launch automatically. Any future observation would require fresh owner authorization and may retain only one current allow-listed stage; it does not authorize authentication, WebView, Keychain, provider, catalog, or playback work.
+next_action: the resolver's logical-versus-physical mapped-path and post-PID mapping-readiness contracts are green offline. Preserve `02-AUTH-UAT.md` as blocked and do not request or run another native launch automatically. Any future observation requires fresh owner authorization and may retain only one current allow-listed stage; it does not authorize authentication, WebView, Keychain, provider, catalog, or playback work.
 reasoning_checkpoint:
   hypothesis: "The resolver can falsely reject the just-launched binary because it compares argv[0], and the lock wrapper can falsely report success because it invokes the launch-stage function in an errexit-ignored `||` context."
   confirming_evidence:
@@ -217,6 +217,26 @@ tdd_checkpoint:
   found: Only `script/build_and_run.sh`, `script/lib/single_instance_launcher.sh`, and `script/tests/build_and_run_tests.sh` were committed as `d2cbdf2` (`fix: preserve launcher failure stages`). All permitted offline checks passed. The pre-existing `.planning/config.json` modification, the sanitized checkpoint artifact, this debug record, and untracked `.gsd/` were not staged.
   implication: The stage-propagation repair is durable and isolated. The consumed `launch-command-failed` datum remains historically ambiguous: it cannot prove that the configured open command, rather than a formerly-unlabeled earlier wrapper failure, was the original cause. A future observation from this revision would distinguish those paths, but none was requested or performed.
 
+- timestamp: 2026-08-20
+  checked: one separately owner-authorized post-fix telemetry-first launch through `script/build_and_run.sh --telemetry`
+  found: `process-stage: mapped-path-missing`; post-failure cleanup was verified at zero SiriusMac processes.
+  implication: The one-use observation failed at the resolver's mapped-executable boundary before owner interaction. No retry, application UI interaction, sign-in, WebView, credential handoff, Keychain query, provider request, catalog action, or playback action occurred.
+
+- timestamp: 2026-08-20T14:20:52-04:00
+  checked: static launcher paths, local command availability, and an actual `lsof -a -p <synthetic-pid> -d txt -Fn` query against a temporary alias to `/bin/sleep`
+  found: The launcher configures its built executable below `/tmp`, while `/bin/realpath` resolves that logical path to its physical target. The real `lsof` machine output contains `ftxt`/`n` records and reports the mapped physical `/bin/sleep` path for the synthetic alias, followed by the dyld mapping. The prior resolver compared the raw logical expected text directly, so it returned no path despite a valid mapped executable. `/usr/sbin/lsof` and `/bin/realpath` are present; `/usr/bin/realpath` is not present on this Mac.
+  implication: Logical-versus-physical path comparison is a confirmed resolver contract defect. It is the evidence-backed explanation for a `mapped-path-missing` result when a valid executable mapping differs only by canonical path representation, but the consumed SiriusMac observation itself remains uninspected by design.
+
+- timestamp: 2026-08-20T14:20:52-04:00
+  checked: RED/green synthetic launcher tests, ten repeated fake matrices, no-host authentication matrix, shell syntax, and non-launching build-only compilation
+  found: Before the repair, a delayed mapped-executable hook failed immediately without reopening. The production-shape alias test also failed because the resolver rejected the physical text mapping. After canonical expected-path matching plus a bounded retry only for `mapped-path-missing`, the fake matrix passed 10/10, including `ftxt`/debug-dylib ordering, wrong-mapped-executable mismatch classification, delayed mapping readiness without a second open, and the actual local `lsof` parser shape. The no-host matrix passed, and `bash script/build_and_run.sh --build-only` reported `BUILD SUCCEEDED`.
+  implication: The exact offline resolver contract is green. A missing mapping may wait briefly for the already-selected PID, while any mapped identity mismatch fails closed immediately; no retry can open a second bundle.
+
+- timestamp: 2026-08-20T14:20:52-04:00
+  checked: focused staged-file list, whitespace validation, and commit result
+  found: Only `script/lib/resolve_process_binary.sh`, `script/lib/single_instance_launcher.sh`, and `script/tests/build_and_run_tests.sh` were committed as `4ce7fab` (`fix: normalize launcher mapped paths`). The pre-existing `.planning/config.json` change, blocked UAT record, debug record, and untracked `.gsd/` directory were not staged.
+  implication: The offline resolver repair is durable and isolated. No native launch or authorization-consuming action occurred during this continuation.
+
 ## Eliminated
 
 ## Resolution
@@ -228,8 +248,9 @@ root_cause: |
   (3) the resolver selects the first text mapping rather than the exact expected executable, despite Debug bundles mapping a debug dylib as well;
   (4) the two-second process-registration budget is unnecessarily brittle for one asynchronous GUI launch.
   (5) `build_and_launch` and its outer lock wrapper did not give every pre-open and absent-stage failure a distinct allow-listed label, so the saved `launch-command-failed` result is not sufficient evidence that `/usr/bin/open` itself failed.
+  (6) the mapped-text resolver compares the logical `/tmp` build path directly to the physical path reported by `lsof`, and performs its one read immediately after PID discovery. A valid mapping can therefore be reported as missing when only the path representation differs or when mapping observation is not yet ready.
 fix:
-  `resolve_process_binary.sh` now reads mapped `txt` executables through an injectable `lsof` command, explicitly fails closed for an empty result, and selects the exact expected executable when supplied. The launcher retains the PID-count observation and waits up to ten seconds for one process without reopening. `build_and_launch` now emits separate stages for build-command, build-output, and telemetry-start failures; the lock helper labels lock/configuration failures, tracks lock ownership, and reports an otherwise absent inner stage only as `launch-wrapper-no-stage-failed`. `launch-command-failed` is now reserved for the actual configured open command returning nonzero.
+  `resolve_process_binary.sh` now canonicalizes the expected path with the available `/bin/realpath`, compares that canonical value to the mapped `txt` entries from injectable `lsof`, and returns the configured path on an exact canonical match so callers keep their verbatim configured-path contract. If a different mapping exists, it returns that mapping for a fixed mismatch result; an empty query still fails closed. The launcher retains the PID-count observation and now retries only a transient missing mapping for the already-selected PID, without reopening; any mismatch fails closed immediately. Earlier changes retain separate build, telemetry, lock, wrapper, and true-open failure stages.
 verification:
   target_test: { result: pass, suite: "bash script/tests/build_and_run_tests.sh" }
   mutation_check: { result: skipped, reason_if_skipped: "No Stryker or other Bash mutation tool is configured." }
@@ -241,6 +262,7 @@ verification:
   commit: 8eddadd
   followup_commit: 9f58c61
   stage_propagation_commit: d2cbdf2
+  mapped_path_commit: 4ce7fab
 files_changed:
   - script/build_and_run.sh
   - script/lib/resolve_process_binary.sh
@@ -250,12 +272,12 @@ oracle_type: specified — the launcher contract explicitly requires the exact b
 
 ## Native Verification Boundary
 
-status: awaiting separate owner authorization
+status: awaiting one separately owner-authorized launcher observation
 
-The separately authorized stage-reporting launch completed with `process-stage: launch-command-failed` and cleanup verified at zero SiriusMac processes. Its one-use authority is consumed. Return to offline investigation before requesting any new native launch authorization.
+The separately authorized post-fix launch completed with `process-stage: mapped-path-missing` and cleanup verified at zero SiriusMac processes. Its one-use authority is consumed. The subsequent offline repair in `4ce7fab` establishes the logical-versus-physical mapped-path explanation and same-PID mapping-readiness contract, but it cannot prove the repaired native path without one new bounded observation.
 
-The offline repair is complete in `8eddadd`, `9f58c61`, and `d2cbdf2`. All earlier native-launch authority is consumed. No authentication, WebView, Keychain, provider, catalog, or playback behavior was entered by the observation.
+The offline repair is complete in `8eddadd`, `9f58c61`, `d2cbdf2`, and `4ce7fab`. All earlier native-launch authority is consumed. No authentication, WebView, Keychain, provider, catalog, or playback behavior was entered by the observation.
 
 The observation may persist exactly one failure datum, formatted as `process-stage: <label>`, where `<label>` is one of: `lock-acquisition-failed`, `launcher-configuration-missing`, `build-command-failed`, `build-output-missing`, `telemetry-start-failed`, `launch-wrapper-no-stage-failed`, `prelaunch-cleanup-failed`, `launch-command-failed`, `zero-after-open`, `multiple-after-open`, `unexpected-count-after-open`, `pid-selection-failed`, `mapped-path-missing`, or `mapped-path-mismatch`. All other process and telemetry output must be discarded. It must not inspect or record credentials, WebView/browser state, Keychain, provider data, catalog data, or playback data.
 
-If the invariant passes, the observation ends without entering authentication. Authentication remains a separate owner authorization. If it fails, record only that one allow-listed label, close all copies through the existing helper, and halt. No result may be inferred from offline evidence.
+The only remaining proof is one separately owner-authorized telemetry-first observation of the repaired launcher. It may open exactly one bundle once; a `mapped-path-missing` retry must inspect only the already-selected PID and must never reopen the bundle. If the invariant passes, the observation ends without entering authentication. Authentication remains a separate owner authorization. If it fails, record only that one allow-listed label, close all copies through the existing helper, and halt. No result may be inferred from offline evidence.
