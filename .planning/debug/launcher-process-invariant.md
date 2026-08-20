@@ -2,7 +2,7 @@
 status: blocked
 trigger: "ok go"
 created: 2026-08-20T16:20:00-04:00
-updated: 2026-08-20T13:04:06-04:00
+updated: 2026-08-20T13:30:17-04:00
 ---
 
 # Debug Session: Launcher Process Invariant
@@ -14,8 +14,9 @@ expected: |
   verifies one PID whose executable path matches the built binary, and keeps that process available
   for the owner-operated authentication checkpoint.
 actual: |
-  The authorized Plan 02-17 attempt ended with zero SiriusMac processes. The telemetry wrapper exited
-  and the checkpoint recorded the fixed process stage `invariant_failed` before WebView sign-in.
+  The authorized Plan 02-17 attempts ended with zero SiriusMac processes. The latest telemetry wrapper
+  emitted only `process-stage: launch-command-failed` before WebView sign-in, but an upstream no-stage
+  wrapper failure was not yet distinguishable from that label.
 errors: |
   Sanitized evidence only: `process: invariant_failed`. No raw telemetry, provider material, credential,
   cookie, header, body, URL, account, or Keychain secret may be inspected.
@@ -39,7 +40,7 @@ reproduction: |
 
 ## Current Focus
 
-hypothesis: the original generic `invariant_failed` remains unassigned, but four offline launcher gaps have now been repaired: argv-derived identity, implicit empty-mapping failure, suppressed launch-stage propagation, and selecting the first `txt` mapping instead of the exact expected executable when a Debug build maps both its executable and debug dylib. A two-second asynchronous-registration window was also hardened to ten seconds.
+hypothesis: the consumed `launch-command-failed` observation remains unassigned because an upstream build, telemetry, lock, configuration, or absent-stage wrapper failure could previously reach the checkpoint without its own fixed label. The initial resolver and wait-window repairs remain in place.
 bug_class: bohrbug
 candidate_causes:
   - code: `resolve_process_binary.sh` compares argv[0] text rather than mapped executable identity.
@@ -47,11 +48,13 @@ candidate_causes:
   - code: `single_instance_with_lock` invokes the whole launch function under an `||` condition, suppressing `errexit` and failure propagation.
   - code: `resolve_process_binary.sh` returns the first `lsof -d txt` mapping, although the Debug bundle statically contains both `SiriusMac` and `SiriusMac.debug.dylib`.
   - code: the two-second PID-registration budget can reject one asynchronous `open` before a newly launched GUI process appears.
+  - code: `build_and_launch` did not classify failures before `open`, and `single_instance_with_lock` could emit no stage for an inner failure; downstream handling could therefore conflate that absence with `launch-command-failed`.
+  - code: a failed lock acquisition could release a lock owned by another launcher process because ownership was not tracked.
   - environment: the built app could have exited before PID discovery; static inspection cannot prove or eliminate runtime exit.
 and_gate: no — each candidate alone can produce the visible post-cleanup zero-process result.
-test: fake-process coverage must select the exact expected mapping after a leading debug-dylib mapping, accept one delayed registration without reopening, and report only a fixed failure stage; then run build-only. Do not launch or inspect SiriusMac in this session.
-expecting: only a separately user-authorized native attempt can show whether the original `invariant_failed` incident is resolved; if it fails, the sanitized fixed stage must distinguish launch-command, count, PID-selection, and mapping outcomes.
-next_action: all permitted offline verification is complete and every prior native authorization has been consumed. Preserve the blocked authentication checkpoint. A new, stage-reporting-only authorization is the only remaining proof for the native incident; it must retain only one allow-listed `process-stage` label from the repaired launcher. The existing `invariant_failed` artifact is too generic to identify a cause, and this authorization does not permit authentication, WebView, Keychain, provider, catalog, or playback work.
+test: fake-only coverage must prove distinct `lock-acquisition-failed`, `launcher-configuration-missing`, `build-command-failed`, `build-output-missing`, `telemetry-start-failed`, `launch-wrapper-no-stage-failed`, and true `launch-command-failed` labels, with no production commands reachable; then run the no-host authentication matrix and build-only. Do not launch or inspect SiriusMac in this session.
+expecting: an absent inner stage is reported only as `launch-wrapper-no-stage-failed`, never as `launch-command-failed`; each pre-open path emits its own allow-listed fixed label.
+next_action: the offline stage-propagation contract is green. Preserve `02-AUTH-UAT.md` as blocked and do not request or run another native launch automatically. Any future observation would require fresh owner authorization and may retain only one current allow-listed stage; it does not authorize authentication, WebView, Keychain, provider, catalog, or playback work.
 reasoning_checkpoint:
   hypothesis: "The resolver can falsely reject the just-launched binary because it compares argv[0], and the lock wrapper can falsely report success because it invokes the launch-stage function in an errexit-ignored `||` context."
   confirming_evidence:
@@ -194,6 +197,26 @@ tdd_checkpoint:
   found: The three repaired launcher files exactly match `9f58c61`; `bash -n` and the fake launcher matrix pass; the no-host authentication matrix passes all fixed-oracle and volatile-WebView isolation cases; and elevated `bash script/build_and_run.sh --build-only` reports `BUILD SUCCEEDED`. The unsandboxed reruns were necessary only because Xcode's normal compiler/module caches are outside the workspace. The repaired launcher emits one allow-listed `process-stage` label on stderr, but no script automatically transfers that label into `02-AUTH-UAT.md`; the present blocked artifact still contains only the earlier generic `process: invariant_failed` text.
   implication: All safe offline checks are green and no production process, launch, termination, credential, WebView, Keychain, telemetry, provider, catalog, or playback action occurred during this reconciliation. The original native failure remains unassigned because its fixed process stage was not retained; a fresh launch is the only remaining evidence, and any such authorization must capture only the fixed process-stage label before the checkpoint is rewritten.
 
+- timestamp: 2026-08-20
+  checked: one separately owner-authorized stage-reporting telemetry-first launch through `script/build_and_run.sh --telemetry`
+  found: `process-stage: launch-command-failed`; post-failure cleanup was verified at zero SiriusMac processes.
+  implication: The one-use observation failed before owner interaction. No retry, application UI interaction, sign-in, WebView, credential handoff, Keychain query, provider request, catalog action, or playback action occurred.
+
+- timestamp: 2026-08-20T13:24:14-04:00
+  checked: RED/green fake-only stage-propagation matrix for an absent inner stage, unavailable lock, missing launch configuration, failed build command, missing build output, failed telemetry start, and a true fake open-command failure
+  found: Before repair the matrix failed at `wrapper preserves an absent inner stage` because the outer wrapper produced no label. After repair it passed: the absent-stage path emits only `launch-wrapper-no-stage-failed`, while the true fake opener failure remains `launch-command-failed`; the pre-open paths emit their separate allow-listed labels. The lock helper also keeps a failed contender from removing a lock it did not acquire.
+  implication: The consumed `launch-command-failed` label cannot be retroactively attributed to the opener. Future offline diagnostics can distinguish it from all identified early wrapper paths without launching or inspecting SiriusMac.
+
+- timestamp: 2026-08-20T13:24:14-04:00
+  checked: shell syntax, `bash script/tests/build_and_run_tests.sh`, `bash script/test_offline_auth_matrix.sh`, and `bash script/build_and_run.sh --build-only`
+  found: Syntax and the fake launcher matrix passed; the offline authentication matrix passed all listed fixed-oracle and WebView-isolation checks; build-only completed with `BUILD SUCCEEDED`. The latter two commands required scoped cache access outside the workspace, but neither launched or controlled the app.
+  implication: The focused repair is green across the permitted offline checks. `02-AUTH-UAT.md` remains blocked, and no authentication, WebView, Keychain, provider, catalog, or playback action occurred.
+
+- timestamp: 2026-08-20T13:30:17-04:00
+  checked: the focused staged-file list, `git diff --cached --check`, shell syntax, fake-process launcher matrix, no-host authentication matrix, non-launching build-only path, and commit result
+  found: Only `script/build_and_run.sh`, `script/lib/single_instance_launcher.sh`, and `script/tests/build_and_run_tests.sh` were committed as `d2cbdf2` (`fix: preserve launcher failure stages`). All permitted offline checks passed. The pre-existing `.planning/config.json` modification, the sanitized checkpoint artifact, this debug record, and untracked `.gsd/` were not staged.
+  implication: The stage-propagation repair is durable and isolated. The consumed `launch-command-failed` datum remains historically ambiguous: it cannot prove that the configured open command, rather than a formerly-unlabeled earlier wrapper failure, was the original cause. A future observation from this revision would distinguish those paths, but none was requested or performed.
+
 ## Eliminated
 
 ## Resolution
@@ -204,19 +227,22 @@ root_cause: |
   (2) `single_instance_with_lock` suppresses launch-stage failure propagation by invoking its command under `||`;
   (3) the resolver selects the first text mapping rather than the exact expected executable, despite Debug bundles mapping a debug dylib as well;
   (4) the two-second process-registration budget is unnecessarily brittle for one asynchronous GUI launch.
+  (5) `build_and_launch` and its outer lock wrapper did not give every pre-open and absent-stage failure a distinct allow-listed label, so the saved `launch-command-failed` result is not sufficient evidence that `/usr/bin/open` itself failed.
 fix:
-  `resolve_process_binary.sh` now reads mapped `txt` executables through an injectable `lsof` command, explicitly fails closed for an empty result, and selects the exact expected executable when supplied. The launcher retains the PID-count observation, waits up to ten seconds for one process without reopening, and reports a fixed sanitized stage before cleanup. `single_instance_with_lock` invokes its stage as a simple command, then explicitly returns its status, preserving `set -e` for production while retaining status propagation in conditional test callers.
+  `resolve_process_binary.sh` now reads mapped `txt` executables through an injectable `lsof` command, explicitly fails closed for an empty result, and selects the exact expected executable when supplied. The launcher retains the PID-count observation and waits up to ten seconds for one process without reopening. `build_and_launch` now emits separate stages for build-command, build-output, and telemetry-start failures; the lock helper labels lock/configuration failures, tracks lock ownership, and reports an otherwise absent inner stage only as `launch-wrapper-no-stage-failed`. `launch-command-failed` is now reserved for the actual configured open command returning nonzero.
 verification:
   target_test: { result: pass, suite: "bash script/tests/build_and_run_tests.sh" }
   mutation_check: { result: skipped, reason_if_skipped: "No Stryker or other Bash mutation tool is configured." }
   no_op_deletion: { result: pass, deletion_justified_by_rca: false, evidence: "Focused diff adds mapped-text resolution, explicit failure, and fake-only assertions; it does not remove or bypass behavior." }
-  adjacent_tests: { result: pass, suites_run: ["bash -n script/lib/resolve_process_binary.sh script/lib/single_instance_launcher.sh script/tests/build_and_run_tests.sh", "bash script/tests/build_and_run_tests.sh (10/10 stability)", "bash script/build_and_run.sh --build-only"] }
+  adjacent_tests: { result: pass, suites_run: ["bash -n script/build_and_run.sh script/lib/single_instance_launcher.sh script/tests/build_and_run_tests.sh", "bash script/tests/build_and_run_tests.sh", "bash script/test_offline_auth_matrix.sh", "bash script/build_and_run.sh --build-only"] }
   revert_and_reconfirm: { result: pass, bug_returned_on_revert: true, fixed_on_reapply: true, evidence: "Each repair was separately reverted and reproduced its contract failure, then restored to a green matrix." }
   guardrail_verdict: accepted
   build_only: { result: pass, command: "bash script/build_and_run.sh --build-only", note: "Xcode Debug build succeeded; no launch-capable mode ran." }
   commit: 8eddadd
   followup_commit: 9f58c61
+  stage_propagation_commit: d2cbdf2
 files_changed:
+  - script/build_and_run.sh
   - script/lib/resolve_process_binary.sh
   - script/lib/single_instance_launcher.sh
   - script/tests/build_and_run_tests.sh
@@ -226,10 +252,10 @@ oracle_type: specified — the launcher contract explicitly requires the exact b
 
 status: awaiting separate owner authorization
 
-Required resume signal: `Authorize one final Phase 02 stage-reporting launcher observation`
+The separately authorized stage-reporting launch completed with `process-stage: launch-command-failed` and cleanup verified at zero SiriusMac processes. Its one-use authority is consumed. Return to offline investigation before requesting any new native launch authorization.
 
-The offline repair is complete in `8eddadd` and `9f58c61`. All earlier native-launch authority is consumed. The only remaining proof for the consumed native incident is one separately authorized, telemetry-first launch of the exact built SiriusMac bundle.
+The offline repair is complete in `8eddadd`, `9f58c61`, and `d2cbdf2`. All earlier native-launch authority is consumed. No authentication, WebView, Keychain, provider, catalog, or playback behavior was entered by the observation.
 
-The observation may persist exactly one failure datum, formatted as `process-stage: <label>`, where `<label>` is one of: `prelaunch-cleanup-failed`, `launch-command-failed`, `zero-after-open`, `multiple-after-open`, `unexpected-count-after-open`, `pid-selection-failed`, `mapped-path-missing`, or `mapped-path-mismatch`. All other process and telemetry output must be discarded. It must not inspect or record credentials, WebView/browser state, Keychain, provider data, catalog data, or playback data.
+The observation may persist exactly one failure datum, formatted as `process-stage: <label>`, where `<label>` is one of: `lock-acquisition-failed`, `launcher-configuration-missing`, `build-command-failed`, `build-output-missing`, `telemetry-start-failed`, `launch-wrapper-no-stage-failed`, `prelaunch-cleanup-failed`, `launch-command-failed`, `zero-after-open`, `multiple-after-open`, `unexpected-count-after-open`, `pid-selection-failed`, `mapped-path-missing`, or `mapped-path-mismatch`. All other process and telemetry output must be discarded. It must not inspect or record credentials, WebView/browser state, Keychain, provider data, catalog data, or playback data.
 
 If the invariant passes, the observation ends without entering authentication. Authentication remains a separate owner authorization. If it fails, record only that one allow-listed label, close all copies through the existing helper, and halt. No result may be inferred from offline evidence.
