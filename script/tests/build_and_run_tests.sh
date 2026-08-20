@@ -130,15 +130,54 @@ cat > "$HOOKS/report" <<'HOOK'
 #!/usr/bin/env bash
 set -euo pipefail
 case "$1" in
-  prelaunch-cleanup-failed|launch-command-failed|zero-after-open|multiple-after-open|unexpected-count-after-open|pid-selection-failed|mapped-path-missing|mapped-path-mismatch) ;;
+  lock-acquisition-failed|launcher-configuration-missing|build-command-failed|build-output-missing|telemetry-start-failed|launch-wrapper-no-stage-failed|prelaunch-cleanup-failed|launch-command-failed|zero-after-open|multiple-after-open|unexpected-count-after-open|pid-selection-failed|mapped-path-missing|mapped-path-mismatch) ;;
   *) exit 92 ;;
 esac
 printf '%s\n' "$1" >> "$SIL_TEST_STATE/reports"
 HOOK
 
+cat > "$HOOKS/xcodebuild" <<'HOOK'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'xcodebuild\n' >> "$SIL_TEST_STATE/events"
+case "${SIL_TEST_BUILD_MODE:-success}" in
+  success)
+    mkdir -p "$(dirname "$SIL_TEST_EXACT_BINARY")"
+    : > "$SIL_TEST_EXACT_BINARY"
+    chmod +x "$SIL_TEST_EXACT_BINARY"
+    ;;
+  fail)
+    exit 23
+    ;;
+  missing-output)
+    ;;
+  *)
+    exit 91
+    ;;
+esac
+HOOK
+
+cat > "$HOOKS/log" <<'HOOK'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'telemetry\n' >> "$SIL_TEST_STATE/events"
+exit 0
+HOOK
+
+cat > "$HOOKS/kill" <<'HOOK'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'kill:%s\n' "$*" >> "$SIL_TEST_STATE/events"
+if [[ "${SIL_TEST_KILL_MODE:-success}" == "start-fail" && "${1:-}" == "-0" ]]; then
+  exit 1
+fi
+exit 0
+HOOK
+
 chmod +x "$HOOKS"/*
 
 reset_state() {
+  rm -rf "$TEST_ROOT/SiriusMac.app"
   : > "$STATE/pids"
   : > "$STATE/events"
   : > "$STATE/opens"
@@ -151,6 +190,8 @@ reset_state() {
   unset SIL_TEST_LSOF_MODE
   unset SIL_TEST_PATH_MODE
   unset SIL_TEST_DELAYED_READY_AFTER
+  unset SIL_TEST_BUILD_MODE
+  unset SIL_TEST_KILL_MODE
   export SIL_TEST_OPEN_MODE=exact
 }
 
@@ -290,6 +331,30 @@ if run_launch; then
 fi
 assert_eq 'launch-command-failed' "$(cat "$STATE/reports")" "failed open command reports its fixed stage"
 
+# A failure before the opener must not be relabeled as an open-command
+# failure. These synthetic checks run only through the fake hooks above.
+wrapper_without_stage() {
+  return 17
+}
+
+reset_state
+if single_instance_with_lock wrapper_without_stage; then
+  echo "FAIL: wrapper failure without a stage must fail" >&2
+  exit 1
+fi
+assert_eq 'launch-wrapper-no-stage-failed' "$(cat "$STATE/reports")" "wrapper preserves an absent inner stage"
+
+reset_state
+mkdir "$SIL_LOCK_PATH"
+export SIL_LOCK_ATTEMPTS=1
+if single_instance_with_lock true; then
+  echo "FAIL: unavailable launch lock must fail" >&2
+  exit 1
+fi
+assert_eq 'lock-acquisition-failed' "$(cat "$STATE/reports")" "lock failure reports its fixed stage"
+rmdir "$SIL_LOCK_PATH"
+export SIL_LOCK_ATTEMPTS=2
+
 reset_state
 export SIL_TEST_PATH_MODE=missing
 if run_launch; then
@@ -298,6 +363,16 @@ if run_launch; then
 fi
 assert_file_empty "$STATE/pids" "missing mapped executable is cleaned"
 assert_eq 'mapped-path-missing' "$(cat "$STATE/reports")" "missing mapped executable reports its fixed stage"
+
+reset_state
+saved_open="$SIL_OPEN"
+unset SIL_OPEN
+if run_launch; then
+  echo "FAIL: missing launch configuration must fail" >&2
+  exit 1
+fi
+assert_eq 'launcher-configuration-missing' "$(cat "$STATE/reports")" "missing launch configuration reports its fixed stage"
+export SIL_OPEN="$saved_open"
 
 # The resolver must read the mapped text executable, never argv[0]. The
 # initial structural check makes the red phase safe: it avoids executing the
@@ -398,5 +473,88 @@ if rg -n --fixed-strings 'open -n' "$BUILD_SCRIPT" >/dev/null ||
   echo "FAIL: build/run entry point retains a duplicate-prone lifecycle command" >&2
   exit 1
 fi
+
+# The outer build/telemetry wrapper has to classify failures before it reaches
+# the helper. Keep this structural RED gate ahead of source-loading the script,
+# so an older script cannot invoke a real compiler or telemetry process.
+if ! rg -q 'SIL_XCODEBUILD' "$BUILD_SCRIPT" ||
+   ! rg -q 'SIL_LOG' "$BUILD_SCRIPT" ||
+   ! rg -q 'launch-wrapper-no-stage-failed' "$HELPER"; then
+  echo "FAIL: build wrapper must expose injectable early-stage hooks and an explicit no-stage label" >&2
+  exit 1
+fi
+
+# Source the entry point only after the structural guard above. All external
+# commands are replaced with fixture hooks, so these checks cannot build,
+# inspect, launch, or control a production process.
+export SIL_BUILD_AND_RUN_SOURCE_ONLY=1
+source "$BUILD_SCRIPT"
+unset SIL_BUILD_AND_RUN_SOURCE_ONLY
+APP_BUNDLE="$TEST_ROOT/SiriusMac.app"
+APP_BINARY="$SIL_TEST_EXACT_BINARY"
+export SIL_APP_NAME="SiriusMac"
+export SIL_APP_BUNDLE="$APP_BUNDLE"
+export SIL_APP_BINARY="$APP_BINARY"
+export SIL_PGREP="$HOOKS/pgrep"
+export SIL_TERMINATE_ALL="$HOOKS/terminate"
+export SIL_PID_PATH="$HOOKS/path"
+export SIL_OPEN="$HOOKS/open"
+export SIL_SLEEP="$HOOKS/sleep"
+export SIL_INVARIANT_REPORT="$HOOKS/report"
+export SIL_XCODEBUILD="$HOOKS/xcodebuild"
+export SIL_LOG="$HOOKS/log"
+export SIL_KILL="$HOOKS/kill"
+
+run_build_wrapper() {
+  single_instance_with_lock build_and_launch "$1"
+}
+
+reset_state
+export SIL_TEST_BUILD_MODE=fail
+if run_build_wrapper run; then
+  echo "FAIL: failed build command must fail" >&2
+  exit 1
+fi
+assert_eq 0 "$(wc -l < "$STATE/opens" | tr -d ' ')" "failed build opens nothing"
+assert_eq 'build-command-failed' "$(cat "$STATE/reports")" "failed build reports its fixed stage"
+
+reset_state
+export SIL_TEST_BUILD_MODE=missing-output
+if run_build_wrapper run; then
+  echo "FAIL: missing build output must fail" >&2
+  exit 1
+fi
+assert_eq 0 "$(wc -l < "$STATE/opens" | tr -d ' ')" "missing build output opens nothing"
+assert_eq 'build-output-missing' "$(cat "$STATE/reports")" "missing build output reports its fixed stage"
+
+reset_state
+export SIL_TEST_BUILD_MODE=success
+export SIL_TEST_KILL_MODE=start-fail
+if run_build_wrapper --telemetry; then
+  echo "FAIL: failed telemetry start must fail" >&2
+  exit 1
+fi
+assert_eq 0 "$(wc -l < "$STATE/opens" | tr -d ' ')" "failed telemetry start opens nothing"
+assert_eq 'telemetry-start-failed' "$(cat "$STATE/reports")" "failed telemetry start reports its fixed stage"
+
+reset_state
+export SIL_TEST_BUILD_MODE=success
+launch_after_build() {
+  return 31
+}
+if run_build_wrapper run; then
+  echo "FAIL: unstaged launch-wrapper failure must fail" >&2
+  exit 1
+fi
+assert_eq 'launch-wrapper-no-stage-failed' "$(cat "$STATE/reports")" "wrapper never relabels an absent stage as an open failure"
+launch_after_build() {
+  single_instance_launch_locked
+}
+
+reset_state
+export SIL_TEST_BUILD_MODE=success
+run_build_wrapper run
+assert_eq 1 "$(wc -l < "$STATE/opens" | tr -d ' ')" "successful fake build launches exactly once"
+assert_file_empty "$STATE/reports" "successful fake build emits no failure stage"
 
 echo "PASS: build/run routing contract"

@@ -22,39 +22,53 @@ export SIL_TERMINATE_ALL="${SIL_TERMINATE_ALL:-/usr/bin/pkill}"
 export SIL_PID_PATH="${SIL_PID_PATH:-$ROOT_DIR/script/lib/resolve_process_binary.sh}"
 export SIL_OPEN="${SIL_OPEN:-/usr/bin/open}"
 export SIL_SLEEP="${SIL_SLEEP:-/bin/sleep}"
+export SIL_XCODEBUILD="${SIL_XCODEBUILD:-xcodebuild}"
+export SIL_LOG="${SIL_LOG:-/usr/bin/log}"
+export SIL_KILL="${SIL_KILL:-/bin/kill}"
 
 TELEMETRY_PID=""
 
 cleanup_telemetry() {
   if [[ -n "$TELEMETRY_PID" ]]; then
-    kill "$TELEMETRY_PID" >/dev/null 2>&1 || true
+    "$SIL_KILL" "$TELEMETRY_PID" >/dev/null 2>&1 || true
     TELEMETRY_PID=""
   fi
 }
-trap cleanup_telemetry EXIT
+if [[ "${SIL_BUILD_AND_RUN_SOURCE_ONLY:-0}" != "1" ]]; then
+  trap cleanup_telemetry EXIT
+fi
 
 build_exact_bundle() {
-  DEVELOPER_DIR="$DEVELOPER_DIR_PATH" \
-  CLANG_MODULE_CACHE_PATH="$CLANG_CACHE_PATH" \
-  SWIFTPM_MODULECACHE_OVERRIDE="$SWIFTPM_CACHE_PATH" \
-    xcodebuild \
+  SIL_BUILD_FAILURE_STAGE=""
+  if ! DEVELOPER_DIR="$DEVELOPER_DIR_PATH" \
+    CLANG_MODULE_CACHE_PATH="$CLANG_CACHE_PATH" \
+    SWIFTPM_MODULECACHE_OVERRIDE="$SWIFTPM_CACHE_PATH" \
+    "$SIL_XCODEBUILD" \
       -project "$PROJECT_PATH" \
       -scheme "$APP_NAME" \
       -configuration Debug \
       -destination "platform=macOS" \
       -derivedDataPath "$DERIVED_DATA_PATH" \
       CODE_SIGNING_ALLOWED=NO \
-      build
+      build; then
+    SIL_BUILD_FAILURE_STAGE="build-command-failed"
+    return 1
+  fi
 
-  [[ -x "$APP_BINARY" ]]
+  if [[ ! -x "$APP_BINARY" ]]; then
+    SIL_BUILD_FAILURE_STAGE="build-output-missing"
+    return 1
+  fi
   echo "$APP_BUNDLE"
 }
 
 start_authentication_telemetry() {
-  /usr/bin/log stream --info --style compact \
+  SIL_TELEMETRY_FAILURE_STAGE=""
+  "$SIL_LOG" stream --info --style compact \
     --predicate '(subsystem == "com.siriusmac.player" AND category == "authentication") OR (subsystem == "com.siriusmac.client" AND category == "diagnostics")' &
   TELEMETRY_PID=$!
-  if ! kill -0 "$TELEMETRY_PID" 2>/dev/null; then
+  if ! "$SIL_KILL" -0 "$TELEMETRY_PID" 2>/dev/null; then
+    SIL_TELEMETRY_FAILURE_STAGE="telemetry-start-failed"
     echo "authentication telemetry stream did not start" >&2
     return 1
   fi
@@ -65,12 +79,25 @@ launch_after_build() {
 }
 
 build_and_launch() {
-  local mode="$1"
-  build_exact_bundle
+  local mode="$1" launch_status=0
+  if ! build_exact_bundle >/dev/null; then
+    sil_report_invariant_stage "${SIL_BUILD_FAILURE_STAGE:-build-command-failed}" || true
+    return 1
+  fi
   if [[ "$mode" == "--telemetry" || "$mode" == "telemetry" ]]; then
-    start_authentication_telemetry
+    if ! start_authentication_telemetry; then
+      sil_report_invariant_stage "${SIL_TELEMETRY_FAILURE_STAGE:-telemetry-start-failed}" || true
+      return 1
+    fi
   fi
   launch_after_build
+  launch_status=$?
+  if (( launch_status != 0 )); then
+    if [[ -z "${SIL_REPORTED_INVARIANT_STAGE:-}" ]]; then
+      sil_report_invariant_stage launch-wrapper-no-stage-failed || true
+    fi
+    return "$launch_status"
+  fi
 
   case "$mode" in
     --debug|debug)
@@ -89,6 +116,13 @@ build_and_launch() {
       ;;
   esac
 }
+
+if [[ "${SIL_BUILD_AND_RUN_SOURCE_ONLY:-0}" == "1" ]]; then
+  if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
+    return 0
+  fi
+  exit 0
+fi
 
 case "$MODE" in
   --build-only|build-only)

@@ -40,12 +40,14 @@ sil_wait_for_count() {
 sil_report_invariant_stage() {
   local stage="$1"
   case "$stage" in
-    prelaunch-cleanup-failed|launch-command-failed|zero-after-open|multiple-after-open|unexpected-count-after-open|pid-selection-failed|mapped-path-missing|mapped-path-mismatch) ;;
+    lock-acquisition-failed|launcher-configuration-missing|build-command-failed|build-output-missing|telemetry-start-failed|launch-wrapper-no-stage-failed|prelaunch-cleanup-failed|launch-command-failed|zero-after-open|multiple-after-open|unexpected-count-after-open|pid-selection-failed|mapped-path-missing|mapped-path-mismatch) ;;
     *)
       echo "single-instance launcher received an unknown invariant stage" >&2
       return 2
       ;;
   esac
+
+  SIL_REPORTED_INVARIANT_STAGE="$stage"
 
   if [[ -n "${SIL_INVARIANT_REPORT:-}" ]]; then
     "$SIL_INVARIANT_REPORT" "$stage"
@@ -64,7 +66,19 @@ sil_after_open_count_failure_stage() {
 
 sil_release_lock() {
   local lock_path="${SIL_LOCK_PATH:-}"
-  [[ -n "$lock_path" && -d "$lock_path" ]] && rmdir "$lock_path" 2>/dev/null || true
+  if [[ "${SIL_LOCK_IS_HELD:-0}" == "1" && -n "$lock_path" && -d "$lock_path" ]]; then
+    rmdir "$lock_path" 2>/dev/null || true
+  fi
+  SIL_LOCK_IS_HELD=0
+}
+
+sil_exit_with_stage_fallback() {
+  local status="$1" fallback_stage="$2"
+  if (( status != 0 )) && [[ -z "${SIL_REPORTED_INVARIANT_STAGE:-}" ]]; then
+    sil_report_invariant_stage "$fallback_stage" || true
+  fi
+  sil_release_lock
+  exit "$status"
 }
 
 sil_acquire_launch_lock() {
@@ -92,6 +106,13 @@ sil_close_all_and_wait() {
   sil_wait_for_count 0
 }
 
+sil_launch_configuration_is_complete() {
+  local name
+  for name in SIL_APP_NAME SIL_APP_BUNDLE SIL_APP_BINARY SIL_PGREP SIL_TERMINATE_ALL SIL_PID_PATH SIL_OPEN SIL_SLEEP; do
+    sil_value "$name" >/dev/null || return 1
+  done
+}
+
 sil_exact_binary_matches_only_pid() {
   local pids pid actual expected path_hook
   SIL_LAST_INVARIANT_STAGE=""
@@ -116,6 +137,10 @@ sil_exact_binary_matches_only_pid() {
 single_instance_launch_locked() {
   # This protocol performs no build itself.  A caller that needs the lock to
   # span a build invokes its build function between acquire and this function.
+  if ! sil_launch_configuration_is_complete; then
+    sil_report_invariant_stage launcher-configuration-missing || true
+    return 1
+  fi
   if ! sil_close_all_and_wait; then
     sil_report_invariant_stage prelaunch-cleanup-failed || true
     return 1
@@ -139,18 +164,30 @@ single_instance_launch_locked() {
 
 single_instance_launch() (
   local status=0
-  trap 'sil_release_lock' EXIT
+  SIL_REPORTED_INVARIANT_STAGE=""
+  SIL_LOCK_IS_HELD=0
+  trap 'sil_exit_with_stage_fallback "$?" launch-wrapper-no-stage-failed' EXIT
   trap 'sil_close_all_and_wait || true; exit 130' HUP INT TERM
-  sil_acquire_launch_lock || exit 1
+  if ! sil_acquire_launch_lock; then
+    sil_report_invariant_stage lock-acquisition-failed || true
+    exit 1
+  fi
+  SIL_LOCK_IS_HELD=1
   single_instance_launch_locked || status=$?
   exit "$status"
 )
 
 single_instance_with_lock() (
   local status=0
-  trap 'sil_release_lock' EXIT
+  SIL_REPORTED_INVARIANT_STAGE=""
+  SIL_LOCK_IS_HELD=0
+  trap 'sil_exit_with_stage_fallback "$?" launch-wrapper-no-stage-failed' EXIT
   trap 'sil_close_all_and_wait || true; exit 130' HUP INT TERM
-  sil_acquire_launch_lock || exit 1
+  if ! sil_acquire_launch_lock; then
+    sil_report_invariant_stage lock-acquisition-failed || true
+    exit 1
+  fi
+  SIL_LOCK_IS_HELD=1
   "$@"
   status=$?
   exit "$status"
@@ -162,9 +199,14 @@ single_instance_build_only() {
 
 single_instance_guard_app_host() (
   local status=0 zero_status=0
+  SIL_LOCK_IS_HELD=0
   trap 'sil_release_lock' EXIT
   trap 'sil_close_all_and_wait || true; exit 130' HUP INT TERM
-  sil_acquire_launch_lock || exit 1
+  if ! sil_acquire_launch_lock; then
+    sil_report_invariant_stage lock-acquisition-failed || true
+    exit 1
+  fi
+  SIL_LOCK_IS_HELD=1
   sil_close_all_and_wait || status=1
   if (( status == 0 )); then
     "$@" || status=$?
