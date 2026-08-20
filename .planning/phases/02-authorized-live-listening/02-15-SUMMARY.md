@@ -12,9 +12,9 @@ provides:
   - Build-only path that performs no lifecycle work
 affects: [02-14, 02-16, 02-17, 02-18, bounded-uat]
 actuals:
-  tokens: 4066
+  tokens: 4177
   tasks: 2
-  commits: 4
+  commits: 5
 tech-stack:
   added: []
   patterns:
@@ -71,7 +71,7 @@ status: complete
 
 ## Accomplishments
 
-- Added an atomic directory lock with zero-old-process draining, one-PID verification, exact executable-path matching, and fail-closed cleanup.
+- Added an atomic directory lock with zero-old-process draining, one-PID verification, exact executable-path matching, fail-closed cleanup, and interruption traps.
 - Added a fake-only concurrent launcher matrix, including host-guard success, failure, and leak cleanup paths.
 - Routed production run modes through the lock and confirmed build-only builds without launching, inspecting, or terminating SiriusMac.
 
@@ -82,7 +82,7 @@ status: complete
 ## Task Commits
 
 1. **Task 02-15-01: Prove two concurrent invocations open the exact bundle once** — `c22d987` (`test`), `725db61` (`feat`)
-2. **Task 02-15-02: Route every run mode through telemetry-first single-instance launch** — `97f192d` (`test`), `87b95f3` (`feat`)
+2. **Task 02-15-02: Route every run mode through telemetry-first single-instance launch** — `97f192d` (`test`), `87b95f3` (`feat`), `0b84600` (`fix`)
 
 ## Decisions Made
 
