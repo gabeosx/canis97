@@ -20,4 +20,4 @@ The incremental prerequisites are green. This artifact records no credential, br
 
 process: invariant_failed
 
-The telemetry-first launcher did not satisfy the exact one-process invariant. No authentication interaction, WebView sign-in, credential handoff, Keychain query, catalog action, or listening operation was performed. Per the checkpoint contract, this phase is halted without retry or relaunch.
+The separately authorized repaired telemetry-first launcher again returned `invariant_failed` before owner interaction. No authentication interaction, WebView sign-in, credential handoff, Keychain query, catalog action, or listening operation was performed. Per the checkpoint contract, this phase is halted without retry or relaunch.
