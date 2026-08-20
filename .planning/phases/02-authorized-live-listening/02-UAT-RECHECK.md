@@ -1,5 +1,5 @@
 ---
-status: blocked
+status: passed
 phase: 02-authorized-live-listening
 plan: "18"
 date: 2026-08-20
@@ -8,7 +8,7 @@ scope: automatic-restore-and-bounded-listening
 
 # Phase 02 Restore and Listening Checkpoint
 
-This sanitized recheck is distinct from the original UAT and authentication checkpoint. It records fixed semantic outcomes only; it retains no credential, token, Keychain value, account identifier, provider payload, browser content, request, response, URL, header, media key, or stream detail.
+This sanitized recheck supersedes the earlier blocked Plan 02-18 observations. It retains only fixed semantic outcomes; it contains no credential, token, Keychain value, account identifier, browser content, request, response, URL, header, media key, stream detail, or dynamic program/channel content.
 
 ## Preconditions
 
@@ -16,106 +16,33 @@ This sanitized recheck is distinct from the original UAT and authentication chec
 | --- | --- | --- |
 | Durable authentication | `02-AUTH-UAT.md` records passed native authentication, entitlement, persistence, and fixed Keychain-item existence. | PASS |
 | Playback readiness | `02-16-SUMMARY.md` records green Incremental Gate 5. | PASS |
-
-## Integrated Offline Preflight
-
-| Check | Result |
-| --- | --- |
-| No-host authentication matrix | PASS (14/14 synthetic cases) |
-| SiriusXMClient package suite | PASS (87 tests) |
-| Fake single-instance launcher and native launcher routing | PASS |
-| Guarded macOS authentication/WebView/playback/metadata tests | PASS (69 tests; zero SiriusMac processes before and after) |
-| Project lint and guarded project listing | PASS (zero SiriusMac processes before and after guarded listing) |
-| Build-only | PASS (no production launch) |
-
-Durable Keychain and browser state were not accessed or changed during preflight. The original `02-UAT.md` and `02-AUTH-UAT.md` remain unchanged.
+| Offline preflight | No-host/package, fake-launcher, guarded app-host, project lint/listing, and build-only checks passed without accessing durable authentication state. | PASS |
 
 ## Restore and Listening Checkpoint
 
 | Check | Result | Fixed evidence |
 | --- | --- | --- |
-| Exact telemetry-first launch | PASS | One newly built application was launched after the green preflight. |
+| Zero-before launch invariant | PASS | The process table contained zero SiriusMac processes before the authorized launcher. |
+| Exact telemetry-first launch | PASS | One freshly built bundle was launched once through the native single-instance launcher. |
+| Exact process identity | PASS | One PID remained mapped to the freshly built bundle throughout the observation. |
 | Automatic restoration | PASS | Native entitled listening composition appeared without a WebView or password entry. |
-| Catalog refresh and selection | PASS | One entitled live-channel catalog refresh completed and one channel was selected. |
-| Natural start | PASS | The selected channel reached confirmed playing state. |
-| Pause | PASS | Playback reached confirmed paused state once. |
-| Resume Live | PASS | One live-edge resume returned to confirmed playing state. |
-| Stop | PASS | Playback reached stopped state once. |
-| Current metadata | PASS | Channel-identity fallback was visible; richer artwork was unavailable and is recorded as unavailable rather than invented. |
-| Final process invariant | BLOCKED | Final exact-process verification found two SiriusMac processes. Both were closed; no process remains. |
-
-automatic_restore: completed
-catalog_refresh: passed
-listening_controls: passed
-current_metadata: passed
-process_invariant: blocked
-
-## Closed Outcome
-
-The bounded restore/listening sequence completed without a WebView, password entry, sign-out, local-session clearing, credential inspection, request capture, forced fault, retry, or second authorized launcher invocation. However, the required final one-process invariant was not met: two separate SiriusMac processes were present after the observation. Both copies were closed to restore the safe zero-process state.
-
-This checkpoint is **BLOCKED**. No relaunch is permitted under this authorization, and no Plan 02-18 summary is created. A future attempt requires fresh owner authorization for one new exact-build observation.
-
-## Authorized Recheck Addendum
-
-| Check | Result | Fixed evidence |
-| --- | --- | --- |
-| Zero-before launch invariant | PASS | No SiriusMac process existed before the authorized launcher. |
-| Exact telemetry-first launch | PASS | One freshly built bundle was launched through the native single-instance launcher. |
-| Exact process identity | PASS | One SiriusMac PID was present and its mapped executable matched the freshly built bundle before and after the attempted accessibility attachment. |
-| Native accessibility attachment | BLOCKED | The non-launching accessibility bridge timed out twice while targeting the already-running exact bundle. No additional launcher, app-open operation, or UI action was attempted. |
-| Restore/listening observation | NOT OBSERVED | Because the accessibility bridge could not attach, automatic restoration, catalog, controls, and metadata were not claimed or interacted with. |
-
-The one-process invariant remained satisfied. The exact intended app is left running and untouched; no WebView, password entry, credential inspection, sign-out, local-session clearing, request capture, recovery/expiry induction, retry, or relaunch occurred. This addendum supersedes neither the original bounded UAT nor the earlier completed listening evidence; it records only the unobservable result of this separately authorized recheck.
-
-## Accessibility Connector Diagnosis Addendum
-
-| Check | Result | Fixed evidence |
-| --- | --- | --- |
-| Existing exact process before inspection | PASS | One intended freshly built SiriusMac process existed before accessibility inspection. |
-| Computer Use inspection | BLOCKED | A nominally non-launching app-state lookup injected a second SiriusMac process from a different Xcode build location before returning the existing app tree. No UI control was operated. |
-| Safety cleanup | PASS | Both processes were closed immediately after the duplicate was detected; zero SiriusMac processes remain. |
-| Replacement attachment proof | PASS | A PID-targeted System Events accessibility query attached to an already-running harmless macOS process without launching or activating another application. |
-
-The duplicate source is therefore isolated to app-name lookup in the Computer Use connector, not the native single-instance launcher. Any future recheck must avoid Computer Use app lookup entirely and target only the existing SiriusMac PID through System Events. This addendum authorizes no launch by itself.
-
-## PID-Targeted Authorized Recheck Addendum
-
-| Check | Result | Fixed evidence |
-| --- | --- | --- |
-| Zero-before launch invariant | PASS | The process table contained zero SiriusMac processes before the authorized launcher ran. |
-| Exact telemetry-first launch | PASS | The native single-instance launcher produced one exact SiriusMac PID mapped to the freshly built bundle. |
-| PID-targeted accessibility binding | PASS | System Events bound only through the numeric PID; no application-name lookup, Computer Use connector, `open`, or alternate launcher was used. |
-| Automatic restoration | BLOCKED | The automatic restore did not settle to native ready composition within this checkpoint. The exact process exposed zero accessibility windows and zero fixed listening/sign-in controls, so no catalog or playback action was possible. |
-| WebView/password/sign-in handoff | NOT INVOKED | No WebView, password entry, credential handling, retry, Sign Out, Clear Local Session, or Keychain modification occurred. |
-| Final process invariant | PASS | One SiriusMac process remained, and its executable path matched the newly built bundle. |
-
-automatic_restore: blocked
-catalog_refresh: not_observed
-listening_controls: not_observed
-current_metadata: not_observed
-process_invariant: passed
-
-## Latest Closed Outcome
-
-This fresh owner-authorized attempt is **BLOCKED** at the fixed automatic-restore stage. It performed exactly one guarded production launch and retained exactly one expected process. Because restore did not reach the native listening composition, the checkpoint did not refresh the catalog, select a channel, tune, control playback, or observe metadata. No second launch, sign-in, WebView, cleanup, fault induction, request variation, traffic capture, or secret inspection is authorized by this record.
-
-## Final PID-Bound Accessibility Addendum
-
-| Check | Result | Fixed evidence |
-| --- | --- | --- |
-| Existing exact process | PASS | One SiriusMac PID mapped to the approved `/private/tmp` build before every interaction. |
-| Automatic restoration | PASS | The existing process was foregrounded by numeric PID and exposed the native listening window without a WebView or password entry. |
-| Catalog refresh | PASS | One native refresh produced an entitled catalog. |
-| Channel selection | PASS | One native catalog row was selected through the existing process. |
-| Tune | NOT ATTEMPTED | The PID-bound accessibility tree exposed no exact `Tune` title, description, or identifier. The checkpoint stopped rather than guess or issue an unverified tune action. |
-| WebView/password/credential handling | NOT INVOKED | No sign-in, credential inspection, sign-out, local-session clearing, or Keychain operation occurred. |
-| Final process cleanup | PASS | The one approved SiriusMac PID was terminated and the process table returned to zero. |
+| Catalog refresh and selection | PASS | One native refresh completed and exactly one accessible catalog row was selected using the existing process's accessibility hierarchy. |
+| Tune and natural start | PASS | One uniquely identified Tune control was invoked; the player item installed, reached ready state, and confirmed playing. |
+| Pause | PASS | One uniquely identified Pause control was invoked and confirmed paused. |
+| Resume Live | PASS | One uniquely identified Resume Live control was invoked and confirmed playing after fresh live-edge resolution. |
+| Stop | PASS | One uniquely identified Stop control was invoked and the native visible state was `Stopped`. |
+| Current metadata | PASS | Channel-identity fallback was present. Richer current text was not supplied in this observation. |
+| Artwork | NOT OBSERVED | Artwork was unavailable during this observation; it was not invented. |
+| Final process invariant | PASS | Exactly one expected SiriusMac process remains open and stopped. |
 
 restore: completed
 catalog_refresh: passed
-channel_selection: passed
-tune: not_attempted
-process_cleanup: passed
+listening_controls: passed
+current_metadata: passed
+process_invariant: passed
 
-This addendum supersedes the immediately preceding restore-stage claim for this one PID-bound continuation only. The checkpoint remains **BLOCKED** because its strict one-tune control sequence could not be verified safely without stable accessibility labels or identifiers. No relaunch, rebuild, second tune, playback control, or Plan 02-18 summary is authorized by this record.
+## Closed Outcome
+
+The saved session restored automatically in the exact next build. One bounded native catalog and listening sequence then completed: refresh, selection, tune, natural confirmed playback, pause, live-edge resume, stop, and metadata/artwork availability observation. The interaction used only numeric-PID-bound accessibility elements and the stable `listening.*` control identifiers; no app-name lookup, alternate launcher, coordinate guess, retry, fault induction, WebView, password entry, sign-out, local-session clearing, Keychain inspection, request capture, or provider-request variation occurred.
+
+The original `02-UAT.md` and authentication-only `02-AUTH-UAT.md` are preserved unchanged. The single intended app remains open in the stopped state for owner use.
