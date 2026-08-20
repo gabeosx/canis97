@@ -67,3 +67,14 @@ This checkpoint is **BLOCKED**. No relaunch is permitted under this authorizatio
 | Restore/listening observation | NOT OBSERVED | Because the accessibility bridge could not attach, automatic restoration, catalog, controls, and metadata were not claimed or interacted with. |
 
 The one-process invariant remained satisfied. The exact intended app is left running and untouched; no WebView, password entry, credential inspection, sign-out, local-session clearing, request capture, recovery/expiry induction, retry, or relaunch occurred. This addendum supersedes neither the original bounded UAT nor the earlier completed listening evidence; it records only the unobservable result of this separately authorized recheck.
+
+## Accessibility Connector Diagnosis Addendum
+
+| Check | Result | Fixed evidence |
+| --- | --- | --- |
+| Existing exact process before inspection | PASS | One intended freshly built SiriusMac process existed before accessibility inspection. |
+| Computer Use inspection | BLOCKED | A nominally non-launching app-state lookup injected a second SiriusMac process from a different Xcode build location before returning the existing app tree. No UI control was operated. |
+| Safety cleanup | PASS | Both processes were closed immediately after the duplicate was detected; zero SiriusMac processes remain. |
+| Replacement attachment proof | PASS | A PID-targeted System Events accessibility query attached to an already-running harmless macOS process without launching or activating another application. |
+
+The duplicate source is therefore isolated to app-name lookup in the Computer Use connector, not the native single-instance launcher. Any future recheck must avoid Computer Use app lookup entirely and target only the existing SiriusMac PID through System Events. This addendum authorizes no launch by itself.
