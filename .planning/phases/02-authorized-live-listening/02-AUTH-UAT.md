@@ -1,5 +1,5 @@
 ---
-status: awaiting_owner_authorization
+status: blocked
 phase: 02-authorized-live-listening
 plan: "17"
 ---
@@ -16,6 +16,8 @@ plan: "17"
 
 The incremental prerequisites are green. This artifact records no credential, browser, Keychain, process, provider, catalog, or listening data.
 
-## Next Step
+## Terminal Stage
 
-Awaiting one fresh owner authorization for the authentication-only checkpoint.
+process: invariant_failed
+
+The telemetry-first launcher did not satisfy the exact one-process invariant. No authentication interaction, WebView sign-in, credential handoff, Keychain query, catalog action, or listening operation was performed. Per the checkpoint contract, this phase is halted without retry or relaunch.
