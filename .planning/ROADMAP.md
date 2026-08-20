@@ -172,7 +172,7 @@ Plans:
   4. Recoverable stream expiry, network interruption, sleep/wake, and stalls make bounded, cancellation-aware recovery attempts without infinite retry or synthesized listener activity.
   5. While listening, a subscriber sees the active channel, best available artwork, and current program or song text; unavailable or stale metadata is explicit and does not interrupt healthy audio.
 
-**Plans**: 11/11 plans executed
+**Plans**: 11/17 plans executed
 
 - [x] 02-08-PLAN.md
 - [x] 02-09-PLAN.md
@@ -206,6 +206,27 @@ Plans:
 **Wave 7 — Independent metadata** *(blocked on Wave 6)*
 
 - [x] 02-07-PLAN.md — Present current text/artwork with independent fresh, stale, and unavailable states.
+
+**Wave 11 — Offline auth and launcher gaps** *(depends on completed Plan 02-11)*
+
+- [ ] 02-12-PLAN.md — Make native auth stages and persistence truthfully diagnosable with a synthetic package matrix.
+- [ ] 02-15-PLAN.md — Enforce one exact telemetry-first SiriusMac process through a tested atomic launcher.
+
+**Wave 12 — Native auth presentation and fresh WebView** *(depends on Plan 02-12)*
+
+- [ ] 02-13-PLAN.md — Complete the no-host auth matrix and wire fixed local/web/native/persistence/restore states.
+
+**Wave 13 — Session cleanup blocker closure** *(depends on Plans 02-13 and 02-15)*
+
+- [ ] 02-14-PLAN.md — Serialize explicit cleanup before later authentication so a new credential survives.
+
+**Wave 14 — Playback blocker closure** *(depends on Plan 02-14)*
+
+- [ ] 02-16-PLAN.md — Handle already-ready AVFoundation items and repair the dangling Xcode test reference.
+
+**Wave 15 — One bounded native recheck** *(depends on Plans 02-14, 02-15, and 02-16)*
+
+- [ ] 02-17-PLAN.md — Run one owner-authorized fresh diagnostic UAT after every offline gate is green.
 
 ### Phase 3: Native Mac Listening Experience
 
@@ -267,7 +288,7 @@ Active product execution proceeds 1 → 2 → 3 → 4 → 5. Phase 0 is retained
 |-------|----------------|--------|-----------|
 | 0. Authentication Feasibility Gate | 12/12 | Complete (historical) | 2026-08-17 |
 | 1. Safe Interoperability Foundation | 16/16 | Complete    | 2026-08-18 |
-| 2. Authorized Live Listening | 11/11 | In Progress|  |
+| 2. Authorized Live Listening | 11/17 | In Progress|  |
 | 3. Native Mac Listening Experience | 0/TBD | Not started | - |
 | 4. Safe Skins & Accessible Recovery | 0/TBD | Not started | - |
 | 5. Public Release & Compatibility Support | 0/TBD | Not started | - |
