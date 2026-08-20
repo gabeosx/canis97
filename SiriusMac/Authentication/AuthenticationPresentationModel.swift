@@ -418,6 +418,11 @@ struct ComposedAuthenticationPresentationFlow: AuthenticationPresentationFlow {
             state = presentationState(for: await client.entitlementAvailability())
         case .waitingForAuthenticationComposition, .unsupported, .cancelled:
             state = .unsupported
+        case .credentialPersistenceFailed:
+            // A non-durable session must never reach Ready. The existing closed
+            // unsupported presentation is intentionally used rather than
+            // exposing Keychain details to the user interface.
+            state = .unsupported
         case .rejected:
             state = .rejected
         case .challengeRequired:
