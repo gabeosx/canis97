@@ -55,3 +55,15 @@ process_invariant: blocked
 The bounded restore/listening sequence completed without a WebView, password entry, sign-out, local-session clearing, credential inspection, request capture, forced fault, retry, or second authorized launcher invocation. However, the required final one-process invariant was not met: two separate SiriusMac processes were present after the observation. Both copies were closed to restore the safe zero-process state.
 
 This checkpoint is **BLOCKED**. No relaunch is permitted under this authorization, and no Plan 02-18 summary is created. A future attempt requires fresh owner authorization for one new exact-build observation.
+
+## Authorized Recheck Addendum
+
+| Check | Result | Fixed evidence |
+| --- | --- | --- |
+| Zero-before launch invariant | PASS | No SiriusMac process existed before the authorized launcher. |
+| Exact telemetry-first launch | PASS | One freshly built bundle was launched through the native single-instance launcher. |
+| Exact process identity | PASS | One SiriusMac PID was present and its mapped executable matched the freshly built bundle before and after the attempted accessibility attachment. |
+| Native accessibility attachment | BLOCKED | The non-launching accessibility bridge timed out twice while targeting the already-running exact bundle. No additional launcher, app-open operation, or UI action was attempted. |
+| Restore/listening observation | NOT OBSERVED | Because the accessibility bridge could not attach, automatic restoration, catalog, controls, and metadata were not claimed or interacted with. |
+
+The one-process invariant remained satisfied. The exact intended app is left running and untouched; no WebView, password entry, credential inspection, sign-out, local-session clearing, request capture, recovery/expiry induction, retry, or relaunch occurred. This addendum supersedes neither the original bounded UAT nor the earlier completed listening evidence; it records only the unobservable result of this separately authorized recheck.
