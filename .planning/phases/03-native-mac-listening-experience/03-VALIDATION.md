@@ -103,3 +103,8 @@ The planner assigns final plan/task IDs. Every mapped behavior below must appear
 - [ ] `nyquist_compliant: true` is set only after all mapped automated and native/manual evidence is green.
 
 **Approval:** pending
+
+## Plan 03-08 Checkpoint Status
+
+- [x] Task 1 native window lifecycle, system media surfaces, and audio routing — user-approved semantic evidence is recorded in `03-08-CHECKPOINT-EVIDENCE.md`.
+- [ ] Task 2 rendered states, keyboard focus, VoiceOver, and Reduce Motion — **blocked:** compact player is not legible at the required compact presentation; full Task 2 acceptance remains unapproved.
