@@ -219,6 +219,14 @@ enum PlayerSemanticStyleRole: CaseIterable, Sendable, Equatable {
     case display
 }
 
+/// The system foreground palette used over a bounded compact-player background.
+/// This remains declarative so a future skin renderer can select its contrast
+/// mode without owning labels, actions, or accessibility semantics.
+enum CompactPlayerForegroundColorScheme: Sendable, Equatable {
+    case light
+    case dark
+}
+
 /// Bounded native fallback tokens. Appearance data can choose these roles but
 /// cannot supply labels, actions, system metadata, or accessibility semantics.
 struct NativeCompactPlayerStyle: Sendable, Equatable {
@@ -227,6 +235,7 @@ struct NativeCompactPlayerStyle: Sendable, Equatable {
     let secondaryHex: String
     let accentHex: String
     let destructiveHex: String
+    let foregroundColorScheme: CompactPlayerForegroundColorScheme
     let padding: CGFloat
     let sectionSpacing: CGFloat
 
@@ -236,6 +245,7 @@ struct NativeCompactPlayerStyle: Sendable, Equatable {
         secondaryHex: "#262626",
         accentHex: "#C6FF00",
         destructiveHex: "#FF453A",
+        foregroundColorScheme: .dark,
         padding: 16,
         sectionSpacing: 8
     )

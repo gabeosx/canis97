@@ -30,7 +30,22 @@ final class CompactPlayerPresentationTests: XCTestCase {
         XCTAssertEqual(NativeCompactPlayerStyle.fallback.secondaryHex, "#262626")
         XCTAssertEqual(NativeCompactPlayerStyle.fallback.accentHex, "#C6FF00")
         XCTAssertEqual(NativeCompactPlayerStyle.fallback.destructiveHex, "#FF453A")
+        XCTAssertEqual(NativeCompactPlayerStyle.fallback.foregroundColorScheme, .dark)
         XCTAssertEqual(PlayerSemanticStyleRole.allCases, [.playerBackground, .metadataPanel, .accent, .destructive, .label, .body, .heading, .display])
+    }
+
+    func testFallbackStyleProvidesDarkSystemForegroundsForEveryCompactState() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: root.appendingPathComponent("SiriusMac/Player/CompactPlayerView.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(source.contains(".environment(\\.colorScheme, contentColorScheme)"))
+        XCTAssertTrue(source.contains(".foregroundStyle(.primary)"))
+        XCTAssertTrue(source.contains(".background(Color(hex: style.dominantHex))"))
     }
 
     func testViewActionsStayOutsideThePresentationValue() {

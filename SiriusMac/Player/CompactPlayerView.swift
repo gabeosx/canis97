@@ -30,8 +30,17 @@ struct CompactPlayerView: View {
         .padding(style.padding)
         .frame(width: style.contentSize.width, height: style.contentSize.height, alignment: .topLeading)
         .background(Color(hex: style.dominantHex))
+        .environment(\.colorScheme, contentColorScheme)
+        .foregroundStyle(.primary)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Sirius Mac compact player")
+    }
+
+    private var contentColorScheme: ColorScheme {
+        switch style.foregroundColorScheme {
+        case .light: .light
+        case .dark: .dark
+        }
     }
 
     @ViewBuilder
