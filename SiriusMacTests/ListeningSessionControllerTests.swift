@@ -70,7 +70,7 @@ final class ListeningSessionControllerTests: XCTestCase {
         XCTFail("Both surfaces must render the same confirmed channel")
     }
 
-    func testCompactSurfaceChangesFromMetadataLoadingToConfirmedProgram() async throws {
+    func testCompactSurfaceRendersConfirmedProgramTitleAndArtist() async throws {
         let runtime = SessionPlaybackRuntime()
         let channel = LiveChannelID("fixture-current-program")
         let client = ControlledSessionMetadataClient()
@@ -88,16 +88,16 @@ final class ListeningSessionControllerTests: XCTestCase {
 
         await client.completeMetadata(with: .current(MetadataSnapshot(
             channelID: channel,
-            program: LiveProgramMetadata(title: "Jóga", artist: "Björk")
+            program: LiveProgramMetadata(title: "Synthetic Program", artist: "Synthetic Artist")
         )))
 
         for _ in 0 ..< 10 {
-            if controller.compactSurface.metadataPrimaryText == "Jóga" { break }
+            if controller.compactSurface.metadataPrimaryText == "Synthetic Program" { break }
             await Task.yield()
         }
 
-        XCTAssertEqual(controller.compactSurface.metadataPrimaryText, "Jóga")
-        XCTAssertEqual(controller.compactSurface.metadataSecondaryText, "Björk")
+        XCTAssertEqual(controller.compactSurface.metadataPrimaryText, "Synthetic Program")
+        XCTAssertEqual(controller.compactSurface.metadataSecondaryText, "Synthetic Artist")
         XCTAssertFalse(controller.compactSurface.usesMetadataFallback)
         XCTAssertFalse(controller.compactSurface.metadataPrimaryText?.contains(channel.rawValue) ?? false)
     }

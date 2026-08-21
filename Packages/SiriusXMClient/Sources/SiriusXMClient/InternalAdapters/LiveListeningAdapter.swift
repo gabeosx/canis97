@@ -83,13 +83,21 @@ enum LiveListeningAdapter {
               let cuts = channel["cuts"] as? [[String: Any]]
         else { return .failed(.unsupportedResponse) }
         guard let first = cuts.first else { return .unavailable }
-        guard let title = first["name"] as? String, !title.isEmpty,
+        guard let title = nonEmptyString(first["name"]),
+              let artist = nonEmptyString(first["artistName"]),
               let validFrom = first["validFrom"] as? String,
               ISO8601DateFormatter().date(from: validFrom) != nil
         else { return .failed(.unsupportedResponse) }
-        let artist = first["artistName"] as? String
         let artwork = artworkReference(from: first["image"])
         return .current(MetadataSnapshot(channelID: channelID, program: LiveProgramMetadata(title: title, artist: artist, artwork: artwork)))
+    }
+
+    /// The observed lookaround contract requires a displayable name and artist.
+    /// Whitespace-only values are not semantic metadata and must fail closed.
+    private static func nonEmptyString(_ value: Any?) -> String? {
+        guard let value = value as? String else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     static func decodeArtwork(_ response: NativeTransportResponse) -> ArtworkAvailability {

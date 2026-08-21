@@ -4,21 +4,20 @@ import Testing
 
 @Suite("Provider-neutral metadata refresh contracts")
 struct MetadataRefreshCoordinatorTests {
-    @Test("observed first-cut metadata keeps title, optional artist, and opaque artwork independent")
-    func observedMetadataPrecedence() throws {
+    @Test("observed lookaround first cut maps its name and artistName into semantic metadata")
+    func observedLookaroundFirstCutMapsProgramAndArtist() throws {
         let channel = LiveChannelID("fixture-channel")
-        let payload = try JSONSerialization.data(withJSONObject: [
-            "channels": ["fixture-channel": [
-                "cuts": [["name": "\u{1F3B5} Unicode title", "artistName": "Artist", "validFrom": "2026-08-19T00:00:00Z", "image": ["url": "/image.jpeg", "width": 450, "height": 450]]],
-                "shows": []
-            ]],
-            "delta": ""
+        let payload = try observedLookaroundPayload(cut: [
+            "name": "  Synthetic Program  ",
+            "artistName": "  Synthetic Artist  ",
+            "validFrom": "2026-08-19T00:00:00Z",
+            "image": ["url": "/image.jpeg", "width": 450, "height": 450],
         ])
         let result = LiveListeningAdapter.decodeMetadata(NativeTransportResponse(statusCode: 200, contentType: "application/json", body: payload), channelID: channel)
         guard case let .current(snapshot) = result else { Issue.record("expected current metadata"); return }
         #expect(snapshot.channelID == channel)
-        #expect(snapshot.program?.title == "\u{1F3B5} Unicode title")
-        #expect(snapshot.program?.artist == "Artist")
+        #expect(snapshot.program?.title == "Synthetic Program")
+        #expect(snapshot.program?.artist == "Synthetic Artist")
         #expect(snapshot.program?.artwork?.description == "ChannelArtworkReference(redacted)")
     }
 
@@ -71,6 +70,32 @@ struct MetadataRefreshCoordinatorTests {
         let empty = try JSONSerialization.data(withJSONObject: ["channels": ["fixture-channel": ["cuts": []]], "delta": ""])
         #expect(LiveListeningAdapter.decodeMetadata(NativeTransportResponse(statusCode: 200, contentType: "application/json", body: empty), channelID: channel) == .unavailable)
         #expect(LiveListeningAdapter.decodeMetadata(NativeTransportResponse(statusCode: 200, contentType: "application/json", body: Data("{}".utf8)), channelID: channel) == .failed(.unsupportedResponse))
+    }
+
+    @Test("lookaround rejects missing, empty, wrong-type, and malformed required metadata fields")
+    func observedLookaroundContractFailsClosedForInvalidRequiredFields() throws {
+        let channel = LiveChannelID("fixture-channel")
+        let base: [String: Any] = [
+            "name": "Synthetic Program",
+            "artistName": "Synthetic Artist",
+            "validFrom": "2026-08-19T00:00:00Z",
+        ]
+        let invalidCuts: [[String: Any]] = [
+            ["artistName": base["artistName"]!, "validFrom": base["validFrom"]!],
+            ["name": "", "artistName": base["artistName"]!, "validFrom": base["validFrom"]!],
+            ["name": "   ", "artistName": base["artistName"]!, "validFrom": base["validFrom"]!],
+            ["name": 7, "artistName": base["artistName"]!, "validFrom": base["validFrom"]!],
+            ["name": base["name"]!, "validFrom": base["validFrom"]!],
+            ["name": base["name"]!, "artistName": "", "validFrom": base["validFrom"]!],
+            ["name": base["name"]!, "artistName": ["not": "a string"], "validFrom": base["validFrom"]!],
+            ["name": base["name"]!, "artistName": base["artistName"]!, "validFrom": "not-a-date"],
+        ]
+
+        for cut in invalidCuts {
+            let payload = try observedLookaroundPayload(cut: cut)
+            let response = NativeTransportResponse(statusCode: 200, contentType: "application/json", body: payload)
+            #expect(LiveListeningAdapter.decodeMetadata(response, channelID: channel) == .failed(.unsupportedResponse))
+        }
     }
 
     @Test("artwork-only metadata remains independent from text presentation")
@@ -219,6 +244,16 @@ struct MetadataRefreshCoordinatorTests {
 }
 
 private let fixtureArtwork = ArtworkData(bytes: Data([0xFF, 0xD8, 0xFF, 0xD9]), mediaType: .jpeg)
+
+private func observedLookaroundPayload(cut: [String: Any]) throws -> Data {
+    try JSONSerialization.data(withJSONObject: [
+        "channels": ["fixture-channel": [
+            "cuts": [cut],
+            "shows": [],
+        ]],
+        "delta": "",
+    ])
+}
 
 private actor InvalidationRecordingMetadataFetcher: LiveMetadataFetching {
     private(set) var invalidationCount = 0
