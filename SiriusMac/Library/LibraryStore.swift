@@ -218,6 +218,7 @@ final class LibraryStore {
     private(set) var favoriteChannelIDs: [LiveChannelID] = []
     private(set) var recents: [LibraryChannelSnapshot] = []
     private(set) var selectedLibraryTab = "channels"
+    private(set) var alwaysOnTop = false
 
     init(
         modelContainer: ModelContainer = LibraryStore.makeDefaultContainer(),
@@ -311,6 +312,21 @@ final class LibraryStore {
         publishPlayerPreferences()
     }
 
+    /// Persists a desired compact-window level without exposing any playback,
+    /// session, or resource state to the preference boundary.
+    func setAlwaysOnTop(_ desiredState: Bool) {
+        let existingRecord = playerPreferenceRecord()
+        let record = existingRecord ?? PlayerPreferenceRecord()
+        if existingRecord == nil { modelContext.insert(record) }
+        guard record.compactWindowAlwaysOnTop != desiredState else {
+            publishPlayerPreferences()
+            return
+        }
+        record.compactWindowAlwaysOnTop = desiredState
+        saveIfNeeded(true)
+        publishPlayerPreferences()
+    }
+
     /// Test-only inspection of the persisted stable-identity boundary.
     func favoriteRecordCount(for channelID: LiveChannelID) throws -> Int {
         try modelContext.fetch(FetchDescriptor<FavoriteRecord>())
@@ -338,7 +354,9 @@ final class LibraryStore {
     }
 
     private func publishPlayerPreferences() {
-        selectedLibraryTab = playerPreferenceRecord()?.selectedTab ?? "channels"
+        let preferences = playerPreferenceRecord()
+        selectedLibraryTab = preferences?.selectedTab ?? "channels"
+        alwaysOnTop = preferences?.compactWindowAlwaysOnTop ?? false
     }
 
     /// Invalid and duplicate legacy rows are removed deterministically before

@@ -3,7 +3,21 @@ import SwiftUI
 struct CompactPlayerView: View {
     let presentation: CompactPlayerPresentation
     let onAction: @MainActor (CompactPlayerAction) -> Void
+    let isAlwaysOnTop: Bool
+    let onAlwaysOnTopChanged: @MainActor (Bool) -> Void
     private let style = NativeCompactPlayerStyle.fallback
+
+    init(
+        presentation: CompactPlayerPresentation,
+        onAction: @escaping @MainActor (CompactPlayerAction) -> Void,
+        isAlwaysOnTop: Bool = false,
+        onAlwaysOnTopChanged: @escaping @MainActor (Bool) -> Void = { _ in }
+    ) {
+        self.presentation = presentation
+        self.onAction = onAction
+        self.isAlwaysOnTop = isAlwaysOnTop
+        self.onAlwaysOnTopChanged = onAlwaysOnTopChanged
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: style.sectionSpacing) {
@@ -139,7 +153,15 @@ struct CompactPlayerView: View {
         HStack {
             Button("Show Library") { onAction(.showLibrary) }.help("Show Library")
             Spacer()
-            Menu("More") { Button("Always on Top") { onAction(.toggleAlwaysOnTop) } }
+            Menu("More") {
+                Toggle(
+                    "Always on Top",
+                    isOn: Binding(
+                        get: { isAlwaysOnTop },
+                        set: { onAlwaysOnTopChanged($0) }
+                    )
+                )
+            }
         }
         .font(.system(size: 12))
     }

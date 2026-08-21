@@ -33,6 +33,9 @@ struct SiriusMacApp: App {
         }
         .defaultSize(width: 760, height: 620)
         .windowResizability(.contentMinSize)
+        .commands {
+            ListeningCommands(controller: sessionController)
+        }
 
         Window("Library", id: "sirius-library") {
             if let sessionController {
@@ -77,12 +80,14 @@ private struct CompactListeningSlice: View {
         let current = presentation
         CompactPlayerView(
             presentation: current.retainingConfirmedContent(from: lastConfirmedPresentation),
-            onAction: perform
+            onAction: perform,
+            isAlwaysOnTop: controller.libraryStore.alwaysOnTop,
+            onAlwaysOnTopChanged: controller.libraryStore.setAlwaysOnTop
         )
         .background(
             WindowAttachmentView(
                 role: .compact,
-                alwaysOnTop: false
+                alwaysOnTop: controller.libraryStore.alwaysOnTop
             )
         )
         .onChange(of: current, initial: true) { _, next in
@@ -129,14 +134,39 @@ private struct CompactListeningSlice: View {
             _ = controller.requestLibraryOpen()
             openWindow(id: "sirius-library")
         case .toggleAlwaysOnTop:
-            // Window policy remains owned by Plan 03-05's scoped AppKit adapter.
-            break
+            controller.libraryStore.setAlwaysOnTop(!controller.libraryStore.alwaysOnTop)
         case .retryPlayback:
             _ = controller.listeningModel.resumePlaybackAtLiveEdge()
         case .signInAgain:
             _ = controller.authenticationModel.retry()
         case .refreshLibrary:
             _ = controller.listeningModel.refresh()
+        }
+    }
+}
+
+@MainActor
+private struct ListeningCommands: Commands {
+    let controller: ListeningSessionController?
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some Commands {
+        if let controller {
+            CommandMenu("Player") {
+                Button("Show Library") {
+                    _ = controller.requestLibraryOpen()
+                    openWindow(id: "sirius-library")
+                }
+                .keyboardShortcut("l", modifiers: .command)
+
+                Toggle(
+                    "Always on Top",
+                    isOn: Binding(
+                        get: { controller.libraryStore.alwaysOnTop },
+                        set: { controller.libraryStore.setAlwaysOnTop($0) }
+                    )
+                )
+            }
         }
     }
 }
