@@ -451,7 +451,7 @@ final class ListeningSessionControllerTests: XCTestCase {
         XCTAssertEqual(runtime.observationCount, 3)
     }
 
-    func testCancellingReplacementTuneClearsPendingStateAndAllowsLaterNavigation() async throws {
+    func testCancellingReplacementTuneSynchronouslyAllowsLaterNavigation() async throws {
         let runtime = SessionPlaybackRuntime()
         let resolver = ControlledSessionPlaybackResolver()
         let catalog = ControlledSessionCatalog()
@@ -496,11 +496,9 @@ final class ListeningSessionControllerTests: XCTestCase {
         XCTAssertTrue(controller.listeningModel.isTunePending)
         XCTAssertEqual(controller.playbackQueue?.currentID, next)
 
+        // Cancellation and its follow-up navigation happen in the same main
+        // actor turn. There is deliberately no Task.yield() between them.
         cancelledReplacement.cancel()
-        for _ in 0 ..< 10 {
-            if !controller.listeningModel.isTunePending { break }
-            await Task.yield()
-        }
         XCTAssertFalse(controller.listeningModel.isTunePending)
         XCTAssertEqual(controller.listeningModel.playbackState, .stopped)
 

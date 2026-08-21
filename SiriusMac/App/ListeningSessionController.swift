@@ -185,12 +185,12 @@ final class ListeningSessionController {
     }
 
     @discardableResult
-    func tuneSelectedLibraryChannel() -> Task<Void, Never>? {
+    func tuneSelectedLibraryChannel() -> ListeningTuneRequest? {
         listeningModel.tuneSelectedChannel()
     }
 
     @discardableResult
-    func tuneFromLibrary(_ channelID: LiveChannelID) -> Task<Void, Never>? {
+    func tuneFromLibrary(_ channelID: LiveChannelID) -> ListeningTuneRequest? {
         listeningModel.select(channelID)
         return listeningModel.tuneSelectedChannel()
     }
@@ -198,7 +198,7 @@ final class ListeningSessionController {
     /// Captures the origin collection before explicit tuning. The captured IDs
     /// are not entitlement authority and are never persisted.
     @discardableResult
-    func tune(channelID: LiveChannelID, originIDs: [LiveChannelID]) -> Task<Void, Never>? {
+    func tune(channelID: LiveChannelID, originIDs: [LiveChannelID]) -> ListeningTuneRequest? {
         guard !listeningModel.isTunePending,
               let tune = listeningModel.tune(channelID)
         else { return nil }
@@ -213,12 +213,12 @@ final class ListeningSessionController {
     }
 
     @discardableResult
-    func previous() -> Task<Void, Never>? {
+    func previous() -> ListeningTuneRequest? {
         navigate(.previous)
     }
 
     @discardableResult
-    func next() -> Task<Void, Never>? {
+    func next() -> ListeningTuneRequest? {
         navigate(.next)
     }
 
@@ -463,7 +463,7 @@ final class ListeningSessionController {
         listeningModel.state.snapshot?.channels.map(\.id) ?? []
     }
 
-    private func navigate(_ direction: QueueDirection) -> Task<Void, Never>? {
+    private func navigate(_ direction: QueueDirection) -> ListeningTuneRequest? {
         guard !listeningModel.isTunePending,
               var queue = playbackQueue,
               let channelID = queue.candidate(

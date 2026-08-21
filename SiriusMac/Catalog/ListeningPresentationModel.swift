@@ -34,12 +34,40 @@ enum ListeningPresentationState: Equatable {
     }
 }
 
+/// A listener-initiated tune whose cancellation is serialized at the same
+/// main-actor boundary as queue navigation. Returning a raw `Task` cannot
+/// provide that guarantee: its cancellation handler is nonisolated and must
+/// schedule main-actor cleanup for a later turn.
+@MainActor
+final class ListeningTuneRequest {
+    private let task: Task<Void, Never>
+    private let cancelPlayback: @MainActor () -> Void
+
+    init(task: Task<Void, Never>, cancelPlayback: @escaping @MainActor () -> Void) {
+        self.task = task
+        self.cancelPlayback = cancelPlayback
+    }
+
+    var value: Void {
+        get async { await task.value }
+    }
+
+    /// Invalidate the coordinator generation before cancelling the worker
+    /// task. That makes a cancellation immediately visible to navigation and
+    /// prevents a resolver that ignores cancellation from installing later.
+    func cancel() {
+        cancelPlayback()
+        task.cancel()
+    }
+}
+
 /// Main-actor state for browsing an already semantic, entitled channel lineup.
 @MainActor
 @Observable
 final class ListeningPresentationModel {
-    /// Bridges the nonisolated cancellation handler back to the presentation
-    /// model without retaining it for the lifetime of a stalled resolver.
+    /// Owns the atomic cancellation transition shared by the returned request
+    /// and the coordinator. This remains main-actor isolated so the pending
+    /// gate cannot reopen before the coordinator invalidates stale work.
     @MainActor
     private final class TuneCancellationRelay {
         weak var presentationModel: ListeningPresentationModel?
@@ -146,7 +174,7 @@ final class ListeningPresentationModel {
     }
 
     @discardableResult
-    func tuneSelectedChannel() -> Task<Void, Never>? {
+    func tuneSelectedChannel() -> ListeningTuneRequest? {
         guard let selectedChannelID else {
             playbackState = .unavailable(.selectionUnavailable)
             return nil
@@ -157,7 +185,7 @@ final class ListeningPresentationModel {
     /// Tunes an already selected semantic identity without mutating browse
     /// selection. Authorization remains entirely with PlaybackCoordinator.
     @discardableResult
-    func tune(_ channelID: LiveChannelID) -> Task<Void, Never>? {
+    func tune(_ channelID: LiveChannelID) -> ListeningTuneRequest? {
         guard !isTunePending, let playbackCoordinator else {
             if playbackCoordinator == nil {
                 playbackState = .unavailable(.unsupported)
@@ -170,17 +198,14 @@ final class ListeningPresentationModel {
             presentationModel: self,
             playbackCoordinator: playbackCoordinator
         )
-        return Task { [weak self] in
-            await withTaskCancellationHandler {
-                guard !Task.isCancelled else { return }
-                await playbackCoordinator.tune(channelID)
-                guard !Task.isCancelled else { return }
-                self?.applyConfirmedPlaybackState(playbackCoordinator.state)
-            } onCancel: {
-                Task { @MainActor [cancellationRelay] in
-                    cancellationRelay.cancel()
-                }
-            }
+        let task = Task { [weak self] in
+            guard !Task.isCancelled else { return }
+            await playbackCoordinator.tune(channelID)
+            guard !Task.isCancelled else { return }
+            self?.applyConfirmedPlaybackState(playbackCoordinator.state)
+        }
+        return ListeningTuneRequest(task: task) { [cancellationRelay] in
+            cancellationRelay.cancel()
         }
     }
 
