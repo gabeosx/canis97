@@ -69,8 +69,8 @@ Phase 0 is historical. FEAS-01 records the accepted architecture; FEAS-02/03/05 
 ### macOS Media Integration
 
 - [x] **MAC-01**: Live audio continues correctly while the app is backgrounded or its library window is closed.
-- [ ] **MAC-02**: Subscriber can control live-appropriate playback actions through Mac media keys and system Now Playing surfaces.
-- [ ] **MAC-03**: System Now Playing information reflects confirmed player state and current metadata rather than optimistic UI state.
+- [x] **MAC-02**: Subscriber can control live-appropriate playback actions through Mac media keys and system Now Playing surfaces.
+- [x] **MAC-03**: System Now Playing information reflects confirmed player state and current metadata rather than optimistic UI state.
 - [x] **MAC-04**: Subscriber can use appropriate system audio-device and routing behavior without the app implementing a custom audio-output stack.
 
 ### Desktop Experience
@@ -175,8 +175,8 @@ Every v1 requirement maps to exactly one delivery phase in `.planning/ROADMAP.md
 | LIBR-02 | Phase 3 | Complete |
 | LIBR-03 | Phase 3 | Complete |
 | MAC-01 | Phase 3 | Complete |
-| MAC-02 | Phase 3 | Pending |
-| MAC-03 | Phase 3 | Pending |
+| MAC-02 | Phase 3 | Complete |
+| MAC-03 | Phase 3 | Complete |
 | MAC-04 | Phase 3 | Complete |
 | UI-01 | Phase 3 | Complete |
 | UI-02 | Phase 3 | Complete |
