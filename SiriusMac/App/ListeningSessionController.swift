@@ -60,7 +60,8 @@ struct ListeningCommandAvailability: Equatable {
         playbackState: LivePlaybackState,
         confirmedChannelID: LiveChannelID?,
         hasCancellablePlayback: Bool,
-        queueAvailability: QueueDirectionAvailability
+        queueAvailability: QueueDirectionAvailability,
+        isTunePending: Bool = false
     ) {
         let isConfirmedPlaying: Bool
         if case let .playing(channelID?) = playbackState {
@@ -71,14 +72,18 @@ struct ListeningCommandAvailability: Equatable {
         let isConfirmedPaused = playbackState == .paused && confirmedChannelID != nil
         let hasConfirmedPlayback = isConfirmedPlaying || isConfirmedPaused
 
-        pause = isConfirmedPlaying
-        resumeLive = isConfirmedPaused
+        // Tuning is scheduled asynchronously. Keep command eligibility closed
+        // from the synchronous request until the coordinator confirms or
+        // terminates that request, otherwise two commands in the same run-loop
+        // turn can both advance the queue.
+        pause = isConfirmedPlaying && !isTunePending
+        resumeLive = isConfirmedPaused && !isTunePending
         // A pending tune retains a selected coordinator channel even though it
         // has not become confirmed playback yet; Stop must remain available to
         // cancel that work without exposing other inert transport commands.
         stop = hasCancellablePlayback && playbackState != .stopped
-        previous = hasConfirmedPlayback && (queueAvailability == .previous || queueAvailability == .both)
-        next = hasConfirmedPlayback && (queueAvailability == .next || queueAvailability == .both)
+        previous = !isTunePending && hasConfirmedPlayback && (queueAvailability == .previous || queueAvailability == .both)
+        next = !isTunePending && hasConfirmedPlayback && (queueAvailability == .next || queueAvailability == .both)
     }
 
     var playPause: Bool { pause || resumeLive }
@@ -147,7 +152,8 @@ final class ListeningSessionController {
             playbackState: listeningModel.playbackState,
             confirmedChannelID: listeningModel.confirmedChannelID,
             hasCancellablePlayback: playbackCoordinator.selectedChannelID != nil,
-            queueAvailability: queueAvailability
+            queueAvailability: queueAvailability,
+            isTunePending: listeningModel.isTunePending
         )
     }
 
@@ -193,8 +199,12 @@ final class ListeningSessionController {
     /// are not entitlement authority and are never persisted.
     @discardableResult
     func tune(channelID: LiveChannelID, originIDs: [LiveChannelID]) -> Task<Void, Never>? {
+        guard !listeningModel.isTunePending,
+              let tune = listeningModel.tune(channelID)
+        else { return nil }
+
         playbackQueue = PlaybackQueue(originIDs: originIDs, currentID: channelID)
-        return listeningModel.tune(channelID)
+        return tune
     }
 
     var queueAvailability: QueueDirectionAvailability {
@@ -383,6 +393,7 @@ final class ListeningSessionController {
         withObservationTracking {
             _ = listeningModel.playbackState
             _ = listeningModel.confirmedChannelID
+            _ = listeningModel.isTunePending
             _ = listeningModel.state
             let metadata = listeningModel.metadataPresentation
             _ = metadata.availability
@@ -453,7 +464,8 @@ final class ListeningSessionController {
     }
 
     private func navigate(_ direction: QueueDirection) -> Task<Void, Never>? {
-        guard var queue = playbackQueue,
+        guard !listeningModel.isTunePending,
+              var queue = playbackQueue,
               let channelID = queue.candidate(
                   direction,
                   currentEntitledIDs: currentEntitledIDs,
@@ -461,10 +473,12 @@ final class ListeningSessionController {
               )
         else { return nil }
 
+        guard let tune = listeningModel.tune(channelID) else { return nil }
+
         playbackQueue = queue
         revealGeneration += 1
         libraryRevealRequest = LibraryRevealRequest(channelID: channelID, generation: revealGeneration)
-        return listeningModel.tune(channelID)
+        return tune
     }
 
     private func handleSystemPlayPause() -> SystemRemoteCommandStatus {

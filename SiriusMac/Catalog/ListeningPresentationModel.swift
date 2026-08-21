@@ -48,6 +48,10 @@ final class ListeningPresentationModel {
     let metadataPresentation: MetadataPresentationModel
     private(set) var selectedChannelID: LiveChannelID?
     private(set) var confirmedChannelID: LiveChannelID?
+    /// This changes before the task that reaches PlaybackCoordinator is
+    /// scheduled, closing the same-run-loop command race at every tune entry
+    /// point (library, compact player, menu, and MediaPlayer).
+    private(set) var isTunePending = false
 
     /// Standalone library previews/tests have no session controller. Keep
     /// their transport controls truthful with the same semantic contract;
@@ -57,7 +61,8 @@ final class ListeningPresentationModel {
             playbackState: playbackState,
             confirmedChannelID: confirmedChannelID,
             hasCancellablePlayback: playbackCoordinator?.selectedChannelID != nil,
-            queueAvailability: .none
+            queueAvailability: .none,
+            isTunePending: isTunePending
         )
     }
 
@@ -135,10 +140,14 @@ final class ListeningPresentationModel {
     /// selection. Authorization remains entirely with PlaybackCoordinator.
     @discardableResult
     func tune(_ channelID: LiveChannelID) -> Task<Void, Never>? {
-        guard let playbackCoordinator else {
-            playbackState = .unavailable(.unsupported)
+        guard !isTunePending, let playbackCoordinator else {
+            if playbackCoordinator == nil {
+                playbackState = .unavailable(.unsupported)
+            }
             return nil
         }
+
+        isTunePending = true
         return Task { [weak self] in
             await playbackCoordinator.tune(channelID)
             self?.applyConfirmedPlaybackState(playbackCoordinator.state)
@@ -165,6 +174,7 @@ final class ListeningPresentationModel {
         generation += 1
         refreshTask?.cancel()
         refreshTask = nil
+        isTunePending = false
         selectedChannelID = nil
         state = .idle
         playbackState = .awaitingLiveContract
@@ -219,11 +229,13 @@ final class ListeningPresentationModel {
         playbackState = state
         switch state {
         case let .playing(channelID?):
+            isTunePending = false
             guard confirmedChannelID != channelID else { return }
             confirmedChannelID = channelID
             metadataPresentation.select(channelID)
         case .paused:
             // Pause retains the last confirmed active channel and its metadata.
+            isTunePending = false
             return
         case .awaitingLiveContract:
             // A replacement tune is pending; continue to identify the last
@@ -231,6 +243,7 @@ final class ListeningPresentationModel {
             // newly confirmed state.
             return
         case .idle, .playing(nil), .stopped, .unavailable:
+            isTunePending = false
             guard confirmedChannelID != nil else { return }
             confirmedChannelID = nil
             metadataPresentation.clear()

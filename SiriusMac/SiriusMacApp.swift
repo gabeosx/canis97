@@ -109,7 +109,7 @@ private struct CompactListeningSlice: View {
             secondaryMetadata: controller.compactSurface.metadataSecondaryText,
             playback: model.playbackState,
             isFavorite: channel.map { controller.libraryStore.isFavorite($0.id) } ?? false,
-            queueAvailability: controller.queueAvailability
+            queueAvailability: controller.listeningModel.isTunePending ? .none : controller.queueAvailability
         )
     }
 

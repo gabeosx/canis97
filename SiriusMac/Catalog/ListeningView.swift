@@ -138,7 +138,7 @@ struct ListeningView: View {
             Button("Tune") { _ = model.tuneSelectedChannel() }
                 .accessibilityIdentifier("listening.tune")
                 .accessibilityLabel("Tune selected channel")
-                .disabled(model.selectedChannelID == nil)
+                .disabled(model.selectedChannelID == nil || model.isTunePending)
             Button("Pause") { _ = model.pausePlayback() }
                 .accessibilityIdentifier("listening.pause")
                 .accessibilityLabel("Pause playback")

@@ -95,13 +95,15 @@ final class ListeningSessionControllerTests: XCTestCase {
             _ playbackState: LivePlaybackState,
             confirmedChannelID: LiveChannelID? = nil,
             hasCancellablePlayback: Bool = false,
-            queueAvailability: QueueDirectionAvailability = .both
+            queueAvailability: QueueDirectionAvailability = .both,
+            isTunePending: Bool = false
         ) -> ListeningCommandAvailability {
             ListeningCommandAvailability(
                 playbackState: playbackState,
                 confirmedChannelID: confirmedChannelID,
                 hasCancellablePlayback: hasCancellablePlayback,
-                queueAvailability: queueAvailability
+                queueAvailability: queueAvailability,
+                isTunePending: isTunePending
             )
         }
 
@@ -125,6 +127,18 @@ final class ListeningSessionControllerTests: XCTestCase {
         XCTAssertTrue(playing.previous)
         XCTAssertTrue(playing.next)
         XCTAssertTrue(playing.stop)
+
+        let pending = availability(
+            .playing(channel),
+            confirmedChannelID: channel,
+            hasCancellablePlayback: true,
+            isTunePending: true
+        )
+        XCTAssertFalse(pending.pause)
+        XCTAssertFalse(pending.resumeLive)
+        XCTAssertTrue(pending.stop)
+        XCTAssertFalse(pending.previous)
+        XCTAssertFalse(pending.next)
 
         let paused = availability(.paused, confirmedChannelID: channel, hasCancellablePlayback: true, queueAvailability: .next)
         XCTAssertTrue(paused.resumeLive)
@@ -369,6 +383,72 @@ final class ListeningSessionControllerTests: XCTestCase {
         XCTAssertEqual(commandCenter.sendIgnoringEnabled(.next), .commandFailed)
         await Task.yield()
         XCTAssertEqual(runtime.observationCount, 2)
+    }
+
+    func testImmediateRemoteNavigationAcceptsOnlyOneTuneAndPreservesQueuePosition() async throws {
+        let runtime = SessionPlaybackRuntime()
+        let catalog = ControlledSessionCatalog()
+        let commandCenter = SessionRemoteCommandCenter()
+        let first = LiveChannelID("fixture-navigation-first")
+        let current = LiveChannelID("fixture-navigation-current")
+        let next = LiveChannelID("fixture-navigation-next")
+        let originIDs = [first, current, next]
+        let controller = makeController(
+            runtime: runtime,
+            client: catalog,
+            authenticationModel: AuthenticationPresentationModel(flow: EntitledSessionAuthenticationFlow()),
+            remoteCommandCenter: commandCenter
+        )
+
+        let signIn = try XCTUnwrap(controller.authenticationModel.signIn())
+        await catalog.waitForCatalogRequests(count: 1)
+        await catalog.completeCatalog(with: .snapshot(LiveCatalogSnapshot(
+            channels: originIDs.map { LiveChannel(id: $0, name: "Channel \($0.rawValue)") },
+            freshness: .fresh
+        )))
+        await signIn.value
+        for _ in 0 ..< 10 {
+            if controller.listeningModel.state.snapshot != nil { break }
+            await Task.yield()
+        }
+
+        controller.startSystemMediaControls()
+        let initialTune = try XCTUnwrap(controller.tune(channelID: current, originIDs: originIDs))
+        await runtime.waitForObservation(count: 1)
+        runtime.confirmReady()
+        runtime.confirmPlaying()
+        await initialTune.value
+        for _ in 0 ..< 10 {
+            if controller.listeningModel.playbackState == .playing(current) { break }
+            await Task.yield()
+        }
+        XCTAssertEqual(controller.listeningModel.playbackState, .playing(current))
+
+        // Do not yield between these events: the second must see the
+        // synchronously-published pending state, before the tune task starts.
+        XCTAssertEqual(commandCenter.sendIgnoringEnabled(.next), .success)
+        XCTAssertEqual(commandCenter.sendIgnoringEnabled(.next), .commandFailed)
+        XCTAssertTrue(controller.listeningModel.isTunePending)
+        XCTAssertEqual(controller.playbackQueue?.currentID, next)
+        await runtime.waitForObservation(count: 2)
+        XCTAssertEqual(runtime.observationCount, 2)
+
+        runtime.confirmReady()
+        runtime.confirmPlaying()
+        for _ in 0 ..< 10 {
+            if controller.listeningModel.playbackState == .playing(next) { break }
+            await Task.yield()
+        }
+        XCTAssertEqual(controller.listeningModel.playbackState, .playing(next))
+        XCTAssertFalse(controller.listeningModel.isTunePending)
+
+        // Exercise the opposite direction through the same no-yield path.
+        XCTAssertEqual(commandCenter.sendIgnoringEnabled(.previous), .success)
+        XCTAssertEqual(commandCenter.sendIgnoringEnabled(.previous), .commandFailed)
+        XCTAssertTrue(controller.listeningModel.isTunePending)
+        XCTAssertEqual(controller.playbackQueue?.currentID, current)
+        await runtime.waitForObservation(count: 3)
+        XCTAssertEqual(runtime.observationCount, 3)
     }
 
     func testRepeatedLibraryOpenRequestsReuseTheSingletonRoute() {
