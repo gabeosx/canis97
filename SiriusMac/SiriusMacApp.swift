@@ -153,15 +153,18 @@ private struct ListeningCommands: Commands {
                 Button("Previous") {
                     _ = controller.previous()
                 }
+                .disabled(!controller.commandAvailability.previous)
 
-                Button(controller.listeningModel.playbackState == .playing(controller.listeningModel.confirmedChannelID) ? "Pause" : "Play") {
+                Button(controller.commandAvailability.playPauseTitle) {
                     _ = controller.toggleConfirmedPlayback()
                 }
                 .keyboardShortcut(" ", modifiers: [])
+                .disabled(!controller.commandAvailability.playPause)
 
                 Button("Next") {
                     _ = controller.next()
                 }
+                .disabled(!controller.commandAvailability.next)
 
                 Divider()
 

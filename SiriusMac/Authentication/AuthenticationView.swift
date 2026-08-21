@@ -6,13 +6,11 @@ struct AuthenticationView: View {
 
     private var model: AuthenticationPresentationModel { controller.authenticationModel }
     private var bridge: WebAuthenticationBridge { controller.bridge }
-    private var listeningModel: ListeningPresentationModel { controller.listeningModel }
-
     var body: some View {
         SwiftUI.Group {
             if model.isReady {
                 VStack(alignment: .leading, spacing: 12) {
-                    ListeningView(model: listeningModel)
+                    ListeningView(controller: controller)
                     HStack {
                         Button("Sign Out") {
                             controller.resetListeningBeforeAuthenticationCleanup()

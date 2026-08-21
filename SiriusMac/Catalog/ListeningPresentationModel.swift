@@ -49,6 +49,18 @@ final class ListeningPresentationModel {
     private(set) var selectedChannelID: LiveChannelID?
     private(set) var confirmedChannelID: LiveChannelID?
 
+    /// Standalone library previews/tests have no session controller. Keep
+    /// their transport controls truthful with the same semantic contract;
+    /// production surfaces use the controller's queue-aware projection.
+    var commandAvailability: ListeningCommandAvailability {
+        ListeningCommandAvailability(
+            playbackState: playbackState,
+            confirmedChannelID: confirmedChannelID,
+            hasCancellablePlayback: playbackCoordinator?.selectedChannelID != nil,
+            queueAvailability: .none
+        )
+    }
+
     /// A listener-facing identity for the confirmed channel. The opaque stable
     /// ID remains a lookup key only; it is never normal display text.
     var confirmedChannelLabel: String? {

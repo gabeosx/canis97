@@ -7,11 +7,19 @@ import SiriusXMClient
 struct ListeningView: View {
     @Bindable var model: ListeningPresentationModel
     let libraryStore: LibraryStore?
+    let controller: ListeningSessionController?
     @State private var isClearRecentsConfirmationPresented = false
 
     init(model: ListeningPresentationModel, libraryStore: LibraryStore? = nil) {
         self.model = model
         self.libraryStore = libraryStore
+        controller = nil
+    }
+
+    init(controller: ListeningSessionController) {
+        model = controller.listeningModel
+        libraryStore = controller.libraryStore
+        self.controller = controller
     }
 
     var channelSelection: Binding<LiveChannelID?> {
@@ -107,6 +115,10 @@ struct ListeningView: View {
         return false
     }
 
+    private var commandAvailability: ListeningCommandAvailability {
+        controller?.commandAvailability ?? model.commandAvailability
+    }
+
     @ViewBuilder
     private var recentSummary: some View {
         if let libraryStore {
@@ -130,12 +142,15 @@ struct ListeningView: View {
             Button("Pause") { _ = model.pausePlayback() }
                 .accessibilityIdentifier("listening.pause")
                 .accessibilityLabel("Pause playback")
+                .disabled(!commandAvailability.pause)
             Button("Resume Live") { _ = model.resumePlaybackAtLiveEdge() }
                 .accessibilityIdentifier("listening.resume-live")
                 .accessibilityLabel("Resume at live edge")
+                .disabled(!commandAvailability.resumeLive)
             Button("Stop") { _ = model.stopPlayback() }
                 .accessibilityIdentifier("listening.stop")
                 .accessibilityLabel("Stop playback")
+                .disabled(!commandAvailability.stop)
             Spacer()
             Text(playbackCopy(model.playbackState))
                 .foregroundStyle(.secondary)

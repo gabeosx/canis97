@@ -90,6 +90,77 @@ private final class WindowLifecycleTerminatorSpy: ApplicationTerminating {
 
 @MainActor
 final class ListeningSessionControllerTests: XCTestCase {
+    func testCommandAvailabilityRequiresConfirmedPlaybackAndPreservesPendingCancellation() {
+        func availability(
+            _ playbackState: LivePlaybackState,
+            confirmedChannelID: LiveChannelID? = nil,
+            hasCancellablePlayback: Bool = false,
+            queueAvailability: QueueDirectionAvailability = .both
+        ) -> ListeningCommandAvailability {
+            ListeningCommandAvailability(
+                playbackState: playbackState,
+                confirmedChannelID: confirmedChannelID,
+                hasCancellablePlayback: hasCancellablePlayback,
+                queueAvailability: queueAvailability
+            )
+        }
+
+        let channel = LiveChannelID("fixture-command-availability")
+
+        XCTAssertEqual(availability(.idle), .init(
+            playbackState: .idle,
+            confirmedChannelID: nil,
+            hasCancellablePlayback: false,
+            queueAvailability: .none
+        ))
+        XCTAssertFalse(availability(.idle).playPause)
+        XCTAssertFalse(availability(.idle).stop)
+        XCTAssertFalse(availability(.awaitingLiveContract, hasCancellablePlayback: true).playPause)
+        XCTAssertTrue(availability(.awaitingLiveContract, hasCancellablePlayback: true).stop)
+        XCTAssertFalse(availability(.playing(channel), confirmedChannelID: nil).pause)
+
+        let playing = availability(.playing(channel), confirmedChannelID: channel, hasCancellablePlayback: true)
+        XCTAssertTrue(playing.pause)
+        XCTAssertTrue(playing.playPause)
+        XCTAssertTrue(playing.previous)
+        XCTAssertTrue(playing.next)
+        XCTAssertTrue(playing.stop)
+
+        let paused = availability(.paused, confirmedChannelID: channel, hasCancellablePlayback: true, queueAvailability: .next)
+        XCTAssertTrue(paused.resumeLive)
+        XCTAssertTrue(paused.playPause)
+        XCTAssertTrue(paused.stop)
+        XCTAssertFalse(paused.previous)
+        XCTAssertTrue(paused.next)
+
+        let stopped = availability(.stopped)
+        XCTAssertFalse(stopped.pause)
+        XCTAssertFalse(stopped.resumeLive)
+        XCTAssertFalse(stopped.stop)
+        XCTAssertFalse(stopped.previous)
+        XCTAssertFalse(stopped.next)
+
+        let unavailable = availability(.unavailable(.networkUnavailable), hasCancellablePlayback: true)
+        XCTAssertFalse(unavailable.playPause)
+        XCTAssertTrue(unavailable.stop)
+        XCTAssertFalse(unavailable.previous)
+        XCTAssertFalse(unavailable.next)
+    }
+
+    func testControllerCommandAvailabilityIsInertBeforeAnySelection() {
+        let controller = makeController()
+
+        XCTAssertEqual(
+            controller.commandAvailability,
+            ListeningCommandAvailability(
+                playbackState: .idle,
+                confirmedChannelID: nil,
+                hasCancellablePlayback: false,
+                queueAvailability: .none
+            )
+        )
+    }
+
     func testReadySessionAutomaticallyLoadsCatalogOnceWithoutRacingManualRecovery() async throws {
         let catalog = ControlledSessionCatalog()
         let controller = makeController(

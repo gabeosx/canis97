@@ -46,6 +46,45 @@ struct ListeningSurfaceState: Equatable {
     let usesMetadataFallback: Bool
 }
 
+/// The single semantic transport contract shared by the library and Player
+/// menu. Commands are enabled only for coordinator-confirmed playback; Stop
+/// is the one exception because it also cancels an in-flight tune.
+struct ListeningCommandAvailability: Equatable {
+    let pause: Bool
+    let resumeLive: Bool
+    let stop: Bool
+    let previous: Bool
+    let next: Bool
+
+    init(
+        playbackState: LivePlaybackState,
+        confirmedChannelID: LiveChannelID?,
+        hasCancellablePlayback: Bool,
+        queueAvailability: QueueDirectionAvailability
+    ) {
+        let isConfirmedPlaying: Bool
+        if case let .playing(channelID?) = playbackState {
+            isConfirmedPlaying = channelID == confirmedChannelID
+        } else {
+            isConfirmedPlaying = false
+        }
+        let isConfirmedPaused = playbackState == .paused && confirmedChannelID != nil
+        let hasConfirmedPlayback = isConfirmedPlaying || isConfirmedPaused
+
+        pause = isConfirmedPlaying
+        resumeLive = isConfirmedPaused
+        // A pending tune retains a selected coordinator channel even though it
+        // has not become confirmed playback yet; Stop must remain available to
+        // cancel that work without exposing other inert transport commands.
+        stop = hasCancellablePlayback && playbackState != .stopped
+        previous = hasConfirmedPlayback && (queueAvailability == .previous || queueAvailability == .both)
+        next = hasConfirmedPlayback && (queueAvailability == .next || queueAvailability == .both)
+    }
+
+    var playPause: Bool { pause || resumeLive }
+    var playPauseTitle: String { pause ? "Pause" : "Play" }
+}
+
 /// The app-lifetime owner for authentication, catalog browsing, and the sole
 /// playback coordinator. SwiftUI scenes receive this controller; they never
 /// construct an alternate authentication or media ownership path.
@@ -103,6 +142,15 @@ final class ListeningSessionController {
     var compactSurface: ListeningSurfaceState { surface(for: .compact) }
     var librarySurface: ListeningSurfaceState { surface(for: .library) }
 
+    var commandAvailability: ListeningCommandAvailability {
+        ListeningCommandAvailability(
+            playbackState: listeningModel.playbackState,
+            confirmedChannelID: listeningModel.confirmedChannelID,
+            hasCancellablePlayback: playbackCoordinator.selectedChannelID != nil,
+            queueAvailability: queueAvailability
+        )
+    }
+
     /// Returns whether this is the first request for the singleton library
     /// route. Repeated requests focus that route without creating new state.
     func requestLibraryOpen() -> Bool {
@@ -120,13 +168,13 @@ final class ListeningSessionController {
 
     @discardableResult
     func toggleConfirmedPlayback() -> Task<Void, Never>? {
-        switch listeningModel.playbackState {
-        case .playing:
-            listeningModel.pausePlayback()
-        case .paused where listeningModel.confirmedChannelID != nil:
-            listeningModel.resumePlaybackAtLiveEdge()
-        case .awaitingLiveContract, .idle, .paused, .stopped, .unavailable:
-            nil
+        let availability = commandAvailability
+        if availability.pause {
+            return listeningModel.pausePlayback()
+        } else if availability.resumeLive {
+            return listeningModel.resumePlaybackAtLiveEdge()
+        } else {
+            return nil
         }
     }
 

@@ -41,6 +41,29 @@ final class MetadataPresentationTests: XCTestCase {
         }
     }
 
+    func testLibraryAndPlayerMenuBindTransportControlsToSharedCommandAvailability() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let librarySource = try String(
+            contentsOf: root.appending(path: "SiriusMac/Catalog/ListeningView.swift"),
+            encoding: .utf8
+        )
+        let appSource = try String(
+            contentsOf: root.appending(path: "SiriusMac/SiriusMacApp.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(librarySource.contains("controller?.commandAvailability ?? model.commandAvailability"))
+        XCTAssertTrue(librarySource.contains(".disabled(!commandAvailability.pause)"))
+        XCTAssertTrue(librarySource.contains(".disabled(!commandAvailability.resumeLive)"))
+        XCTAssertTrue(librarySource.contains(".disabled(!commandAvailability.stop)"))
+        XCTAssertTrue(appSource.contains("Button(controller.commandAvailability.playPauseTitle)"))
+        XCTAssertTrue(appSource.contains(".disabled(!controller.commandAvailability.previous)"))
+        XCTAssertTrue(appSource.contains(".disabled(!controller.commandAvailability.playPause)"))
+        XCTAssertTrue(appSource.contains(".disabled(!controller.commandAvailability.next)"))
+    }
+
     func testViewSelectionBindingDoesNotStartMetadataUntilPlaybackIsConfirmed() async {
         let flow = ListeningMetadataFlowSpy()
         let model = ListeningPresentationModel(flow: flow)
