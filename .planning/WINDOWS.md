@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 11
+open_count: 12
 waived_count: 0
 fixed_count: 1
-total_count: 12
-last_updated: 2026-08-20T20:09:02.243Z
+total_count: 13
+last_updated: 2026-08-21T17:06:19.082Z
 ---
 
 # Broken Windows Ledger
@@ -27,6 +27,7 @@ last_updated: 2026-08-20T20:09:02.243Z
 | 10 | 01 | deviation | SiriusMac.xcodeproj/project.pbxproj |  | Corrected a mismatched group file-reference identifier for RestorableAuthenticationCredentialSource.swift. | open |  | 2026-08-18T18:11:48.668Z |  |
 | 11 | 02 | deviation | SiriusMac/Authentication/AuthenticationPresentationModel.swift | 420 | Build-only verification exposed a non-exhaustive credential persistence outcome; mapped it to the closed unsupported presentation. | open |  | 2026-08-20T15:04:40.471Z |  |
 | 12 | 02 | deviation | script/lib/single_instance_launcher.sh |  | The sourceable app-host guard required direct function invocation for Xcode verification. | open |  | 2026-08-20T20:09:02.243Z |  |
+| 13 | 03 | stub | SiriusMac/Library/PlaybackQueue.swift | 1 | Project-file source registration is retained while the compiled semantic queue currently lives beside LibraryStore. | open |  | 2026-08-21T17:06:19.082Z |  |
 
 ````json
 [
@@ -172,6 +173,18 @@ last_updated: 2026-08-20T20:09:02.243Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-20T20:09:02.243Z",
+    "resolved_at": null
+  },
+  {
+    "id": 13,
+    "kind": "stub",
+    "phase": "03",
+    "file": "SiriusMac/Library/PlaybackQueue.swift",
+    "line": 1,
+    "description": "Project-file source registration is retained while the compiled semantic queue currently lives beside LibraryStore.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-21T17:06:19.082Z",
     "resolved_at": null
   }
 ]

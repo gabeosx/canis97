@@ -76,9 +76,9 @@ Phase 0 is historical. FEAS-01 records the accepted architecture; FEAS-02/03/05 
 ### Desktop Experience
 
 - [ ] **UI-01**: Subscriber can use a single-instance compact player window for channel identity, current metadata, favorite state, and primary playback controls.
-- [ ] **UI-02**: Subscriber can use a separate native library window to browse entitled channels and categories and access favorites and recents.
+- [x] **UI-02**: Subscriber can use a separate native library window to browse entitled channels and categories and access favorites and recents.
 - [x] **UI-03**: Compact and library windows observe the same session and playback state, and opening or closing either window never creates another player or interrupts healthy audio.
-- [ ] **UI-04**: Subscriber can move deterministically to the previous or next channel in the active entitled lineup and reveal the selected channel in the library.
+- [x] **UI-04**: Subscriber can move deterministically to the previous or next channel in the active entitled lineup and reveal the selected channel in the library.
 
 ### Accessibility
 
@@ -179,9 +179,9 @@ Every v1 requirement maps to exactly one delivery phase in `.planning/ROADMAP.md
 | MAC-03 | Phase 3 | Pending |
 | MAC-04 | Phase 3 | Complete |
 | UI-01 | Phase 3 | Pending |
-| UI-02 | Phase 3 | Pending |
+| UI-02 | Phase 3 | Complete |
 | UI-03 | Phase 3 | Complete |
-| UI-04 | Phase 3 | Pending |
+| UI-04 | Phase 3 | Complete |
 | ACCS-01 | Phase 3 | Pending |
 | ACCS-02 | Phase 4 | Pending |
 | SKIN-01 | Phase 4 | Pending |

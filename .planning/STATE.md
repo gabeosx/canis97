@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 03
 current_phase_name: native-mac-listening-experience
 status: executing
-stopped_at: Completed 03-02-PLAN.md
-last_updated: "2026-08-21T16:53:01.274Z"
+stopped_at: Completed 03-03-PLAN.md
+last_updated: "2026-08-21T17:06:28.809Z"
 last_activity: 2026-08-21
 last_activity_desc: Phase 03 execution started
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 54
-  completed_plans: 48
+  completed_plans: 49
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-08-18)
 ## Current Position
 
 Phase: 03 (native-mac-listening-experience) — EXECUTING
-Plan: 3 of 8
+Plan: 4 of 8
 Status: Ready to execute
 Last activity: 2026-08-21 — Phase 03 execution started
 
-Progress: [█████████░] 89%
+Progress: [█████████░] 91%
 
 ## Performance Metrics
 
@@ -107,6 +107,7 @@ Progress: [█████████░] 89%
 | Phase 02 P18 | 43 min | 2 tasks | 2 files |
 | Phase 03 P01 | 1h 7m | 2 tasks | 11 files |
 | Phase 03-native-mac-listening-experience P02 | 8min | 2 tasks | 7 files |
+| Phase 03 P03 | 17min | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -193,6 +194,8 @@ All earlier Phase 0 feasibility-selection, proof-run, quartet, GO/NO-GO, and cal
 - [Phase ?]: Keep live metadata compatibility diagnostics value-free, with strict required semantic fields and bounded fractional ISO-8601 timestamp support.
 - [Phase ?]: Persist local library state through a single main-actor SwiftData facade with an explicit non-secret allow-list.
 - [Phase ?]: Record recents only on a newly confirmed .playing channel transition with a safe semantic catalog snapshot.
+- [Phase ?]: Queue candidates are filtered against the current semantic entitled lineup and always tune through the shared coordinator.
+- [Phase ?]: Library browse selection remains independent from explicit tuning and generation-tagged reveal requests.
 
 ### Pending Todos
 
@@ -227,6 +230,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-21T16:53:01.252Z
-Stopped at: Completed 03-02-PLAN.md
+Last session: 2026-08-21T17:06:28.787Z
+Stopped at: Completed 03-03-PLAN.md
 Resume file: None
