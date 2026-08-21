@@ -5,6 +5,63 @@ import XCTest
 @testable import SiriusMac
 
 @MainActor
+final class WindowLifecyclePolicyTests: XCTestCase {
+    func testCompactPolicyUsesFixedSizeAndDistinctAutosaveName() {
+        let policy = WindowLifecyclePolicy(role: .compact)
+
+        XCTAssertEqual(policy.defaultContentSize, CGSize(width: 400, height: 288))
+        XCTAssertEqual(policy.minimumContentSize, CGSize(width: 400, height: 288))
+        XCTAssertFalse(policy.isResizable)
+        XCTAssertFalse(policy.allowsFullScreen)
+        XCTAssertEqual(policy.frameAutosaveName, "SiriusMac.compact.frame")
+    }
+
+    func testLibraryPolicyIsResizableWithSeparateAutosaveName() {
+        let policy = WindowLifecyclePolicy(role: .library)
+
+        XCTAssertEqual(policy.defaultContentSize, CGSize(width: 980, height: 700))
+        XCTAssertEqual(policy.minimumContentSize, CGSize(width: 760, height: 540))
+        XCTAssertTrue(policy.isResizable)
+        XCTAssertTrue(policy.allowsFullScreen)
+        XCTAssertEqual(policy.frameAutosaveName, "SiriusMac.library.frame")
+    }
+
+    func testRestoresOnlyFramesIntersectingAnAvailableScreen() {
+        let visibleFrame = CGRect(x: 100, y: 100, width: 400, height: 288)
+        let offscreenFrame = CGRect(x: 9_000, y: 9_000, width: 400, height: 288)
+        let screens = [CGRect(x: 0, y: 0, width: 1_440, height: 900)]
+
+        XCTAssertEqual(
+            WindowFrameRestoration.frameToApply(savedFrame: visibleFrame, screens: screens),
+            visibleFrame
+        )
+        XCTAssertNil(WindowFrameRestoration.frameToApply(savedFrame: offscreenFrame, screens: screens))
+    }
+
+    func testCompactCloseRequestsTerminationOnlyOnceWhileLibraryCloseDoesNothing() {
+        let terminator = WindowLifecycleTerminatorSpy()
+        let compact = WindowLifecyclePolicy(role: .compact, terminator: terminator)
+        let library = WindowLifecyclePolicy(role: .library, terminator: terminator)
+
+        compact.windowWillClose()
+        compact.windowWillClose()
+        library.windowWillClose()
+
+        XCTAssertEqual(terminator.terminationRequestCount, 1)
+    }
+
+}
+
+@MainActor
+private final class WindowLifecycleTerminatorSpy: ApplicationTerminating {
+    private(set) var terminationRequestCount = 0
+
+    func requestTermination() {
+        terminationRequestCount += 1
+    }
+}
+
+@MainActor
 final class ListeningSessionControllerTests: XCTestCase {
     func testReadySessionAutomaticallyLoadsCatalogOnceWithoutRacingManualRecovery() async throws {
         let catalog = ControlledSessionCatalog()
