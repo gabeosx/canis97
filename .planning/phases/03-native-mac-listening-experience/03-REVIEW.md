@@ -1,76 +1,90 @@
 ---
 phase: 03-native-mac-listening-experience
-reviewed: 2026-08-21T20:37:39Z
+reviewed: 2026-08-21T21:10:01Z
 depth: standard
-files_reviewed: 23
+files_reviewed: 10
 files_reviewed_list:
-  - Packages/SiriusXMClient/Sources/SiriusXMClient/InternalAdapters/LiveListeningAdapter.swift
-  - SiriusMac.xcodeproj/project.pbxproj
-  - SiriusMac/Accessibility/AccessibilityAnnouncer.swift
   - SiriusMac/App/ListeningSessionController.swift
-  - SiriusMac/Authentication/AuthenticationView.swift
   - SiriusMac/Catalog/ListeningPresentationModel.swift
   - SiriusMac/Catalog/ListeningView.swift
-  - SiriusMac/Library/LibraryStore.swift
+  - SiriusMac/SiriusMacApp.swift
   - SiriusMac/Library/PlaybackQueue.swift
   - SiriusMac/Listening/PlaybackCoordinator.swift
   - SiriusMac/Listening/SystemMediaController.swift
-  - SiriusMac/Metadata/MetadataPresentationModel.swift
-  - SiriusMac/Player/CompactPlayerPresentation.swift
-  - SiriusMac/Player/CompactPlayerView.swift
-  - SiriusMac/SiriusMacApp.swift
-  - SiriusMac/Windows/CompactWindowController.swift
-  - SiriusMacTests/AccessibilityContractTests.swift
-  - SiriusMacTests/CompactPlayerPresentationTests.swift
-  - SiriusMacTests/LibraryStoreTests.swift
   - SiriusMacTests/ListeningSessionControllerTests.swift
-  - SiriusMacTests/MetadataPresentationTests.swift
   - SiriusMacTests/PlaybackQueueTests.swift
   - SiriusMacTests/SystemMediaControllerTests.swift
 findings:
-  critical: 0
+  critical: 1
   warning: 1
   info: 0
-  total: 1
+  total: 2
 status: issues_found
 ---
 
 # Phase 03: Code Review Report
 
-**Reviewed:** 2026-08-21T20:37:39Z
+**Reviewed:** 2026-08-21T21:10:01Z
 **Depth:** standard
-**Files Reviewed:** 23
+**Files Reviewed:** 10
 **Status:** issues_found
 
 ## Summary
 
-All 23 submitted source and test files were re-read in context. The prior findings are resolved: storage has an in-memory fallback, failed metadata is marked stale immediately, failed or stopped replacement presentation has no inert transport, `PlaybackQueueTests.swift` is compiled by the test target, and pending replacement state disables MediaPlayer commands while retaining last-confirmed Now Playing content. Handler guards correctly reject events that arrive after the pending state has been observed.
+The synchronous `isTunePending` write now occurs before queue mutation or task scheduling, so the targeted no-yield next/previous race is fixed. Menu, compact-player, and MediaPlayer navigation predicates observe it, and confirmed playback still preserves the last-confirmed metadata/Now Playing semantics.
 
-One race remains before that asynchronous pending-state transition occurs: two immediate next/previous media events can queue competing tune tasks. The second task supersedes the first, so one intended navigation can be lost. No credential, URL, or media-key material is exposed in the reviewed code.
+However, cancelling the returned replacement-tune task leaves the coordinator in `.awaitingLiveContract` and leaves `isTunePending` true forever. The separate Library window also continues to offer active Tune controls while that guard rejects their request.
 
-Validation completed successfully: `xcodebuild test -quiet -project SiriusMac.xcodeproj -scheme SiriusMac -destination 'platform=macOS' -derivedDataPath /private/tmp/sirius-mac-phase03-final-review` and `swift test` in `Packages/SiriusXMClient` (91 package tests). `git diff --check` is clean.
+Validation: `xcodebuild test -project SiriusMac.xcodeproj -scheme SiriusMac -destination 'platform=macOS' -only-testing:SiriusMacTests/ListeningSessionControllerTests -derivedDataPath /private/tmp/siriusmac-review-derived` passed (11 tests). `git diff --check 1b68064^ 1b68064` was clean.
 
 ## Narrative Findings (AI reviewer)
 
-## Warnings
+## Critical Issues
 
-### WR-01 [WARNING]: A second remote navigation event can supersede the first before pending state is published
+### CR-01 [BLOCKER]: Cancelling a replacement-tune task permanently latches navigation
 
-**File:** `/Users/gabe/sirius-mac/SiriusMac/App/ListeningSessionController.swift:145-151`, `/Users/gabe/sirius-mac/SiriusMac/App/ListeningSessionController.swift:455-482`; `/Users/gabe/sirius-mac/SiriusMac/Catalog/ListeningPresentationModel.swift:137-145`
+**File:** `/Users/gabe/sirius-mac/SiriusMac/Catalog/ListeningPresentationModel.swift:150-153`; `/Users/gabe/sirius-mac/SiriusMac/Listening/PlaybackCoordinator.swift:657-665`
 
-**Issue:** `handleSystemNext`/`handleSystemPrevious` checks `commandAvailability` and then calls `navigate`, which immediately advances the `PlaybackQueue` but only starts the tune inside a newly scheduled `Task`. Until that task runs, `listeningModel.playbackState` is still `.playing` or `.paused`, so `commandAvailability` remains true and another media-key/Control Center event is accepted. The second `navigate` advances the queue again and its tune supersedes the first in `PlaybackCoordinator`; two rapid presses can therefore discard the first requested channel instead of disabling controls after the first command. The same timing window exists for the menu/library routes that invoke the shared controller navigation.
+**Issue:** `ListeningPresentationModel.tune` sets `isTunePending` before returning an externally cancellable `Task`, but has no cancellation handler. If that task is cancelled while it replaces confirmed playback, `PlaybackCoordinator.tune` has already set `state = .awaitingLiveContract` (lines 552-565). When its resolver completes, the `!Task.isCancelled` guard returns without moving the coordinator to a terminal state (lines 661-665). The presentation model then re-applies `.awaitingLiveContract`, a state that deliberately does not clear `isTunePending` (lines 240-244). All next/previous/play-pause eligibility remains disabled indefinitely, despite the request having been cancelled.
 
-**Fix:** Make pending navigation visible synchronously at the controller/model boundary, then have every command predicate include that synchronous in-flight flag until the coordinator emits a terminal or confirmed state. Alternatively, expose a synchronous `beginTune` operation on `PlaybackCoordinator` that sets `.awaitingLiveContract` before returning the task. Keep the existing handler guards as a backstop, and add a controller test that sends two remote `next` events without yielding between them; it should return `.commandFailed` for the second event and create exactly one replacement observation.
+**Fix:** Treat cancellation as a coordinated terminal operation: forward it to a main-actor coordinator cancellation method that invalidates the resolution and publishes `.stopped` or `.unavailable(.cancelled)`, then apply that state so the pending guard clears. Do not simply clear the guard in the task cancellation handler, because that would allow a still-running resolver to race a later navigation. Add a regression test that starts a confirmed replacement navigation, cancels its returned task before resolution completes, then verifies `isTunePending == false` and that a subsequent next/previous can be accepted.
 
 ```swift
-// Set this before scheduling the task and clear it from the playback observer.
-guard !isNavigationPending, commandAvailability.next else { return .commandFailed }
-isNavigationPending = true
-return next() == nil ? .commandFailed : .success
+return Task { [weak self, playbackCoordinator] in
+    await withTaskCancellationHandler {
+        await playbackCoordinator.tune(channelID)
+        self?.applyConfirmedPlaybackState(playbackCoordinator.state)
+    } onCancel: {
+        Task { @MainActor [weak self, playbackCoordinator] in
+            await playbackCoordinator.cancelPendingTune()
+            self?.applyConfirmedPlaybackState(playbackCoordinator.state)
+        }
+    }
+}
+```
+
+## Warnings
+
+### WR-01 [WARNING]: Library Tune affordances remain enabled while their requests are rejected
+
+**File:** `/Users/gabe/sirius-mac/SiriusMac/Catalog/ListeningView.swift:449-457`
+
+**Issue:** The primary library’s row context-menu Tune action and double-click path remain active during `isTunePending`. They call the controller, which correctly rejects the request before queue mutation, but the UI still advertises an available action that silently does nothing. This is inconsistent with the pending-aware menu, compact player, and MediaPlayer controls, and makes an in-flight navigation look broken.
+
+**Fix:** Bind those Tune affordances to the same pending eligibility. Disable the context-menu Tune button when `model.isTunePending`, and guard the double-click action before calling `tune(channel)`; keep selection/favorite controls available.
+
+```swift
+Button("Tune") { tune(channel) }
+    .disabled(model.isTunePending)
+
+.onTapGesture(count: 2) {
+    guard !model.isTunePending else { return }
+    tune(channel)
+}
 ```
 
 ---
 
-_Reviewed: 2026-08-21T20:37:39Z_
+_Reviewed: 2026-08-21T21:10:01Z_
 _Reviewer: the agent (gsd-code-reviewer)_
 _Depth: standard_

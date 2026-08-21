@@ -1,51 +1,53 @@
 ---
 phase: 03-native-mac-listening-experience
-fixed_at: 2026-08-21T20:37:39Z
+fixed_at: 2026-08-21T21:12:18Z
 review_path: /Users/gabe/sirius-mac/.planning/phases/03-native-mac-listening-experience/03-REVIEW.md
-iteration: post-cap-2
-findings_in_scope: 2
+iteration: post-cap-3
+findings_in_scope: 3
 fixed: 1
-skipped: 1
+skipped: 2
 status: partial
 ---
 
 # Phase 03: Code Review Fix Report
 
-**Fixed at:** 2026-08-21T20:37:39Z
+**Updated at:** 2026-08-21T21:12:18Z
 **Source review:** `/Users/gabe/sirius-mac/.planning/phases/03-native-mac-listening-experience/03-REVIEW.md`
-**Iteration:** post-cap-2
+**Iteration:** post-cap-3
 
 **Summary:**
 
-- Findings in scope across this fix and its final re-review: 2
+- Findings in scope: 3
 - Fixed: 1
-- Remaining: 1 warning
+- Remaining: 2
 
 ## Fixed Issues
 
-### WR-01: System media commands stay enabled while a replacement tune is pending
-
-**Files modified:** `SiriusMac/App/ListeningSessionController.swift`, `SiriusMac/Catalog/ListeningPresentationModel.swift`, `SiriusMac/Listening/PlaybackCoordinator.swift`, `SiriusMacTests/ListeningSessionControllerTests.swift`
-**Commit:** c7b6d71
-**Applied fix:** Replacement tunes now publish the pending state while retaining the last confirmed channel and metadata. System-media availability follows the shared `ListeningCommandAvailability` projection before any pending-state return, and remote handlers re-check that projection. The regression test verifies that a pending replacement disables all commands, retains confirmed Now Playing metadata, and rejects stale command events without initiating another tune.
-
-## Remaining Issue After Final Re-review
-
 ### WR-01: A second remote navigation event can supersede the first before pending state is published
 
-The final review found a synchronous race before the asynchronously scheduled tune publishes pending state. Two immediate navigation events can both pass eligibility and enqueue competing tune tasks. See `03-REVIEW.md` for the full finding and remediation guidance.
+**Files modified:** `SiriusMac/App/ListeningSessionController.swift`, `SiriusMac/Catalog/ListeningPresentationModel.swift`, `SiriusMac/Catalog/ListeningView.swift`, `SiriusMac/SiriusMacApp.swift`, `SiriusMacTests/ListeningSessionControllerTests.swift`
+**Commit:** 1b68064
+**Applied fix:** Added a synchronous main-actor `isTunePending` gate before a tune task is scheduled. Controller navigation now checks this gate before advancing the queue, command availability disables non-cancel transport commands while it is set, and library, compact-player, menu, and system-media routes use the shared projection. The state clears on reset and on confirmed or terminal coordinator observations. A deterministic no-yield test sends immediate remote Next and Previous pairs, verifies the second event fails, and verifies exactly one replacement observation and queue movement occur per accepted event.
 
 ## Verification
 
 All verification ran in the main checkout (the requested no-worktree mode).
 
-- Focused system-media/controller tests: passed.
-- Full `xcodebuild test`: passed.
-- Standalone `xcodebuild build`: passed (with existing warnings in `AccessibilityAnnouncer.swift`).
+- Focused `ListeningSessionControllerTests`, `SystemMediaControllerTests`, and `PlaybackQueueTests`: passed.
+- Full `xcodebuild test`: passed (existing Xcode framework-copy and compiler warnings only).
+- `swift test` in `Packages/SiriusXMClient`: passed, 91 tests.
+- Standalone `xcodebuild build`: passed (existing `AccessibilityAnnouncer.swift` warning only).
 - `git diff --check`: passed.
+
+## Remaining Review Findings
+
+The targeted re-review confirmed the rapid-navigation serialization fix and found two follow-up issues that remain open for the next authorized fix pass:
+
+- **CR-01 (blocker):** cancelling a replacement-tune task can leave `isTunePending` latched because cancellation does not drive the playback coordinator to a terminal state.
+- **WR-01 (warning):** Library Tune affordances remain enabled while a pending tune causes their requests to be rejected.
 
 ---
 
-_Updated: 2026-08-21T20:37:39Z_
+_Updated: 2026-08-21T21:12:18Z_
 _Fixer: the agent (gsd-code-fixer)_
-_Iteration: post-cap-2 (partial; one warning remains)_
+_Iteration: post-cap-3_
