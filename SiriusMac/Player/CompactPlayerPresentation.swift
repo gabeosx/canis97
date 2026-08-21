@@ -50,7 +50,9 @@ struct CompactPlayerPresentation: Sendable, Equatable {
     let isFavorite: Bool
     let transport: Transport?
     let emptyTitle: String?
-    let primaryActionTitle: String?
+    /// Inert copy for the empty-state button; the view still supplies the
+    /// matching `showLibrary` command through its injected action closure.
+    let emptyLibraryButtonTitle: String?
 
     static func confirmed(
         channel: ChannelIdentity,
@@ -76,7 +78,7 @@ struct CompactPlayerPresentation: Sendable, Equatable {
                 nextEnabled: availability.next
             ),
             emptyTitle: nil,
-            primaryActionTitle: nil
+            emptyLibraryButtonTitle: nil
         )
     }
 
@@ -91,7 +93,7 @@ struct CompactPlayerPresentation: Sendable, Equatable {
             isFavorite: false,
             transport: nil,
             emptyTitle: "Nothing Playing",
-            primaryActionTitle: "Open Library"
+            emptyLibraryButtonTitle: "Open Library"
         )
     }
 
@@ -162,7 +164,7 @@ struct CompactPlayerPresentation: Sendable, Equatable {
             isFavorite: previous.isFavorite,
             transport: previous.transport,
             emptyTitle: nil,
-            primaryActionTitle: nil
+            emptyLibraryButtonTitle: nil
         )
     }
 }

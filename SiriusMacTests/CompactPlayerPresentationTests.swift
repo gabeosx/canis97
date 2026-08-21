@@ -38,16 +38,25 @@ final class CompactPlayerPresentationTests: XCTestCase {
             CompactPlayerAction.allCases,
             [.previous, .playPause, .next, .toggleFavorite, .showLibrary, .toggleAlwaysOnTop, .retryPlayback, .signInAgain, .refreshLibrary]
         )
-        XCTAssertFalse(Mirror(reflecting: CompactPlayerPresentation.empty()).children.contains {
-            $0.label?.localizedCaseInsensitiveContains("action") == true
-        })
+        let storedValues = Array(Mirror(reflecting: CompactPlayerPresentation.empty()).children)
+
+        XCTAssertEqual(
+            storedValues.compactMap(\.label),
+            [
+                "backgroundRole", "channelIdentity", "artwork", "primaryMetadata",
+                "secondaryMetadata", "status", "isFavorite", "transport", "emptyTitle",
+                "emptyLibraryButtonTitle"
+            ]
+        )
+        XCTAssertFalse(storedValues.contains { $0.value is CompactPlayerAction })
+        XCTAssertFalse(storedValues.contains { String(reflecting: type(of: $0.value)).contains("->") })
     }
 
     func testEmptyPresentationHasNoFabricatedChannelOrMetadata() {
         let presentation = CompactPlayerPresentation.empty()
 
         XCTAssertEqual(presentation.emptyTitle, "Nothing Playing")
-        XCTAssertEqual(presentation.primaryActionTitle, "Open Library")
+        XCTAssertEqual(presentation.emptyLibraryButtonTitle, "Open Library")
         XCTAssertNil(presentation.channelIdentity)
         XCTAssertNil(presentation.primaryMetadata)
         XCTAssertNil(presentation.secondaryMetadata)

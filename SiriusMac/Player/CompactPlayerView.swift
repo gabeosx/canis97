@@ -149,7 +149,7 @@ struct CompactPlayerView: View {
             Spacer()
             Text(presentation.emptyTitle ?? "Nothing Playing").font(.system(size: 24, weight: .semibold))
             statusAndRecovery
-            Button(presentation.primaryActionTitle ?? "Open Library") { onAction(.showLibrary) }
+            Button(presentation.emptyLibraryButtonTitle ?? "Open Library") { onAction(.showLibrary) }
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
