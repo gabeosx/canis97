@@ -249,14 +249,38 @@ Plans:
 **Plans**: 8 plans
 
 Plans:
+**Wave 1**
+
 - [ ] 03-01-PLAN.md — Prove one app-owned listening session across singleton compact and library surfaces.
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 03-02-PLAN.md — Add secret-safe shared favorites and confirmed-listen recents.
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 03-03-PLAN.md — Deliver the four-tab native library, captured queue, and reveal flow.
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 03-04-PLAN.md — Build the fixed compact player and renderer-independent semantic style seam.
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
 - [ ] 03-05-PLAN.md — Enforce native window lifecycle, frame restoration, and Always on Top.
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
 - [ ] 03-06-PLAN.md — Route confirmed playback through macOS media keys and Now Playing.
+
+**Wave 7** *(blocked on Wave 6 completion)*
+
 - [ ] 03-07-PLAN.md — Complete keyboard, menu, focus, VoiceOver, announcements, and Reduce Motion.
+
+**Wave 8** *(blocked on Wave 7 completion)*
+
 - [ ] 03-08-PLAN.md — Verify native windows, system media, audio routing, rendered states, and accessibility.
+
 **UI hint**: yes
 
 ### Phase 4: Safe Skins & Accessible Recovery
