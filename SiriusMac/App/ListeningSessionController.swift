@@ -36,6 +36,10 @@ final class ListeningSessionController {
     let playbackCoordinator: PlaybackCoordinator
     let libraryStore: LibraryStore
 
+    private let remoteCommandCenter: any RemoteCommandCenterControlling
+    private let nowPlayingPublisher: any NowPlayingInfoPublishing
+    private var systemMediaController: SystemMediaController?
+
     private(set) var hasRequestedLibraryOpen = false
     private(set) var playbackQueue: PlaybackQueue?
     private(set) var libraryRevealRequest: LibraryRevealRequest?
@@ -47,7 +51,9 @@ final class ListeningSessionController {
     init(
         composition: AuthenticationComposition = AuthenticationComposition(),
         authenticationModel: AuthenticationPresentationModel? = nil,
-        libraryStore: LibraryStore? = nil
+        libraryStore: LibraryStore? = nil,
+        remoteCommandCenter: any RemoteCommandCenterControlling = SystemRemoteCommandCenterAdapter(),
+        nowPlayingPublisher: any NowPlayingInfoPublishing = SystemNowPlayingInfoAdapter()
     ) {
         self.composition = composition
         bridge = composition.bridge
@@ -58,6 +64,8 @@ final class ListeningSessionController {
             playbackCoordinator: composition.playbackCoordinator
         )
         self.libraryStore = libraryStore ?? LibraryStore()
+        self.remoteCommandCenter = remoteCommandCenter
+        self.nowPlayingPublisher = nowPlayingPublisher
         observeAuthenticationReadiness()
         observeConfirmedPlayback()
     }
@@ -106,12 +114,30 @@ final class ListeningSessionController {
         listeningModel.reset()
     }
 
+    /// The application composition, never a window, owns MediaPlayer's single
+    /// process-wide registration. Tests supply fakes without touching macOS.
+    func startSystemMediaControls() {
+        if systemMediaController == nil {
+            systemMediaController = SystemMediaController(
+                commandCenter: remoteCommandCenter,
+                nowPlayingPublisher: nowPlayingPublisher,
+                actions: .init(
+                    playPause: { [weak self] in self?.handleSystemPlayPause() ?? .commandFailed },
+                    previous: { [weak self] in self?.handleSystemPrevious() ?? .commandFailed },
+                    next: { [weak self] in self?.handleSystemNext() ?? .commandFailed }
+                )
+            )
+        }
+        systemMediaController?.start()
+    }
+
     /// Application termination owns playback invalidation, but intentionally
     /// never erases credentials. Explicit authentication cleanup remains the
     /// only path that can alter stored credential material.
     func shutdown() {
         guard !hasShutdown else { return }
         hasShutdown = true
+        systemMediaController?.shutdown()
         listeningModel.reset()
     }
 
@@ -182,6 +208,28 @@ final class ListeningSessionController {
         revealGeneration += 1
         libraryRevealRequest = LibraryRevealRequest(channelID: channelID, generation: revealGeneration)
         return listeningModel.tune(channelID)
+    }
+
+    private func handleSystemPlayPause() -> SystemRemoteCommandStatus {
+        switch listeningModel.playbackState {
+        case .playing:
+            return listeningModel.pausePlayback() == nil ? .commandFailed : .success
+        case .paused:
+            guard listeningModel.confirmedChannelID != nil else { return .commandFailed }
+            return listeningModel.resumePlaybackAtLiveEdge() == nil ? .commandFailed : .success
+        case .awaitingLiveContract, .idle, .stopped, .unavailable:
+            return .commandFailed
+        }
+    }
+
+    private func handleSystemPrevious() -> SystemRemoteCommandStatus {
+        guard queueAvailability == .previous || queueAvailability == .both else { return .commandFailed }
+        return previous() == nil ? .commandFailed : .success
+    }
+
+    private func handleSystemNext() -> SystemRemoteCommandStatus {
+        guard queueAvailability == .next || queueAvailability == .both else { return .commandFailed }
+        return next() == nil ? .commandFailed : .success
     }
 
     private func surface(for role: ListeningSurfaceRole) -> ListeningSurfaceState {

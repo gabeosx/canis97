@@ -68,8 +68,11 @@ final class SystemMediaControllerTests: XCTestCase {
 
 @MainActor
 private final class FakeRemoteCommandCenter: RemoteCommandCenterControlling {
-    private final class Token: RemoteCommandTarget {
+    private final class Token: RemoteCommandTarget, Hashable {
         var isRemoved = false
+
+        nonisolated static func == (lhs: Token, rhs: Token) -> Bool { lhs === rhs }
+        nonisolated func hash(into hasher: inout Hasher) { hasher.combine(ObjectIdentifier(self)) }
     }
 
     private var handlers: [SystemRemoteCommand: [Token: () -> SystemRemoteCommandStatus]] = [:]

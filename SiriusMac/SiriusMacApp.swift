@@ -8,6 +8,7 @@ struct SiriusMacApp: App {
 
     init() {
         sessionController = Self.makeSessionController()
+        sessionController?.startSystemMediaControls()
         terminationObserver = sessionController.map { controller in
             ApplicationTerminationObserver { controller.shutdown() }
         }
