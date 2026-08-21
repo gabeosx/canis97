@@ -52,8 +52,10 @@ struct CompactPlayerView: View {
                     .buttonStyle(.borderless)
                     .foregroundStyle(presentation.isFavorite ? Color(hex: style.accentHex) : .primary)
                     .help(presentation.isFavorite ? "Remove from Favorites" : "Add to Favorites")
+                    .accessibilityIdentifier("compact.favorite")
                     .accessibilityLabel(presentation.isFavorite ? "Remove from Favorites" : "Add to Favorites")
                     .accessibilityValue(presentation.isFavorite ? "Favorite" : "Not favorite")
+                    .accessibilitySortPriority(40)
                 }
                 metadata
             }
@@ -79,7 +81,8 @@ struct CompactPlayerView: View {
         .frame(width: 72, height: 72)
         .background(Color(hex: style.secondaryHex))
         .clipShape(.rect(cornerRadius: 4))
-        .accessibilityHidden(true)
+        .accessibilityLabel(presentation.channelIdentity.map { "Artwork for channel \($0.displayText)" } ?? "Channel artwork")
+        .accessibilitySortPriority(60)
     }
 
     @ViewBuilder
@@ -90,6 +93,8 @@ struct CompactPlayerView: View {
                 .lineLimit(CompactPlayerPresentation.metadataLineLimit)
                 .help(primary)
                 .accessibilityLabel("Current program: \(primary)")
+                .accessibilityValue(primary)
+                .accessibilitySortPriority(55)
         }
         if let secondary = presentation.secondaryMetadata {
             Text(secondary)
@@ -98,6 +103,8 @@ struct CompactPlayerView: View {
                 .lineLimit(CompactPlayerPresentation.metadataLineLimit)
                 .help(secondary)
                 .accessibilityLabel("Artist: \(secondary)")
+                .accessibilityValue(secondary)
+                .accessibilitySortPriority(54)
         }
     }
 
@@ -123,6 +130,8 @@ struct CompactPlayerView: View {
             .font(.system(size: 12))
             .foregroundStyle(.secondary)
             .accessibilityValue(status.accessibilityValue)
+            .accessibilityIdentifier("compact.status")
+            .accessibilitySortPriority(50)
         }
     }
 
@@ -145,13 +154,20 @@ struct CompactPlayerView: View {
         }
         .disabled(!enabled)
         .help(title)
+        .accessibilityIdentifier("compact.transport.\(accessibilityIdentifier(for: action))")
         .accessibilityLabel(title)
         .accessibilityValue(enabled ? "Available" : "Unavailable for the current queue")
+        .accessibilityHint(enabled ? "" : "Unavailable for the current queue")
+        .accessibilitySortPriority(30)
     }
 
     private var footer: some View {
         HStack {
-            Button("Show Library") { onAction(.showLibrary) }.help("Show Library")
+            Button("Show Library") { onAction(.showLibrary) }
+                .help("Show Library")
+                .accessibilityIdentifier("compact.show-library")
+                .accessibilityLabel("Show Library")
+                .accessibilitySortPriority(20)
             Spacer()
             Menu("More") {
                 Toggle(
@@ -161,9 +177,27 @@ struct CompactPlayerView: View {
                         set: { onAlwaysOnTopChanged($0) }
                     )
                 )
+                .accessibilityIdentifier("compact.always-on-top")
+                .accessibilityLabel("Always on Top")
+                .accessibilityValue(isAlwaysOnTop ? "On" : "Off")
+                .accessibilitySortPriority(10)
             }
         }
         .font(.system(size: 12))
+    }
+
+    private func accessibilityIdentifier(for action: CompactPlayerAction) -> String {
+        switch action {
+        case .previous: "previous"
+        case .playPause: "play-pause"
+        case .next: "next"
+        case .toggleFavorite: "favorite"
+        case .showLibrary: "show-library"
+        case .toggleAlwaysOnTop: "always-on-top"
+        case .retryPlayback: "retry"
+        case .signInAgain: "sign-in-again"
+        case .refreshLibrary: "refresh-library"
+        }
     }
 
     private var emptyContent: some View {
@@ -172,6 +206,8 @@ struct CompactPlayerView: View {
             Text(presentation.emptyTitle ?? "Nothing Playing").font(.system(size: 24, weight: .semibold))
             statusAndRecovery
             Button(presentation.emptyLibraryButtonTitle ?? "Open Library") { onAction(.showLibrary) }
+                .accessibilityIdentifier("compact.show-library")
+                .accessibilityLabel("Open Library")
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)

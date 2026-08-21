@@ -118,11 +118,7 @@ private struct CompactListeningSlice: View {
         case .previous:
             _ = controller.previous()
         case .playPause:
-            if presentation.transport?.playPause == .pause {
-                _ = controller.listeningModel.pausePlayback()
-            } else if controller.listeningModel.confirmedChannelID != nil {
-                _ = controller.listeningModel.resumePlaybackAtLiveEdge()
-            }
+            _ = controller.toggleConfirmedPlayback()
         case .next:
             _ = controller.next()
         case .toggleFavorite:
@@ -130,7 +126,7 @@ private struct CompactListeningSlice: View {
                 controller.listeningModel.state.snapshot?.channels.first(where: { $0.id == id })
             }) else { return }
             let snapshot = LibraryChannelSnapshot(channel)
-            controller.libraryStore.setFavorite(snapshot, isFavorite: !controller.libraryStore.isFavorite(channel.id))
+            controller.setFavorite(snapshot, isFavorite: !controller.libraryStore.isFavorite(channel.id))
         case .showLibrary:
             _ = controller.requestLibraryOpen()
             openWindow(id: "sirius-library")
@@ -154,11 +150,45 @@ private struct ListeningCommands: Commands {
     var body: some Commands {
         if let controller {
             CommandMenu("Player") {
+                Button("Previous") {
+                    _ = controller.previous()
+                }
+
+                Button(controller.listeningModel.playbackState == .playing(controller.listeningModel.confirmedChannelID) ? "Pause" : "Play") {
+                    _ = controller.toggleConfirmedPlayback()
+                }
+                .keyboardShortcut(" ", modifiers: [])
+
+                Button("Next") {
+                    _ = controller.next()
+                }
+
+                Divider()
+
                 Button("Show Library") {
                     _ = controller.requestLibraryOpen()
                     openWindow(id: "sirius-library")
                 }
                 .keyboardShortcut("l", modifiers: .command)
+
+                Button("Focus Search") {
+                    controller.requestLibrarySearchFocus()
+                    openWindow(id: "sirius-library")
+                }
+                .keyboardShortcut("f", modifiers: .command)
+
+                Button("Clear Recents") {
+                    controller.libraryStore.clearRecents()
+                }
+                .disabled(controller.libraryStore.recents.isEmpty)
+
+                if let channel = controller.listeningModel.confirmedChannelID.flatMap({ id in
+                    controller.listeningModel.state.snapshot?.channels.first(where: { $0.id == id })
+                }) {
+                    Button(controller.libraryStore.isFavorite(channel.id) ? "Remove from Favorites" : "Add to Favorites") {
+                        controller.setFavorite(LibraryChannelSnapshot(channel), isFavorite: !controller.libraryStore.isFavorite(channel.id))
+                    }
+                }
 
                 Toggle(
                     "Always on Top",

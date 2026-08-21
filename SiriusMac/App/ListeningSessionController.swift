@@ -67,6 +67,7 @@ final class ListeningSessionController {
     private(set) var hasRequestedLibraryOpen = false
     private(set) var playbackQueue: PlaybackQueue?
     private(set) var libraryRevealRequest: LibraryRevealRequest?
+    private(set) var librarySearchFocusGeneration = 0
     private var hasTriggeredAutomaticCatalogLoad = false
     private var hasShutdown = false
     private var lastObservedPlaybackState: LivePlaybackState = .awaitingLiveContract
@@ -108,6 +109,30 @@ final class ListeningSessionController {
         guard !hasRequestedLibraryOpen else { return false }
         hasRequestedLibraryOpen = true
         return true
+    }
+
+    /// A generation-tagged request keeps focus ownership inside the singleton
+    /// library scene rather than letting playback or another window steal it.
+    func requestLibrarySearchFocus() {
+        librarySearchFocusGeneration &+= 1
+        _ = requestLibraryOpen()
+    }
+
+    @discardableResult
+    func toggleConfirmedPlayback() -> Task<Void, Never>? {
+        switch listeningModel.playbackState {
+        case .playing:
+            listeningModel.pausePlayback()
+        case .paused where listeningModel.confirmedChannelID != nil:
+            listeningModel.resumePlaybackAtLiveEdge()
+        case .awaitingLiveContract, .idle, .paused, .stopped, .unavailable:
+            nil
+        }
+    }
+
+    @discardableResult
+    func tuneSelectedLibraryChannel() -> Task<Void, Never>? {
+        listeningModel.tuneSelectedChannel()
     }
 
     @discardableResult

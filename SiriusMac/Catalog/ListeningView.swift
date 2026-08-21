@@ -258,8 +258,10 @@ struct LibraryView: View {
     @Bindable var model: ListeningPresentationModel
     let libraryStore: LibraryStore
     let controller: ListeningSessionController?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var tab: LibraryTab
     @State private var query = ""
+    @FocusState private var focusTarget: LibraryFocusTarget?
 
     init(controller: ListeningSessionController) {
         model = controller.listeningModel
@@ -287,12 +289,17 @@ struct LibraryView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
                 .onChange(of: tab) { _, value in libraryStore.setSelectedLibraryTab(value.rawValue) }
+                .accessibilityIdentifier("library.tabs")
+                .accessibilitySortPriority(30)
 
                 TextField("Search Channels", text: $query)
                     .textFieldStyle(.roundedBorder)
                     .padding(.horizontal, 16)
                     .padding(.bottom, 8)
                     .accessibilityLabel("Search visible library collection")
+                    .accessibilityIdentifier("library.search")
+                    .focused($focusTarget, equals: .search)
+                    .accessibilitySortPriority(29)
 
                 libraryContent
             }
@@ -307,7 +314,17 @@ struct LibraryView: View {
                 if filteredChannels.contains(where: { $0.id == request.channelID }) == false {
                     query = ""
                 }
-                withAnimation(.easeInOut(duration: 0.12)) { proxy.scrollTo(request.channelID, anchor: .center) }
+                if reduceMotion {
+                    proxy.scrollTo(request.channelID, anchor: .center)
+                } else {
+                    withAnimation(.easeInOut(duration: 0.12)) { proxy.scrollTo(request.channelID, anchor: .center) }
+                }
+            }
+            .onChange(of: controller?.librarySearchFocusGeneration) { _, _ in
+                focusTarget = .search
+            }
+            .onChange(of: filteredChannels.map(\.id)) { previousIDs, currentIDs in
+                restoreSelectionAfterRefresh(previousIDs: previousIDs, currentIDs: currentIDs)
             }
         }
         .frame(minWidth: 760, minHeight: 540)
@@ -327,15 +344,29 @@ struct LibraryView: View {
                 Button("Try Again") { _ = model.refresh() }
             }
         default:
-            List(filteredChannels, id: \.id, selection: selection) { channel in
-                libraryRow(channel)
-                    .id(channel.id)
-                    .tag(channel.id)
-                    .contentShape(Rectangle())
-                    .onTapGesture(count: 2) { tune(channel) }
+            if filteredChannels.isEmpty {
+                ContentUnavailableView(emptyCollectionTitle, systemImage: "music.note.list", description: Text(emptyCollectionDescription))
+                    .accessibilityLabel("\(emptyCollectionTitle). \(emptyCollectionDescription)")
+            } else {
+                List(filteredChannels, id: \.id, selection: selection) { channel in
+                    libraryRow(channel)
+                        .id(channel.id)
+                        .tag(channel.id)
+                        .contentShape(Rectangle())
+                        .onTapGesture(count: 2) { tune(channel) }
+                }
+                .listStyle(.inset)
+                .focused($focusTarget, equals: .collection)
+                .accessibilityIdentifier("library.collection")
+                .accessibilitySortPriority(27)
+                .onSubmit { tuneSelectedChannel() }
+                .onKeyPress(.return) { tuneSelectedChannel(); return .handled }
+                .onKeyPress(.space) {
+                    guard focusTarget != .search else { return .ignored }
+                    _ = controller?.toggleConfirmedPlayback()
+                    return .handled
+                }
             }
-            .listStyle(.inset)
-            .onSubmit { if let selected = model.selectedChannelID, let channel = filteredChannels.first(where: { $0.id == selected }) { tune(channel) } }
         }
     }
 
@@ -386,18 +417,88 @@ struct LibraryView: View {
             Spacer()
             if model.confirmedChannelID == channel.id { Label("Now Playing", systemImage: "speaker.wave.2.fill").labelStyle(.iconOnly).accessibilityLabel("Now Playing") }
             Button(libraryStore.isFavorite(channel.id) ? "Remove from Favorites" : "Add to Favorites") {
-                libraryStore.setFavorite(LibraryChannelSnapshot(channel), isFavorite: !libraryStore.isFavorite(channel.id))
+                setFavorite(channel)
             }
             .buttonStyle(.borderless)
+            .help(libraryStore.isFavorite(channel.id) ? "Remove from Favorites" : "Add to Favorites")
+            .accessibilityIdentifier("library.favorite.\(channel.id.rawValue)")
+            .accessibilityLabel(libraryStore.isFavorite(channel.id) ? "Remove from Favorites" : "Add to Favorites")
+            .accessibilityValue(libraryStore.isFavorite(channel.id) ? "Favorite" : "Not favorite")
+            .accessibilitySortPriority(10)
         }
         .frame(minHeight: 44)
-        .accessibilityLabel(channel.name ?? "Unnamed channel")
-        .accessibilityValue(model.confirmedChannelID == channel.id ? "Now Playing" : "")
+        .accessibilityLabel(channelAccessibilityLabel(channel))
+        .accessibilityValue(channelAccessibilityValue(channel))
+        .accessibilityIdentifier("library.row.\(channel.id.rawValue)")
+        .accessibilitySortPriority(20)
+        .contextMenu {
+            Button("Tune") { tune(channel) }
+            Button(libraryStore.isFavorite(channel.id) ? "Remove from Favorites" : "Add to Favorites") { setFavorite(channel) }
+        }
     }
 
     private func tune(_ channel: LiveChannel) {
         if let controller { _ = controller.tune(channelID: channel.id, originIDs: tabChannels.map(\.id)) }
         else { model.select(channel.id); _ = model.tuneSelectedChannel() }
+    }
+
+    private func tuneSelectedChannel() {
+        guard let selected = model.selectedChannelID,
+              let channel = filteredChannels.first(where: { $0.id == selected })
+        else { return }
+        tune(channel)
+    }
+
+    private func setFavorite(_ channel: LiveChannel) {
+        let desiredState = !libraryStore.isFavorite(channel.id)
+        if let controller {
+            controller.setFavorite(LibraryChannelSnapshot(channel), isFavorite: desiredState)
+        } else {
+            libraryStore.setFavorite(LibraryChannelSnapshot(channel), isFavorite: desiredState)
+        }
+    }
+
+    private func restoreSelectionAfterRefresh(previousIDs: [LiveChannelID], currentIDs: [LiveChannelID]) {
+        guard let selected = model.selectedChannelID, !currentIDs.contains(selected) else { return }
+        guard !currentIDs.isEmpty else {
+            model.clearSelection()
+            focusTarget = .collection
+            return
+        }
+        let previousIndex = previousIDs.firstIndex(of: selected) ?? 0
+        model.select(currentIDs[min(previousIndex, currentIDs.count - 1)])
+        focusTarget = .collection
+    }
+
+    private func channelAccessibilityLabel(_ channel: LiveChannel) -> String {
+        let number = channel.displayNumber.map(String.init) ?? "Channel"
+        let name = channel.name ?? "Unnamed channel"
+        return "\(number), \(name)"
+    }
+
+    private func channelAccessibilityValue(_ channel: LiveChannel) -> String {
+        [
+            model.confirmedChannelID == channel.id ? "Now Playing" : nil,
+            libraryStore.isFavorite(channel.id) ? "Favorite" : nil,
+        ]
+        .compactMap { $0 }
+        .joined(separator: ", ")
+    }
+
+    private var emptyCollectionTitle: String {
+        switch tab {
+        case .favorites: "No Favorite Channels"
+        case .recents: "No Recent Channels"
+        case .channels, .categories: "No Matching Channels"
+        }
+    }
+
+    private var emptyCollectionDescription: String {
+        switch tab {
+        case .favorites: "Use Add to Favorites on a channel to build this collection."
+        case .recents: "Channels you play will appear here."
+        case .channels, .categories: "Change your search or refresh the library."
+        }
     }
 
     private func failureCopy(_ failure: CatalogFailure) -> String {
@@ -407,6 +508,11 @@ struct LibraryView: View {
         default: "The channel lineup could not be refreshed safely."
         }
     }
+}
+
+private enum LibraryFocusTarget: Hashable {
+    case search
+    case collection
 }
 
 private struct ChannelRow: View {
