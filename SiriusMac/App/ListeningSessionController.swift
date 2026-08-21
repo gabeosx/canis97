@@ -316,9 +316,9 @@ final class ListeningSessionController {
         let metadata = listeningModel.metadataPresentation
         guard metadata.availability != .loading else { return .loading }
         switch metadata.state.text {
-        case .current: .current
-        case .stale: .stale
-        case .channelFallback, .unavailable: .unavailable
+        case .current: return .current
+        case .stale: return .stale
+        case .channelFallback, .unavailable: return .unavailable
         }
     }
 
