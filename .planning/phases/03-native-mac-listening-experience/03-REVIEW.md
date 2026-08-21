@@ -1,6 +1,6 @@
 ---
 phase: 03-native-mac-listening-experience
-reviewed: 2026-08-21T19:16:29Z
+reviewed: 2026-08-21T19:43:00Z
 depth: standard
 files_reviewed: 20
 files_reviewed_list:
@@ -25,72 +25,53 @@ files_reviewed_list:
   - SiriusMacTests/PlaybackQueueTests.swift
   - SiriusMacTests/SystemMediaControllerTests.swift
 findings:
-  critical: 1
-  warning: 3
+  critical: 0
+  warning: 1
   info: 0
-  total: 4
+  total: 1
 status: issues_found
 ---
 
 # Phase 03: Code Review Report
 
-**Reviewed:** 2026-08-21T19:16:29Z
+**Reviewed:** 2026-08-21T19:43:00Z
 **Depth:** standard
 **Files Reviewed:** 20
 **Status:** issues_found
 
 ## Summary
 
-The submitted listening, persistence, MediaPlayer, accessibility, and client-adapter changes were reviewed in context. The phase has one launch-time crash path and three user-visible robustness/test-reliability defects. No hard-coded credentials, command injection, arbitrary URL routing, or unsafe renderer execution was found in the reviewed scope.
+This final standard-depth re-review covered the declared client adapter, listening-state, persistence, MediaPlayer, window, accessibility, presentation, and test-target scope. The prior four findings remain resolved: SwiftData falls back to in-memory storage, failed metadata is immediately marked stale, failed replacement tunes suppress stale compact transport, and `PlaybackQueueTests.swift` is in the Xcode test target. The iteration-two compact stopped-state transport regression is also resolved.
+
+`xcodebuild test -quiet -project SiriusMac.xcodeproj -scheme SiriusMac -destination 'platform=macOS' -derivedDataPath /private/tmp/sirius-mac-final-review-derived` completed successfully. One user-facing transport-state defect remains outside the compact-player fix.
 
 ## Narrative Findings (AI reviewer)
 
-## Critical Issues
-
-### CR-01 [BLOCKER]: A recoverable SwiftData initialization failure terminates the entire app
-
-**File:** `/Users/gabe/sirius-mac/SiriusMac/Library/LibraryStore.swift:420-425`
-
-**Issue:** `LibraryStore()` is constructed unconditionally by `ListeningSessionController` during application launch, but `makeDefaultContainer()` turns every `ModelContainer` error into `preconditionFailure`. A corrupted/migration-incompatible local store, unavailable storage, or other SwiftData initialization failure therefore aborts the process before the user can sign in or listen. Library persistence is non-secret ancillary state and must not make the player unavailable.
-
-**Fix:** Make container creation fallible at the composition boundary and either present a recoverable local-storage error or fall back to an explicitly in-memory `ModelContainer`. Do not call `preconditionFailure` for expected persistence initialization errors. For example:
-
-```swift
-private static func makeDefaultContainer() throws -> ModelContainer {
-    try ModelContainer(for: FavoriteRecord.self, RecentRecord.self, PlayerPreferenceRecord.self)
-}
-
-// At composition, use an in-memory container (and a user-visible warning) if durable storage cannot open.
-```
-
 ## Warnings
 
-### WR-01 [WARNING]: Failed metadata refresh leaves old metadata labeled as current
+### WR-01 [WARNING]: Library and menu transport controls remain actionable when no command is valid
 
-**File:** `/Users/gabe/sirius-mac/SiriusMac/Metadata/MetadataPresentationModel.swift:165-173`
+**File:** `/Users/gabe/sirius-mac/SiriusMac/Catalog/ListeningView.swift:130-138`; `/Users/gabe/sirius-mac/SiriusMac/SiriusMacApp.swift:153-164`
 
-**Issue:** After a successful metadata result, a later `.unavailable` or `.failed` result only changes `availability` and clears the title/artist fields. It leaves `state.text` and `state.artwork` unchanged, so `nowPlayingSemanticMetadata`, the compact player, and the system Now Playing publisher continue to use the prior `.current` value as if it were fresh. The old expiry task also remains in place. This produces false current-program information whenever the upstream metadata call fails before the 90-second expiry.
+**Issue:** The library's Pause, Resume Live, and Stop buttons are always enabled, while the Player menu's Previous, Play/Pause, and Next commands are never disabled. Before the user has selected/tuned a channel, Pause or Resume calls `PlaybackCoordinator` with no selected channel and changes the UI to `.unavailable(.selectionUnavailable)`. After Stop, the menu's Play command calls `toggleConfirmedPlayback()`, which deliberately returns `nil` for `.stopped`; Previous and Next similarly return `nil` without feedback when the queue is unavailable. The compact presentation now suppresses these stale controls, but the library and menu still advertise actions that cannot execute.
 
-**Fix:** On an unsuccessful refresh, immediately transition retained values to `.stale` (or to the channel fallback when no retained value is allowed), and keep expiry scheduling coherent. Add a test that returns `.current` once and then `.unavailable`/`.failed` before `staleAfter`.
+**Fix:** Derive command eligibility from the same confirmed playback state and queue availability used by `ListeningSessionController`, disable unsupported controls in both surfaces, and add controller/view-contract tests for the initial and stopped states. For example:
 
-### WR-02 [WARNING]: Retained failed-tune UI exposes a transport button that cannot act
+```swift
+Button("Pause") { _ = model.pausePlayback() }
+    .disabled(model.playbackState != .playing(model.confirmedChannelID))
 
-**File:** `/Users/gabe/sirius-mac/SiriusMac/Player/CompactPlayerPresentation.swift:151-168`
+Button("Resume Live") { _ = model.resumePlaybackAtLiveEdge() }
+    .disabled(model.playbackState != .paused || model.confirmedChannelID == nil)
 
-**Issue:** When a replacement tune fails, `retainingConfirmedContent` correctly preserves the prior station artwork/text but also copies its `transport` unchanged. A previously playing station therefore renders a Pause button while the actual state is `.unavailable`; `toggleConfirmedPlayback()` rejects that state and the control does nothing. Previous/next availability can likewise describe the obsolete queue position.
+Button("Previous") { _ = controller.previous() }
+    .disabled(controller.queueAvailability != .previous && controller.queueAvailability != .both)
+```
 
-**Fix:** Do not retain transport controls across `.unavailable`/`.pending` state, or rebuild `Transport` from the current playback state and queue availability with unsupported actions disabled. Cover a playing station followed by a failed tune in a presentation test.
-
-### WR-03 [WARNING]: Playback-queue tests are not compiled into the test target
-
-**File:** `/Users/gabe/sirius-mac/SiriusMac.xcodeproj/project.pbxproj:118`
-
-**Issue:** `PlaybackQueueTests.swift` has a `PBXFileReference` and `PBXBuildFile` (`030300010000000000000001`) but is absent from the `SiriusMacTests` `PBXSourcesBuildPhase`. Its assertions, including queue fallback and reveal-request coverage, never execute under the Xcode test scheme.
-
-**Fix:** Add `030300010000000000000001 /* PlaybackQueueTests.swift in Sources */` to the test target's source-build-phase `files` list (and retain it in the test group), then run the test target to verify it is discovered.
+Give Stop its own eligibility predicate (including an in-flight tune that can be cancelled), and use the same predicates for the menu Play/Pause and Next controls.
 
 ---
 
-_Reviewed: 2026-08-21T19:16:29Z_
+_Reviewed: 2026-08-21T19:43:00Z_
 _Reviewer: the agent (gsd-code-reviewer)_
 _Depth: standard_
