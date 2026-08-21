@@ -50,6 +50,33 @@ final class WindowLifecyclePolicyTests: XCTestCase {
         XCTAssertEqual(terminator.terminationRequestCount, 1)
     }
 
+    func testAlwaysOnTopDefaultsOffPersistsDesiredStateAndAffectsOnlyCompactPolicy() throws {
+        let container = try makePreferenceContainer()
+        let store = LibraryStore(modelContainer: container)
+        let compact = WindowLifecyclePolicy(role: .compact)
+        let library = WindowLifecyclePolicy(role: .library)
+
+        XCTAssertFalse(store.alwaysOnTop)
+        XCTAssertEqual(compact.windowLevel(alwaysOnTop: store.alwaysOnTop), .normal)
+
+        store.setAlwaysOnTop(true)
+        store.setAlwaysOnTop(true)
+
+        XCTAssertTrue(store.alwaysOnTop)
+        XCTAssertEqual(compact.windowLevel(alwaysOnTop: store.alwaysOnTop), .floating)
+        XCTAssertEqual(library.windowLevel(alwaysOnTop: store.alwaysOnTop), .normal)
+        XCTAssertTrue(LibraryStore(modelContainer: container).alwaysOnTop)
+    }
+
+    private func makePreferenceContainer() throws -> ModelContainer {
+        try ModelContainer(
+            for: FavoriteRecord.self,
+            RecentRecord.self,
+            PlayerPreferenceRecord.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+    }
+
 }
 
 @MainActor
