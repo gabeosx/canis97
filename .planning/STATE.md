@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 03
 current_phase_name: native-mac-listening-experience
 status: executing
-stopped_at: Completed 03-04-PLAN.md
-last_updated: "2026-08-21T17:22:09.826Z"
+stopped_at: Completed 03-05-PLAN.md
+last_updated: "2026-08-21T17:45:44.240Z"
 last_activity: 2026-08-21
 last_activity_desc: Phase 03 execution started
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 54
-  completed_plans: 50
+  completed_plans: 51
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-08-18)
 ## Current Position
 
 Phase: 03 (native-mac-listening-experience) — EXECUTING
-Plan: 5 of 8
+Plan: 6 of 8
 Status: Ready to execute
 Last activity: 2026-08-21 — Phase 03 execution started
 
-Progress: [█████████░] 93%
+Progress: [█████████░] 94%
 
 ## Performance Metrics
 
@@ -109,6 +109,7 @@ Progress: [█████████░] 93%
 | Phase 03-native-mac-listening-experience P02 | 8min | 2 tasks | 7 files |
 | Phase 03 P03 | 17min | 2 tasks | 9 files |
 | Phase 03 P04 | 11 min | 2 tasks | 5 files |
+| Phase 03 P05 | 13min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -199,6 +200,8 @@ All earlier Phase 0 feasibility-selection, proof-run, quartet, GO/NO-GO, and cal
 - [Phase ?]: Library browse selection remains independent from explicit tuning and generation-tagged reveal requests.
 - [Phase ?]: Compact rendering uses closed semantic values and typed app-owned actions; the renderer owns no playback, persistence, system media, or accessibility behavior.
 - [Phase ?]: Retain prior confirmed compact semantic content only at the scene host through transient pending or failure state.
+- [Phase ?]: Use role-scoped NSWindow notifications rather than replacing SwiftUI window delegates.
+- [Phase ?]: Persist one compact-only Always on Top desired state through the non-secret LibraryStore facade.
 
 ### Pending Todos
 
@@ -233,6 +236,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-21T17:22:09.805Z
-Stopped at: Completed 03-04-PLAN.md
+Last session: 2026-08-21T17:45:44.220Z
+Stopped at: Completed 03-05-PLAN.md
 Resume file: None
