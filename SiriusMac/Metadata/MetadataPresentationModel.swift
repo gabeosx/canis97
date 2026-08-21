@@ -28,6 +28,16 @@ protocol MetadataSleeping: Sendable {
     func sleep(for duration: TimeInterval) async throws
 }
 
+/// Closed, provider-neutral evidence for the metadata fallback. This lets
+/// presentation and diagnostics distinguish an unavailable upstream result
+/// from an app wiring failure without retaining response details.
+enum MetadataPresentationAvailability: Equatable {
+    case loading
+    case current
+    case unavailable
+    case failed
+}
+
 struct SystemMetadataSleeper: MetadataSleeping {
     func sleep(for duration: TimeInterval) async throws {
         try await Task.sleep(for: .seconds(duration))
@@ -48,6 +58,9 @@ final class MetadataPresentationModel {
     private var expiryTask: Task<Void, Never>?
     private var generation = 0
     private(set) var state: LiveMetadataState
+    private(set) var availability: MetadataPresentationAvailability = .unavailable
+    private(set) var programTitle: String?
+    private(set) var programArtist: String?
 
     init(
         flow: any MetadataFlow = UnavailableMetadataFlow(),
@@ -70,6 +83,9 @@ final class MetadataPresentationModel {
         pollTask?.cancel()
         expiryTask?.cancel()
         state = LiveMetadataState(channelID: channelID, text: .channelFallback(channelID), artwork: .unavailable, refreshedAt: nil)
+        availability = .loading
+        programTitle = nil
+        programArtist = nil
         let expected = generation
         metadataTask = Task { [weak self] in await self?.refresh(channelID: channelID, generation: expected) }
         pollTask = Task { [weak self] in await self?.poll(channelID: channelID, generation: expected) }
@@ -87,6 +103,9 @@ final class MetadataPresentationModel {
         expiryTask = nil
         let channelID = LiveChannelID("semantic-unselected-channel")
         state = LiveMetadataState(channelID: channelID, text: .channelFallback(channelID), artwork: .unavailable, refreshedAt: nil)
+        availability = .unavailable
+        programTitle = nil
+        programArtist = nil
     }
 
     private func poll(channelID: LiveChannelID, generation expected: Int) async {
@@ -109,13 +128,22 @@ final class MetadataPresentationModel {
             let program = snapshot.program
             let text = presentationText(for: program, channelID: channelID)
             let refreshedAt = clock.now()
+            programTitle = program?.title.nonEmptyTrimmed
+            programArtist = program?.artist?.nonEmptyTrimmed
+            availability = programTitle == nil ? .unavailable : .current
             state = LiveMetadataState(channelID: channelID, text: text, artwork: .unavailable, refreshedAt: refreshedAt)
             if let reference = program?.artwork {
                 startArtworkFetch(for: reference, channelID: channelID, generation: expected, refreshedAt: refreshedAt)
             }
             scheduleExpiry(channelID: channelID, generation: expected, refreshedAt: refreshedAt)
-        case .unavailable, .failed:
-            break
+        case .unavailable:
+            availability = .unavailable
+            programTitle = nil
+            programArtist = nil
+        case .failed:
+            availability = .failed
+            programTitle = nil
+            programArtist = nil
         }
     }
 
@@ -182,7 +210,17 @@ final class MetadataPresentationModel {
                 artwork: .unavailable,
                 refreshedAt: nil
             )
+            self.availability = .unavailable
+            self.programTitle = nil
+            self.programArtist = nil
         }
+    }
+}
+
+private extension String {
+    var nonEmptyTrimmed: String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }
 

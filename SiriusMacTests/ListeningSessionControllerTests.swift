@@ -5,6 +5,35 @@ import XCTest
 
 @MainActor
 final class ListeningSessionControllerTests: XCTestCase {
+    func testReadySessionAutomaticallyLoadsCatalogOnceWithoutRacingManualRecovery() async throws {
+        let catalog = ControlledSessionCatalog()
+        let controller = makeController(
+            client: catalog,
+            authenticationModel: AuthenticationPresentationModel(flow: EntitledSessionAuthenticationFlow())
+        )
+
+        let signIn = try XCTUnwrap(controller.authenticationModel.signIn())
+        await catalog.waitForCatalogRequests(count: 1)
+
+        controller.loadCatalogWhenReady()
+        controller.loadCatalogWhenReady()
+        XCTAssertNil(controller.listeningModel.refresh())
+        let requestCount = await catalog.catalogRequestCount()
+        XCTAssertEqual(requestCount, 1)
+
+        await catalog.completeCatalog(with: .snapshot(LiveCatalogSnapshot(
+            channels: [LiveChannel(id: LiveChannelID("fixture-ready"), name: "Ready Channel")],
+            freshness: .fresh
+        )))
+        await signIn.value
+
+        for _ in 0 ..< 10 {
+            if controller.listeningModel.state.snapshot != nil { break }
+            await Task.yield()
+        }
+        XCTAssertEqual(controller.listeningModel.state.snapshot?.channels.map(\.name), ["Ready Channel"])
+    }
+
     func testControllerRetainsOneCompositionAndCoordinatorAcrossSurfaceHandles() {
         let controller = makeController()
 
@@ -41,6 +70,35 @@ final class ListeningSessionControllerTests: XCTestCase {
         XCTFail("Both surfaces must render the same confirmed channel")
     }
 
+    func testConfirmedProgramMetadataFlowsToCompactSurfaceWithTruthfulFallback() async throws {
+        let runtime = SessionPlaybackRuntime()
+        let channel = LiveChannelID("fixture-current-program")
+        let client = SessionMetadataClient(
+            metadata: .current(MetadataSnapshot(
+                channelID: channel,
+                program: LiveProgramMetadata(title: "Jóga", artist: "Björk")
+            ))
+        )
+        let controller = makeController(runtime: runtime, client: client)
+
+        let tune = try XCTUnwrap(controller.tuneFromLibrary(channel))
+        await runtime.waitForObservation()
+        runtime.confirmReady()
+        runtime.confirmPlaying()
+        await tune.value
+        await client.waitForMetadataRequests(count: 1)
+
+        for _ in 0 ..< 10 {
+            if controller.compactSurface.metadataPrimaryText == "Jóga" { break }
+            await Task.yield()
+        }
+
+        XCTAssertEqual(controller.compactSurface.metadataPrimaryText, "Jóga")
+        XCTAssertEqual(controller.compactSurface.metadataSecondaryText, "Björk")
+        XCTAssertFalse(controller.compactSurface.usesMetadataFallback)
+        XCTAssertFalse(controller.compactSurface.metadataPrimaryText?.contains(channel.rawValue) ?? false)
+    }
+
     func testRepeatedLibraryOpenRequestsReuseTheSingletonRoute() {
         let controller = makeController()
         let originalCoordinator = controller.librarySurface.coordinatorIdentity
@@ -59,7 +117,9 @@ final class ListeningSessionControllerTests: XCTestCase {
     }
 
     private func makeController(
-        runtime: SessionPlaybackRuntime = SessionPlaybackRuntime()
+        runtime: SessionPlaybackRuntime = SessionPlaybackRuntime(),
+        client: (any ClientAuthenticationFlow & ListeningFlow)? = nil,
+        authenticationModel: AuthenticationPresentationModel? = nil
     ) -> ListeningSessionController {
         let coordinator = PlaybackCoordinator(
             resolver: SessionPlaybackResolver(),
@@ -71,10 +131,13 @@ final class ListeningSessionControllerTests: XCTestCase {
                 service: "com.siriusmac.tests.\(UUID().uuidString)",
                 account: "listening-session-controller"
             ),
-            client: SessionClient(),
+            client: client ?? SessionClient(),
             playbackCoordinator: coordinator
         )
-        return ListeningSessionController(composition: composition)
+        return ListeningSessionController(
+            composition: composition,
+            authenticationModel: authenticationModel
+        )
     }
 }
 
@@ -83,6 +146,83 @@ private actor SessionClient: ClientAuthenticationFlow, ListeningFlow {
     func entitlementAvailability() async -> EntitlementAvailability { .unavailable }
     func signOut() async -> SignOutOutcome { .signedOut }
     func catalog() async -> CatalogAvailability { .unavailable }
+}
+
+private actor ControlledSessionCatalog: ClientAuthenticationFlow, ListeningFlow {
+    private var catalogRequests = 0
+    private var catalogWaiters: [CheckedContinuation<Void, Never>] = []
+    private var pendingCatalog: CheckedContinuation<CatalogAvailability, Never>?
+
+    func authenticate() async -> AuthenticationOutcome { .authenticatedPendingEntitlement }
+    func entitlementAvailability() async -> EntitlementAvailability { .entitled }
+    func signOut() async -> SignOutOutcome { .signedOut }
+
+    func catalog() async -> CatalogAvailability {
+        catalogRequests += 1
+        catalogWaiters.forEach { $0.resume() }
+        catalogWaiters.removeAll()
+        return await withCheckedContinuation { pendingCatalog = $0 }
+    }
+
+    func catalogRequestCount() -> Int { catalogRequests }
+
+    func waitForCatalogRequests(count: Int) async {
+        if catalogRequests >= count { return }
+        await withCheckedContinuation { catalogWaiters.append($0) }
+    }
+
+    func completeCatalog(with availability: CatalogAvailability) {
+        pendingCatalog?.resume(returning: availability)
+        pendingCatalog = nil
+    }
+}
+
+private struct EntitledSessionAuthenticationFlow: AuthenticationPresentationFlow {
+    func beginWebViewSignIn() async -> AuthenticationPresentationState { .entitled }
+
+    func prepareForExplicitSignIn(
+        onAuthenticationVerification _: @MainActor @escaping @Sendable () -> Void,
+        onEntitlementVerification _: @MainActor @escaping @Sendable () -> Void
+    ) async -> AuthenticationPresentationState {
+        .entitled
+    }
+
+    func useLoggedInSession(
+        onEntitlementVerification _: @MainActor @escaping @Sendable () -> Void
+    ) async -> AuthenticationPresentationState {
+        .entitled
+    }
+
+    func signOut() async -> SignOutOutcome { .signedOut }
+}
+
+private actor SessionMetadataClient: ClientAuthenticationFlow, ListeningFlow, MetadataFlow {
+    private let metadataResult: MetadataAvailability
+    private var metadataRequests = 0
+    private var metadataWaiters: [CheckedContinuation<Void, Never>] = []
+
+    init(metadata: MetadataAvailability) {
+        metadataResult = metadata
+    }
+
+    func authenticate() async -> AuthenticationOutcome { .unsupported }
+    func entitlementAvailability() async -> EntitlementAvailability { .unavailable }
+    func signOut() async -> SignOutOutcome { .signedOut }
+    func catalog() async -> CatalogAvailability { .unavailable }
+
+    func metadata(for _: LiveChannelID) async -> MetadataAvailability {
+        metadataRequests += 1
+        metadataWaiters.forEach { $0.resume() }
+        metadataWaiters.removeAll()
+        return metadataResult
+    }
+
+    func artwork(for _: ChannelArtworkReference) async -> ArtworkAvailability { .unavailable }
+
+    func waitForMetadataRequests(count: Int) async {
+        if metadataRequests >= count { return }
+        await withCheckedContinuation { metadataWaiters.append($0) }
+    }
 }
 
 private struct SessionPlaybackResolver: PlaybackResolving {

@@ -220,6 +220,20 @@ final class MetadataPresentationTests: XCTestCase {
         XCTAssertEqual(model.state.text, .channelFallback(channel))
     }
 
+    func testUnavailableUpstreamMetadataKeepsTruthfulFallbackWithClosedDiagnosticState() async {
+        let flow = MetadataFlowSpy(metadata: .unavailable)
+        let model = MetadataPresentationModel(flow: flow)
+        let channel = LiveChannelID("fixture-unavailable-metadata")
+
+        model.select(channel)
+        await flow.waitForRequest()
+
+        XCTAssertEqual(model.state.text, .channelFallback(channel))
+        XCTAssertEqual(model.availability, .unavailable)
+        XCTAssertNil(model.programTitle)
+        XCTAssertNil(model.programArtist)
+    }
+
     func testPolicyUsesDocumentedFixedCeilings() {
         XCTAssertEqual(MetadataRefreshPolicy.default.pollInterval, 30)
         XCTAssertEqual(MetadataRefreshPolicy.default.staleAfter, 90)

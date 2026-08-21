@@ -76,6 +76,19 @@ private struct CompactListeningSlice: View {
             Text(compactStatus(state))
                 .foregroundStyle(.secondary)
                 .accessibilityLabel(compactStatus(state))
+            if let primary = state.metadataPrimaryText {
+                Text(primary)
+                    .font(.body)
+                    .lineLimit(2)
+                    .accessibilityLabel("Current program: \(primary)")
+            }
+            if let secondary = state.metadataSecondaryText {
+                Text(secondary)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .accessibilityLabel(state.usesMetadataFallback ? "Channel: \(secondary)" : "Artist: \(secondary)")
+            }
             Button("Show Library") {
                 _ = controller.requestLibraryOpen()
                 openWindow(id: "sirius-library")

@@ -16,6 +16,11 @@ struct ListeningSurfaceState: Equatable {
     let selectedChannelID: LiveChannelID?
     let activeChannelID: LiveChannelID?
     let playbackState: LivePlaybackState
+    /// Confirmed program details are semantic display values only. They never
+    /// contain provider identifiers, credentials, transport data, or URLs.
+    let metadataPrimaryText: String?
+    let metadataSecondaryText: String?
+    let usesMetadataFallback: Bool
 }
 
 /// The app-lifetime owner for authentication, catalog browsing, and the sole
@@ -31,16 +36,21 @@ final class ListeningSessionController {
     let playbackCoordinator: PlaybackCoordinator
 
     private(set) var hasRequestedLibraryOpen = false
+    private var hasTriggeredAutomaticCatalogLoad = false
 
-    init(composition: AuthenticationComposition = AuthenticationComposition()) {
+    init(
+        composition: AuthenticationComposition = AuthenticationComposition(),
+        authenticationModel: AuthenticationPresentationModel? = nil
+    ) {
         self.composition = composition
         bridge = composition.bridge
-        authenticationModel = AuthenticationPresentationModel(flow: composition.flow)
+        self.authenticationModel = authenticationModel ?? AuthenticationPresentationModel(flow: composition.flow)
         playbackCoordinator = composition.playbackCoordinator
         listeningModel = ListeningPresentationModel(
             flow: composition.listeningFlow,
             playbackCoordinator: composition.playbackCoordinator
         )
+        observeAuthenticationReadiness()
     }
 
     var compactSurface: ListeningSurfaceState { surface(for: .compact) }
@@ -64,20 +74,59 @@ final class ListeningSessionController {
         listeningModel.reset()
     }
 
+    /// Starts one initial catalog request for each transition into a ready,
+    /// entitled listening session. Manual refresh remains the explicit recovery
+    /// path after a failed result; observation repeats cannot start a race.
+    func loadCatalogWhenReady() {
+        guard authenticationModel.isReady else {
+            hasTriggeredAutomaticCatalogLoad = false
+            return
+        }
+        guard !hasTriggeredAutomaticCatalogLoad else { return }
+        hasTriggeredAutomaticCatalogLoad = true
+        _ = listeningModel.refresh()
+    }
+
+    private func observeAuthenticationReadiness() {
+        loadCatalogWhenReady()
+        withObservationTracking {
+            _ = authenticationModel.isReady
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.loadCatalogWhenReady()
+                self.observeAuthenticationReadiness()
+            }
+        }
+    }
+
     private func surface(for role: ListeningSurfaceRole) -> ListeningSurfaceState {
         let playbackState = listeningModel.playbackState
-        let activeChannelID: LiveChannelID?
-        if case let .playing(channelID) = playbackState {
-            activeChannelID = channelID
-        } else {
-            activeChannelID = nil
-        }
+        let activeChannelID = listeningModel.confirmedChannelID
+        let metadata = confirmedMetadataPresentation()
         return ListeningSurfaceState(
             role: role,
             coordinatorIdentity: ObjectIdentifier(playbackCoordinator),
             selectedChannelID: listeningModel.selectedChannelID,
             activeChannelID: activeChannelID,
-            playbackState: playbackState
+            playbackState: playbackState,
+            metadataPrimaryText: metadata.primary,
+            metadataSecondaryText: metadata.secondary,
+            usesMetadataFallback: metadata.isFallback
         )
+    }
+
+    private func confirmedMetadataPresentation() -> (primary: String?, secondary: String?, isFallback: Bool) {
+        guard listeningModel.confirmedChannelID != nil else { return (nil, nil, false) }
+
+        let metadata = listeningModel.metadataPresentation
+        switch metadata.state.text {
+        case let .current(value):
+            return (metadata.programTitle ?? value, metadata.programArtist, false)
+        case let .stale(value):
+            return ("Last updated earlier: \(metadata.programTitle ?? value)", metadata.programArtist, false)
+        case .channelFallback, .unavailable:
+            return ("Current program unavailable", listeningModel.confirmedChannelLabel, true)
+        }
     }
 }
