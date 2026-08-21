@@ -14,7 +14,7 @@ affects: [03-05, 03-08, phase-04-skins]
 actuals:
   tokens: 10015
   tasks: 2
-  commits: 4
+  commits: 5
 tech-stack:
   added: []
   patterns:
@@ -79,6 +79,7 @@ status: complete
 
 1. **Task 1: Render the confirmed compact happy path through semantic slots** - `c7d4896` (test), `7ef445a` (feat)
 2. **Task 2: Complete compact empty, pending, failure, fallback, and overflow states** - `7579c32` (test), `3ba62c1` (feat)
+3. **Post-wave test-gate repair: enforce the compact action-authority boundary** - `3571f5b` (fix)
 
 ## Files Created/Modified
 
@@ -119,6 +120,16 @@ status: complete
 **Total deviations:** 2 auto-fixed (1 Rule 1, 1 Rule 3)
 **Impact on plan:** Both changes were necessary to build the planned compact surface correctly; no unrelated scope was added.
 
+### Post-Wave Test-Gate Repair
+
+**[Rule 1 - Test bug] Repaired a false-positive compact action-boundary assertion**
+- **Found during:** Wave 4 post-merge full-suite gate.
+- **Issue:** `testViewActionsStayOutsideThePresentationValue()` rejected the inert `primaryActionTitle: String?` solely because its stored-property label contained `action`. The presentation had no executable closure or `CompactPlayerAction` value; `CompactPlayerView.onAction` remained the only dispatch boundary.
+- **Fix:** Renamed the inert empty-state copy to `emptyLibraryButtonTitle` and replaced the label-substring check with a structural assertion that enumerates the presentation's stored semantic slots and rejects `CompactPlayerAction` or closure value types.
+- **Files modified:** `SiriusMac/Player/CompactPlayerPresentation.swift`, `SiriusMac/Player/CompactPlayerView.swift`, `SiriusMacTests/CompactPlayerPresentationTests.swift`
+- **Committed in:** `3571f5b`
+- **Verification:** The repaired single test passed; `CompactPlayerPresentationTests` passed twice (8/8 each); the full `SiriusMac` Xcode suite passed (143/143).
+
 ## Issues Encountered
 
 - The first full-suite pass reported one non-reproducing failure in verbose Xcode output; an immediate `xcodebuild test -quiet` rerun completed successfully.
@@ -141,7 +152,7 @@ None - no external service configuration required.
 PASSED
 
 - Confirmed `CompactPlayerPresentation.swift`, `CompactPlayerView.swift`, and `CompactPlayerPresentationTests.swift` exist.
-- Confirmed task commits `c7d4896`, `7ef445a`, `7579c32`, and `3ba62c1` exist in git history.
+- Confirmed task commits `c7d4896`, `7ef445a`, `7579c32`, `3ba62c1`, and post-wave repair `3571f5b` exist in git history.
 
 ---
 *Phase: 03-native-mac-listening-experience*
