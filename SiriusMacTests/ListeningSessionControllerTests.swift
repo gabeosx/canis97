@@ -8,7 +8,7 @@ final class ListeningSessionControllerTests: XCTestCase {
     func testControllerRetainsOneCompositionAndCoordinatorAcrossSurfaceHandles() {
         let controller = makeController()
 
-        XCTAssertEqual(controller.compositionIdentity, ObjectIdentifier(controller.composition))
+        XCTAssertTrue(controller.composition.playbackCoordinator === controller.playbackCoordinator)
         XCTAssertEqual(controller.compactSurface.coordinatorIdentity, ObjectIdentifier(controller.playbackCoordinator))
         XCTAssertEqual(controller.librarySurface.coordinatorIdentity, ObjectIdentifier(controller.playbackCoordinator))
     }
@@ -43,13 +43,12 @@ final class ListeningSessionControllerTests: XCTestCase {
 
     func testRepeatedLibraryOpenRequestsReuseTheSingletonRoute() {
         let controller = makeController()
-        let originalComposition = controller.compositionIdentity
         let originalCoordinator = controller.librarySurface.coordinatorIdentity
 
         XCTAssertTrue(controller.requestLibraryOpen())
         XCTAssertFalse(controller.requestLibraryOpen())
         XCTAssertFalse(controller.requestLibraryOpen())
-        XCTAssertEqual(controller.compositionIdentity, originalComposition)
+        XCTAssertTrue(controller.composition.playbackCoordinator === controller.playbackCoordinator)
         XCTAssertEqual(controller.librarySurface.coordinatorIdentity, originalCoordinator)
     }
 

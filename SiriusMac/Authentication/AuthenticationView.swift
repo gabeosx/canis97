@@ -2,19 +2,11 @@ import SwiftUI
 import SiriusXMClient
 
 struct AuthenticationView: View {
-    @State private var model: AuthenticationPresentationModel
-    @State private var bridge: WebAuthenticationBridge
-    @State private var listeningModel: ListeningPresentationModel
+    let controller: ListeningSessionController
 
-    init() {
-        let composition = AuthenticationComposition()
-        _bridge = State(initialValue: composition.bridge)
-        _model = State(initialValue: AuthenticationPresentationModel(flow: composition.flow))
-        _listeningModel = State(initialValue: ListeningPresentationModel(
-            flow: composition.listeningFlow,
-            playbackCoordinator: composition.playbackCoordinator
-        ))
-    }
+    private var model: AuthenticationPresentationModel { controller.authenticationModel }
+    private var bridge: WebAuthenticationBridge { controller.bridge }
+    private var listeningModel: ListeningPresentationModel { controller.listeningModel }
 
     var body: some View {
         SwiftUI.Group {
@@ -23,7 +15,7 @@ struct AuthenticationView: View {
                     ListeningView(model: listeningModel)
                     HStack {
                         Button("Sign Out") {
-                            listeningModel.reset()
+                            controller.resetListeningBeforeAuthenticationCleanup()
                             _ = model.signOut()
                         }
                         clearLocalSessionButton
@@ -120,7 +112,7 @@ struct AuthenticationView: View {
 
     private var clearLocalSessionButton: some View {
         Button("Clear Local Session") {
-            listeningModel.reset()
+            controller.resetListeningBeforeAuthenticationCleanup()
             _ = model.clearLocalSession()
         }
     }
@@ -144,7 +136,8 @@ struct AuthenticationComposition {
     init(
         bridge: WebAuthenticationBridge,
         keychain: KeychainCredentialStore,
-        client: (any ClientAuthenticationFlow)? = nil
+        client: (any ClientAuthenticationFlow)? = nil,
+        playbackCoordinator injectedPlaybackCoordinator: PlaybackCoordinator? = nil
     ) {
         let credentialSource = RestorableAuthenticationCredentialSource(keychain: keychain, webViewSource: bridge)
 
@@ -161,7 +154,7 @@ struct AuthenticationComposition {
                 credentialSource: credentialSource
             )
             self.listeningFlow = (client as? any ListeningFlow) ?? UnavailableListeningFlow()
-            self.playbackCoordinator = PlaybackCoordinator(resolver: UnavailablePlaybackResolver())
+            self.playbackCoordinator = injectedPlaybackCoordinator ?? PlaybackCoordinator(resolver: UnavailablePlaybackResolver())
         } else {
             let composedClient = SiriusXMClient(
                 credentialSource: credentialSource,
@@ -174,7 +167,7 @@ struct AuthenticationComposition {
                 credentialSource: credentialSource
             )
             self.listeningFlow = composedClient
-            self.playbackCoordinator = PlaybackCoordinator(
+            self.playbackCoordinator = injectedPlaybackCoordinator ?? PlaybackCoordinator(
                 resolver: SiriusXMPlaybackResolver(client: composedClient),
                 networkObserver: SystemNetworkPathObserver(),
                 workspaceObserver: SystemWorkspacePowerObserver()
