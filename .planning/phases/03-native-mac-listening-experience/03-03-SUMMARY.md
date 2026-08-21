@@ -79,4 +79,4 @@ Implemented a stable-ID, no-wrap playback queue plus a native Channels/Categorie
 
 ## Self-Check: PASSED
 
-- Confirmed all listed task commits are reachable and the focused and full Xcode suites pass.
+- Confirmed all listed task commits and created files are reachable on disk, and the focused and full Xcode suites pass.
