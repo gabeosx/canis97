@@ -64,6 +64,54 @@ final class SystemMediaControllerTests: XCTestCase {
         XCTAssertEqual(playPauseCount, 1)
         XCTAssertEqual(nextCount, 1)
     }
+
+    func testNowPlayingSemanticMetadataPrefersCurrentTitleAndArtistWithChannelArtworkContext() {
+        let artwork = ArtworkData(bytes: Data([0x89, 0x50, 0x4E, 0x47]), mediaType: .png)
+        let metadata = NowPlayingSemanticMetadata(
+            programTitle: "Été électronique",
+            programArtist: "Björk",
+            currentProgram: "Fallback program",
+            artwork: artwork
+        )
+
+        let info = metadata.systemNowPlayingInfo(
+            channelName: "80s on 8",
+            playbackState: .playing
+        )
+
+        XCTAssertEqual(info.title, "Été électronique")
+        XCTAssertEqual(info.artist, "Björk")
+        XCTAssertEqual(info.channelName, "80s on 8")
+        XCTAssertEqual(info.artwork, artwork)
+        XCTAssertTrue(info.isLive)
+        XCTAssertEqual(info.playbackRate, 1)
+    }
+
+    func testNowPlayingRetainsLastConfirmedInfoUntilTerminalStateClearsIt() {
+        let commandCenter = FakeRemoteCommandCenter()
+        let publisher = FakeNowPlayingPublisher()
+        let controller = SystemMediaController(
+            commandCenter: commandCenter,
+            nowPlayingPublisher: publisher,
+            actions: .init(playPause: { .success }, previous: { .success }, next: { .success })
+        )
+        let confirmed = NowPlayingSemanticMetadata(
+            programTitle: nil,
+            programArtist: nil,
+            currentProgram: "Current program",
+            artwork: nil
+        ).systemNowPlayingInfo(channelName: "Channel 42", playbackState: .paused)
+
+        controller.start()
+        controller.publish(confirmed)
+
+        // A pending tune has no confirmed presentation to publish, so it keeps
+        // the previous system representation rather than leaking a browse choice.
+        XCTAssertEqual(publisher.lastPublished, confirmed)
+
+        controller.publish(nil)
+        XCTAssertNil(publisher.lastPublished)
+    }
 }
 
 @MainActor
@@ -111,5 +159,9 @@ private final class FakeRemoteCommandCenter: RemoteCommandCenterControlling {
 
 @MainActor
 private final class FakeNowPlayingPublisher: NowPlayingInfoPublishing {
-    func publish(_ info: SystemNowPlayingInfo?) {}
+    private(set) var lastPublished: SystemNowPlayingInfo?
+
+    func publish(_ info: SystemNowPlayingInfo?) {
+        lastPublished = info
+    }
 }
