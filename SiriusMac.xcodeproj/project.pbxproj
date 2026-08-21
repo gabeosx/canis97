@@ -29,6 +29,8 @@
 		030200010000000000000001 /* LibraryStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 030200020000000000000001 /* LibraryStoreTests.swift */; };
 		030100010000000000000002 /* ListeningSessionController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 030100020000000000000002 /* ListeningSessionController.swift */; };
 		030200010000000000000002 /* LibraryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 030200020000000000000002 /* LibraryStore.swift */; };
+		030300010000000000000001 /* PlaybackQueueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 030300020000000000000001 /* PlaybackQueueTests.swift */; };
+		030300010000000000000002 /* PlaybackQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 030300020000000000000002 /* PlaybackQueue.swift */; };
 		020200010000000000000001 /* LiveContractObservation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020200020000000000000001 /* LiveContractObservation.swift */; };
 		020200010000000000000002 /* ClosedLiveObservationAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020200020000000000000002 /* ClosedLiveObservationAdapter.swift */; };
 		020400010000000000000001 /* ListeningView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020400020000000000000001 /* ListeningView.swift */; };
@@ -62,6 +64,8 @@
 		030200020000000000000001 /* LibraryStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiriusMacTests/LibraryStoreTests.swift; sourceTree = SOURCE_ROOT; };
 		030200020000000000000002 /* LibraryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiriusMac/Library/LibraryStore.swift; sourceTree = SOURCE_ROOT; };
 		030100020000000000000002 /* ListeningSessionController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiriusMac/App/ListeningSessionController.swift; sourceTree = SOURCE_ROOT; };
+		030300020000000000000001 /* PlaybackQueueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiriusMacTests/PlaybackQueueTests.swift; sourceTree = SOURCE_ROOT; };
+		030300020000000000000002 /* PlaybackQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiriusMac/Library/PlaybackQueue.swift; sourceTree = SOURCE_ROOT; };
 		020200020000000000000001 /* LiveContractObservation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiriusMac/Listening/LiveContractObservation.swift; sourceTree = SOURCE_ROOT; };
 		020200020000000000000002 /* ClosedLiveObservationAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiriusMac/Listening/ClosedLiveObservationAdapter.swift; sourceTree = SOURCE_ROOT; };
 		020400020000000000000001 /* ListeningView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiriusMac/Catalog/ListeningView.swift; sourceTree = SOURCE_ROOT; };

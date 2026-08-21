@@ -120,3 +120,33 @@ final class LibraryStoreTests: XCTestCase {
         )
     }
 }
+
+@MainActor
+final class PlaybackQueueContractTests: XCTestCase {
+    func testCapturedQueueKeepsExactOrderAndNeverWraps() {
+        let ids = values("one", "two", "three", "four")
+        var queue = PlaybackQueue(originIDs: ids, currentID: ids[1])
+        let entitled = [ids[0], ids[1], ids[3]]
+
+        XCTAssertEqual(queue.capturedIDs, ids)
+        XCTAssertEqual(queue.currentIndex, 1)
+        XCTAssertEqual(queue.candidate(.next, currentEntitledIDs: entitled, fullLineup: ids), ids[3])
+        XCTAssertNil(queue.candidate(.next, currentEntitledIDs: entitled, fullLineup: ids))
+        XCTAssertEqual(queue.candidate(.previous, currentEntitledIDs: entitled, fullLineup: ids), ids[1])
+    }
+
+    func testEmptyAndOneItemQueuesDisableDirectionsAndUseFullLineupFallback() {
+        let only = LiveChannelID("only")
+        XCTAssertEqual(PlaybackQueue(originIDs: [], currentID: nil).availability(currentEntitledIDs: [], fullLineup: []), .none)
+        XCTAssertEqual(PlaybackQueue(originIDs: [only], currentID: only).availability(currentEntitledIDs: [only], fullLineup: [only]), .none)
+
+        let captured = values("removed-one", "removed-two")
+        let lineup = values("alpha", "beta")
+        var queue = PlaybackQueue(originIDs: captured, currentID: captured[0])
+        XCTAssertEqual(queue.candidate(.next, currentEntitledIDs: lineup, fullLineup: lineup), lineup[0])
+    }
+
+    private func values(_ rawValues: String...) -> [LiveChannelID] {
+        rawValues.map(LiveChannelID.init)
+    }
+}
