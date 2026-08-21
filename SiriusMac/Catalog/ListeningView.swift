@@ -368,7 +368,10 @@ struct LibraryView: View {
                         .id(channel.id)
                         .tag(channel.id)
                         .contentShape(Rectangle())
-                        .onTapGesture(count: 2) { tune(channel) }
+                        .onTapGesture(count: 2) {
+                            guard !model.isTunePending else { return }
+                            tune(channel)
+                        }
                 }
                 .listStyle(.inset)
                 .focused($focusTarget, equals: .collection)
@@ -448,6 +451,7 @@ struct LibraryView: View {
         .accessibilitySortPriority(20)
         .contextMenu {
             Button("Tune") { tune(channel) }
+                .disabled(model.isTunePending)
             Button(libraryStore.isFavorite(channel.id) ? "Remove from Favorites" : "Add to Favorites") { setFavorite(channel) }
         }
     }

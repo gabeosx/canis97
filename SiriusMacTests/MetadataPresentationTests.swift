@@ -64,6 +64,19 @@ final class MetadataPresentationTests: XCTestCase {
         XCTAssertTrue(appSource.contains(".disabled(!controller.commandAvailability.next)"))
     }
 
+    func testLibraryTuneAffordancesRejectPendingTuneWhileKeepingLibraryStateAvailable() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: root.appending(path: "SiriusMac/Catalog/ListeningView.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(source.contains("guard !model.isTunePending else { return }\n                            tune(channel)"))
+        XCTAssertTrue(source.contains("Button(\"Tune\") { tune(channel) }\n                .disabled(model.isTunePending)"))
+    }
+
     func testViewSelectionBindingDoesNotStartMetadataUntilPlaybackIsConfirmed() async {
         let flow = ListeningMetadataFlowSpy()
         let model = ListeningPresentationModel(flow: flow)
