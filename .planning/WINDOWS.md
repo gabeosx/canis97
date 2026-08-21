@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 12
+open_count: 14
 waived_count: 0
 fixed_count: 1
-total_count: 13
-last_updated: 2026-08-21T17:06:19.082Z
+total_count: 15
+last_updated: 2026-08-21T17:22:09.276Z
 ---
 
 # Broken Windows Ledger
@@ -28,6 +28,8 @@ last_updated: 2026-08-21T17:06:19.082Z
 | 11 | 02 | deviation | SiriusMac/Authentication/AuthenticationPresentationModel.swift | 420 | Build-only verification exposed a non-exhaustive credential persistence outcome; mapped it to the closed unsupported presentation. | open |  | 2026-08-20T15:04:40.471Z |  |
 | 12 | 02 | deviation | script/lib/single_instance_launcher.sh |  | The sourceable app-host guard required direct function invocation for Xcode verification. | open |  | 2026-08-20T20:09:02.243Z |  |
 | 13 | 03 | stub | SiriusMac/Library/PlaybackQueue.swift | 1 | Project-file source registration is retained while the compiled semantic queue currently lives beside LibraryStore. | open |  | 2026-08-21T17:06:19.082Z |  |
+| 14 | 03 | unmet-truth | SiriusMac/Player/CompactPlayerView.swift |  | Rendered 400 × 288 long-text displacement inspection remains for Plan 03-08; source contracts do not prove layout. | open |  | 2026-08-21T17:22:09.192Z |  |
+| 15 | 03 | deviation | SiriusMac/SiriusMacApp.swift |  | Plan listed AuthenticationView, but the compact tracer was located and replaced in SiriusMacApp's CompactListeningSlice. | open |  | 2026-08-21T17:22:09.276Z |  |
 
 ````json
 [
@@ -185,6 +187,30 @@ last_updated: 2026-08-21T17:06:19.082Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-21T17:06:19.082Z",
+    "resolved_at": null
+  },
+  {
+    "id": 14,
+    "kind": "unmet-truth",
+    "phase": "03",
+    "file": "SiriusMac/Player/CompactPlayerView.swift",
+    "line": null,
+    "description": "Rendered 400 × 288 long-text displacement inspection remains for Plan 03-08; source contracts do not prove layout.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-21T17:22:09.192Z",
+    "resolved_at": null
+  },
+  {
+    "id": 15,
+    "kind": "deviation",
+    "phase": "03",
+    "file": "SiriusMac/SiriusMacApp.swift",
+    "line": null,
+    "description": "Plan listed AuthenticationView, but the compact tracer was located and replaced in SiriusMacApp's CompactListeningSlice.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-21T17:22:09.276Z",
     "resolved_at": null
   }
 ]
