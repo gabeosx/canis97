@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 14
+open_count: 15
 waived_count: 0
 fixed_count: 1
-total_count: 15
-last_updated: 2026-08-21T17:22:09.276Z
+total_count: 16
+last_updated: 2026-08-21T18:20:34.238Z
 ---
 
 # Broken Windows Ledger
@@ -30,6 +30,7 @@ last_updated: 2026-08-21T17:22:09.276Z
 | 13 | 03 | stub | SiriusMac/Library/PlaybackQueue.swift | 1 | Project-file source registration is retained while the compiled semantic queue currently lives beside LibraryStore. | open |  | 2026-08-21T17:06:19.082Z |  |
 | 14 | 03 | unmet-truth | SiriusMac/Player/CompactPlayerView.swift |  | Rendered 400 × 288 long-text displacement inspection remains for Plan 03-08; source contracts do not prove layout. | open |  | 2026-08-21T17:22:09.192Z |  |
 | 15 | 03 | deviation | SiriusMac/SiriusMacApp.swift |  | Plan listed AuthenticationView, but the compact tracer was located and replaced in SiriusMacApp's CompactListeningSlice. | open |  | 2026-08-21T17:22:09.276Z |  |
+| 16 | 03 | unrun-verify | SiriusMac.xcodeproj/project.pbxproj |  | AccessibilityContractTests cannot run because Xcode omits FirstPartyTokenCookiePolicy.swift from the generated source list. | open |  | 2026-08-21T18:20:34.238Z |  |
 
 ````json
 [
@@ -211,6 +212,18 @@ last_updated: 2026-08-21T17:22:09.276Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-21T17:22:09.276Z",
+    "resolved_at": null
+  },
+  {
+    "id": 16,
+    "kind": "unrun-verify",
+    "phase": "03",
+    "file": "SiriusMac.xcodeproj/project.pbxproj",
+    "line": null,
+    "description": "AccessibilityContractTests cannot run because Xcode omits FirstPartyTokenCookiePolicy.swift from the generated source list.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-21T18:20:34.238Z",
     "resolved_at": null
   }
 ]

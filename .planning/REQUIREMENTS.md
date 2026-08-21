@@ -82,7 +82,7 @@ Phase 0 is historical. FEAS-01 records the accepted architecture; FEAS-02/03/05 
 
 ### Accessibility
 
-- [ ] **ACCS-01**: All essential player and library actions are usable with keyboard navigation and expose accurate VoiceOver labels, values, focus order, and state announcements.
+- [x] **ACCS-01**: All essential player and library actions are usable with keyboard navigation and expose accurate VoiceOver labels, values, focus order, and state announcements.
 - [ ] **ACCS-02**: Skin customization cannot remove semantic controls, minimum hit targets, readable focus/state indicators, or access to an unskinned native fallback.
 
 ### Skins
@@ -182,7 +182,7 @@ Every v1 requirement maps to exactly one delivery phase in `.planning/ROADMAP.md
 | UI-02 | Phase 3 | Complete |
 | UI-03 | Phase 3 | Complete |
 | UI-04 | Phase 3 | Complete |
-| ACCS-01 | Phase 3 | Pending |
+| ACCS-01 | Phase 3 | Complete |
 | ACCS-02 | Phase 4 | Pending |
 | SKIN-01 | Phase 4 | Pending |
 | SKIN-02 | Phase 4 | Pending |
