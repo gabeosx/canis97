@@ -525,6 +525,130 @@ final class ListeningSessionControllerTests: XCTestCase {
         XCTAssertEqual(runtime.observationCount, 2)
     }
 
+    func testRepeatedCancellationOfOldRequestCannotStopNewPendingTune() async throws {
+        let runtime = SessionPlaybackRuntime()
+        let resolver = ControlledSessionPlaybackResolver()
+        let catalog = ControlledSessionCatalog()
+        let first = LiveChannelID("fixture-repeated-cancel-first")
+        let current = LiveChannelID("fixture-repeated-cancel-current")
+        let next = LiveChannelID("fixture-repeated-cancel-next")
+        let originIDs = [first, current, next]
+        let controller = makeController(
+            runtime: runtime,
+            resolver: resolver,
+            client: catalog,
+            authenticationModel: AuthenticationPresentationModel(flow: EntitledSessionAuthenticationFlow())
+        )
+
+        let signIn = try XCTUnwrap(controller.authenticationModel.signIn())
+        await catalog.waitForCatalogRequests(count: 1)
+        await catalog.completeCatalog(with: .snapshot(LiveCatalogSnapshot(
+            channels: originIDs.map { LiveChannel(id: $0, name: "Channel \($0.rawValue)") },
+            freshness: .fresh
+        )))
+        await signIn.value
+
+        let initialTune = try XCTUnwrap(controller.tune(channelID: current, originIDs: originIDs))
+        await resolver.waitForResolution(of: current)
+        await resolver.complete(current, with: .available(SessionMediaHandoff()))
+        await runtime.waitForObservation(count: 1)
+        runtime.confirmReady()
+        runtime.confirmPlaying()
+        await initialTune.value
+
+        let firstReplacement = try XCTUnwrap(controller.next())
+        await resolver.waitForResolution(of: next)
+        firstReplacement.cancel()
+        let secondReplacement = try XCTUnwrap(controller.previous())
+        await resolver.waitForResolution(of: current, count: 2)
+
+        // This handle already cancelled its own request. A repeated call must
+        // not invalidate the newer request that is currently pending.
+        firstReplacement.cancel()
+        XCTAssertTrue(controller.listeningModel.isTunePending)
+        XCTAssertEqual(controller.playbackCoordinator.selectedChannelID, current)
+        XCTAssertEqual(controller.playbackQueue?.currentID, current)
+
+        await resolver.complete(current, with: .available(SessionMediaHandoff()))
+        await runtime.waitForObservation(count: 2)
+        runtime.confirmReady()
+        runtime.confirmPlaying()
+        await secondReplacement.value
+        for _ in 0 ..< 10 {
+            if controller.listeningModel.playbackState == .playing(current) { break }
+            await Task.yield()
+        }
+        XCTAssertEqual(controller.listeningModel.playbackState, .playing(current))
+        XCTAssertFalse(controller.listeningModel.isTunePending)
+    }
+
+    func testLateCancellationOfCompletedRequestCannotStopNewPendingTune() async throws {
+        let runtime = SessionPlaybackRuntime()
+        let resolver = ControlledSessionPlaybackResolver()
+        let catalog = ControlledSessionCatalog()
+        let first = LiveChannelID("fixture-late-cancel-first")
+        let current = LiveChannelID("fixture-late-cancel-current")
+        let next = LiveChannelID("fixture-late-cancel-next")
+        let originIDs = [first, current, next]
+        let controller = makeController(
+            runtime: runtime,
+            resolver: resolver,
+            client: catalog,
+            authenticationModel: AuthenticationPresentationModel(flow: EntitledSessionAuthenticationFlow())
+        )
+
+        let signIn = try XCTUnwrap(controller.authenticationModel.signIn())
+        await catalog.waitForCatalogRequests(count: 1)
+        await catalog.completeCatalog(with: .snapshot(LiveCatalogSnapshot(
+            channels: originIDs.map { LiveChannel(id: $0, name: "Channel \($0.rawValue)") },
+            freshness: .fresh
+        )))
+        await signIn.value
+
+        let initialTune = try XCTUnwrap(controller.tune(channelID: current, originIDs: originIDs))
+        await resolver.waitForResolution(of: current)
+        await resolver.complete(current, with: .available(SessionMediaHandoff()))
+        await runtime.waitForObservation(count: 1)
+        runtime.confirmReady()
+        runtime.confirmPlaying()
+        await initialTune.value
+
+        let completedReplacement = try XCTUnwrap(controller.next())
+        await resolver.waitForResolution(of: next)
+        await resolver.complete(next, with: .available(SessionMediaHandoff()))
+        await runtime.waitForObservation(count: 2)
+        runtime.confirmReady()
+        runtime.confirmPlaying()
+        await completedReplacement.value
+        for _ in 0 ..< 10 {
+            if controller.listeningModel.playbackState == .playing(next) { break }
+            await Task.yield()
+        }
+        XCTAssertEqual(controller.listeningModel.playbackState, .playing(next))
+
+        let newerReplacement = try XCTUnwrap(controller.previous())
+        await resolver.waitForResolution(of: current, count: 2)
+
+        // This is the first cancel call for an already completed request. Its
+        // old identity must not reach the pending newer coordinator request.
+        completedReplacement.cancel()
+        XCTAssertTrue(controller.listeningModel.isTunePending)
+        XCTAssertEqual(controller.listeningModel.playbackState, .awaitingLiveContract)
+        XCTAssertEqual(controller.playbackQueue?.currentID, current)
+
+        await resolver.complete(current, with: .available(SessionMediaHandoff()))
+        await runtime.waitForObservation(count: 3)
+        runtime.confirmReady()
+        runtime.confirmPlaying()
+        await newerReplacement.value
+        for _ in 0 ..< 10 {
+            if controller.listeningModel.playbackState == .playing(current) { break }
+            await Task.yield()
+        }
+        XCTAssertEqual(controller.listeningModel.playbackState, .playing(current))
+        XCTAssertFalse(controller.listeningModel.isTunePending)
+    }
+
     func testRepeatedLibraryOpenRequestsReuseTheSingletonRoute() {
         let controller = makeController()
         let originalCoordinator = controller.librarySurface.coordinatorIdentity
