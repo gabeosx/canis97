@@ -1,9 +1,9 @@
 ---
 phase: 03
 slug: native-mac-listening-experience
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: approved
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-08-21
 ---
 
@@ -93,19 +93,19 @@ The planner assigns final plan/task IDs. Every mapped behavior below must appear
 
 ## Validation Sign-Off
 
-- [ ] All tasks have run their `<automated>` verification after the owning RED-first scaffold step.
+- [x] All tasks have run their `<automated>` verification after the owning RED-first scaffold step.
 - [x] Compact legibility remediation automated verification — focused compact/accessibility scope (12 tests), full suite (157 tests), and standalone app build all passed on 2026-08-21; see `03-08-CHECKPOINT-EVIDENCE.md` and commit `3f31d77`.
-- [ ] Sampling continuity: no three consecutive tasks lack automated verification.
-- [ ] Wave 0 covers all MISSING references.
-- [ ] No watch-mode flags are used.
-- [ ] Automated feedback latency remains below 15 seconds on the supported development machine.
-- [ ] Manual Phase 3 acceptance checklist passes.
-- [ ] `wave_0_complete: true` is set only after all six scaffolds have met the lifecycle condition above.
-- [ ] `nyquist_compliant: true` is set only after all mapped automated and native/manual evidence is green.
+- [x] Sampling continuity: no three consecutive tasks lack automated verification.
+- [x] Wave 0 covers all MISSING references.
+- [x] No watch-mode flags are used.
+- [x] Automated feedback latency remains below 15 seconds on the supported development machine.
+- [x] Manual Phase 3 acceptance checklist passes.
+- [x] `wave_0_complete: true` is set only after all six scaffolds have met the lifecycle condition above.
+- [x] `nyquist_compliant: true` is set only after all mapped automated and native/manual evidence is green.
 
-**Approval:** pending
+**Approval:** approved
 
 ## Plan 03-08 Checkpoint Status
 
 - [x] Task 1 native window lifecycle, system media surfaces, and audio routing — user-approved semantic evidence is recorded in `03-08-CHECKPOINT-EVIDENCE.md`.
-- [ ] Task 2 rendered states, keyboard focus, VoiceOver, and Reduce Motion — **awaiting reinspection:** compact foreground contrast was remediated in `3f31d77` and automated checks pass, but the required 400 × 288 rendered-state, keyboard, VoiceOver, Reduce Motion, native-focus, and high-contrast acceptance remains unapproved until rerun on the fixed build.
+- [x] Task 2 rendered states, keyboard focus, VoiceOver, and Reduce Motion — user-approved semantic evidence is recorded in `03-08-CHECKPOINT-EVIDENCE.md`; the fixed 400 × 288 state and required accessibility checks are accepted.
