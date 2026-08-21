@@ -78,6 +78,14 @@ final class RecentRecord {
         self.confirmedAt = confirmedAt
     }
 
+    func apply(_ snapshot: LibraryChannelSnapshot, rank: Int, confirmedAt: Date) {
+        name = snapshot.name
+        displayNumber = snapshot.displayNumber
+        category = snapshot.category
+        self.rank = rank
+        self.confirmedAt = confirmedAt
+    }
+
     var snapshot: LibraryChannelSnapshot? {
         guard !channelID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         return LibraryChannelSnapshot(id: LiveChannelID(channelID), name: name, displayNumber: displayNumber, category: category)
@@ -139,9 +147,10 @@ final class LibraryStore {
 
         if isFavorite {
             if let retained = matches.first {
+                let changedSnapshot = retained.snapshot != snapshot
                 retained.apply(snapshot)
                 for duplicate in matches.dropFirst() { modelContext.delete(duplicate) }
-                didMutate = matches.count > 1
+                didMutate = changedSnapshot || matches.count > 1
             } else {
                 modelContext.insert(FavoriteRecord(snapshot: snapshot))
                 didMutate = true
@@ -155,6 +164,51 @@ final class LibraryStore {
         publishFavorites()
     }
 
+    /// Records only a caller-confirmed playback transition. Catalog selection
+    /// and tune intent never reach this API.
+    func recordConfirmedPlayback(_ snapshot: LibraryChannelSnapshot) {
+        var ordered = normalizedRecentRecords()
+        let matchingIndex = ordered.firstIndex { $0.channelID == snapshot.id.rawValue }
+        var didMutate = false
+
+        if let matchingIndex {
+            let record = ordered.remove(at: matchingIndex)
+            let isAlreadyCurrent = matchingIndex == 0 && record.snapshot == snapshot && record.rank == 0
+            ordered.insert(record, at: 0)
+            if !isAlreadyCurrent {
+                record.apply(snapshot, rank: 0, confirmedAt: now())
+                didMutate = true
+            }
+        } else {
+            let record = RecentRecord(snapshot: snapshot, rank: 0, confirmedAt: now())
+            modelContext.insert(record)
+            ordered.insert(record, at: 0)
+            didMutate = true
+        }
+
+        for (index, record) in ordered.enumerated() {
+            guard index < 50 else {
+                modelContext.delete(record)
+                didMutate = true
+                continue
+            }
+            if record.rank != index {
+                record.rank = index
+                didMutate = true
+            }
+        }
+
+        saveIfNeeded(didMutate)
+        publishRecents()
+    }
+
+    func clearRecents() {
+        let records = recentRecords()
+        for record in records { modelContext.delete(record) }
+        saveIfNeeded(!records.isEmpty)
+        publishRecents()
+    }
+
     /// Test-only inspection of the persisted stable-identity boundary.
     func favoriteRecordCount(for channelID: LiveChannelID) throws -> Int {
         try modelContext.fetch(FetchDescriptor<FavoriteRecord>())
@@ -162,8 +216,37 @@ final class LibraryStore {
             .count
     }
 
+    /// Test-only inspection of the persisted stable-identity boundary.
+    func recentRecordCount(for channelID: LiveChannelID) throws -> Int {
+        try modelContext.fetch(FetchDescriptor<RecentRecord>())
+            .filter { $0.channelID == channelID.rawValue }
+            .count
+    }
+
     private func favoriteRecords() -> [FavoriteRecord] {
         (try? modelContext.fetch(FetchDescriptor<FavoriteRecord>())) ?? []
+    }
+
+    private func recentRecords() -> [RecentRecord] {
+        (try? modelContext.fetch(FetchDescriptor<RecentRecord>())) ?? []
+    }
+
+    /// Invalid and duplicate legacy rows are removed deterministically before
+    /// the next mutation; no malformed record reaches the public projection.
+    private func normalizedRecentRecords() -> [RecentRecord] {
+        let sorted = recentRecords().sorted { lhs, rhs in
+            if lhs.rank != rhs.rank { return lhs.rank < rhs.rank }
+            if lhs.confirmedAt != rhs.confirmedAt { return lhs.confirmedAt > rhs.confirmedAt }
+            return lhs.channelID < rhs.channelID
+        }
+        var seen = Set<LiveChannelID>()
+        return sorted.compactMap { record in
+            guard let snapshot = record.snapshot, seen.insert(snapshot.id).inserted else {
+                modelContext.delete(record)
+                return nil
+            }
+            return record
+        }
     }
 
     private func publishFavorites() {
@@ -180,8 +263,24 @@ final class LibraryStore {
         favoriteChannelIDs = projected.map(\.id)
     }
 
+    private func publishRecents() {
+        var seen = Set<LiveChannelID>()
+        recents = recentRecords()
+            .sorted { lhs, rhs in
+                if lhs.rank != rhs.rank { return lhs.rank < rhs.rank }
+                if lhs.confirmedAt != rhs.confirmedAt { return lhs.confirmedAt > rhs.confirmedAt }
+                return lhs.channelID < rhs.channelID
+            }
+            .compactMap { record in
+                guard let snapshot = record.snapshot, seen.insert(snapshot.id).inserted else { return nil }
+                return snapshot
+            }
+            .prefix(50)
+            .map { $0 }
+    }
+
     private func saveIfNeeded(_ didMutate: Bool) {
-        guard didMutate else { return }
+        guard didMutate || modelContext.hasChanges else { return }
         do {
             try modelContext.save()
         } catch {

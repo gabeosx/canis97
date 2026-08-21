@@ -7,6 +7,7 @@ import SiriusXMClient
 struct ListeningView: View {
     @Bindable var model: ListeningPresentationModel
     let libraryStore: LibraryStore?
+    @State private var isClearRecentsConfirmationPresented = false
 
     init(model: ListeningPresentationModel, libraryStore: LibraryStore? = nil) {
         self.model = model
@@ -37,15 +38,30 @@ struct ListeningView: View {
                     .accessibilityIdentifier("listening.refresh")
                     .accessibilityLabel("Refresh Channels")
                     .disabled(isLoading)
+                if libraryStore != nil {
+                    Button("Clear Recents") {
+                        isClearRecentsConfirmationPresented = true
+                    }
+                    .disabled(libraryStore?.recents.isEmpty ?? true)
+                }
             }
 
             content
+            recentSummary
             metadata
             playbackControls
         }
         .padding(24)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Entitled SiriusXM channels")
+        .alert("Clear Recents?", isPresented: $isClearRecentsConfirmationPresented) {
+            Button("Keep Recents", role: .cancel) {}
+            Button("Clear Recents", role: .destructive) {
+                libraryStore?.clearRecents()
+            }
+        } message: {
+            Text("This removes your recently played channels from this Mac. Favorites will not be changed.")
+        }
     }
 
     @ViewBuilder
@@ -89,6 +105,20 @@ struct ListeningView: View {
     private var isLoading: Bool {
         if case .loading = model.state { return true }
         return false
+    }
+
+    @ViewBuilder
+    private var recentSummary: some View {
+        if let libraryStore {
+            if libraryStore.recents.isEmpty {
+                Label("Channels you play will appear here.", systemImage: "clock")
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("Recents: Channels you play will appear here.")
+            } else {
+                Label("\(libraryStore.recents.count) recently played channel\(libraryStore.recents.count == 1 ? "" : "s")", systemImage: "clock")
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 
     private var playbackControls: some View {

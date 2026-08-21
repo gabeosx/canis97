@@ -1,4 +1,5 @@
 import AVFoundation
+import SwiftData
 import XCTest
 @_spi(Playback) import SiriusXMClient
 @testable import SiriusMac
@@ -70,6 +71,46 @@ final class ListeningSessionControllerTests: XCTestCase {
         XCTFail("Both surfaces must render the same confirmed channel")
     }
 
+    func testControllerRecordsARecentOnlyAfterNewConfirmedPlayback() async throws {
+        let runtime = SessionPlaybackRuntime()
+        let catalog = ControlledSessionCatalog()
+        let store = try makeLibraryStore()
+        let channel = LiveChannelID("fixture-confirmed-recent")
+        let controller = makeController(
+            runtime: runtime,
+            client: catalog,
+            authenticationModel: AuthenticationPresentationModel(flow: EntitledSessionAuthenticationFlow()),
+            libraryStore: store
+        )
+
+        let signIn = try XCTUnwrap(controller.authenticationModel.signIn())
+        await catalog.waitForCatalogRequests(count: 1)
+        await catalog.completeCatalog(with: .snapshot(LiveCatalogSnapshot(
+            channels: [LiveChannel(id: channel, name: "Confirmed Recent", displayNumber: 99, category: "Test")],
+            freshness: .fresh
+        )))
+        await signIn.value
+
+        for _ in 0 ..< 10 {
+            if controller.listeningModel.state.snapshot != nil { break }
+            await Task.yield()
+        }
+        let tune = try XCTUnwrap(controller.tuneFromLibrary(channel))
+        await runtime.waitForObservation()
+        XCTAssertTrue(store.recents.isEmpty)
+
+        runtime.confirmReady()
+        XCTAssertTrue(store.recents.isEmpty)
+        runtime.confirmPlaying()
+        await tune.value
+
+        for _ in 0 ..< 10 {
+            if store.recents.map(\.id) == [channel] { return }
+            await Task.yield()
+        }
+        XCTFail("Only the confirmed playback transition should create a recent")
+    }
+
     func testCompactSurfaceRendersConfirmedProgramTitleAndArtist() async throws {
         let runtime = SessionPlaybackRuntime()
         let channel = LiveChannelID("fixture-current-program")
@@ -122,7 +163,8 @@ final class ListeningSessionControllerTests: XCTestCase {
     private func makeController(
         runtime: SessionPlaybackRuntime = SessionPlaybackRuntime(),
         client: (any ClientAuthenticationFlow & ListeningFlow)? = nil,
-        authenticationModel: AuthenticationPresentationModel? = nil
+        authenticationModel: AuthenticationPresentationModel? = nil,
+        libraryStore: LibraryStore? = nil
     ) -> ListeningSessionController {
         let coordinator = PlaybackCoordinator(
             resolver: SessionPlaybackResolver(),
@@ -139,8 +181,19 @@ final class ListeningSessionControllerTests: XCTestCase {
         )
         return ListeningSessionController(
             composition: composition,
-            authenticationModel: authenticationModel
+            authenticationModel: authenticationModel,
+            libraryStore: libraryStore
         )
+    }
+
+    private func makeLibraryStore() throws -> LibraryStore {
+        let container = try ModelContainer(
+            for: FavoriteRecord.self,
+            RecentRecord.self,
+            PlayerPreferenceRecord.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        return LibraryStore(modelContainer: container, now: { Date(timeIntervalSince1970: 1) })
     }
 }
 

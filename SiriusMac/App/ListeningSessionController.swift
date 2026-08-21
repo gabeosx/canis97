@@ -38,6 +38,7 @@ final class ListeningSessionController {
 
     private(set) var hasRequestedLibraryOpen = false
     private var hasTriggeredAutomaticCatalogLoad = false
+    private var lastObservedPlaybackState: LivePlaybackState = .awaitingLiveContract
 
     init(
         composition: AuthenticationComposition = AuthenticationComposition(),
@@ -54,6 +55,7 @@ final class ListeningSessionController {
         )
         self.libraryStore = libraryStore ?? LibraryStore()
         observeAuthenticationReadiness()
+        observeConfirmedPlayback()
     }
 
     var compactSurface: ListeningSurfaceState { surface(for: .compact) }
@@ -101,6 +103,30 @@ final class ListeningSessionController {
                 self.observeAuthenticationReadiness()
             }
         }
+    }
+
+    /// Records a recent from an actual coordinator-confirmed transition, never
+    /// from a selection or command. Repeated reads of the same state are inert.
+    private func observeConfirmedPlayback() {
+        withObservationTracking {
+            _ = listeningModel.playbackState
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.recordConfirmedPlaybackIfNeeded()
+                self.observeConfirmedPlayback()
+            }
+        }
+    }
+
+    private func recordConfirmedPlaybackIfNeeded() {
+        let state = listeningModel.playbackState
+        guard state != lastObservedPlaybackState else { return }
+        lastObservedPlaybackState = state
+        guard case let .playing(channelID?) = state,
+              let channel = listeningModel.state.snapshot?.channels.first(where: { $0.id == channelID })
+        else { return }
+        libraryStore.recordConfirmedPlayback(LibraryChannelSnapshot(channel))
     }
 
     private func surface(for role: ListeningSurfaceRole) -> ListeningSurfaceState {
