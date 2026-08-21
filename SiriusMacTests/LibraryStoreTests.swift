@@ -150,3 +150,18 @@ final class PlaybackQueueContractTests: XCTestCase {
         rawValues.map(LiveChannelID.init)
     }
 }
+
+final class LibraryViewStateContractTests: XCTestCase {
+    func testFourLockedTabsExposeNativeTitlesAndPersistenceValues() {
+        XCTAssertEqual(LibraryTab.allCases, [.channels, .categories, .favorites, .recents])
+        XCTAssertEqual(LibraryTab.channels.title, "Channels")
+        XCTAssertEqual(LibraryTab.categories.title, "Categories")
+        XCTAssertEqual(LibraryTab.favorites.title, "Favorites")
+        XCTAssertEqual(LibraryTab.recents.title, "Recents")
+    }
+
+    func testEmptySearchKeepsTheCurrentTabCollection() {
+        XCTAssertFalse(LibrarySearchQuery("").filtersVisibleCollection)
+        XCTAssertTrue(LibrarySearchQuery("rock").filtersVisibleCollection)
+    }
+}
