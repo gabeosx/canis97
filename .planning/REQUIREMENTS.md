@@ -62,9 +62,9 @@ Phase 0 is historical. FEAS-01 records the accepted architecture; FEAS-02/03/05 
 
 ### Local Library
 
-- [ ] **LIBR-01**: Subscriber can add or remove a channel as a local favorite using its stable channel identity.
-- [ ] **LIBR-02**: Subscriber can return to an ordered list of recently and successfully tuned channels.
-- [ ] **LIBR-03**: Favorites and recents store only non-secret channel identity and presentation snapshots, never credentials, session material, or stream URLs.
+- [x] **LIBR-01**: Subscriber can add or remove a channel as a local favorite using its stable channel identity.
+- [x] **LIBR-02**: Subscriber can return to an ordered list of recently and successfully tuned channels.
+- [x] **LIBR-03**: Favorites and recents store only non-secret channel identity and presentation snapshots, never credentials, session material, or stream URLs.
 
 ### macOS Media Integration
 
@@ -171,9 +171,9 @@ Every v1 requirement maps to exactly one delivery phase in `.planning/ROADMAP.md
 | PLAY-04 | Phase 2 | Complete |
 | META-01 | Phase 2 | Complete |
 | META-02 | Phase 2 | Complete |
-| LIBR-01 | Phase 3 | Pending |
-| LIBR-02 | Phase 3 | Pending |
-| LIBR-03 | Phase 3 | Pending |
+| LIBR-01 | Phase 3 | Complete |
+| LIBR-02 | Phase 3 | Complete |
+| LIBR-03 | Phase 3 | Complete |
 | MAC-01 | Phase 3 | Complete |
 | MAC-02 | Phase 3 | Pending |
 | MAC-03 | Phase 3 | Pending |
