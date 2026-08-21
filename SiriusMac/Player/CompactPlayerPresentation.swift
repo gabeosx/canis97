@@ -154,6 +154,12 @@ struct CompactPlayerPresentation: Sendable, Equatable {
               previous.channelIdentity != nil,
               status != nil
         else { return self }
+        let retainedTransport: Transport? = switch status {
+        case .pending, .unavailable:
+            nil
+        case .playing, .paused, .stopped, nil:
+            previous.transport
+        }
         return Self(
             backgroundRole: previous.backgroundRole,
             channelIdentity: previous.channelIdentity,
@@ -162,7 +168,7 @@ struct CompactPlayerPresentation: Sendable, Equatable {
             secondaryMetadata: previous.secondaryMetadata,
             status: status,
             isFavorite: previous.isFavorite,
-            transport: previous.transport,
+            transport: retainedTransport,
             emptyTitle: nil,
             emptyLibraryButtonTitle: nil
         )

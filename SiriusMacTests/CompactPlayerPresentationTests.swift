@@ -101,6 +101,25 @@ final class CompactPlayerPresentationTests: XCTestCase {
         XCTAssertEqual(CompactRecoveryAction(failure: .networkUnavailable), .tryAgain)
     }
 
+    func testFailedReplacementTuneRetainsStationContentWithoutObsoleteTransportControls() {
+        let confirmed = CompactPlayerPresentation.confirmed(
+            channel: .init(number: 42, name: "The Spectrum"),
+            artwork: .placeholder,
+            primaryMetadata: "Current title",
+            secondaryMetadata: "Current artist",
+            playback: .playing,
+            isFavorite: true,
+            queueAvailability: .both
+        )
+        let failedReplacement = CompactPlayerPresentation.empty(
+            status: .unavailable(.tryAgain)
+        ).retainingConfirmedContent(from: confirmed)
+
+        XCTAssertEqual(failedReplacement.channelIdentity, confirmed.channelIdentity)
+        XCTAssertEqual(failedReplacement.status, .unavailable(.tryAgain))
+        XCTAssertNil(failedReplacement.transport)
+    }
+
     func testMissingMetadataAndArtworkUseIndependentTruthfulFallbacks() {
         let presentation = CompactPlayerPresentation.project(
             channel: LiveChannel(id: LiveChannelID("fixture-channel"), name: "Fallback Channel", displayNumber: 7),
