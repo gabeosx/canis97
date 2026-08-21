@@ -246,7 +246,17 @@ Plans:
   4. A subscriber can add or remove favorites and return to an ordered list of successfully tuned recent channels, with neither feature retaining credentials, session material, or stream URLs.
   5. Audio continues while backgrounded or with the library closed; media keys and system Now Playing reflect confirmed player and metadata state, system routing works normally, and essential player/library actions remain keyboard- and VoiceOver-usable.
 
-**Plans**: TBD
+**Plans**: 8 plans
+
+Plans:
+- [ ] 03-01-PLAN.md — Prove one app-owned listening session across singleton compact and library surfaces.
+- [ ] 03-02-PLAN.md — Add secret-safe shared favorites and confirmed-listen recents.
+- [ ] 03-03-PLAN.md — Deliver the four-tab native library, captured queue, and reveal flow.
+- [ ] 03-04-PLAN.md — Build the fixed compact player and renderer-independent semantic style seam.
+- [ ] 03-05-PLAN.md — Enforce native window lifecycle, frame restoration, and Always on Top.
+- [ ] 03-06-PLAN.md — Route confirmed playback through macOS media keys and Now Playing.
+- [ ] 03-07-PLAN.md — Complete keyboard, menu, focus, VoiceOver, announcements, and Reduce Motion.
+- [ ] 03-08-PLAN.md — Verify native windows, system media, audio routing, rendered states, and accessibility.
 **UI hint**: yes
 
 ### Phase 4: Safe Skins & Accessible Recovery
