@@ -1,24 +1,24 @@
 ---
 phase: 03-native-mac-listening-experience
-fixed_at: 2026-08-21T21:22:58Z
+fixed_at: 2026-08-21T21:33:42Z
 review_path: /Users/gabe/sirius-mac/.planning/phases/03-native-mac-listening-experience/03-REVIEW.md
 iteration: post-cap-4
-findings_in_scope: 4
-fixed: 3
+findings_in_scope: 5
+fixed: 4
 skipped: 1
 status: partial
 ---
 
 # Phase 03: Code Review Fix Report
 
-**Updated at:** 2026-08-21T21:22:58Z
+**Updated at:** 2026-08-21T21:33:42Z
 **Source review:** `/Users/gabe/sirius-mac/.planning/phases/03-native-mac-listening-experience/03-REVIEW.md`
 **Iteration:** post-cap-4
 
 **Summary:**
 
-- Findings in scope: 4
-- Fixed: 3
+- Findings in scope: 5
+- Fixed: 4
 - Remaining: 1
 
 ## Fixed Issues
@@ -41,11 +41,17 @@ status: partial
 **Commit:** 90a60a5
 **Applied fix:** Disabled the Library context-menu Tune action during a pending tune and made the double-click Tune path return early during that same state. Favorite and selection behavior remains untouched. A source contract test locks both pending guards in place.
 
+### WR-01: Same-turn navigation is rejected immediately after cancellation
+
+**Files modified:** `SiriusMac/Catalog/ListeningPresentationModel.swift`, `SiriusMac/App/ListeningSessionController.swift`, `SiriusMacTests/ListeningSessionControllerTests.swift`
+**Commit:** 82ec46c
+**Applied fix:** Replaced the returned raw tune `Task` with a main-actor `ListeningTuneRequest`. Its cancellation method now invalidates the coordinator generation and applies the terminal state synchronously before it cancels the worker task, so a same-turn Next or Previous request is accepted only after stale resolver work is no longer authorized. The deterministic regression cancels a replacement tune, immediately navigates Previous without yielding, then completes the cancellation-ignoring resolver and proves it cannot replace the later confirmed playback.
+
 ## Verification
 
 All verification ran in the main checkout (the requested no-worktree mode).
 
-- Focused cancellation and Library Tune contract tests: passed (2 tests); the full focused `ListeningSessionControllerTests` plus `MetadataPresentationTests` selection also passed (25 tests).
+- Focused `ListeningSessionControllerTests`: passed (12 tests), including cancellation followed immediately by Previous without `Task.yield()`.
 - Full `xcodebuild test`: passed, 174 tests.
 - `swift test` in `Packages/SiriusXMClient`: passed, 91 tests.
 - Standalone `./script/build_and_run.sh --build-only`: passed.
@@ -53,10 +59,10 @@ All verification ran in the main checkout (the requested no-worktree mode).
 
 ## Remaining Review Findings
 
-- **WR-01 (warning):** cancellation cleanup is scheduled onto a new main-actor task, so a next/previous request made immediately after `Task.cancel()` in the same actor turn still sees `isTunePending == true` and is rejected. The existing cancellation regression yields before navigating and does not cover this no-yield timing.
+- **CR-01 (blocker):** `ListeningTuneRequest.cancel()` is not scoped to the request that created it. Repeating cancellation on an old handle, or cancelling a completed handle after a newer tune starts, can invalidate and stop that newer tune. Cancellation must be idempotent and conditional on a matching active tune identity.
 
 ---
 
-_Updated: 2026-08-21T21:22:58Z_
+_Updated: 2026-08-21T21:33:42Z_
 _Fixer: the agent (gsd-code-fixer)_
 _Iteration: post-cap-4_

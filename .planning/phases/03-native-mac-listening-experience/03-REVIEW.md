@@ -1,18 +1,19 @@
 ---
 phase: 03-native-mac-listening-experience
-reviewed: 2026-08-21T21:22:00Z
+reviewed: 2026-08-21T21:32:44Z
 depth: standard
-files_reviewed: 6
+files_reviewed: 7
 files_reviewed_list:
   - SiriusMac/App/ListeningSessionController.swift
   - SiriusMac/Catalog/ListeningPresentationModel.swift
   - SiriusMac/Catalog/ListeningView.swift
+  - SiriusMac/Library/PlaybackQueue.swift
   - SiriusMac/Listening/PlaybackCoordinator.swift
+  - SiriusMac/SiriusMacApp.swift
   - SiriusMacTests/ListeningSessionControllerTests.swift
-  - SiriusMacTests/MetadataPresentationTests.swift
 findings:
-  critical: 0
-  warning: 1
+  critical: 1
+  warning: 0
   info: 0
   total: 1
 status: issues_found
@@ -20,39 +21,44 @@ status: issues_found
 
 # Phase 03: Code Review Report
 
-**Reviewed:** 2026-08-21T21:22:00Z
+**Reviewed:** 2026-08-21T21:32:44Z
 **Depth:** standard
-**Files Reviewed:** 6
+**Files Reviewed:** 7
 **Status:** issues_found
 
 ## Summary
 
-The cancellation fix invalidates the coordinator generation before publishing `.stopped`, so a resolver that ignores cancellation cannot replace a later navigation. The context-menu Tune item and double-click are pending-aware while ordinary row selection and favorite controls remain enabled. The focused Xcode suite passed: 25 tests across `ListeningSessionControllerTests` and `MetadataPresentationTests`; `git diff --check 1f3dadb..90a60a5` was clean.
+The new `ListeningTuneRequest` correctly makes the first cancellation synchronous: `cancel()` invalidates the coordinator generation and clears the pending gate before same-turn navigation. The focused `ListeningSessionControllerTests` suite passed (12 tests). The regression test deterministically covers cancellation followed by immediate navigation and confirms a cancellation-ignoring resolver cannot install stale playback.
 
-One timing gap remains: cancellation requests route through a newly scheduled main-actor task. Therefore a caller that cancels a returned tune task and immediately invokes next/previous in the same actor turn sees the stale pending gate and has its navigation rejected. The new regression test yields until the gate clears, so it does not cover that required timing variant.
+However, the returned cancellation handle is not scoped to the tune that created it. A stale handle can cancel a later, unrelated tune. This is a playback correctness blocker and must be fixed before shipping.
 
 ## Narrative Findings (AI reviewer)
 
-## Warnings
+## Critical Issues
 
-### WR-01 [WARNING]: Same-turn navigation is still rejected immediately after cancellation
+### CR-01 [BLOCKER]: A stale cancellation handle can stop a newer tune
 
-**File:** `/Users/gabe/sirius-mac/SiriusMac/Catalog/ListeningPresentationModel.swift:173-183`; `/Users/gabe/sirius-mac/SiriusMacTests/ListeningSessionControllerTests.swift:499-507`
+**File:** `/Users/gabe/sirius-mac/SiriusMac/Catalog/ListeningPresentationModel.swift:42-60`; `/Users/gabe/sirius-mac/SiriusMac/Catalog/ListeningPresentationModel.swift:72-84`; `/Users/gabe/sirius-mac/SiriusMac/Listening/PlaybackCoordinator.swift:572-577`
 
-**Issue:** The cancellation handler schedules `Task { @MainActor ... cancellationRelay.cancel() }` rather than applying cancellation before `Task.cancel()` returns. Until that task runs, `isTunePending` remains `true`, so `ListeningSessionController.navigate` rejects a next/previous request through its `!listeningModel.isTunePending` guard. The new test masks this by yielding in a loop until pending clears before calling `previous()`. Cancellation is eventually safe and stale resolution is invalidated, but the required cancellation-timing behavior is not atomic: a same-turn follow-up navigation silently fails.
+**Issue:** Every `ListeningTuneRequest.cancel()` invokes its captured `TuneCancellationRelay` without identifying the tune it owns. After request A is cancelled and request B begins, calling `A.cancel()` again (or calling it for the first time after A already completed) reaches `PlaybackCoordinator.cancelPendingTune()`. Because the coordinator only sees B's current `resolutionTask`/`.awaitingLiveContract` state, it invalidates B's generation, clears B's selected channel, and publishes `.stopped`. Repeated cancellation and cancel-after-completion therefore let an obsolete request terminate later playback.
 
-**Fix:** Make the cancellation transition observable synchronously at the model boundary, while preserving the coordinator generation invalidation before re-opening navigation. One approach is to retain a main-actor-owned tune-request token and have cancellation synchronously mark it terminal, then call the coordinator cancellation method from the same main-actor context; alternatively expose a non-suspending cancellation method on the model/controller. Add a deterministic no-yield regression:
+**Fix:** Give each request a model-owned identity/generation and make cancellation idempotent and conditional on that request still being active. Clear the active identity before calling `cancelPendingTune()` so only the currently active request can invalidate the coordinator. For example:
 
 ```swift
-replacement.cancel()
-let followUp = controller.previous() // no Task.yield() first
-XCTAssertNotNil(followUp)
+private var activeTuneID: UUID?
+
+func cancelTune(id: UUID) {
+    guard activeTuneID == id else { return }
+    activeTuneID = nil
+    playbackCoordinator.cancelPendingTune()
+    applyConfirmedPlaybackState(playbackCoordinator.state)
+}
 ```
 
-The test should also complete the ignored cancelled resolver after the follow-up confirms playback, proving the stale result cannot replace it.
+Pass `id` into `ListeningTuneRequest` and clear it on the matching terminal completion. Add deterministic tests that (1) cancel A, start B, then call `A.cancel()` again, and (2) complete A, start B, then call `A.cancel()`. In both cases B must remain pending and be able to confirm playback.
 
 ---
 
-_Reviewed: 2026-08-21T21:22:00Z_
+_Reviewed: 2026-08-21T21:32:44Z_
 _Reviewer: the agent (gsd-code-reviewer)_
 _Depth: standard_
