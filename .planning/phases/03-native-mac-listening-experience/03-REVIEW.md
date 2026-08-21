@@ -1,8 +1,8 @@
 ---
 phase: 03-native-mac-listening-experience
-reviewed: 2026-08-21T20:12:53Z
+reviewed: 2026-08-21T20:37:39Z
 depth: standard
-files_reviewed: 22
+files_reviewed: 23
 files_reviewed_list:
   - Packages/SiriusXMClient/Sources/SiriusXMClient/InternalAdapters/LiveListeningAdapter.swift
   - SiriusMac.xcodeproj/project.pbxproj
@@ -13,6 +13,7 @@ files_reviewed_list:
   - SiriusMac/Catalog/ListeningView.swift
   - SiriusMac/Library/LibraryStore.swift
   - SiriusMac/Library/PlaybackQueue.swift
+  - SiriusMac/Listening/PlaybackCoordinator.swift
   - SiriusMac/Listening/SystemMediaController.swift
   - SiriusMac/Metadata/MetadataPresentationModel.swift
   - SiriusMac/Player/CompactPlayerPresentation.swift
@@ -36,51 +37,40 @@ status: issues_found
 
 # Phase 03: Code Review Report
 
-**Reviewed:** 2026-08-21T20:12:53Z
+**Reviewed:** 2026-08-21T20:37:39Z
 **Depth:** standard
-**Files Reviewed:** 22
+**Files Reviewed:** 23
 **Status:** issues_found
 
 ## Summary
 
-This final post-cap standard review re-read all declared source and test files, traced the controller, compact player, Player menu, and MediaPlayer command paths, and verified the shared `ListeningCommandAvailability` projection for initial, pending, playing, paused, stopped, unavailable, and queue-direction states.
+All 23 submitted source and test files were re-read in context. The prior findings are resolved: storage has an in-memory fallback, failed metadata is marked stale immediately, failed or stopped replacement presentation has no inert transport, `PlaybackQueueTests.swift` is compiled by the test target, and pending replacement state disables MediaPlayer commands while retaining last-confirmed Now Playing content. Handler guards correctly reject events that arrive after the pending state has been observed.
 
-The earlier findings remain resolved: persistent-library initialization falls back to in-memory storage, failed metadata is immediately stale, the compact player does not retain inert transport after pending/failed/stopped transitions, and `PlaybackQueueTests.swift` is compiled by the Xcode test target. The final change correctly disables invalid Library and Player-menu commands. One equivalent availability bug remains in the system media controls during a replacement tune.
+One race remains before that asynchronous pending-state transition occurs: two immediate next/previous media events can queue competing tune tasks. The second task supersedes the first, so one intended navigation can be lost. No credential, URL, or media-key material is exposed in the reviewed code.
 
-`xcodebuild test -quiet -project SiriusMac.xcodeproj -scheme SiriusMac -destination 'platform=macOS' -derivedDataPath /private/tmp/sirius-mac-final-rereview-derived` passed. `git diff --check` was clean.
+Validation completed successfully: `xcodebuild test -quiet -project SiriusMac.xcodeproj -scheme SiriusMac -destination 'platform=macOS' -derivedDataPath /private/tmp/sirius-mac-phase03-final-review` and `swift test` in `Packages/SiriusXMClient` (91 package tests). `git diff --check` is clean.
 
 ## Narrative Findings (AI reviewer)
 
 ## Warnings
 
-### WR-01 [WARNING]: System media commands stay enabled while a replacement tune is pending
+### WR-01 [WARNING]: A second remote navigation event can supersede the first before pending state is published
 
-**File:** `/Users/gabe/sirius-mac/SiriusMac/App/ListeningSessionController.swift:405-413`, `/Users/gabe/sirius-mac/SiriusMac/App/ListeningSessionController.swift:478-497`
+**File:** `/Users/gabe/sirius-mac/SiriusMac/App/ListeningSessionController.swift:145-151`, `/Users/gabe/sirius-mac/SiriusMac/App/ListeningSessionController.swift:455-482`; `/Users/gabe/sirius-mac/SiriusMac/Catalog/ListeningPresentationModel.swift:137-145`
 
-**Issue:** When a user changes channels after a confirmed stream exists, `PlaybackCoordinator.tune` transitions to `.awaitingLiveContract` while the old confirmed channel is still present. `publishConfirmedSystemMediaState()` deliberately returns at lines 406-413 to preserve previous Now Playing metadata, but it also leaves the previous play/pause, Previous, and Next enabled state untouched. Those commands are no longer valid under `ListeningCommandAvailability`: Play/Pause returns `.commandFailed`, while Previous/Next can start another tune and supersede the in-flight request. The Library and Player menu now disable those commands, so media keys and Control Center are the remaining inconsistent entry point.
+**Issue:** `handleSystemNext`/`handleSystemPrevious` checks `commandAvailability` and then calls `navigate`, which immediately advances the `PlaybackQueue` but only starts the tune inside a newly scheduled `Task`. Until that task runs, `listeningModel.playbackState` is still `.playing` or `.paused`, so `commandAvailability` remains true and another media-key/Control Center event is accepted. The second `navigate` advances the queue again and its tune supersedes the first in `PlaybackCoordinator`; two rapid presses can therefore discard the first requested channel instead of disabling controls after the first command. The same timing window exists for the menu/library routes that invoke the shared controller navigation.
 
-**Fix:** Set system media availability from the shared projection on every observed state, including the pending branch, and make the handlers enforce the same projection as a race-safe backstop. For example:
+**Fix:** Make pending navigation visible synchronously at the controller/model boundary, then have every command predicate include that synchronous in-flight flag until the coordinator emits a terminal or confirmed state. Alternatively, expose a synchronous `beginTune` operation on `PlaybackCoordinator` that sets `.awaitingLiveContract` before returning the task. Keep the existing handler guards as a backstop, and add a controller test that sends two remote `next` events without yielding between them; it should return `.commandFailed` for the second event and create exactly one replacement observation.
 
 ```swift
-private func setSystemCommandAvailability(using media: SystemMediaController) {
-    let availability = commandAvailability
-    media.setSupportedCommandAvailability(
-        playPause: availability.playPause,
-        previous: availability.previous,
-        next: availability.next
-    )
-}
-
-private func handleSystemNext() -> SystemRemoteCommandStatus {
-    guard commandAvailability.next else { return .commandFailed }
-    return next() == nil ? .commandFailed : .success
-}
+// Set this before scheduling the task and clear it from the playback observer.
+guard !isNavigationPending, commandAvailability.next else { return .commandFailed }
+isNavigationPending = true
+return next() == nil ? .commandFailed : .success
 ```
-
-Call the helper before the `.awaitingLiveContract` early return and replace the queue-only guards in both navigation handlers. Add a controller test that reaches a pending replacement tune after confirmed playback and asserts all three remote commands are disabled and cannot invoke a second tune.
 
 ---
 
-_Reviewed: 2026-08-21T20:12:53Z_
+_Reviewed: 2026-08-21T20:37:39Z_
 _Reviewer: the agent (gsd-code-reviewer)_
 _Depth: standard_
