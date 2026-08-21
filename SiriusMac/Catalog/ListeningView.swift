@@ -127,10 +127,15 @@ struct ListeningView: View {
     }
 
     private func metadataText(_ text: LiveMetadataText) -> String {
-        switch text {
+        return switch text {
         case let .current(value): value
         case let .stale(value): "Stale: \(value)"
-        case let .channelFallback(id): "Channel \(id.rawValue)"
+        case .channelFallback:
+            if let channelLabel = model.confirmedChannelLabel {
+                "Current program unavailable on \(channelLabel)"
+            } else {
+                "Current program unavailable"
+            }
         case .unavailable: "Current program unavailable"
         }
     }
@@ -194,7 +199,7 @@ private struct ChannelRow: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 18)
             VStack(alignment: .leading, spacing: 2) {
-                Text(channel.name ?? channel.id.rawValue)
+                Text(channelTitle)
                 if let category = channel.category {
                     Text(category)
                         .font(.caption)
@@ -211,8 +216,15 @@ private struct ChannelRow: View {
     }
 
     private var accessibilityName: String {
-        let name = channel.name ?? channel.id.rawValue
-        guard let number = channel.displayNumber else { return name }
-        return "\(number), \(name)"
+        guard let number = channel.displayNumber else { return channelTitle }
+        return "\(number), \(channelTitle)"
+    }
+
+    private var channelTitle: String {
+        let name = channel.name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let name, !name.isEmpty, name != channel.id.rawValue else {
+            return channel.displayNumber.map { "Channel \($0)" } ?? "Unnamed channel"
+        }
+        return name
     }
 }

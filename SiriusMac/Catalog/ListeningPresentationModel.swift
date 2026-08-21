@@ -47,6 +47,24 @@ final class ListeningPresentationModel {
     private(set) var playbackState: LivePlaybackState = .awaitingLiveContract
     let metadataPresentation: MetadataPresentationModel
     private(set) var selectedChannelID: LiveChannelID?
+    private(set) var confirmedChannelID: LiveChannelID?
+
+    /// A listener-facing identity for the confirmed channel. The opaque stable
+    /// ID remains a lookup key only; it is never normal display text.
+    var confirmedChannelLabel: String? {
+        guard let confirmedChannelID,
+              let channel = state.snapshot?.channels.first(where: { $0.id == confirmedChannelID })
+        else { return nil }
+
+        let name = channel.name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let usableName = name.flatMap { $0.isEmpty || $0 == confirmedChannelID.rawValue ? nil : $0 }
+        return switch (channel.displayNumber, usableName) {
+        case let (number?, name?): "\(number) · \(name)"
+        case let (number?, nil): "Channel \(number)"
+        case let (nil, name?): name
+        case (nil, nil): nil
+        }
+    }
 
     init(flow: any ListeningFlow, playbackCoordinator: PlaybackCoordinator? = nil) {
         self.flow = flow
@@ -86,12 +104,10 @@ final class ListeningPresentationModel {
 
     func select(_ channelID: LiveChannelID) {
         selectedChannelID = channelID
-        metadataPresentation.select(channelID)
     }
 
     func clearSelection() {
         selectedChannelID = nil
-        metadataPresentation.clear()
     }
 
     @discardableResult
@@ -106,7 +122,7 @@ final class ListeningPresentationModel {
         }
         return Task { [weak self] in
             await playbackCoordinator.tune(selectedChannelID)
-            self?.playbackState = playbackCoordinator.state
+            self?.applyConfirmedPlaybackState(playbackCoordinator.state)
         }
     }
 
@@ -133,6 +149,7 @@ final class ListeningPresentationModel {
         selectedChannelID = nil
         state = .idle
         playbackState = .awaitingLiveContract
+        confirmedChannelID = nil
         metadataPresentation.clear()
     }
 
@@ -158,7 +175,7 @@ final class ListeningPresentationModel {
         }
         return Task { [weak self] in
             await operation(playbackCoordinator)
-            self?.playbackState = playbackCoordinator.state
+            self?.applyConfirmedPlaybackState(playbackCoordinator.state)
         }
     }
 
@@ -167,15 +184,32 @@ final class ListeningPresentationModel {
     /// update the rendered semantic state.
     private func observePlaybackState() {
         guard let playbackCoordinator else { return }
-        playbackState = playbackCoordinator.state
+        applyConfirmedPlaybackState(playbackCoordinator.state)
         withObservationTracking {
             _ = playbackCoordinator.state
         } onChange: { [weak self, playbackCoordinator] in
             Task { @MainActor [weak self, playbackCoordinator] in
                 guard let self else { return }
-                self.playbackState = playbackCoordinator.state
+                self.applyConfirmedPlaybackState(playbackCoordinator.state)
                 self.observePlaybackState()
             }
+        }
+    }
+
+    private func applyConfirmedPlaybackState(_ state: LivePlaybackState) {
+        playbackState = state
+        switch state {
+        case let .playing(channelID?):
+            guard confirmedChannelID != channelID else { return }
+            confirmedChannelID = channelID
+            metadataPresentation.select(channelID)
+        case .paused:
+            // Pause retains the last confirmed active channel and its metadata.
+            return
+        case .awaitingLiveContract, .idle, .playing(nil), .stopped, .unavailable:
+            guard confirmedChannelID != nil else { return }
+            confirmedChannelID = nil
+            metadataPresentation.clear()
         }
     }
 }

@@ -1,6 +1,7 @@
+import AVFoundation
 import XCTest
+@_spi(Playback) import SiriusXMClient
 @testable import SiriusMac
-import SiriusXMClient
 
 @MainActor
 final class MetadataPresentationTests: XCTestCase {
@@ -40,19 +41,105 @@ final class MetadataPresentationTests: XCTestCase {
         }
     }
 
-    func testViewSelectionBindingStartsExactlyOneSemanticMetadataRequest() async {
+    func testViewSelectionBindingDoesNotStartMetadataUntilPlaybackIsConfirmed() async {
         let flow = ListeningMetadataFlowSpy()
         let model = ListeningPresentationModel(flow: flow)
         let view = ListeningView(model: model)
         let channel = LiveChannelID("fixture-channel")
 
         view.channelSelection.wrappedValue = channel
-        await flow.waitForMetadataRequests(count: 1)
+        await Task.yield()
 
         let metadataRequestCount = await flow.metadataRequestCount()
-        XCTAssertEqual(metadataRequestCount, 1)
+        XCTAssertEqual(metadataRequestCount, 0)
         XCTAssertEqual(model.selectedChannelID, channel)
-        XCTAssertEqual(model.metadataPresentation.state.channelID, channel)
+    }
+
+    func testConfirmedPlaybackUsesCatalogIdentityWithoutDisplayingOpaqueChannelID() async throws {
+        let channel = LiveChannelID("194adbca-34d6-cb94-b153-3488ee563308")
+        let flow = ConfirmedPlaybackCatalogFlow(
+            snapshot: LiveCatalogSnapshot(
+                channels: [LiveChannel(id: channel, name: "SiriusXM Hits 1", displayNumber: 2)],
+                freshness: .fresh
+            )
+        )
+        let runtime = MetadataTestPlaybackRuntime()
+        let coordinator = PlaybackCoordinator(
+            resolver: MetadataTestPlaybackResolver(),
+            runtime: runtime
+        )
+        let model = ListeningPresentationModel(flow: flow, playbackCoordinator: coordinator)
+
+        let refresh = try XCTUnwrap(model.refresh())
+        await refresh.value
+        model.select(channel)
+        let tune = try XCTUnwrap(model.tuneSelectedChannel())
+        await runtime.waitForObservation()
+        runtime.confirmReady()
+        runtime.confirmPlaying()
+        await tune.value
+
+        for _ in 0 ..< 10 {
+            if model.confirmedChannelLabel == "2 · SiriusXM Hits 1" { break }
+            await Task.yield()
+        }
+
+        XCTAssertEqual(model.confirmedChannelLabel, "2 · SiriusXM Hits 1")
+        XCTAssertFalse(model.confirmedChannelLabel?.contains(channel.rawValue) ?? false)
+        await flow.waitForMetadataRequests(count: 1)
+        let metadataRequestCount = await flow.metadataRequestCount()
+        XCTAssertEqual(metadataRequestCount, 1)
+    }
+
+    func testBrowsingAwayAndPauseRetainConfirmedMetadataUntilStop() async throws {
+        let activeChannel = LiveChannelID("fixture-active-channel")
+        let browsedChannel = LiveChannelID("fixture-browsed-channel")
+        let flow = ConfirmedPlaybackCatalogFlow(
+            snapshot: LiveCatalogSnapshot(
+                channels: [
+                    LiveChannel(id: activeChannel, name: "Active Channel", displayNumber: 2),
+                    LiveChannel(id: browsedChannel, name: "Browsed Channel", displayNumber: 3),
+                ],
+                freshness: .fresh
+            )
+        )
+        let runtime = MetadataTestPlaybackRuntime()
+        let coordinator = PlaybackCoordinator(
+            resolver: MetadataTestPlaybackResolver(),
+            runtime: runtime
+        )
+        let model = ListeningPresentationModel(flow: flow, playbackCoordinator: coordinator)
+
+        let refresh = try XCTUnwrap(model.refresh())
+        await refresh.value
+        model.select(activeChannel)
+        let tune = try XCTUnwrap(model.tuneSelectedChannel())
+        await runtime.waitForObservation()
+        runtime.confirmReady()
+        runtime.confirmPlaying()
+        await tune.value
+        await flow.waitForMetadataRequests(count: 1)
+
+        model.select(browsedChannel)
+        await Task.yield()
+        XCTAssertEqual(model.selectedChannelID, browsedChannel)
+        XCTAssertEqual(model.metadataPresentation.state.channelID, activeChannel)
+        let metadataRequestCount = await flow.metadataRequestCount()
+        XCTAssertEqual(metadataRequestCount, 1)
+
+        let pause = try XCTUnwrap(model.pausePlayback())
+        runtime.confirmPaused()
+        await pause.value
+        for _ in 0 ..< 10 {
+            if model.playbackState == .paused { break }
+            await Task.yield()
+        }
+        XCTAssertEqual(model.metadataPresentation.state.channelID, activeChannel)
+
+        let stop = try XCTUnwrap(model.stopPlayback())
+        await stop.value
+        XCTAssertNil(model.confirmedChannelID)
+        XCTAssertEqual(model.metadataPresentation.state.channelID, LiveChannelID("semantic-unselected-channel"))
     }
 
     func testCurrentMetadataStartsSeparateArtworkRequestAndPublishesValidatedBytes() async {
@@ -206,6 +293,89 @@ private actor ListeningMetadataFlowSpy: ListeningFlow, MetadataFlow {
         if metadataRequests >= count { return }
         await withCheckedContinuation { metadataWaiters.append($0) }
     }
+}
+
+private actor ConfirmedPlaybackCatalogFlow: ListeningFlow, MetadataFlow {
+    private let snapshot: LiveCatalogSnapshot
+    private var metadataRequests = 0
+    private var metadataWaiters: [CheckedContinuation<Void, Never>] = []
+
+    init(snapshot: LiveCatalogSnapshot) {
+        self.snapshot = snapshot
+    }
+
+    func catalog() async -> CatalogAvailability { .snapshot(snapshot) }
+
+    func metadata(for _: LiveChannelID) async -> MetadataAvailability {
+        metadataRequests += 1
+        metadataWaiters.forEach { $0.resume() }
+        metadataWaiters.removeAll()
+        return .unavailable
+    }
+
+    func artwork(for _: ChannelArtworkReference) async -> ArtworkAvailability { .unavailable }
+
+    func metadataRequestCount() -> Int { metadataRequests }
+
+    func waitForMetadataRequests(count: Int) async {
+        if metadataRequests >= count { return }
+        await withCheckedContinuation { metadataWaiters.append($0) }
+    }
+}
+
+private struct MetadataTestPlaybackResolver: PlaybackResolving {
+    func resolve(for _: LiveChannelID) async -> PlaybackResourceResolution {
+        .available(MetadataTestMediaHandoff())
+    }
+}
+
+private final class MetadataTestMediaHandoff: SiriusXMAppleMediaHandoff, @unchecked Sendable {
+    @MainActor
+    func makePlayerItem() -> AVPlayerItem? {
+        AVPlayerItem(url: URL(fileURLWithPath: "/dev/null"))
+    }
+}
+
+@MainActor
+private final class MetadataTestPlaybackRuntime: PlaybackPlayerRuntime {
+    private var ready: (@MainActor @Sendable () -> Void)?
+    private var playing: (@MainActor @Sendable () -> Void)?
+    private var paused: (@MainActor @Sendable () -> Void)?
+    private var observationWaiter: CheckedContinuation<Void, Never>?
+
+    func observe(
+        _: AVPlayerItem,
+        onReady: @escaping @MainActor @Sendable () -> Void,
+        onPlaying: @escaping @MainActor @Sendable () -> Void,
+        onPaused: @escaping @MainActor @Sendable () -> Void,
+        onFailure _: @escaping @MainActor @Sendable (LiveListeningFailure) -> Void
+    ) -> any PlaybackItemObserving {
+        ready = onReady
+        playing = onPlaying
+        paused = onPaused
+        observationWaiter?.resume()
+        observationWaiter = nil
+        return MetadataTestPlaybackObservation()
+    }
+
+    func install(_: AVPlayerItem) {}
+    func requestPlay() {}
+    func requestPause() {}
+    func clearCurrentItem() {}
+
+    func waitForObservation() async {
+        guard ready == nil else { return }
+        await withCheckedContinuation { observationWaiter = $0 }
+    }
+
+    func confirmReady() { ready?() }
+    func confirmPlaying() { playing?() }
+    func confirmPaused() { paused?() }
+}
+
+@MainActor
+private final class MetadataTestPlaybackObservation: PlaybackItemObserving {
+    func cancel() {}
 }
 
 private final class MutableMetadataClock: MetadataClock, @unchecked Sendable {

@@ -88,10 +88,13 @@ private struct CompactListeningSlice: View {
     }
 
     private func compactStatus(_ state: ListeningSurfaceState) -> String {
-        guard let channelID = state.activeChannelID else {
-            return "Waiting for confirmed playback"
+        guard state.activeChannelID != nil else {
+            return "Nothing Playing"
         }
-        return "Playing channel \(channelID.rawValue)"
+        guard let channelLabel = controller.listeningModel.confirmedChannelLabel else {
+            return "Playing current channel"
+        }
+        return "Playing \(channelLabel)"
     }
 }
 
