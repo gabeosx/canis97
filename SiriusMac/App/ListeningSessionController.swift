@@ -8,6 +8,29 @@ enum ListeningSurfaceRole: Equatable {
     case library
 }
 
+private enum MetadataAnnouncementState: Equatable {
+    case loading
+    case current
+    case stale
+    case unavailable
+}
+
+private extension LiveListeningFailure {
+    /// Recovery-capable and bookkeeping failures are intentionally quiet. The
+    /// announcer only reports a terminal state that has no further automatic
+    /// playback path to wait for.
+    var isTerminalAccessibilityFailure: Bool {
+        switch self {
+        case .catalogUnavailable, .selectionUnavailable, .resolutionUnavailable,
+             .protectedControl, .recoveryExhausted, .unsupported:
+            true
+        case .authorizationUnavailable, .entitlementUnavailable, .networkUnavailable,
+             .bufferingUnavailable, .decoderUnavailable, .cancelled, .superseded:
+            false
+        }
+    }
+}
+
 /// A closed, semantic snapshot for an application surface. It intentionally
 /// excludes provider, credential, session, transport, resource, and URL data.
 struct ListeningSurfaceState: Equatable {
@@ -38,6 +61,7 @@ final class ListeningSessionController {
 
     private let remoteCommandCenter: any RemoteCommandCenterControlling
     private let nowPlayingPublisher: any NowPlayingInfoPublishing
+    private let accessibilityAnnouncer: AccessibilityAnnouncer
     private var systemMediaController: SystemMediaController?
 
     private(set) var hasRequestedLibraryOpen = false
@@ -46,6 +70,8 @@ final class ListeningSessionController {
     private var hasTriggeredAutomaticCatalogLoad = false
     private var hasShutdown = false
     private var lastObservedPlaybackState: LivePlaybackState = .awaitingLiveContract
+    private var lastObservedMetadataAnnouncementState: MetadataAnnouncementState = .unavailable
+    private var announcementGeneration = 0
     private var revealGeneration = 0
 
     init(
@@ -53,7 +79,8 @@ final class ListeningSessionController {
         authenticationModel: AuthenticationPresentationModel? = nil,
         libraryStore: LibraryStore? = nil,
         remoteCommandCenter: any RemoteCommandCenterControlling = SystemRemoteCommandCenterAdapter(),
-        nowPlayingPublisher: any NowPlayingInfoPublishing = SystemNowPlayingInfoAdapter()
+        nowPlayingPublisher: any NowPlayingInfoPublishing = SystemNowPlayingInfoAdapter(),
+        accessibilityAnnouncer: AccessibilityAnnouncer = AccessibilityAnnouncer()
     ) {
         self.composition = composition
         bridge = composition.bridge
@@ -66,8 +93,10 @@ final class ListeningSessionController {
         self.libraryStore = libraryStore ?? LibraryStore()
         self.remoteCommandCenter = remoteCommandCenter
         self.nowPlayingPublisher = nowPlayingPublisher
+        self.accessibilityAnnouncer = accessibilityAnnouncer
         observeAuthenticationReadiness()
         observeConfirmedPlayback()
+        observeMetadataAccessibilityState()
     }
 
     var compactSurface: ListeningSurfaceState { surface(for: .compact) }
@@ -114,6 +143,19 @@ final class ListeningSessionController {
         listeningModel.reset()
     }
 
+    /// Favorite controls send their desired state through this shared route so
+    /// a successful store mutation can be announced exactly once.
+    func setFavorite(_ snapshot: LibraryChannelSnapshot, isFavorite: Bool) {
+        let wasFavorite = libraryStore.isFavorite(snapshot.id)
+        libraryStore.setFavorite(snapshot, isFavorite: isFavorite)
+        guard wasFavorite != isFavorite, libraryStore.isFavorite(snapshot.id) == isFavorite else { return }
+        accessibilityAnnouncer.announce(
+            isFavorite
+                ? .favoriteAdded(generation: nextAnnouncementGeneration())
+                : .favoriteRemoved(generation: nextAnnouncementGeneration())
+        )
+    }
+
     /// The application composition, never a window, owns MediaPlayer's single
     /// process-wide registration. Tests supply fakes without touching macOS.
     func startSystemMediaControls() {
@@ -140,6 +182,7 @@ final class ListeningSessionController {
         guard !hasShutdown else { return }
         hasShutdown = true
         systemMediaController?.shutdown()
+        accessibilityAnnouncer.shutdown()
         listeningModel.reset()
     }
 
@@ -163,6 +206,7 @@ final class ListeningSessionController {
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                guard !self.hasShutdown else { return }
                 self.loadCatalogWhenReady()
                 self.observeAuthenticationReadiness()
             }
@@ -177,6 +221,7 @@ final class ListeningSessionController {
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                guard !self.hasShutdown else { return }
                 self.recordConfirmedPlaybackIfNeeded()
                 self.observeConfirmedPlayback()
             }
@@ -186,11 +231,75 @@ final class ListeningSessionController {
     private func recordConfirmedPlaybackIfNeeded() {
         let state = listeningModel.playbackState
         guard state != lastObservedPlaybackState else { return }
+        let previousState = lastObservedPlaybackState
         lastObservedPlaybackState = state
+        announceConfirmedPlaybackTransition(from: previousState, to: state)
         guard case let .playing(channelID?) = state,
               let channel = listeningModel.state.snapshot?.channels.first(where: { $0.id == channelID })
         else { return }
         libraryStore.recordConfirmedPlayback(LibraryChannelSnapshot(channel))
+    }
+
+    private func announceConfirmedPlaybackTransition(from previous: LivePlaybackState, to current: LivePlaybackState) {
+        switch current {
+        case let .playing(channelID?) where confirmedChannelChanged(from: previous, to: channelID):
+            accessibilityAnnouncer.announce(.tuned(generation: nextAnnouncementGeneration()))
+        case .playing where previous == .paused:
+            accessibilityAnnouncer.announce(.playing(generation: nextAnnouncementGeneration()))
+        case .paused:
+            accessibilityAnnouncer.announce(.paused(generation: nextAnnouncementGeneration()))
+        case let .unavailable(failure) where failure.isTerminalAccessibilityFailure:
+            accessibilityAnnouncer.announce(.playbackFailed(generation: nextAnnouncementGeneration()))
+        case .awaitingLiveContract, .idle, .playing, .stopped, .unavailable:
+            break
+        }
+    }
+
+    private func confirmedChannelChanged(from previous: LivePlaybackState, to channelID: LiveChannelID) -> Bool {
+        guard case let .playing(previousChannelID?) = previous else { return true }
+        return previousChannelID != channelID
+    }
+
+    private func observeMetadataAccessibilityState() {
+        withObservationTracking {
+            _ = listeningModel.metadataPresentation.availability
+            _ = listeningModel.metadataPresentation.state
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self, !self.hasShutdown else { return }
+                self.announceMetadataAccessibilityTransitionIfNeeded()
+                self.observeMetadataAccessibilityState()
+            }
+        }
+    }
+
+    private func announceMetadataAccessibilityTransitionIfNeeded() {
+        let current = metadataAnnouncementState
+        defer { lastObservedMetadataAnnouncementState = current }
+        guard current != lastObservedMetadataAnnouncementState else { return }
+        switch current {
+        case .stale:
+            accessibilityAnnouncer.announce(.metadataStale(generation: nextAnnouncementGeneration()))
+        case .unavailable where lastObservedMetadataAnnouncementState != .loading:
+            accessibilityAnnouncer.announce(.metadataUnavailable(generation: nextAnnouncementGeneration()))
+        case .loading, .current, .unavailable:
+            break
+        }
+    }
+
+    private var metadataAnnouncementState: MetadataAnnouncementState {
+        let metadata = listeningModel.metadataPresentation
+        guard metadata.availability != .loading else { return .loading }
+        switch metadata.state.text {
+        case .current: .current
+        case .stale: .stale
+        case .channelFallback, .unavailable: .unavailable
+        }
+    }
+
+    private func nextAnnouncementGeneration() -> Int {
+        announcementGeneration &+= 1
+        return announcementGeneration
     }
 
     /// MediaPlayer only follows coordinator-confirmed state. In particular, a
