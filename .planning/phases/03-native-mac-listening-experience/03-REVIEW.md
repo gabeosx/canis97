@@ -1,13 +1,14 @@
 ---
 phase: 03-native-mac-listening-experience
-reviewed: 2026-08-21T19:43:00Z
+reviewed: 2026-08-21T20:12:53Z
 depth: standard
-files_reviewed: 20
+files_reviewed: 22
 files_reviewed_list:
   - Packages/SiriusXMClient/Sources/SiriusXMClient/InternalAdapters/LiveListeningAdapter.swift
   - SiriusMac.xcodeproj/project.pbxproj
   - SiriusMac/Accessibility/AccessibilityAnnouncer.swift
   - SiriusMac/App/ListeningSessionController.swift
+  - SiriusMac/Authentication/AuthenticationView.swift
   - SiriusMac/Catalog/ListeningPresentationModel.swift
   - SiriusMac/Catalog/ListeningView.swift
   - SiriusMac/Library/LibraryStore.swift
@@ -22,6 +23,7 @@ files_reviewed_list:
   - SiriusMacTests/CompactPlayerPresentationTests.swift
   - SiriusMacTests/LibraryStoreTests.swift
   - SiriusMacTests/ListeningSessionControllerTests.swift
+  - SiriusMacTests/MetadataPresentationTests.swift
   - SiriusMacTests/PlaybackQueueTests.swift
   - SiriusMacTests/SystemMediaControllerTests.swift
 findings:
@@ -34,44 +36,51 @@ status: issues_found
 
 # Phase 03: Code Review Report
 
-**Reviewed:** 2026-08-21T19:43:00Z
+**Reviewed:** 2026-08-21T20:12:53Z
 **Depth:** standard
-**Files Reviewed:** 20
+**Files Reviewed:** 22
 **Status:** issues_found
 
 ## Summary
 
-This final standard-depth re-review covered the declared client adapter, listening-state, persistence, MediaPlayer, window, accessibility, presentation, and test-target scope. The prior four findings remain resolved: SwiftData falls back to in-memory storage, failed metadata is immediately marked stale, failed replacement tunes suppress stale compact transport, and `PlaybackQueueTests.swift` is in the Xcode test target. The iteration-two compact stopped-state transport regression is also resolved.
+This final post-cap standard review re-read all declared source and test files, traced the controller, compact player, Player menu, and MediaPlayer command paths, and verified the shared `ListeningCommandAvailability` projection for initial, pending, playing, paused, stopped, unavailable, and queue-direction states.
 
-`xcodebuild test -quiet -project SiriusMac.xcodeproj -scheme SiriusMac -destination 'platform=macOS' -derivedDataPath /private/tmp/sirius-mac-final-review-derived` completed successfully. One user-facing transport-state defect remains outside the compact-player fix.
+The earlier findings remain resolved: persistent-library initialization falls back to in-memory storage, failed metadata is immediately stale, the compact player does not retain inert transport after pending/failed/stopped transitions, and `PlaybackQueueTests.swift` is compiled by the Xcode test target. The final change correctly disables invalid Library and Player-menu commands. One equivalent availability bug remains in the system media controls during a replacement tune.
+
+`xcodebuild test -quiet -project SiriusMac.xcodeproj -scheme SiriusMac -destination 'platform=macOS' -derivedDataPath /private/tmp/sirius-mac-final-rereview-derived` passed. `git diff --check` was clean.
 
 ## Narrative Findings (AI reviewer)
 
 ## Warnings
 
-### WR-01 [WARNING]: Library and menu transport controls remain actionable when no command is valid
+### WR-01 [WARNING]: System media commands stay enabled while a replacement tune is pending
 
-**File:** `/Users/gabe/sirius-mac/SiriusMac/Catalog/ListeningView.swift:130-138`; `/Users/gabe/sirius-mac/SiriusMac/SiriusMacApp.swift:153-164`
+**File:** `/Users/gabe/sirius-mac/SiriusMac/App/ListeningSessionController.swift:405-413`, `/Users/gabe/sirius-mac/SiriusMac/App/ListeningSessionController.swift:478-497`
 
-**Issue:** The library's Pause, Resume Live, and Stop buttons are always enabled, while the Player menu's Previous, Play/Pause, and Next commands are never disabled. Before the user has selected/tuned a channel, Pause or Resume calls `PlaybackCoordinator` with no selected channel and changes the UI to `.unavailable(.selectionUnavailable)`. After Stop, the menu's Play command calls `toggleConfirmedPlayback()`, which deliberately returns `nil` for `.stopped`; Previous and Next similarly return `nil` without feedback when the queue is unavailable. The compact presentation now suppresses these stale controls, but the library and menu still advertise actions that cannot execute.
+**Issue:** When a user changes channels after a confirmed stream exists, `PlaybackCoordinator.tune` transitions to `.awaitingLiveContract` while the old confirmed channel is still present. `publishConfirmedSystemMediaState()` deliberately returns at lines 406-413 to preserve previous Now Playing metadata, but it also leaves the previous play/pause, Previous, and Next enabled state untouched. Those commands are no longer valid under `ListeningCommandAvailability`: Play/Pause returns `.commandFailed`, while Previous/Next can start another tune and supersede the in-flight request. The Library and Player menu now disable those commands, so media keys and Control Center are the remaining inconsistent entry point.
 
-**Fix:** Derive command eligibility from the same confirmed playback state and queue availability used by `ListeningSessionController`, disable unsupported controls in both surfaces, and add controller/view-contract tests for the initial and stopped states. For example:
+**Fix:** Set system media availability from the shared projection on every observed state, including the pending branch, and make the handlers enforce the same projection as a race-safe backstop. For example:
 
 ```swift
-Button("Pause") { _ = model.pausePlayback() }
-    .disabled(model.playbackState != .playing(model.confirmedChannelID))
+private func setSystemCommandAvailability(using media: SystemMediaController) {
+    let availability = commandAvailability
+    media.setSupportedCommandAvailability(
+        playPause: availability.playPause,
+        previous: availability.previous,
+        next: availability.next
+    )
+}
 
-Button("Resume Live") { _ = model.resumePlaybackAtLiveEdge() }
-    .disabled(model.playbackState != .paused || model.confirmedChannelID == nil)
-
-Button("Previous") { _ = controller.previous() }
-    .disabled(controller.queueAvailability != .previous && controller.queueAvailability != .both)
+private func handleSystemNext() -> SystemRemoteCommandStatus {
+    guard commandAvailability.next else { return .commandFailed }
+    return next() == nil ? .commandFailed : .success
+}
 ```
 
-Give Stop its own eligibility predicate (including an in-flight tune that can be cancelled), and use the same predicates for the menu Play/Pause and Next controls.
+Call the helper before the `.awaitingLiveContract` early return and replace the queue-only guards in both navigation handlers. Add a controller test that reaches a pending replacement tune after confirmed playback and asserts all three remote commands are disabled and cannot invoke a second tune.
 
 ---
 
-_Reviewed: 2026-08-21T19:43:00Z_
+_Reviewed: 2026-08-21T20:12:53Z_
 _Reviewer: the agent (gsd-code-reviewer)_
 _Depth: standard_
