@@ -21,6 +21,29 @@ struct MetadataRefreshCoordinatorTests {
         #expect(snapshot.program?.artwork?.description == "ChannelArtworkReference(redacted)")
     }
 
+    @Test("observed fractional-second lookaround timestamps map into current metadata")
+    func observedFractionalSecondLookaroundTimestampMapsProgram() throws {
+        let channel = LiveChannelID("fixture-channel")
+        let payload = try observedLookaroundPayload(cut: [
+            "name": "Synthetic Program",
+            "artistName": "Synthetic Artist",
+            "validFrom": "2026-08-19T00:00:00.123Z",
+        ])
+
+        let result = LiveListeningAdapter.decodeMetadata(
+            NativeTransportResponse(statusCode: 200, contentType: "application/json", body: payload),
+            channelID: channel
+        )
+
+        guard case let .current(snapshot) = result else {
+            Issue.record("expected current metadata")
+            return
+        }
+        #expect(snapshot.channelID == channel)
+        #expect(snapshot.program?.title == "Synthetic Program")
+        #expect(snapshot.program?.artist == "Synthetic Artist")
+    }
+
     @Test("schema evidence records only allow-listed paths, kinds, and bounded counts")
     func schemaEvidenceIsValueFreeAcrossCatalogLookaroundAndTune() throws {
         let catalogItem: [String: Any] = [
