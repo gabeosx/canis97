@@ -50,4 +50,73 @@ final class CompactPlayerPresentationTests: XCTestCase {
         XCTAssertNil(presentation.primaryMetadata)
         XCTAssertNil(presentation.secondaryMetadata)
     }
+
+    func testPendingWithoutAConfirmedChannelShowsNativeProgressWithoutMetadata() {
+        let presentation = CompactPlayerPresentation.project(
+            channel: nil,
+            metadata: unavailableMetadata(),
+            primaryMetadata: nil,
+            secondaryMetadata: nil,
+            playback: .awaitingLiveContract,
+            isFavorite: false,
+            queueAvailability: .none
+        )
+
+        XCTAssertEqual(presentation.status, .pending)
+        XCTAssertTrue(presentation.showsNativeProgress)
+        XCTAssertNil(presentation.channelIdentity)
+        XCTAssertNil(presentation.primaryMetadata)
+    }
+
+    func testFailuresExposeOnlyTheirApprovedRecoveryAction() {
+        XCTAssertEqual(CompactRecoveryAction(failure: .authorizationUnavailable), .signInAgain)
+        XCTAssertEqual(CompactRecoveryAction(failure: .entitlementUnavailable), .signInAgain)
+        XCTAssertEqual(CompactRecoveryAction(failure: .catalogUnavailable), .refreshLibrary)
+        XCTAssertEqual(CompactRecoveryAction(failure: .networkUnavailable), .tryAgain)
+    }
+
+    func testMissingMetadataAndArtworkUseIndependentTruthfulFallbacks() {
+        let presentation = CompactPlayerPresentation.project(
+            channel: LiveChannel(id: LiveChannelID("fixture-channel"), name: "Fallback Channel", displayNumber: 7),
+            metadata: unavailableMetadata(),
+            primaryMetadata: "Current program unavailable",
+            secondaryMetadata: "7 · Fallback Channel",
+            playback: .paused,
+            isFavorite: false,
+            queueAvailability: .none
+        )
+
+        XCTAssertEqual(presentation.artwork, .placeholder)
+        XCTAssertEqual(presentation.primaryMetadata, "Current program unavailable")
+        XCTAssertEqual(presentation.secondaryMetadata, "7 · Fallback Channel")
+        XCTAssertEqual(presentation.status, .paused)
+    }
+
+    func testLongMetadataKeepsCompleteSemanticValuesAndFixedLayoutMetrics() {
+        let longTitle = "音楽と星空のためのライブ・ラジオ・セッション — a deliberately very long title"
+        let presentation = CompactPlayerPresentation.confirmed(
+            channel: .init(number: 42, name: "The Spectrum"),
+            artwork: .placeholder,
+            primaryMetadata: longTitle,
+            secondaryMetadata: longTitle,
+            playback: .playing,
+            isFavorite: false,
+            queueAvailability: .both
+        )
+
+        XCTAssertEqual(presentation.primaryMetadata, longTitle)
+        XCTAssertEqual(presentation.secondaryMetadata, longTitle)
+        XCTAssertEqual(CompactPlayerPresentation.metadataLineLimit, 2)
+        XCTAssertEqual(CompactPlayerPresentation.transportControlSize, 32)
+        XCTAssertEqual(NativeCompactPlayerStyle.fallback.contentSize, .init(width: 400, height: 288))
+    }
+
+    private func unavailableMetadata() -> LiveMetadataState {
+        LiveMetadataState(
+            channelID: LiveChannelID("fixture-metadata"),
+            text: .unavailable,
+            artwork: .unavailable,
+            refreshedAt: nil
+        )
+    }
 }
