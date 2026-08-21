@@ -2,4 +2,4 @@
 
 | Category | Item | Status | Deferred At |
 | --- | --- | --- | --- |
-| build | `FirstPartyTokenCookiePolicy.swift` is present in `project.pbxproj` but omitted from Xcode's generated `SiriusMac.SwiftFileList`, blocking unit-test compilation through `WebCredentialSelectionPolicy.swift`. | open | 2026-08-21 |
+| build | `ListeningSessionController.swift` cannot infer the result type for `.current`, `.stale`, and `.unavailable` at lines 319-321, preventing the focused accessibility suite from executing after the app Sources references were repaired. | open | 2026-08-21 |

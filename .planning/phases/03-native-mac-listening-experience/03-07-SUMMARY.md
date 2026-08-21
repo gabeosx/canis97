@@ -14,13 +14,13 @@ affects: [03-08, safe-skins-accessible-recovery]
 actuals:
   tokens: 11523
   tasks: 2
-  commits: 3
+  commits: 4
 tech-stack:
   added: []
   patterns: [injected AppKit announcement poster, generation-tagged focus requests, semantic control identifiers]
 key-files:
   created: [SiriusMac/Accessibility/AccessibilityAnnouncer.swift, SiriusMacTests/AccessibilityContractTests.swift]
-  modified: [SiriusMac/App/ListeningSessionController.swift, SiriusMac/SiriusMacApp.swift, SiriusMac/Catalog/ListeningView.swift, SiriusMac/Player/CompactPlayerView.swift]
+  modified: [SiriusMac.xcodeproj/project.pbxproj, SiriusMac/App/ListeningSessionController.swift, SiriusMac/SiriusMacApp.swift, SiriusMac/Catalog/ListeningView.swift, SiriusMac/Player/CompactPlayerView.swift]
 key-decisions:
   - "VoiceOver receives only closed semantic event strings through an injected AppKit poster."
   - "Menu and compact/library controls call the same ListeningSessionController routes."
@@ -34,7 +34,7 @@ coverage:
         ref: SiriusMacTests/AccessibilityContractTests.swift
         status: unknown
     human_judgment: true
-    rationale: Focused test compilation is blocked by a pre-existing target-membership issue outside this plan.
+    rationale: The repaired target includes the accessibility sources; compilation now reaches a separate type-inference error in ListeningSessionController.swift.
   - id: D2
     description: Native player and library menus, keyboard routes, semantic labels, focus restoration, context menus, and Reduce Motion behavior.
     requirement: UI-01
@@ -71,6 +71,7 @@ status: complete
 
 1. **Task 1: Announce confirmed semantic transitions exactly once** — `ecfa380` (test RED), `39ebb63` (feat GREEN)
 2. **Task 2: Complete native commands, focus, labels, values, order, and Reduce Motion** — `57a42fc` (feat)
+3. **Post-gate repair: Restore original app Sources build-file identifiers** — `3b032bd` (fix)
 
 ## Files Created/Modified
 
@@ -80,6 +81,7 @@ status: complete
 - `SiriusMac/Catalog/ListeningView.swift` — Focused search/list behavior, semantic rows, contexts, and motion policy.
 - `SiriusMac/Player/CompactPlayerView.swift` — Stable compact accessibility identifiers, labels, values, hints, and order.
 - `SiriusMacTests/AccessibilityContractTests.swift` — Deterministic injected-announcer contract coverage.
+- `SiriusMac.xcodeproj/project.pbxproj` — Restored the five original build-file identifiers while retaining `AccessibilityAnnouncer.swift` source membership.
 
 ## Decisions Made
 
@@ -92,12 +94,13 @@ None - plan implementation followed the requested controller/view boundaries.
 
 ## Issues Encountered
 
-- The focused and full Xcode command cannot complete because Xcode omits the pre-existing `FirstPartyTokenCookiePolicy.swift` source from `SiriusMac.SwiftFileList`, causing `WebCredentialSelectionPolicy.swift` to fail with an unresolved type. The file and its nominal project entry both exist; this is outside the plan's accessibility scope. New accessibility sources compile before that unrelated failure.
+- The malformed app Sources references introduced during the accessibility change omitted five existing Swift sources from Xcode's generated file list. Restoring their original build-file identifiers makes `FirstPartyTokenCookiePolicy.swift` compile again.
+- Both `xcodebuild test -only-testing:SiriusMacTests/AccessibilityContractTests` and the complete macOS `xcodebuild test` now reach a separate `ListeningSessionController.swift` type-inference failure for `.current`, `.stale`, and `.unavailable`, so the focused suite cannot yet execute.
 
 ## Next Phase Readiness
 
 - Plan 03-08 can manually inspect VoiceOver traversal, focus rings, high contrast, and Reduce Motion using the stable identifiers and shared command routes introduced here.
-- Restore the missing authentication source membership before treating the focused accessibility suite as passing.
+- Resolve the `ListeningSessionController` type-inference error before treating the focused accessibility suite as passing.
 
 ## Self-Check: PASSED
 
