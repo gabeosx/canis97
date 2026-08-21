@@ -73,7 +73,7 @@ struct CompactPlayerView: View {
         if let primary = presentation.primaryMetadata {
             Text(primary)
                 .font(.system(size: 14))
-                .lineLimit(2)
+                .lineLimit(CompactPlayerPresentation.metadataLineLimit)
                 .help(primary)
                 .accessibilityLabel("Current program: \(primary)")
         }
@@ -81,7 +81,7 @@ struct CompactPlayerView: View {
             Text(secondary)
                 .font(.system(size: 14))
                 .foregroundStyle(.secondary)
-                .lineLimit(2)
+                .lineLimit(CompactPlayerPresentation.metadataLineLimit)
                 .help(secondary)
                 .accessibilityLabel("Artist: \(secondary)")
         }
@@ -126,7 +126,8 @@ struct CompactPlayerView: View {
 
     private func transportButton(_ title: String, systemImage: String, enabled: Bool, action: CompactPlayerAction) -> some View {
         Button(action: { onAction(action) }) {
-            Image(systemName: systemImage).frame(width: 32, height: 32)
+            Image(systemName: systemImage)
+                .frame(width: CompactPlayerPresentation.transportControlSize, height: CompactPlayerPresentation.transportControlSize)
         }
         .disabled(!enabled)
         .help(title)
@@ -147,6 +148,7 @@ struct CompactPlayerView: View {
         VStack(alignment: .leading, spacing: 16) {
             Spacer()
             Text(presentation.emptyTitle ?? "Nothing Playing").font(.system(size: 24, weight: .semibold))
+            statusAndRecovery
             Button(presentation.primaryActionTitle ?? "Open Library") { onAction(.showLibrary) }
             Spacer()
         }
@@ -157,8 +159,9 @@ struct CompactPlayerView: View {
 private extension CompactRecoveryAction {
     var compactAction: CompactPlayerAction {
         switch self {
-        case .tryAgain: .playPause
-        case .signInAgain, .refreshLibrary: .showLibrary
+        case .tryAgain: .retryPlayback
+        case .signInAgain: .signInAgain
+        case .refreshLibrary: .refreshLibrary
         }
     }
 }
@@ -191,4 +194,19 @@ private extension Color {
 
 #Preview("Nothing Playing") {
     CompactPlayerView(presentation: .empty(), onAction: { _ in })
+}
+
+#Preview("Loading") {
+    CompactPlayerView(presentation: .empty(status: .pending), onAction: { _ in })
+}
+
+#Preview("Paused") {
+    CompactPlayerView(
+        presentation: .confirmed(channel: .init(number: 7, name: "Fallback Channel"), artwork: .placeholder, primaryMetadata: "Current program unavailable", secondaryMetadata: "7 · Fallback Channel", playback: .paused, isFavorite: false, queueAvailability: .none),
+        onAction: { _ in }
+    )
+}
+
+#Preview("Playback Error") {
+    CompactPlayerView(presentation: .empty(status: .unavailable(.tryAgain)), onAction: { _ in })
 }

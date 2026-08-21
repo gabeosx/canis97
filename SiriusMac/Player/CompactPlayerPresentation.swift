@@ -4,6 +4,8 @@ import SiriusXMClient
 /// The finite, renderer-independent input for the compact player. It contains
 /// only already-validated semantic values; action execution stays with the app.
 struct CompactPlayerPresentation: Sendable, Equatable {
+    static let metadataLineLimit = 2
+    static let transportControlSize: CGFloat = 32
     struct ChannelIdentity: Sendable, Equatable {
         let number: Int?
         let name: String?
@@ -78,14 +80,14 @@ struct CompactPlayerPresentation: Sendable, Equatable {
         )
     }
 
-    static func empty() -> Self {
+    static func empty(status: Status? = nil) -> Self {
         Self(
             backgroundRole: .playerBackground,
             channelIdentity: nil,
             artwork: nil,
             primaryMetadata: nil,
             secondaryMetadata: nil,
-            status: nil,
+            status: status,
             isFavorite: false,
             transport: nil,
             emptyTitle: "Nothing Playing",
@@ -102,7 +104,10 @@ struct CompactPlayerPresentation: Sendable, Equatable {
         isFavorite: Bool,
         queueAvailability: QueueDirectionAvailability
     ) -> Self {
-        guard let channel else { return empty() }
+        guard let channel else {
+            let projectedStatus = status(playback)
+            return empty(status: projectedStatus == .stopped ? nil : projectedStatus)
+        }
         let artwork: Artwork = switch metadata.artwork {
         case let .current(data), let .stale(data): .data(data)
         case .unavailable: .placeholder
@@ -135,6 +140,30 @@ struct CompactPlayerPresentation: Sendable, Equatable {
         case .next: (false, true)
         case .both: (true, true)
         }
+    }
+
+    var showsNativeProgress: Bool { status == .pending }
+
+    /// A scene-level presentation host can retain confirmed semantic content
+    /// while a fresh tune or metadata operation is pending or has failed.
+    func retainingConfirmedContent(from previous: Self?) -> Self {
+        guard channelIdentity == nil,
+              let previous,
+              previous.channelIdentity != nil,
+              status != nil
+        else { return self }
+        return Self(
+            backgroundRole: previous.backgroundRole,
+            channelIdentity: previous.channelIdentity,
+            artwork: previous.artwork,
+            primaryMetadata: previous.primaryMetadata,
+            secondaryMetadata: previous.secondaryMetadata,
+            status: status,
+            isFavorite: previous.isFavorite,
+            transport: previous.transport,
+            emptyTitle: nil,
+            primaryActionTitle: nil
+        )
     }
 }
 
@@ -172,6 +201,9 @@ enum CompactPlayerAction: CaseIterable, Sendable, Equatable {
     case toggleFavorite
     case showLibrary
     case toggleAlwaysOnTop
+    case retryPlayback
+    case signInAgain
+    case refreshLibrary
 }
 
 enum PlayerSemanticStyleRole: CaseIterable, Sendable, Equatable {

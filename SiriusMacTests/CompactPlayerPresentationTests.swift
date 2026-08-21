@@ -36,9 +36,11 @@ final class CompactPlayerPresentationTests: XCTestCase {
     func testViewActionsStayOutsideThePresentationValue() {
         XCTAssertEqual(
             CompactPlayerAction.allCases,
-            [.previous, .playPause, .next, .toggleFavorite, .showLibrary, .toggleAlwaysOnTop]
+            [.previous, .playPause, .next, .toggleFavorite, .showLibrary, .toggleAlwaysOnTop, .retryPlayback, .signInAgain, .refreshLibrary]
         )
-        XCTAssertFalse(CompactPlayerPresentation.self is AnyObject.Type)
+        XCTAssertFalse(Mirror(reflecting: CompactPlayerPresentation.empty()).children.contains {
+            $0.label?.localizedCaseInsensitiveContains("action") == true
+        })
     }
 
     func testEmptyPresentationHasNoFabricatedChannelOrMetadata() {

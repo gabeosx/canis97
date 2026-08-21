@@ -67,9 +67,18 @@ private struct CompactAuthenticationRoot: View {
 private struct CompactListeningSlice: View {
     let controller: ListeningSessionController
     @Environment(\.openWindow) private var openWindow
+    @State private var lastConfirmedPresentation: CompactPlayerPresentation?
 
     var body: some View {
-        CompactPlayerView(presentation: presentation, onAction: perform)
+        let current = presentation
+        CompactPlayerView(
+            presentation: current.retainingConfirmedContent(from: lastConfirmedPresentation),
+            onAction: perform
+        )
+        .onChange(of: current, initial: true) { _, next in
+            guard next.channelIdentity != nil else { return }
+            lastConfirmedPresentation = next
+        }
     }
 
     private var presentation: CompactPlayerPresentation {
@@ -112,6 +121,12 @@ private struct CompactListeningSlice: View {
         case .toggleAlwaysOnTop:
             // Window policy remains owned by Plan 03-05's scoped AppKit adapter.
             break
+        case .retryPlayback:
+            _ = controller.listeningModel.resumePlaybackAtLiveEdge()
+        case .signInAgain:
+            _ = controller.authenticationModel.retry()
+        case .refreshLibrary:
+            _ = controller.listeningModel.refresh()
         }
     }
 }
