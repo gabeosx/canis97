@@ -155,9 +155,9 @@ struct CompactPlayerPresentation: Sendable, Equatable {
               status != nil
         else { return self }
         let retainedTransport: Transport? = switch status {
-        case .pending, .unavailable:
+        case .pending, .stopped, .unavailable:
             nil
-        case .playing, .paused, .stopped, nil:
+        case .playing, .paused, nil:
             previous.transport
         }
         return Self(

@@ -120,6 +120,24 @@ final class CompactPlayerPresentationTests: XCTestCase {
         XCTAssertNil(failedReplacement.transport)
     }
 
+    func testStoppedPlaybackRetainsStationContentWithoutInertTransportControls() {
+        let confirmed = CompactPlayerPresentation.confirmed(
+            channel: .init(number: 42, name: "The Spectrum"),
+            artwork: .placeholder,
+            primaryMetadata: "Current title",
+            secondaryMetadata: "Current artist",
+            playback: .playing,
+            isFavorite: true,
+            queueAvailability: .both
+        )
+        let stopped = CompactPlayerPresentation.empty(status: .stopped)
+            .retainingConfirmedContent(from: confirmed)
+
+        XCTAssertEqual(stopped.channelIdentity, confirmed.channelIdentity)
+        XCTAssertEqual(stopped.status, .stopped)
+        XCTAssertNil(stopped.transport)
+    }
+
     func testMissingMetadataAndArtworkUseIndependentTruthfulFallbacks() {
         let presentation = CompactPlayerPresentation.project(
             channel: LiveChannel(id: LiveChannelID("fixture-channel"), name: "Fallback Channel", displayNumber: 7),
