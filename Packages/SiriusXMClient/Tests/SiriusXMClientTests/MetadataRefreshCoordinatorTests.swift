@@ -59,7 +59,7 @@ struct MetadataRefreshCoordinatorTests {
         let tuneEvidence = CompatibilitySchemaDiagnostics.tuneEvidence(body: tune)
 
         #expect(catalogEvidence == "stage=catalog root=object page=object page.containers=one item-count=one entity.texts.title.default=string-nonempty metadata=object metadata.live=object metadata.live.items=one cuts=absent")
-        #expect(lookaroundEvidence == "stage=lookaround root=object channels=object selected-channel=object selected.cuts=one selected.cuts[0].name=string-nonempty selected.cuts[0].title=absent selected.cuts[0].artistName=string-nonempty selected.cuts[0].artist=absent selected.cuts[0].validFrom=string-nonempty selected.shows=empty")
+        #expect(lookaroundEvidence == "stage=lookaround root=object channels=object selected-channel=object selected.cuts=one selected.cuts[0].name=string-nonempty selected.cuts[0].title=absent selected.cuts[0].artistName=string-nonempty selected.cuts[0].artist=absent selected.cuts[0].validFrom=string-nonempty selected.cuts[0].validFrom.parse=default-ISO8601 delta=string-empty selected.shows=empty")
         #expect(tuneEvidence == "stage=tune root=object streams=one metadata=object metadata.live=object metadata.live.items=one metadata.live.items[0].name=absent metadata.live.items[0].title=string-nonempty metadata.live.items[0].artistName=absent metadata.live.items[0].artist=string-nonempty metadata.live.episodes=empty")
         #expect(![catalogEvidence, lookaroundEvidence, tuneEvidence].joined().contains("fixture"))
     }

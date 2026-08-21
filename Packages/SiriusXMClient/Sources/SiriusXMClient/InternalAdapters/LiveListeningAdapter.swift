@@ -233,6 +233,35 @@ private enum CompatibilitySchemaValueKind: String {
     }
 }
 
+/// A closed classification of the only ISO-8601 variants relevant to the
+/// observed lookaround boundary. This intentionally records parser behavior,
+/// never a provider timestamp.
+private enum LookaroundTimestampParseClass: String {
+    case defaultISO8601 = "default-ISO8601"
+    case fractionalSecondsISO8601 = "fractional-seconds-ISO8601"
+    case both
+    case unparseable
+
+    init(_ value: Any?) {
+        guard let value = value as? String else {
+            self = .unparseable
+            return
+        }
+
+        let defaultParses = ISO8601DateFormatter().date(from: value) != nil
+        let fractionalFormatter = ISO8601DateFormatter()
+        fractionalFormatter.formatOptions.insert(.withFractionalSeconds)
+        let fractionalParses = fractionalFormatter.date(from: value) != nil
+
+        switch (defaultParses, fractionalParses) {
+        case (true, false): self = .defaultISO8601
+        case (false, true): self = .fractionalSecondsISO8601
+        case (true, true): self = .both
+        case (false, false): self = .unparseable
+        }
+    }
+}
+
 private enum CompatibilitySchemaCardinality: String {
     case absent
     case empty
@@ -318,6 +347,8 @@ private struct LookaroundSchemaEvidence {
         let artistName = CompatibilitySchemaValueKind(firstCut?["artistName"]).rawValue
         let artist = CompatibilitySchemaValueKind(firstCut?["artist"]).rawValue
         let validFrom = CompatibilitySchemaValueKind(firstCut?["validFrom"]).rawValue
+        let timestampParse = LookaroundTimestampParseClass(firstCut?["validFrom"]).rawValue
+        let delta = CompatibilitySchemaValueKind(root["delta"]).rawValue
         let shows = CompatibilitySchemaCardinality(selected?["shows"]).rawValue
         rendered = [
             "stage=lookaround",
@@ -330,6 +361,8 @@ private struct LookaroundSchemaEvidence {
             "selected.cuts[0].artistName=\(artistName)",
             "selected.cuts[0].artist=\(artist)",
             "selected.cuts[0].validFrom=\(validFrom)",
+            "selected.cuts[0].validFrom.parse=\(timestampParse)",
+            "delta=\(delta)",
             "selected.shows=\(shows)"
         ].joined(separator: " ")
     }
