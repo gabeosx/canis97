@@ -38,6 +38,24 @@ enum ListeningPresentationState: Equatable {
 @MainActor
 @Observable
 final class ListeningPresentationModel {
+    /// Bridges the nonisolated cancellation handler back to the presentation
+    /// model without retaining it for the lifetime of a stalled resolver.
+    @MainActor
+    private final class TuneCancellationRelay {
+        weak var presentationModel: ListeningPresentationModel?
+        let playbackCoordinator: PlaybackCoordinator
+
+        init(presentationModel: ListeningPresentationModel, playbackCoordinator: PlaybackCoordinator) {
+            self.presentationModel = presentationModel
+            self.playbackCoordinator = playbackCoordinator
+        }
+
+        func cancel() {
+            playbackCoordinator.cancelPendingTune()
+            presentationModel?.applyConfirmedPlaybackState(playbackCoordinator.state)
+        }
+    }
+
     private let flow: any ListeningFlow
     private let playbackCoordinator: PlaybackCoordinator?
     private var refreshTask: Task<Void, Never>?
@@ -148,9 +166,21 @@ final class ListeningPresentationModel {
         }
 
         isTunePending = true
+        let cancellationRelay = TuneCancellationRelay(
+            presentationModel: self,
+            playbackCoordinator: playbackCoordinator
+        )
         return Task { [weak self] in
-            await playbackCoordinator.tune(channelID)
-            self?.applyConfirmedPlaybackState(playbackCoordinator.state)
+            await withTaskCancellationHandler {
+                guard !Task.isCancelled else { return }
+                await playbackCoordinator.tune(channelID)
+                guard !Task.isCancelled else { return }
+                self?.applyConfirmedPlaybackState(playbackCoordinator.state)
+            } onCancel: {
+                Task { @MainActor [cancellationRelay] in
+                    cancellationRelay.cancel()
+                }
+            }
         }
     }
 

@@ -451,6 +451,82 @@ final class ListeningSessionControllerTests: XCTestCase {
         XCTAssertEqual(runtime.observationCount, 3)
     }
 
+    func testCancellingReplacementTuneClearsPendingStateAndAllowsLaterNavigation() async throws {
+        let runtime = SessionPlaybackRuntime()
+        let resolver = ControlledSessionPlaybackResolver()
+        let catalog = ControlledSessionCatalog()
+        let first = LiveChannelID("fixture-cancel-first")
+        let current = LiveChannelID("fixture-cancel-current")
+        let next = LiveChannelID("fixture-cancel-next")
+        let originIDs = [first, current, next]
+        let controller = makeController(
+            runtime: runtime,
+            resolver: resolver,
+            client: catalog,
+            authenticationModel: AuthenticationPresentationModel(flow: EntitledSessionAuthenticationFlow())
+        )
+
+        let signIn = try XCTUnwrap(controller.authenticationModel.signIn())
+        await catalog.waitForCatalogRequests(count: 1)
+        await catalog.completeCatalog(with: .snapshot(LiveCatalogSnapshot(
+            channels: originIDs.map { LiveChannel(id: $0, name: "Channel \($0.rawValue)") },
+            freshness: .fresh
+        )))
+        await signIn.value
+        for _ in 0 ..< 10 {
+            if controller.listeningModel.state.snapshot != nil { break }
+            await Task.yield()
+        }
+
+        let initialTune = try XCTUnwrap(controller.tune(channelID: current, originIDs: originIDs))
+        await resolver.waitForResolution(of: current)
+        await resolver.complete(current, with: .available(SessionMediaHandoff()))
+        await runtime.waitForObservation(count: 1)
+        runtime.confirmReady()
+        runtime.confirmPlaying()
+        await initialTune.value
+        for _ in 0 ..< 10 {
+            if controller.listeningModel.playbackState == .playing(current) { break }
+            await Task.yield()
+        }
+        XCTAssertEqual(controller.listeningModel.playbackState, .playing(current))
+
+        let cancelledReplacement = try XCTUnwrap(controller.next())
+        await resolver.waitForResolution(of: next)
+        XCTAssertTrue(controller.listeningModel.isTunePending)
+        XCTAssertEqual(controller.playbackQueue?.currentID, next)
+
+        cancelledReplacement.cancel()
+        for _ in 0 ..< 10 {
+            if !controller.listeningModel.isTunePending { break }
+            await Task.yield()
+        }
+        XCTAssertFalse(controller.listeningModel.isTunePending)
+        XCTAssertEqual(controller.listeningModel.playbackState, .stopped)
+
+        let laterNavigation = try XCTUnwrap(controller.previous())
+        XCTAssertEqual(controller.playbackQueue?.currentID, current)
+        await resolver.waitForResolution(of: current, count: 2)
+        await resolver.complete(current, with: .available(SessionMediaHandoff()))
+        await runtime.waitForObservation(count: 2)
+        runtime.confirmReady()
+        runtime.confirmPlaying()
+        await laterNavigation.value
+        for _ in 0 ..< 10 {
+            if controller.listeningModel.playbackState == .playing(current) { break }
+            await Task.yield()
+        }
+        XCTAssertEqual(controller.listeningModel.playbackState, .playing(current))
+
+        // The first resolver deliberately ignores cancellation. Completing it
+        // after a later navigation must not replace the newly confirmed item.
+        await resolver.complete(next, with: .available(SessionMediaHandoff()))
+        await cancelledReplacement.value
+        await Task.yield()
+        XCTAssertEqual(controller.listeningModel.playbackState, .playing(current))
+        XCTAssertEqual(runtime.observationCount, 2)
+    }
+
     func testRepeatedLibraryOpenRequestsReuseTheSingletonRoute() {
         let controller = makeController()
         let originalCoordinator = controller.librarySurface.coordinatorIdentity
@@ -470,6 +546,7 @@ final class ListeningSessionControllerTests: XCTestCase {
 
     private func makeController(
         runtime: SessionPlaybackRuntime = SessionPlaybackRuntime(),
+        resolver: (any PlaybackResolving)? = nil,
         client: (any ClientAuthenticationFlow & ListeningFlow)? = nil,
         authenticationModel: AuthenticationPresentationModel? = nil,
         libraryStore: LibraryStore? = nil,
@@ -477,7 +554,7 @@ final class ListeningSessionControllerTests: XCTestCase {
         nowPlayingPublisher: any NowPlayingInfoPublishing = SystemNowPlayingInfoAdapter()
     ) -> ListeningSessionController {
         let coordinator = PlaybackCoordinator(
-            resolver: SessionPlaybackResolver(),
+            resolver: resolver ?? SessionPlaybackResolver(),
             runtime: runtime
         )
         let composition = AuthenticationComposition(
@@ -597,6 +674,36 @@ private actor ControlledSessionMetadataClient: ClientAuthenticationFlow, Listeni
 private struct SessionPlaybackResolver: PlaybackResolving {
     func resolve(for _: LiveChannelID) async -> PlaybackResourceResolution {
         .available(SessionMediaHandoff())
+    }
+}
+
+private actor ControlledSessionPlaybackResolver: PlaybackResolving {
+    private var calls: [LiveChannelID: Int] = [:]
+    private var continuations: [LiveChannelID: [CheckedContinuation<PlaybackResourceResolution, Never>]] = [:]
+    private var waiters: [LiveChannelID: [Int: CheckedContinuation<Void, Never>]] = [:]
+
+    func resolve(for channelID: LiveChannelID) async -> PlaybackResourceResolution {
+        let count = (calls[channelID] ?? 0) + 1
+        calls[channelID] = count
+        waiters[channelID]?[count]?.resume()
+        waiters[channelID]?[count] = nil
+        return await withCheckedContinuation { continuation in
+            continuations[channelID, default: []].append(continuation)
+        }
+    }
+
+    func waitForResolution(of channelID: LiveChannelID, count: Int = 1) async {
+        guard (calls[channelID] ?? 0) < count else { return }
+        await withCheckedContinuation { waiter in
+            waiters[channelID, default: [:]][count] = waiter
+        }
+    }
+
+    func complete(_ channelID: LiveChannelID, with result: PlaybackResourceResolution) {
+        guard var pending = continuations[channelID], !pending.isEmpty else { return }
+        let continuation = pending.removeFirst()
+        continuations[channelID] = pending
+        continuation.resume(returning: result)
     }
 }
 

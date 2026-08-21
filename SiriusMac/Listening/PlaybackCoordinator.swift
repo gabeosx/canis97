@@ -565,6 +565,17 @@ final class PlaybackCoordinator {
         await resolveAndInstall(channelID, commandGeneration: commandGeneration)
     }
 
+    /// Cancels an in-flight tune at the playback boundary. Invalidating the
+    /// generation before publishing a terminal state prevents a resolver that
+    /// ignores cancellation from installing audio after the listener has
+    /// cancelled the request.
+    func cancelPendingTune() {
+        guard resolutionTask != nil || state == .awaitingLiveContract else { return }
+        _ = supersedeActiveWork(clearItem: true)
+        selectedChannelID = nil
+        state = .stopped
+    }
+
     func pause() async {
         guard selectedChannelID != nil else {
             state = .unavailable(.selectionUnavailable)
