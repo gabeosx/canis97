@@ -34,13 +34,15 @@ final class ListeningSessionController {
     let bridge: WebAuthenticationBridge
     let listeningModel: ListeningPresentationModel
     let playbackCoordinator: PlaybackCoordinator
+    let libraryStore: LibraryStore
 
     private(set) var hasRequestedLibraryOpen = false
     private var hasTriggeredAutomaticCatalogLoad = false
 
     init(
         composition: AuthenticationComposition = AuthenticationComposition(),
-        authenticationModel: AuthenticationPresentationModel? = nil
+        authenticationModel: AuthenticationPresentationModel? = nil,
+        libraryStore: LibraryStore? = nil
     ) {
         self.composition = composition
         bridge = composition.bridge
@@ -50,6 +52,7 @@ final class ListeningSessionController {
             flow: composition.listeningFlow,
             playbackCoordinator: composition.playbackCoordinator
         )
+        self.libraryStore = libraryStore ?? LibraryStore()
         observeAuthenticationReadiness()
     }
 

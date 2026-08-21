@@ -115,7 +115,7 @@ private struct LibraryRoot: View {
     let controller: ListeningSessionController
 
     var body: some View {
-        ListeningView(model: controller.listeningModel)
+        ListeningView(model: controller.listeningModel, libraryStore: controller.libraryStore)
             .frame(minWidth: 760, minHeight: 540)
     }
 }

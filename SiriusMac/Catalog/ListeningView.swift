@@ -6,6 +6,12 @@ import SiriusXMClient
 /// stores a stable identity; playback authority remains in a later tune flow.
 struct ListeningView: View {
     @Bindable var model: ListeningPresentationModel
+    let libraryStore: LibraryStore?
+
+    init(model: ListeningPresentationModel, libraryStore: LibraryStore? = nil) {
+        self.model = model
+        self.libraryStore = libraryStore
+    }
 
     var channelSelection: Binding<LiveChannelID?> {
         Binding(
@@ -55,7 +61,13 @@ struct ListeningView: View {
             ContentUnavailableView("Channels unavailable", systemImage: "exclamationmark.triangle", description: Text(failureCopy(failure)))
         case let .available(snapshot), let .stale(snapshot, _):
             List(snapshot.channels, id: \.id, selection: channelSelection) { channel in
-                ChannelRow(channel: channel)
+                ChannelRow(
+                    channel: channel,
+                    isFavorite: libraryStore?.isFavorite(channel.id) ?? false,
+                    onFavoriteChange: libraryStore.map { store in
+                        { isFavorite in store.setFavorite(LibraryChannelSnapshot(channel), isFavorite: isFavorite) }
+                    }
+                )
                     .tag(channel.id)
             }
             .listStyle(.inset)
@@ -192,6 +204,8 @@ struct NativeArtworkImage: View {
 
 private struct ChannelRow: View {
     let channel: LiveChannel
+    let isFavorite: Bool
+    let onFavoriteChange: ((Bool) -> Void)?
 
     var body: some View {
         HStack(spacing: 10) {
@@ -211,8 +225,22 @@ private struct ChannelRow: View {
                 Text(String(number))
                     .foregroundStyle(.secondary)
             }
+            if let onFavoriteChange {
+                Button(isFavorite ? "Remove from Favorites" : "Add to Favorites") {
+                    onFavoriteChange(!isFavorite)
+                }
+                .buttonStyle(.borderless)
+                .labelStyle(.iconOnly)
+                .accessibilityLabel(isFavorite ? "Remove from Favorites" : "Add to Favorites")
+                .accessibilityValue(isFavorite ? "Favorite" : "Not favorite")
+                .overlay {
+                    Image(systemName: isFavorite ? "star.fill" : "star")
+                        .foregroundStyle(isFavorite ? Color.yellow : Color.secondary)
+                        .allowsHitTesting(false)
+                }
+            }
         }
-        .accessibilityLabel(accessibilityName)
+        .accessibilityLabel(isFavorite ? "\(accessibilityName), Favorite" : accessibilityName)
     }
 
     private var accessibilityName: String {
