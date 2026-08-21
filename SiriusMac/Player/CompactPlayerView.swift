@@ -1,0 +1,194 @@
+import SwiftUI
+
+struct CompactPlayerView: View {
+    let presentation: CompactPlayerPresentation
+    let onAction: @MainActor (CompactPlayerAction) -> Void
+    private let style = NativeCompactPlayerStyle.fallback
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: style.sectionSpacing) {
+            if let channel = presentation.channelIdentity {
+                populatedContent(channel)
+            } else {
+                emptyContent
+            }
+        }
+        .padding(style.padding)
+        .frame(width: style.contentSize.width, height: style.contentSize.height, alignment: .topLeading)
+        .background(Color(hex: style.dominantHex))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Sirius Mac compact player")
+    }
+
+    @ViewBuilder
+    private func populatedContent(_ channel: CompactPlayerPresentation.ChannelIdentity) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            artwork
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 4) {
+                    Text(channel.displayText)
+                        .font(.system(size: 18, weight: .semibold))
+                        .lineLimit(1)
+                        .help(channel.displayText)
+                        .accessibilityLabel("Channel \(channel.displayText)")
+                    Spacer(minLength: 4)
+                    Button(action: { onAction(.toggleFavorite) }) {
+                        Image(systemName: presentation.isFavorite ? "star.fill" : "star")
+                    }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(presentation.isFavorite ? Color(hex: style.accentHex) : .primary)
+                    .help(presentation.isFavorite ? "Remove from Favorites" : "Add to Favorites")
+                    .accessibilityLabel(presentation.isFavorite ? "Remove from Favorites" : "Add to Favorites")
+                    .accessibilityValue(presentation.isFavorite ? "Favorite" : "Not favorite")
+                }
+                metadata
+            }
+        }
+        statusAndRecovery
+        transport
+        footer
+    }
+
+    private var artwork: some View {
+        Group {
+            switch presentation.artwork {
+            case let .data(artwork):
+                NativeArtworkImage(artwork: artwork)
+            case .placeholder, .none:
+                Image(systemName: "photo")
+                    .resizable()
+                    .scaledToFit()
+                    .padding(18)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(width: 72, height: 72)
+        .background(Color(hex: style.secondaryHex))
+        .clipShape(.rect(cornerRadius: 4))
+        .accessibilityHidden(true)
+    }
+
+    @ViewBuilder
+    private var metadata: some View {
+        if let primary = presentation.primaryMetadata {
+            Text(primary)
+                .font(.system(size: 14))
+                .lineLimit(2)
+                .help(primary)
+                .accessibilityLabel("Current program: \(primary)")
+        }
+        if let secondary = presentation.secondaryMetadata {
+            Text(secondary)
+                .font(.system(size: 14))
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .help(secondary)
+                .accessibilityLabel("Artist: \(secondary)")
+        }
+    }
+
+    @ViewBuilder
+    private var statusAndRecovery: some View {
+        if let status = presentation.status {
+            HStack(spacing: 4) {
+                switch status {
+                case .pending:
+                    ProgressView().controlSize(.small)
+                    Text("Loading playback")
+                case .playing:
+                    Label("Playing", systemImage: "play.fill")
+                case .paused:
+                    Label("Paused", systemImage: "pause.fill")
+                case .stopped:
+                    Label("Stopped", systemImage: "stop.fill")
+                case let .unavailable(recovery):
+                    Text("Playback couldn’t start.")
+                    Button(recovery.title) { onAction(recovery.compactAction) }
+                }
+            }
+            .font(.system(size: 12))
+            .foregroundStyle(.secondary)
+            .accessibilityValue(status.accessibilityValue)
+        }
+    }
+
+    @ViewBuilder
+    private var transport: some View {
+        if let transport = presentation.transport {
+            HStack(spacing: 8) {
+                transportButton("Previous", systemImage: "backward.fill", enabled: transport.previousEnabled, action: .previous)
+                transportButton(transport.playPause == .pause ? "Pause" : "Play Live", systemImage: transport.playPause == .pause ? "pause.fill" : "play.fill", enabled: true, action: .playPause)
+                transportButton("Next", systemImage: "forward.fill", enabled: transport.nextEnabled, action: .next)
+            }
+            .frame(maxWidth: .infinity)
+        }
+    }
+
+    private func transportButton(_ title: String, systemImage: String, enabled: Bool, action: CompactPlayerAction) -> some View {
+        Button(action: { onAction(action) }) {
+            Image(systemName: systemImage).frame(width: 32, height: 32)
+        }
+        .disabled(!enabled)
+        .help(title)
+        .accessibilityLabel(title)
+        .accessibilityValue(enabled ? "Available" : "Unavailable for the current queue")
+    }
+
+    private var footer: some View {
+        HStack {
+            Button("Show Library") { onAction(.showLibrary) }.help("Show Library")
+            Spacer()
+            Menu("More") { Button("Always on Top") { onAction(.toggleAlwaysOnTop) } }
+        }
+        .font(.system(size: 12))
+    }
+
+    private var emptyContent: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Spacer()
+            Text(presentation.emptyTitle ?? "Nothing Playing").font(.system(size: 24, weight: .semibold))
+            Button(presentation.primaryActionTitle ?? "Open Library") { onAction(.showLibrary) }
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+    }
+}
+
+private extension CompactRecoveryAction {
+    var compactAction: CompactPlayerAction {
+        switch self {
+        case .tryAgain: .playPause
+        case .signInAgain, .refreshLibrary: .showLibrary
+        }
+    }
+}
+
+private extension CompactPlayerPresentation.Status {
+    var accessibilityValue: String {
+        switch self {
+        case .pending: "Playback pending"
+        case .playing: "Playing"
+        case .paused: "Paused"
+        case .stopped: "Stopped"
+        case .unavailable: "Playback unavailable"
+        }
+    }
+}
+
+private extension Color {
+    init(hex: String) {
+        let value = UInt64(hex.dropFirst(), radix: 16) ?? 0
+        self.init(red: Double((value >> 16) & 0xFF) / 255, green: Double((value >> 8) & 0xFF) / 255, blue: Double(value & 0xFF) / 255)
+    }
+}
+
+#Preview("Playing") {
+    CompactPlayerView(
+        presentation: .confirmed(channel: .init(number: 42, name: "The Spectrum"), artwork: .placeholder, primaryMetadata: "An unusually long Unicode title — 音楽と星空のためのライブ・ラジオ・セッション", secondaryMetadata: "An unusually long artist name — कलाकार और अतिथि", playback: .playing, isFavorite: true, queueAvailability: .both),
+        onAction: { _ in }
+    )
+}
+
+#Preview("Nothing Playing") {
+    CompactPlayerView(presentation: .empty(), onAction: { _ in })
+}

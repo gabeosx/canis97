@@ -69,45 +69,50 @@ private struct CompactListeningSlice: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        let state = controller.compactSurface
-        VStack(alignment: .leading, spacing: 12) {
-            Label("Sirius Mac", systemImage: "dot.radiowaves.left.and.right")
-                .font(.title2)
-            Text(compactStatus(state))
-                .foregroundStyle(.secondary)
-                .accessibilityLabel(compactStatus(state))
-            if let primary = state.metadataPrimaryText {
-                Text(primary)
-                    .font(.body)
-                    .lineLimit(2)
-                    .accessibilityLabel("Current program: \(primary)")
-            }
-            if let secondary = state.metadataSecondaryText {
-                Text(secondary)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .accessibilityLabel(state.usesMetadataFallback ? "Channel: \(secondary)" : "Artist: \(secondary)")
-            }
-            Button("Show Library") {
-                _ = controller.requestLibraryOpen()
-                openWindow(id: "sirius-library")
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .padding(24)
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Sirius Mac compact player")
+        CompactPlayerView(presentation: presentation, onAction: perform)
     }
 
-    private func compactStatus(_ state: ListeningSurfaceState) -> String {
-        guard state.activeChannelID != nil else {
-            return "Nothing Playing"
+    private var presentation: CompactPlayerPresentation {
+        let model = controller.listeningModel
+        let channel = model.confirmedChannelID.flatMap { id in
+            model.state.snapshot?.channels.first(where: { $0.id == id })
         }
-        guard let channelLabel = controller.listeningModel.confirmedChannelLabel else {
-            return "Playing current channel"
+        return CompactPlayerPresentation.project(
+            channel: channel,
+            metadata: model.metadataPresentation.state,
+            primaryMetadata: controller.compactSurface.metadataPrimaryText,
+            secondaryMetadata: controller.compactSurface.metadataSecondaryText,
+            playback: model.playbackState,
+            isFavorite: channel.map { controller.libraryStore.isFavorite($0.id) } ?? false,
+            queueAvailability: controller.queueAvailability
+        )
+    }
+
+    private func perform(_ action: CompactPlayerAction) {
+        switch action {
+        case .previous:
+            _ = controller.previous()
+        case .playPause:
+            if presentation.transport?.playPause == .pause {
+                _ = controller.listeningModel.pausePlayback()
+            } else if controller.listeningModel.confirmedChannelID != nil {
+                _ = controller.listeningModel.resumePlaybackAtLiveEdge()
+            }
+        case .next:
+            _ = controller.next()
+        case .toggleFavorite:
+            guard let channel = controller.listeningModel.confirmedChannelID.flatMap({ id in
+                controller.listeningModel.state.snapshot?.channels.first(where: { $0.id == id })
+            }) else { return }
+            let snapshot = LibraryChannelSnapshot(channel)
+            controller.libraryStore.setFavorite(snapshot, isFavorite: !controller.libraryStore.isFavorite(channel.id))
+        case .showLibrary:
+            _ = controller.requestLibraryOpen()
+            openWindow(id: "sirius-library")
+        case .toggleAlwaysOnTop:
+            // Window policy remains owned by Plan 03-05's scoped AppKit adapter.
+            break
         }
-        return "Playing \(channelLabel)"
     }
 }
 
