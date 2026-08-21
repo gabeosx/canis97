@@ -246,7 +246,7 @@ Plans:
   4. A subscriber can add or remove favorites and return to an ordered list of successfully tuned recent channels, with neither feature retaining credentials, session material, or stream URLs.
   5. Audio continues while backgrounded or with the library closed; media keys and system Now Playing reflect confirmed player and metadata state, system routing works normally, and essential player/library actions remain keyboard- and VoiceOver-usable.
 
-**Plans**: 7/8 plans executed
+**Plans**: 8/8 plans executed
 
 Plans:
 **Wave 1**
@@ -279,7 +279,7 @@ Plans:
 
 **Wave 8** *(blocked on Wave 7 completion)*
 
-- [ ] 03-08-PLAN.md — Verify native windows, system media, audio routing, rendered states, and accessibility.
+- [x] 03-08-PLAN.md — Verify native windows, system media, audio routing, rendered states, and accessibility.
 
 **UI hint**: yes
 
@@ -327,6 +327,6 @@ Active product execution proceeds 1 → 2 → 3 → 4 → 5. Phase 0 is retained
 | 0. Authentication Feasibility Gate | 12/12 | Complete (historical) | 2026-08-17 |
 | 1. Safe Interoperability Foundation | 16/16 | Complete    | 2026-08-18 |
 | 2. Authorized Live Listening | 18/18 | Complete    | 2026-08-20 |
-| 3. Native Mac Listening Experience | 7/8 | In Progress|  |
+| 3. Native Mac Listening Experience | 8/8 | In Progress|  |
 | 4. Safe Skins & Accessible Recovery | 0/TBD | Not started | - |
 | 5. Public Release & Compatibility Support | 0/TBD | Not started | - |
