@@ -120,6 +120,9 @@ final class ListeningSessionController {
         guard listeningModel.confirmedChannelID != nil else { return (nil, nil, false) }
 
         let metadata = listeningModel.metadataPresentation
+        if metadata.availability == .loading {
+            return ("Loading current program…", listeningModel.confirmedChannelLabel, false)
+        }
         switch metadata.state.text {
         case let .current(value):
             return (metadata.programTitle ?? value, metadata.programArtist, false)

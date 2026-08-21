@@ -70,15 +70,10 @@ final class ListeningSessionControllerTests: XCTestCase {
         XCTFail("Both surfaces must render the same confirmed channel")
     }
 
-    func testConfirmedProgramMetadataFlowsToCompactSurfaceWithTruthfulFallback() async throws {
+    func testCompactSurfaceChangesFromMetadataLoadingToConfirmedProgram() async throws {
         let runtime = SessionPlaybackRuntime()
         let channel = LiveChannelID("fixture-current-program")
-        let client = SessionMetadataClient(
-            metadata: .current(MetadataSnapshot(
-                channelID: channel,
-                program: LiveProgramMetadata(title: "Jóga", artist: "Björk")
-            ))
-        )
+        let client = ControlledSessionMetadataClient()
         let controller = makeController(runtime: runtime, client: client)
 
         let tune = try XCTUnwrap(controller.tuneFromLibrary(channel))
@@ -87,6 +82,14 @@ final class ListeningSessionControllerTests: XCTestCase {
         runtime.confirmPlaying()
         await tune.value
         await client.waitForMetadataRequests(count: 1)
+
+        XCTAssertEqual(controller.compactSurface.metadataPrimaryText, "Loading current program…")
+        XCTAssertFalse(controller.compactSurface.usesMetadataFallback)
+
+        await client.completeMetadata(with: .current(MetadataSnapshot(
+            channelID: channel,
+            program: LiveProgramMetadata(title: "Jóga", artist: "Björk")
+        )))
 
         for _ in 0 ..< 10 {
             if controller.compactSurface.metadataPrimaryText == "Jóga" { break }
@@ -196,14 +199,10 @@ private struct EntitledSessionAuthenticationFlow: AuthenticationPresentationFlow
     func signOut() async -> SignOutOutcome { .signedOut }
 }
 
-private actor SessionMetadataClient: ClientAuthenticationFlow, ListeningFlow, MetadataFlow {
-    private let metadataResult: MetadataAvailability
+private actor ControlledSessionMetadataClient: ClientAuthenticationFlow, ListeningFlow, MetadataFlow {
     private var metadataRequests = 0
     private var metadataWaiters: [CheckedContinuation<Void, Never>] = []
-
-    init(metadata: MetadataAvailability) {
-        metadataResult = metadata
-    }
+    private var pendingMetadata: CheckedContinuation<MetadataAvailability, Never>?
 
     func authenticate() async -> AuthenticationOutcome { .unsupported }
     func entitlementAvailability() async -> EntitlementAvailability { .unavailable }
@@ -214,7 +213,7 @@ private actor SessionMetadataClient: ClientAuthenticationFlow, ListeningFlow, Me
         metadataRequests += 1
         metadataWaiters.forEach { $0.resume() }
         metadataWaiters.removeAll()
-        return metadataResult
+        return await withCheckedContinuation { pendingMetadata = $0 }
     }
 
     func artwork(for _: ChannelArtworkReference) async -> ArtworkAvailability { .unavailable }
@@ -222,6 +221,11 @@ private actor SessionMetadataClient: ClientAuthenticationFlow, ListeningFlow, Me
     func waitForMetadataRequests(count: Int) async {
         if metadataRequests >= count { return }
         await withCheckedContinuation { metadataWaiters.append($0) }
+    }
+
+    func completeMetadata(with result: MetadataAvailability) {
+        pendingMetadata?.resume(returning: result)
+        pendingMetadata = nil
     }
 }
 
