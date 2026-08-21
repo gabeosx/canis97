@@ -4,9 +4,13 @@ import SwiftUI
 @main
 struct SiriusMacApp: App {
     private let sessionController: ListeningSessionController?
+    private let terminationObserver: ApplicationTerminationObserver?
 
     init() {
         sessionController = Self.makeSessionController()
+        terminationObserver = sessionController.map { controller in
+            ApplicationTerminationObserver { controller.shutdown() }
+        }
     }
 
     @MainActor
@@ -75,6 +79,12 @@ private struct CompactListeningSlice: View {
             presentation: current.retainingConfirmedContent(from: lastConfirmedPresentation),
             onAction: perform
         )
+        .background(
+            WindowAttachmentView(
+                role: .compact,
+                alwaysOnTop: false
+            )
+        )
         .onChange(of: current, initial: true) { _, next in
             guard next.channelIdentity != nil else { return }
             lastConfirmedPresentation = next
@@ -137,6 +147,7 @@ private struct LibraryRoot: View {
     var body: some View {
         LibraryView(controller: controller)
             .frame(minWidth: 760, minHeight: 540)
+            .background(WindowAttachmentView(role: .library, alwaysOnTop: false))
     }
 }
 

@@ -40,6 +40,7 @@ final class ListeningSessionController {
     private(set) var playbackQueue: PlaybackQueue?
     private(set) var libraryRevealRequest: LibraryRevealRequest?
     private var hasTriggeredAutomaticCatalogLoad = false
+    private var hasShutdown = false
     private var lastObservedPlaybackState: LivePlaybackState = .awaitingLiveContract
     private var revealGeneration = 0
 
@@ -102,6 +103,15 @@ final class ListeningSessionController {
     }
 
     func resetListeningBeforeAuthenticationCleanup() {
+        listeningModel.reset()
+    }
+
+    /// Application termination owns playback invalidation, but intentionally
+    /// never erases credentials. Explicit authentication cleanup remains the
+    /// only path that can alter stored credential material.
+    func shutdown() {
+        guard !hasShutdown else { return }
+        hasShutdown = true
         listeningModel.reset()
     }
 
