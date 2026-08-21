@@ -1,10 +1,11 @@
 ---
 phase: 3
 slug: native-mac-listening-experience
-status: draft
+status: approved
 shadcn_initialized: false
 preset: none
 created: 2026-08-20
+reviewed_at: 2026-08-21T09:10:35-04:00
 ---
 
 # Phase 3 — UI Design Contract
@@ -37,6 +38,7 @@ Create a renderer-independent compact-player presentation model with semantic sl
 - Use one non-resizable **400 × 288 pt** content area. Do not offer full screen, arbitrary resizing, a sidebar, or an embedded web view.
 - Restore the last valid on-screen frame; otherwise center on the active display. Persist the compact window frame separately from the Always on Top preference.
 - The default layout, top to bottom: channel number/name and favorite action; 72 pt artwork beside two metadata lines; confirmed playback/status line; a three-control transport row (Previous, Play/Pause, Next); then a small `Show Library` action and Always on Top menu item. Preserve this visual order in the accessibility tree.
+- The compact player's visual anchor is channel identity and artwork; confirmed playback status and transport controls are secondary. This is the first content that should draw the eye in the populated state.
 - Transport controls are native buttons with a visible selected/pressed state. Play/Pause changes label and icon only after the coordinator confirms the state. Never show seek, scrub, duration, or replay UI for live radio.
 - Always on Top is off by default, user-controlled, remembered, and represented by a checked app-menu command as well as the compact-player menu. Toggling it changes only window level, not playback or window ownership.
 
@@ -117,6 +119,7 @@ Accent reserved for: confirmed live-playback call to action, active library tab,
 | Element | Copy |
 |---------|------|
 | Primary CTA | `Play Live` for confirmed idle/stopped/paused state; `Pause` only when confirmed playing |
+| No active playback | `Nothing Playing`; action `Open Library` |
 | Empty state heading | `No Favorites Yet` |
 | Empty state body | `Select the star beside a channel to keep it here.` For Recents: `Channels you play will appear here.` For an empty entitled lineup: `No entitled channels are available. Refresh the library or sign in again.` |
 | Error state | `Playback couldn’t start.` Follow with the confirmed failure-specific action: `Try Again`, `Sign In Again`, or `Refresh Library`; never imply that a channel is playing or a retry is occurring before confirmation. |
@@ -143,19 +146,48 @@ Use existing confirmed Phase 2 failure distinctions in visible status text: auth
 
 ## UI Considerations
 
-Applicable state considerations resolved: 8 covered, 2 backstop, 0 unresolved.
+> Populated by the ui-phase UI-consideration probe and lifted by plan-phase's
+> `## UI Considerations` rule. Empty-state and error-state copy remains canonical in
+> `## Copywriting Contract`; these rows define state behavior and reference that copy.
+
+Applicable state considerations resolved: 27 covered, 4 backstop, 0 unresolved.
 
 | Category | Element(s) | Status | Resolution / Reason |
 |----------|------------|--------|---------------------|
-| empty | Favorites, Recents, entitled Channels list | ✅ covered | Each collection uses the documented tab-specific empty state; it never presents stale rows as current entitlement. |
-| loading | Library list, channel artwork, playback command | ✅ covered | Keep the current confirmed list visible while refreshing and mark it stale; otherwise show native progress/status without disabling healthy playback. Artwork uses a fixed-size placeholder. |
-| error | Catalog list, playback status, metadata region | ✅ covered | Render the documented failure-specific status and only the applicable retry/sign-in/refresh action; confirmed playback state remains visible. |
-| populated | Compact player and all library collections | ✅ covered | Compact player renders identity, metadata, favorite, confirmed status, and transport; library renders the scrolling native list with persistent Now Playing marker. |
-| partial | Channel rows and metadata | ✅ covered | Missing artwork/category/track data uses the prescribed placeholder or channel fallback without changing identity, row height, or current confirmed state. |
-| overflow | Library collection, toolbar tabs, compact metadata | ✅ covered | Lists scroll vertically; the 760 pt minimum library width keeps all four tabs visible; text uses the declared one/two-line truncation rules. |
-| zero-one-many | Favorites, Recents, captured queue | ✅ covered | Zero uses empty state, one uses its standard row with no special layout, and many scroll; a one-item queue disables Previous/Next instead of wrapping. |
-| long-text | Channel title, category, metadata, tab/search labels | 🧪 backstop | UI-state test verifies tail truncation plus full VoiceOver label/tooltip, and that compact metadata cannot push transport controls out of the 288 pt window. |
-| loading | System media/Now Playing updates | 🧪 backstop | Integration test verifies media-key/Now Playing labels update only after confirmed coordinator state, not on command dispatch. |
+| empty | Compact player | ✅ covered | When no channel is confirmed, show the documented `Nothing Playing` copy with `Open Library` and no fabricated channel or metadata. |
+| loading | Compact player | ✅ covered | During tune or refresh, preserve the last confirmed channel and playback state; without prior state show native progress and never claim playback before confirmation. |
+| error | Compact player | ✅ covered | Keep healthy confirmed state visible and show the specific failure with only its valid `Try Again`, `Sign In Again`, or `Refresh Library` recovery action. |
+| populated | Compact player | ✅ covered | Show channel identity and artwork first, then metadata, confirmed status, favorite state, and transport controls in the documented fixed order. |
+| overflow | Compact player | ✅ covered | Truncate compact metadata after two lines so status and transport controls remain inside the fixed 400 × 288 pt window. |
+| long-text | Compact player | 🧪 backstop | A UI-state test verifies compact metadata truncation, complete VoiceOver and tooltip values, and that unusually long text never displaces controls. |
+| empty | Library toolbar and search | ✅ covered | An empty search query shows the unfiltered selected tab; search never replaces the collection with a separate empty-form state. |
+| loading | Library toolbar and search | ✅ covered | Keep tabs and search visible during catalog loading; show progress in collection status and leave healthy playback usable. |
+| error | Library toolbar and search | ✅ covered | Keep search and tab navigation available when catalog loading fails while the collection shows the applicable recovery action. |
+| partial | Library search | ✅ covered | Live-filter a partially entered query; clearing it restores the complete current tab without tuning or changing playback. |
+| overflow | Library toolbar and search | ✅ covered | The 760 pt minimum library width keeps all four tabs and search usable; native toolbar layout may adapt without hiding essential navigation. |
+| long-text | Library toolbar and search | 🧪 backstop | A UI-state test verifies long tab and search labels retain native focus, truncate safely where applicable, and expose complete accessibility text. |
+| empty | Library collections | ✅ covered | Favorites, Recents, and an empty entitled lineup use their documented tab-specific empty copy and recovery action and never present stale entitlement as current. |
+| loading | Library collections | ✅ covered | Preserve the last confirmed list while refreshing and mark it stale; an initial load shows native progress without disabling healthy playback. |
+| error | Library collections | ✅ covered | Keep catalog failures in the collection region with the applicable recovery action while last confirmed playback remains visible elsewhere. |
+| populated | Library collections | ✅ covered | Render vertically scrolling native rows with independent browse selection and persistent Now Playing identity. |
+| partial | Library collections | ✅ covered | Keep usable rows visible when optional fields are absent, using documented fallbacks without changing stable identity or row height. |
+| overflow | Library collections | ✅ covered | Scroll vertically within the resizable library window without clipping or wrapping rows into a different layout. |
+| zero-one-many | Library collections and captured queue | ✅ covered | Zero items use tab-specific empty copy, one uses the standard row and disables unavailable queue directions, and many scroll without implicit queue wrapping. |
+| empty | Channel row | ✅ covered | Missing artwork uses the fixed-size `photo` placeholder; required channel identity is never replaced with fabricated content. |
+| loading | Channel row | ✅ covered | Load artwork in its fixed placeholder and leave the prior confirmed Now Playing marker unchanged until a pending tune is confirmed. |
+| error | Channel row | ✅ covered | Retain the artwork placeholder on image failure and the prior active marker on tune failure while exposing the valid recovery action. |
+| populated | Channel row | ✅ covered | Show artwork, number and title, optional category, independent favorite control, browse selection, and a stable-ID Now Playing marker. |
+| overflow | Channel row | ✅ covered | Tail-truncate title and category to one line, preserve fixed row height, and expose full values through VoiceOver and tooltips. |
+| long-text | Channel row | 🧪 backstop | A UI-state test verifies long-text truncation, full VoiceOver and tooltip values, fixed row height, and independently reachable favorite controls. |
+| empty | System Now Playing and media controls | ✅ covered | Clear system Now Playing metadata when no channel or playback state is confirmed and expose no misleading active state. |
+| loading | System Now Playing and media controls | 🧪 backstop | An integration test verifies system metadata and command state update only after coordinator confirmation and retain prior confirmed state while a command is pending. |
+| error | System Now Playing and media controls | ✅ covered | A terminal playback failure clears the system playing state; recoverable metadata or artwork failure retains valid playback without inventing values. |
+| populated | System Now Playing and media controls | ✅ covered | Publish confirmed title and artist first, then current program, then channel name, with channel artwork as context and only supported commands enabled. |
+| overflow | System Now Playing and media controls | ✅ covered | Publish complete confirmed metadata strings and allow the system surface to control its own truncation and layout. |
+| long-text | System Now Playing and media controls | ✅ covered | Publish long metadata without app-side shortening so VoiceOver and the system surface receive the complete confirmed value. |
+
+<!-- Status vocabulary: ✅ covered lifts as a plain truth string; 🧪 backstop lifts as
+     { statement, verification: backstop } and requires explicit evidence at verification. -->
 
 ---
 
@@ -170,11 +202,11 @@ Applicable state considerations resolved: 8 covered, 2 backstop, 0 unresolved.
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: PASS
-- [ ] Dimension 2 Visuals: PASS
-- [ ] Dimension 3 Color: PASS
-- [ ] Dimension 4 Typography: PASS
-- [ ] Dimension 5 Spacing: PASS
-- [ ] Dimension 6 Registry Safety: PASS
+- [x] Dimension 1 Copywriting: FLAG — `Pause` is concise but lacks a noun; accepted as the accurate live-state command.
+- [x] Dimension 2 Visuals: FLAG — focal-point recommendation incorporated into the compact-player contract.
+- [x] Dimension 3 Color: PASS
+- [x] Dimension 4 Typography: PASS
+- [x] Dimension 5 Spacing: PASS
+- [x] Dimension 6 Registry Safety: PASS
 
-**Approval:** pending
+**Approval:** APPROVED — 2026-08-21
