@@ -35,8 +35,26 @@ struct SystemNowPlayingInfo: Equatable {
     let artist: String?
     let channelName: String?
     let artwork: ArtworkData?
+    let isLive: Bool
     let playbackState: SystemPlaybackState
     let playbackRate: Double
+}
+
+extension NowPlayingSemanticMetadata {
+    func systemNowPlayingInfo(
+        channelName: String,
+        playbackState: SystemPlaybackState
+    ) -> SystemNowPlayingInfo {
+        SystemNowPlayingInfo(
+            title: programTitle ?? currentProgram ?? channelName,
+            artist: programTitle == nil ? nil : programArtist,
+            channelName: channelName,
+            artwork: artwork,
+            isLive: true,
+            playbackState: playbackState,
+            playbackRate: playbackState == .playing ? 1 : 0
+        )
+    }
 }
 
 @MainActor
@@ -75,6 +93,12 @@ final class SystemMediaController {
     }
 
     func publish(_ info: SystemNowPlayingInfo?) { nowPlayingPublisher.publish(info) }
+
+    func setSupportedCommandAvailability(playPause: Bool, previous: Bool, next: Bool) {
+        commandCenter.setEnabled(playPause, for: .playPause)
+        commandCenter.setEnabled(previous, for: .previous)
+        commandCenter.setEnabled(next, for: .next)
+    }
 
     func shutdown() {
         guard !isShutdown else { return }
@@ -147,7 +171,7 @@ final class SystemNowPlayingInfoAdapter: NowPlayingInfoPublishing {
         }
         var values: [String: Any] = [
             MPMediaItemPropertyTitle: info.title,
-            MPNowPlayingInfoPropertyIsLiveStream: true,
+            MPNowPlayingInfoPropertyIsLiveStream: info.isLive,
             MPNowPlayingInfoPropertyPlaybackRate: info.playbackRate,
         ]
         if let artist = info.artist { values[MPMediaItemPropertyArtist] = artist }

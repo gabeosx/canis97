@@ -38,6 +38,15 @@ enum MetadataPresentationAvailability: Equatable {
     case failed
 }
 
+/// The bounded semantic subset that can be safely represented outside Sirius
+/// Mac's views. It excludes renderer state, request details, and stream data.
+struct NowPlayingSemanticMetadata: Equatable {
+    let programTitle: String?
+    let programArtist: String?
+    let currentProgram: String?
+    let artwork: ArtworkData?
+}
+
 struct SystemMetadataSleeper: MetadataSleeping {
     func sleep(for duration: TimeInterval) async throws {
         try await Task.sleep(for: .seconds(duration))
@@ -61,6 +70,23 @@ final class MetadataPresentationModel {
     private(set) var availability: MetadataPresentationAvailability = .unavailable
     private(set) var programTitle: String?
     private(set) var programArtist: String?
+
+    var nowPlayingSemanticMetadata: NowPlayingSemanticMetadata {
+        let currentProgram: String? = switch state.text {
+        case let .current(value), let .stale(value): value
+        case .channelFallback, .unavailable: nil
+        }
+        let artwork: ArtworkData? = switch state.artwork {
+        case let .current(value), let .stale(value): value
+        case .unavailable: nil
+        }
+        return NowPlayingSemanticMetadata(
+            programTitle: programTitle,
+            programArtist: programArtist,
+            currentProgram: currentProgram,
+            artwork: artwork
+        )
+    }
 
     init(
         flow: any MetadataFlow = UnavailableMetadataFlow(),

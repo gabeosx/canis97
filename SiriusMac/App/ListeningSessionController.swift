@@ -129,6 +129,8 @@ final class ListeningSessionController {
             )
         }
         systemMediaController?.start()
+        publishConfirmedSystemMediaState()
+        observeSystemMediaState()
     }
 
     /// Application termination owns playback invalidation, but intentionally
@@ -189,6 +191,87 @@ final class ListeningSessionController {
               let channel = listeningModel.state.snapshot?.channels.first(where: { $0.id == channelID })
         else { return }
         libraryStore.recordConfirmedPlayback(LibraryChannelSnapshot(channel))
+    }
+
+    /// MediaPlayer only follows coordinator-confirmed state. In particular, a
+    /// browse selection or an in-flight tune must retain the last confirmed
+    /// Now Playing presentation rather than publishing unconfirmed information.
+    private func observeSystemMediaState() {
+        guard systemMediaController != nil else { return }
+        withObservationTracking {
+            _ = listeningModel.playbackState
+            _ = listeningModel.confirmedChannelID
+            _ = listeningModel.state
+            let metadata = listeningModel.metadataPresentation
+            _ = metadata.availability
+            _ = metadata.programTitle
+            _ = metadata.programArtist
+            _ = metadata.state
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.publishConfirmedSystemMediaState()
+                self.observeSystemMediaState()
+            }
+        }
+    }
+
+    private func publishConfirmedSystemMediaState() {
+        guard let systemMediaController else { return }
+        let state = listeningModel.playbackState
+
+        switch state {
+        case .awaitingLiveContract:
+            // Preserve the last confirmed state while a replacement tune is pending.
+            guard listeningModel.confirmedChannelID != nil else {
+                systemMediaController.publish(nil)
+                systemMediaController.setSupportedCommandAvailability(playPause: false, previous: false, next: false)
+                return
+            }
+            return
+        case let .playing(channelID?):
+            guard listeningModel.confirmedChannelID == channelID,
+                  let channelName = listeningModel.confirmedChannelLabel
+            else {
+                return
+            }
+            let info = listeningModel.metadataPresentation.nowPlayingSemanticMetadata.systemNowPlayingInfo(
+                channelName: channelName,
+                playbackState: .playing
+            )
+            systemMediaController.publish(info)
+            setConfirmedSystemCommandAvailability(using: systemMediaController)
+        case .paused:
+            guard listeningModel.confirmedChannelID != nil,
+                  let channelName = listeningModel.confirmedChannelLabel
+            else {
+                systemMediaController.publish(nil)
+                systemMediaController.setSupportedCommandAvailability(playPause: false, previous: false, next: false)
+                return
+            }
+            let info = listeningModel.metadataPresentation.nowPlayingSemanticMetadata.systemNowPlayingInfo(
+                channelName: channelName,
+                playbackState: .paused
+            )
+            systemMediaController.publish(info)
+            setConfirmedSystemCommandAvailability(using: systemMediaController)
+        case .idle, .playing(nil), .stopped, .unavailable:
+            systemMediaController.publish(nil)
+            systemMediaController.setSupportedCommandAvailability(playPause: false, previous: false, next: false)
+        }
+    }
+
+    private func setConfirmedSystemCommandAvailability(using systemMediaController: SystemMediaController) {
+        switch queueAvailability {
+        case .none:
+            systemMediaController.setSupportedCommandAvailability(playPause: true, previous: false, next: false)
+        case .previous:
+            systemMediaController.setSupportedCommandAvailability(playPause: true, previous: true, next: false)
+        case .next:
+            systemMediaController.setSupportedCommandAvailability(playPause: true, previous: false, next: true)
+        case .both:
+            systemMediaController.setSupportedCommandAvailability(playPause: true, previous: true, next: true)
+        }
     }
 
     private var currentEntitledIDs: [LiveChannelID] {
