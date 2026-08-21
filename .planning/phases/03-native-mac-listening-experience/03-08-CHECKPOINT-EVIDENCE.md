@@ -31,3 +31,8 @@ This is a failing rendered-state and visual-legibility observation for Task 2's
 backstop, native focus/high-contrast inspection, or the Task 2 checkpoint as
 approved until the compact presentation is made legible and the full Task 2
 checklist is rerun.
+
+**Automated baseline:** `xcodebuild test -project SiriusMac.xcodeproj -scheme
+SiriusMac -destination 'platform=macOS'` passed on 2026-08-21 (156 tests, zero
+failures). This automated result does not replace the required rendered-state
+inspection.

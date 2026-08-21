@@ -6,7 +6,7 @@ current_phase: 03
 current_phase_name: native-mac-listening-experience
 status: executing
 stopped_at: Completed 03-07-PLAN.md
-last_updated: "2026-08-21T18:20:34.818Z"
+last_updated: "2026-08-21T18:47:28.548Z"
 last_activity: 2026-08-21
 last_activity_desc: Phase 03 execution started
 progress:
@@ -219,6 +219,7 @@ None yet.
 - Phase 5: Verify signing, notarization, stapling, immutable release, Gatekeeper, and Homebrew Cask behavior against the current release toolchain before publishing.
 - Phase 02 remains volatile: unknown hosts, redirects, protected controls, malformed contracts, authorization loss, and DRM ambiguity must continue to fail closed behind repairable adapters.
 - Plan 02-18: final exact-process verification found two SiriusMac processes after the bounded restore/listening observation; both were closed and no relaunch is authorized.
+- Phase 03 Plan 08 Task 2 is blocked: the compact player is not legible at the required 400 × 288 fixed presentation.
 
 ### Quick Tasks Completed
 
