@@ -68,16 +68,16 @@ Phase 0 is historical. FEAS-01 records the accepted architecture; FEAS-02/03/05 
 
 ### macOS Media Integration
 
-- [ ] **MAC-01**: Live audio continues correctly while the app is backgrounded or its library window is closed.
+- [x] **MAC-01**: Live audio continues correctly while the app is backgrounded or its library window is closed.
 - [ ] **MAC-02**: Subscriber can control live-appropriate playback actions through Mac media keys and system Now Playing surfaces.
 - [ ] **MAC-03**: System Now Playing information reflects confirmed player state and current metadata rather than optimistic UI state.
-- [ ] **MAC-04**: Subscriber can use appropriate system audio-device and routing behavior without the app implementing a custom audio-output stack.
+- [x] **MAC-04**: Subscriber can use appropriate system audio-device and routing behavior without the app implementing a custom audio-output stack.
 
 ### Desktop Experience
 
 - [ ] **UI-01**: Subscriber can use a single-instance compact player window for channel identity, current metadata, favorite state, and primary playback controls.
 - [ ] **UI-02**: Subscriber can use a separate native library window to browse entitled channels and categories and access favorites and recents.
-- [ ] **UI-03**: Compact and library windows observe the same session and playback state, and opening or closing either window never creates another player or interrupts healthy audio.
+- [x] **UI-03**: Compact and library windows observe the same session and playback state, and opening or closing either window never creates another player or interrupts healthy audio.
 - [ ] **UI-04**: Subscriber can move deterministically to the previous or next channel in the active entitled lineup and reveal the selected channel in the library.
 
 ### Accessibility
@@ -174,13 +174,13 @@ Every v1 requirement maps to exactly one delivery phase in `.planning/ROADMAP.md
 | LIBR-01 | Phase 3 | Pending |
 | LIBR-02 | Phase 3 | Pending |
 | LIBR-03 | Phase 3 | Pending |
-| MAC-01 | Phase 3 | Pending |
+| MAC-01 | Phase 3 | Complete |
 | MAC-02 | Phase 3 | Pending |
 | MAC-03 | Phase 3 | Pending |
-| MAC-04 | Phase 3 | Pending |
+| MAC-04 | Phase 3 | Complete |
 | UI-01 | Phase 3 | Pending |
 | UI-02 | Phase 3 | Pending |
-| UI-03 | Phase 3 | Pending |
+| UI-03 | Phase 3 | Complete |
 | UI-04 | Phase 3 | Pending |
 | ACCS-01 | Phase 3 | Pending |
 | ACCS-02 | Phase 4 | Pending |
