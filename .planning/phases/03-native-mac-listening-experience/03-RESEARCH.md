@@ -280,16 +280,15 @@ Keep a focused native element for the library/compact surface and post one nativ
 |---|-------|---------|---------------|
 | A1 | A no-wrap policy is the correct deterministic behavior at either end of a captured queue. | Architecture Patterns | User decision specifies deterministic traversal but does not explicitly choose wrap behavior; planner should preserve the approved UI contract’s no-wrap instruction or seek confirmation before changing it. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **How should the compact close request trigger app termination while preserving SwiftUI’s internal window delegate?**
-   - What we know: AppKit exposes close-attempt/delegate hooks; a close request is distinct from application quit. [CITED: https://developer.apple.com/documentation/appkit/nswindowdelegate/windowshouldclose(_:)]
-   - What's unclear: Whether the project’s chosen narrow bridge should observe `willClose` or delegate-proxy `windowShouldClose` after implementation spikes.
-   - Recommendation: Plan a small AppKit adapter with an isolated manual acceptance test; do not replace the delegate blindly.
+1. **RESOLVED — Compact close uses a narrow exact-window AppKit lifecycle adapter.**
+   - The isolated `CompactWindowController` bridge attaches to the compact `NSWindow` and observes that exact window's `willCloseNotification`; it requests `NSApplication.terminate(nil)` through an injected terminator. The library role never requests termination. [CITED: https://developer.apple.com/documentation/appkit/nswindow]
+   - SwiftUI retains scene and internal window-delegate ownership: the adapter does not replace the application delegate or `NSWindowDelegate`, and it owns no playback/session state. Normal `NSApplication.willTerminateNotification` handling invokes the app-owned session controller's idempotent shutdown so compact close follows the ordinary application-termination path.
 
-2. **How will the app reliably open the library only after successful authentication without a scene-local duplicate?**
-   - What we know: `openWindow(id:)` works from a view environment and `Window` reorders to front. [CITED: https://developer.apple.com/documentation/swiftui/openwindow]
-   - Recommendation: Let the compact/authenticated root trigger the one initial open as it observes readiness; manual-test fresh launch, library close/reopen, and reauthentication.
+2. **RESOLVED — Initial library opening uses singleton scene activation from app-owned session readiness.**
+   - The app-owned `ListeningSessionController`/authentication composition exposes the entitled transition; the compact/authenticated scene observes its first successful transition and calls `openWindow(id:)` once for the uniquely identified library `Window`. [CITED: https://developer.apple.com/documentation/swiftui/openwindow]
+   - Every later Show Library, Command-L, reopen, or reauthentication activation targets that same scene id and existing library scene/state. Scene activation never constructs another `AuthenticationComposition`, `ListeningSessionController`, `PlaybackCoordinator`, or AVFoundation runtime.
 
 ## Environment Availability
 
