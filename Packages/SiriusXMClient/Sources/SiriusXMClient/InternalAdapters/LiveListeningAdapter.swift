@@ -85,8 +85,7 @@ enum LiveListeningAdapter {
         guard let first = cuts.first else { return .unavailable }
         guard let title = nonEmptyString(first["name"]),
               let artist = nonEmptyString(first["artistName"]),
-              let validFrom = first["validFrom"] as? String,
-              ISO8601DateFormatter().date(from: validFrom) != nil
+              parseObservedLookaroundTimestamp(first["validFrom"]) != nil
         else { return .failed(.unsupportedResponse) }
         let artwork = artworkReference(from: first["image"])
         return .current(MetadataSnapshot(channelID: channelID, program: LiveProgramMetadata(title: title, artist: artist, artwork: artwork)))
@@ -98,6 +97,20 @@ enum LiveListeningAdapter {
         guard let value = value as? String else { return nil }
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    /// The provider's observed timestamp contract is ISO-8601 with either the
+    /// default internet-date-time form or its fractional-seconds variant. No
+    /// other date representation is admitted at this compatibility boundary.
+    private static func parseObservedLookaroundTimestamp(_ value: Any?) -> Date? {
+        guard let value = value as? String else { return nil }
+        if let parsed = ISO8601DateFormatter().date(from: value) {
+            return parsed
+        }
+
+        let fractionalFormatter = ISO8601DateFormatter()
+        fractionalFormatter.formatOptions.insert(.withFractionalSeconds)
+        return fractionalFormatter.date(from: value)
     }
 
     static func decodeArtwork(_ response: NativeTransportResponse) -> ArtworkAvailability {
