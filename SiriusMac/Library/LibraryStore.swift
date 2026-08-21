@@ -217,6 +217,7 @@ final class LibraryStore {
     private(set) var favorites: [LibraryChannelSnapshot] = []
     private(set) var favoriteChannelIDs: [LiveChannelID] = []
     private(set) var recents: [LibraryChannelSnapshot] = []
+    private(set) var selectedLibraryTab = "channels"
 
     init(
         modelContainer: ModelContainer = LibraryStore.makeDefaultContainer(),
@@ -225,6 +226,7 @@ final class LibraryStore {
         modelContext = ModelContext(modelContainer)
         self.now = now
         publishFavorites()
+        publishPlayerPreferences()
     }
 
     func isFavorite(_ channelID: LiveChannelID) -> Bool {
@@ -300,6 +302,15 @@ final class LibraryStore {
         publishRecents()
     }
 
+    func setSelectedLibraryTab(_ tab: String) {
+        let record = playerPreferenceRecord() ?? PlayerPreferenceRecord()
+        if playerPreferenceRecord() == nil { modelContext.insert(record) }
+        guard record.selectedTab != tab else { return }
+        record.selectedTab = tab
+        saveIfNeeded(true)
+        publishPlayerPreferences()
+    }
+
     /// Test-only inspection of the persisted stable-identity boundary.
     func favoriteRecordCount(for channelID: LiveChannelID) throws -> Int {
         try modelContext.fetch(FetchDescriptor<FavoriteRecord>())
@@ -320,6 +331,14 @@ final class LibraryStore {
 
     private func recentRecords() -> [RecentRecord] {
         (try? modelContext.fetch(FetchDescriptor<RecentRecord>())) ?? []
+    }
+
+    private func playerPreferenceRecord() -> PlayerPreferenceRecord? {
+        (try? modelContext.fetch(FetchDescriptor<PlayerPreferenceRecord>()))?.first
+    }
+
+    private func publishPlayerPreferences() {
+        selectedLibraryTab = playerPreferenceRecord()?.selectedTab ?? "channels"
     }
 
     /// Invalid and duplicate legacy rows are removed deterministically before
