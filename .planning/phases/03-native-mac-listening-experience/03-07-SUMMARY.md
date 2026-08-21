@@ -14,7 +14,7 @@ affects: [03-08, safe-skins-accessible-recovery]
 actuals:
   tokens: 11523
   tasks: 2
-  commits: 4
+  commits: 5
 tech-stack:
   added: []
   patterns: [injected AppKit announcement poster, generation-tagged focus requests, semantic control identifiers]
@@ -32,19 +32,19 @@ coverage:
     verification:
       - kind: unit
         ref: SiriusMacTests/AccessibilityContractTests.swift
-        status: unknown
+        status: passed
     human_judgment: true
-    rationale: The repaired target includes the accessibility sources; compilation now reaches a separate type-inference error in ListeningSessionController.swift.
+    rationale: The focused accessibility suite passed after the metadata announcement-state type-inference repair.
   - id: D2
     description: Native player and library menus, keyboard routes, semantic labels, focus restoration, context menus, and Reduce Motion behavior.
     requirement: UI-01
     verification:
       - kind: unit
         ref: xcodebuild test -project SiriusMac.xcodeproj -scheme SiriusMac -destination 'platform=macOS' -only-testing:SiriusMacTests/AccessibilityContractTests
-        status: unknown
+        status: passed
     human_judgment: true
     rationale: VoiceOver order, high-contrast rendering, and focused keyboard interaction require the planned native manual checkpoint.
-duration: 19min
+duration: 38min
 completed: 2026-08-21
 status: complete
 ---
@@ -55,9 +55,9 @@ status: complete
 
 ## Performance
 
-- **Duration:** 19 min
+- **Duration:** 38 min
 - **Started:** 2026-08-21T18:00:00Z
-- **Completed:** 2026-08-21T18:19:51Z
+- **Completed:** 2026-08-21T18:37:46Z
 - **Tasks:** 2/2
 - **Files modified:** 7
 
@@ -72,6 +72,7 @@ status: complete
 1. **Task 1: Announce confirmed semantic transitions exactly once** — `ecfa380` (test RED), `39ebb63` (feat GREEN)
 2. **Task 2: Complete native commands, focus, labels, values, order, and Reduce Motion** — `57a42fc` (feat)
 3. **Post-gate repair: Restore original app Sources build-file identifiers** — `3b032bd` (fix)
+4. **Post-gate repair: Return metadata announcement states explicitly** — `e4a8bef` (fix)
 
 ## Files Created/Modified
 
@@ -90,18 +91,25 @@ status: complete
 
 ## Deviations from Plan
 
-None - plan implementation followed the requested controller/view boundaries.
+### Auto-fixed Issues
+
+**1. [Rule 1 - Bug] Restored metadata announcement-state switch type inference**
+- **Found during:** Wave 7 compilation gate
+- **Issue:** The compact switch case bodies lacked enough context for Swift to infer the `MetadataAnnouncementState` return value.
+- **Fix:** Added explicit returns in each case without changing the mapping or announcement behavior.
+- **Files modified:** `SiriusMac/App/ListeningSessionController.swift`
+- **Commit:** `e4a8bef`
 
 ## Issues Encountered
 
 - The malformed app Sources references introduced during the accessibility change omitted five existing Swift sources from Xcode's generated file list. Restoring their original build-file identifiers makes `FirstPartyTokenCookiePolicy.swift` compile again.
-- Both `xcodebuild test -only-testing:SiriusMacTests/AccessibilityContractTests` and the complete macOS `xcodebuild test` now reach a separate `ListeningSessionController.swift` type-inference failure for `.current`, `.stale`, and `.unavailable`, so the focused suite cannot yet execute.
+- The narrow type-inference repair was verified by the focused accessibility suite (3 tests), the full macOS suite (156 tests), and a standalone app build.
 
 ## Next Phase Readiness
 
 - Plan 03-08 can manually inspect VoiceOver traversal, focus rings, high contrast, and Reduce Motion using the stable identifiers and shared command routes introduced here.
-- Resolve the `ListeningSessionController` type-inference error before treating the focused accessibility suite as passing.
+- The Wave 7 compilation gate is clear: focused accessibility tests, all macOS tests, and the standalone app build pass.
 
 ## Self-Check: PASSED
 
-- Confirmed all listed source files exist and task commits `ecfa380`, `39ebb63`, and `57a42fc` are present in git history.
+- Confirmed all listed source files exist and task commits `ecfa380`, `39ebb63`, `57a42fc`, and `e4a8bef` are present in git history.
