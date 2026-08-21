@@ -163,14 +163,29 @@ final class MetadataPresentationModel {
             }
             scheduleExpiry(channelID: channelID, generation: expected, refreshedAt: refreshedAt)
         case .unavailable:
+            markRetainedMetadataStale()
             availability = .unavailable
             programTitle = nil
             programArtist = nil
         case .failed:
+            markRetainedMetadataStale()
             availability = .failed
             programTitle = nil
             programArtist = nil
         }
+    }
+
+    /// A failed refresh does not invalidate the last confirmed semantic value,
+    /// but it must never continue to present it as freshly current. Its
+    /// original expiry task remains responsible for the eventual fallback.
+    private func markRetainedMetadataStale() {
+        artworkTask?.cancel()
+        state = LiveMetadataState(
+            channelID: state.channelID,
+            text: stale(state.text),
+            artwork: stale(state.artwork),
+            refreshedAt: state.refreshedAt
+        )
     }
 
     private func stale(_ text: LiveMetadataText) -> LiveMetadataText { if case let .current(value) = text { return .stale(value) }; return text }

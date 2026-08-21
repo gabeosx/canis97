@@ -206,6 +206,31 @@ final class MetadataPresentationTests: XCTestCase {
         await flow.releaseBlockedRefresh()
     }
 
+    func testUnavailableRefreshImmediatelyMarksRetainedMetadataStale() async {
+        let channel = LiveChannelID("fixture-stale-metadata")
+        let sleeper = ControllableMetadataSleeper()
+        let flow = SequentialMetadataFlow(results: [
+            .current(MetadataSnapshot(
+                channelID: channel,
+                program: LiveProgramMetadata(title: "Current title")
+            )),
+            .unavailable,
+        ])
+        let model = MetadataPresentationModel(flow: flow, sleeper: sleeper)
+
+        model.select(channel)
+        await flow.waitForMetadataRequests(count: 1)
+        await sleeper.waitForSleep(duration: 30)
+        await sleeper.releaseSleep(duration: 30)
+        await flow.waitForMetadataRequests(count: 2)
+        await settleTasks()
+
+        XCTAssertEqual(model.availability, .unavailable)
+        XCTAssertEqual(model.state.text, .stale("Current title"))
+        XCTAssertEqual(model.nowPlayingSemanticMetadata.currentProgram, "Current title")
+        model.clear()
+    }
+
     func testSelectionStartsMetadataWithoutPlaybackMutationAuthority() async {
         let flow = MetadataFlowSpy()
         let model = MetadataPresentationModel(flow: flow)
@@ -450,5 +475,27 @@ private actor BlockingRefreshMetadataFlow: MetadataFlow {
     func releaseBlockedRefresh() {
         blockedRefresh?.resume(returning: .unavailable)
         blockedRefresh = nil
+    }
+}
+
+private actor SequentialMetadataFlow: MetadataFlow {
+    private var results: [MetadataAvailability]
+    private var metadataRequests = 0
+    private var requestWaiters: [CheckedContinuation<Void, Never>] = []
+
+    init(results: [MetadataAvailability]) { self.results = results }
+
+    func metadata(for _: LiveChannelID) async -> MetadataAvailability {
+        metadataRequests += 1
+        requestWaiters.forEach { $0.resume() }
+        requestWaiters.removeAll()
+        return results.isEmpty ? .unavailable : results.removeFirst()
+    }
+
+    func artwork(for _: ChannelArtworkReference) async -> ArtworkAvailability { .unavailable }
+
+    func waitForMetadataRequests(count: Int) async {
+        if metadataRequests >= count { return }
+        await withCheckedContinuation { requestWaiters.append($0) }
     }
 }
