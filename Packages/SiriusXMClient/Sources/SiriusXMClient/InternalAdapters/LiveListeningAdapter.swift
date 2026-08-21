@@ -70,6 +70,10 @@ enum LiveListeningAdapter {
         _ response: NativeTransportResponse,
         channelID: LiveChannelID
     ) -> MetadataAvailability {
+        CompatibilitySchemaDiagnostics.recordLookaround(
+            body: response.body,
+            selectedChannelID: channelID
+        )
         guard preflightFailure(for: response) == nil,
               let root = try? JSONSerialization.jsonObject(with: response.body) as? [String: Any],
               root["channels"] is [String: Any],
@@ -153,6 +157,228 @@ enum LiveListeningAdapter {
         if object["bot"] as? Bool == true { return true }
         guard let challenge = object["challenge"] as? String else { return false }
         return ["captcha", "mfa", "control"].contains(challenge.lowercased())
+    }
+}
+
+/// Emits a deliberately closed, value-free shape summary for the three
+/// authorized content boundaries. These summaries exist to repair volatile
+/// provider adapters without retaining a response, an identity, or any
+/// protected transport material. Every rendered token is an allow-listed path,
+/// scalar/container kind, or bounded cardinality.
+enum CompatibilitySchemaDiagnostics {
+    private static let logger = Logger(subsystem: "com.siriusmac.client", category: "diagnostics")
+
+    static func recordCatalog(body: Data) {
+        record(catalogEvidence(body: body))
+    }
+
+    static func recordLookaround(body: Data, selectedChannelID: LiveChannelID) {
+        record(lookaroundEvidence(body: body, selectedChannelID: selectedChannelID))
+    }
+
+    static func recordTune(body: Data) {
+        record(tuneEvidence(body: body))
+    }
+
+    static func catalogEvidence(body: Data) -> String {
+        CatalogSchemaEvidence(body: body).rendered
+    }
+
+    static func lookaroundEvidence(body: Data, selectedChannelID: LiveChannelID) -> String {
+        LookaroundSchemaEvidence(body: body, selectedChannelID: selectedChannelID).rendered
+    }
+
+    static func tuneEvidence(body: Data) -> String {
+        TuneSchemaEvidence(body: body).rendered
+    }
+
+    private static func record(_ evidence: String) {
+        logger.info("SiriusXM compatibility schema \(evidence, privacy: .public)")
+    }
+}
+
+private enum CompatibilitySchemaValueKind: String {
+    case absent
+    case null
+    case emptyString = "string-empty"
+    case string = "string-nonempty"
+    case object
+    case emptyArray = "array-empty"
+    case array = "array-nonempty"
+    case other
+
+    init(_ value: Any?) {
+        switch value {
+        case nil:
+            self = .absent
+        case is NSNull:
+            self = .null
+        case let value as String:
+            self = value.isEmpty ? .emptyString : .string
+        case is [String: Any]:
+            self = .object
+        case let value as [Any]:
+            self = value.isEmpty ? .emptyArray : .array
+        default:
+            self = .other
+        }
+    }
+}
+
+private enum CompatibilitySchemaCardinality: String {
+    case absent
+    case empty
+    case one
+    case twoOrMore = "two-or-more"
+    case other
+
+    init(_ value: Any?) {
+        guard let value else {
+            self = .absent
+            return
+        }
+        guard let values = value as? [Any] else {
+            self = .other
+            return
+        }
+        switch values.count {
+        case 0: self = .empty
+        case 1: self = .one
+        default: self = .twoOrMore
+        }
+    }
+}
+
+private struct CatalogSchemaEvidence {
+    let rendered: String
+
+    init(body: Data) {
+        guard let root = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+              let page = root["page"] as? [String: Any],
+              let containers = page["containers"] as? [[String: Any]]
+        else {
+            rendered = "stage=catalog root=non-catalog-object"
+            return
+        }
+
+        let items = containers.flatMap { container in
+            (container["sets"] as? [[String: Any]] ?? []).flatMap { $0["items"] as? [[String: Any]] ?? [] }
+        }
+        let metadataValues = items.map { $0["metadata"] }
+        let liveValues = metadataValues.map { ($0 as? [String: Any])?["live"] }
+        let currentItems = liveValues.compactMap { ($0 as? [String: Any])?["items"] as? [Any] }
+        let cuts = items.map { $0["cuts"] }
+        let titleValues = items.map { item -> Any? in
+            let entity = item["entity"] as? [String: Any]
+            let texts = entity?["texts"] as? [String: Any]
+            let title = texts?["title"] as? [String: Any]
+            return title?["default"]
+        }
+
+        rendered = [
+            "stage=catalog",
+            "root=object",
+            "page=object",
+            "page.containers=\(CompatibilitySchemaCardinality(containers).rawValue)",
+            "item-count=\(boundedCount(items.count))",
+            "entity.texts.title.default=\(aggregateKind(titleValues))",
+            "metadata=\(aggregateKind(metadataValues))",
+            "metadata.live=\(aggregateKind(liveValues))",
+            "metadata.live.items=\(aggregateCardinality(currentItems))",
+            "cuts=\(aggregateKind(cuts))"
+        ].joined(separator: " ")
+    }
+}
+
+private struct LookaroundSchemaEvidence {
+    let rendered: String
+
+    init(body: Data, selectedChannelID: LiveChannelID) {
+        guard let root = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+              let channels = root["channels"] as? [String: Any]
+        else {
+            rendered = "stage=lookaround root=non-lookaround-object"
+            return
+        }
+
+        let selected = channels[selectedChannelID.rawValue] as? [String: Any]
+        let cuts = selected?["cuts"]
+        let firstCut = (cuts as? [[String: Any]])?.first
+        let selectedChannel = selected == nil ? "absent" : "object"
+        let name = CompatibilitySchemaValueKind(firstCut?["name"]).rawValue
+        let title = CompatibilitySchemaValueKind(firstCut?["title"]).rawValue
+        let artistName = CompatibilitySchemaValueKind(firstCut?["artistName"]).rawValue
+        let artist = CompatibilitySchemaValueKind(firstCut?["artist"]).rawValue
+        let validFrom = CompatibilitySchemaValueKind(firstCut?["validFrom"]).rawValue
+        let shows = CompatibilitySchemaCardinality(selected?["shows"]).rawValue
+        rendered = [
+            "stage=lookaround",
+            "root=object",
+            "channels=object",
+            "selected-channel=\(selectedChannel)",
+            "selected.cuts=\(CompatibilitySchemaCardinality(cuts).rawValue)",
+            "selected.cuts[0].name=\(name)",
+            "selected.cuts[0].title=\(title)",
+            "selected.cuts[0].artistName=\(artistName)",
+            "selected.cuts[0].artist=\(artist)",
+            "selected.cuts[0].validFrom=\(validFrom)",
+            "selected.shows=\(shows)"
+        ].joined(separator: " ")
+    }
+}
+
+private struct TuneSchemaEvidence {
+    let rendered: String
+
+    init(body: Data) {
+        guard let root = try? JSONSerialization.jsonObject(with: body) as? [String: Any] else {
+            rendered = "stage=tune root=non-object"
+            return
+        }
+        let metadata = root["metadata"] as? [String: Any]
+        let live = metadata?["live"] as? [String: Any]
+        let items = live?["items"]
+        let firstItem = (items as? [[String: Any]])?.first
+        let streams = CompatibilitySchemaCardinality(root["streams"]).rawValue
+        let metadataKind = CompatibilitySchemaValueKind(root["metadata"]).rawValue
+        let liveKind = CompatibilitySchemaValueKind(metadata?["live"]).rawValue
+        let name = CompatibilitySchemaValueKind(firstItem?["name"]).rawValue
+        let title = CompatibilitySchemaValueKind(firstItem?["title"]).rawValue
+        let artistName = CompatibilitySchemaValueKind(firstItem?["artistName"]).rawValue
+        let artist = CompatibilitySchemaValueKind(firstItem?["artist"]).rawValue
+        let episodes = CompatibilitySchemaCardinality(live?["episodes"]).rawValue
+        rendered = [
+            "stage=tune",
+            "root=object",
+            "streams=\(streams)",
+            "metadata=\(metadataKind)",
+            "metadata.live=\(liveKind)",
+            "metadata.live.items=\(CompatibilitySchemaCardinality(items).rawValue)",
+            "metadata.live.items[0].name=\(name)",
+            "metadata.live.items[0].title=\(title)",
+            "metadata.live.items[0].artistName=\(artistName)",
+            "metadata.live.items[0].artist=\(artist)",
+            "metadata.live.episodes=\(episodes)"
+        ].joined(separator: " ")
+    }
+}
+
+private func aggregateKind(_ values: [Any?]) -> String {
+    guard !values.isEmpty else { return "no-items" }
+    let kinds = Set(values.map { CompatibilitySchemaValueKind($0).rawValue })
+    return kinds.count == 1 ? kinds.first ?? "other" : "mixed"
+}
+
+private func aggregateCardinality(_ values: [[Any]]) -> String {
+    guard !values.isEmpty else { return "absent" }
+    return boundedCount(values.reduce(0) { $0 + $1.count })
+}
+
+private func boundedCount(_ count: Int) -> String {
+    switch count {
+    case 0: "zero"
+    case 1: "one"
+    default: "two-or-more"
     }
 }
 
@@ -256,6 +482,7 @@ enum FixedCatalogResponseDecoder {
     private static let maximumBodyBytes = 1_048_576
 
     static func decode(_ response: NativeTransportResponse) -> LiveCatalogSnapshotResult {
+        CompatibilitySchemaDiagnostics.recordCatalog(body: response.body)
         guard response.transportFailure == nil,
               response.redirectLocation == nil,
               (200 ... 299).contains(response.statusCode),
@@ -703,6 +930,7 @@ private enum FixedLiveResponseDecoder {
         from body: Data,
         expectedChannelID: LiveChannelID
     ) -> FixedLiveResourceSelection? {
+        CompatibilitySchemaDiagnostics.recordTune(body: body)
         guard body.count <= maximumBodyBytes else {
             recordTuneShape("payload-too-large")
             return nil
