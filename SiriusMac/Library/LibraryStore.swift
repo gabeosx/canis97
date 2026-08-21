@@ -30,6 +30,97 @@ struct LibraryChannelSnapshot: Equatable, Hashable {
     }
 }
 
+/// The only queue commands the application exposes for live radio.
+enum QueueDirection: Equatable {
+    case previous
+    case next
+}
+
+/// The available directions are a semantic projection, never media authority.
+enum QueueDirectionAvailability: Equatable {
+    case none
+    case previous
+    case next
+    case both
+}
+
+/// A volatile, stable-ID queue captured from the collection that explicitly
+/// began playback. It deliberately knows nothing about media, sessions, or
+/// catalog records; callers reconcile it with the current entitled IDs.
+struct PlaybackQueue: Equatable {
+    let capturedIDs: [LiveChannelID]
+    private(set) var currentID: LiveChannelID?
+
+    init(originIDs: [LiveChannelID], currentID: LiveChannelID?) {
+        capturedIDs = originIDs
+        self.currentID = currentID
+    }
+
+    var currentIndex: Int? {
+        guard let currentID else { return nil }
+        return capturedIDs.firstIndex(of: currentID)
+    }
+
+    mutating func candidate(
+        _ direction: QueueDirection,
+        currentEntitledIDs: [LiveChannelID],
+        fullLineup: [LiveChannelID]
+    ) -> LiveChannelID? {
+        let entitled = Set(currentEntitledIDs)
+        if capturedIDs.contains(where: { entitled.contains($0) }) {
+            guard let currentIndex else { return nil }
+            let indices: [Int] = switch direction {
+            case .previous: Array(capturedIDs.indices.prefix(upTo: currentIndex).reversed())
+            case .next: Array(capturedIDs.indices.dropFirst(currentIndex + 1))
+            }
+            for index in indices {
+                let candidate = capturedIDs[index]
+                if entitled.contains(candidate) {
+                    currentID = candidate
+                    return candidate
+                }
+            }
+            return nil
+        }
+
+        let usableLineup = fullLineup.filter { entitled.contains($0) }
+        guard !usableLineup.isEmpty else { return nil }
+        let candidate: LiveChannelID?
+        if let currentID, let fullLineupIndex = usableLineup.firstIndex(of: currentID) {
+            switch direction {
+            case .previous:
+                candidate = fullLineupIndex > 0 ? usableLineup[fullLineupIndex - 1] : nil
+            case .next:
+                candidate = fullLineupIndex + 1 < usableLineup.count ? usableLineup[fullLineupIndex + 1] : nil
+            }
+        } else {
+            candidate = direction == .next ? usableLineup.first : usableLineup.last
+        }
+        guard let candidate else { return nil }
+        currentID = candidate
+        return candidate
+    }
+
+    func availability(currentEntitledIDs: [LiveChannelID], fullLineup: [LiveChannelID]) -> QueueDirectionAvailability {
+        var previous = self
+        var next = self
+        let hasPrevious = previous.candidate(.previous, currentEntitledIDs: currentEntitledIDs, fullLineup: fullLineup) != nil
+        let hasNext = next.candidate(.next, currentEntitledIDs: currentEntitledIDs, fullLineup: fullLineup) != nil
+        return switch (hasPrevious, hasNext) {
+        case (false, false): .none
+        case (true, false): .previous
+        case (false, true): .next
+        case (true, true): .both
+        }
+    }
+}
+
+/// A generation-tagged, semantic request for the library to reveal a channel.
+struct LibraryRevealRequest: Equatable {
+    let channelID: LiveChannelID
+    let generation: Int
+}
+
 @Model
 final class FavoriteRecord {
     static let persistedPropertyNames = ["channelID", "name", "displayNumber", "category"]

@@ -112,16 +112,23 @@ final class ListeningPresentationModel {
 
     @discardableResult
     func tuneSelectedChannel() -> Task<Void, Never>? {
-        guard let playbackCoordinator else {
-            playbackState = .unavailable(.unsupported)
-            return nil
-        }
         guard let selectedChannelID else {
             playbackState = .unavailable(.selectionUnavailable)
             return nil
         }
+        return tune(selectedChannelID)
+    }
+
+    /// Tunes an already selected semantic identity without mutating browse
+    /// selection. Authorization remains entirely with PlaybackCoordinator.
+    @discardableResult
+    func tune(_ channelID: LiveChannelID) -> Task<Void, Never>? {
+        guard let playbackCoordinator else {
+            playbackState = .unavailable(.unsupported)
+            return nil
+        }
         return Task { [weak self] in
-            await playbackCoordinator.tune(selectedChannelID)
+            await playbackCoordinator.tune(channelID)
             self?.applyConfirmedPlaybackState(playbackCoordinator.state)
         }
     }

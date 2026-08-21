@@ -37,8 +37,11 @@ final class ListeningSessionController {
     let libraryStore: LibraryStore
 
     private(set) var hasRequestedLibraryOpen = false
+    private(set) var playbackQueue: PlaybackQueue?
+    private(set) var libraryRevealRequest: LibraryRevealRequest?
     private var hasTriggeredAutomaticCatalogLoad = false
     private var lastObservedPlaybackState: LivePlaybackState = .awaitingLiveContract
+    private var revealGeneration = 0
 
     init(
         composition: AuthenticationComposition = AuthenticationComposition(),
@@ -73,6 +76,29 @@ final class ListeningSessionController {
     func tuneFromLibrary(_ channelID: LiveChannelID) -> Task<Void, Never>? {
         listeningModel.select(channelID)
         return listeningModel.tuneSelectedChannel()
+    }
+
+    /// Captures the origin collection before explicit tuning. The captured IDs
+    /// are not entitlement authority and are never persisted.
+    @discardableResult
+    func tune(channelID: LiveChannelID, originIDs: [LiveChannelID]) -> Task<Void, Never>? {
+        playbackQueue = PlaybackQueue(originIDs: originIDs, currentID: channelID)
+        return listeningModel.tune(channelID)
+    }
+
+    var queueAvailability: QueueDirectionAvailability {
+        let lineup = currentEntitledIDs
+        return playbackQueue?.availability(currentEntitledIDs: lineup, fullLineup: lineup) ?? .none
+    }
+
+    @discardableResult
+    func previous() -> Task<Void, Never>? {
+        navigate(.previous)
+    }
+
+    @discardableResult
+    func next() -> Task<Void, Never>? {
+        navigate(.next)
     }
 
     func resetListeningBeforeAuthenticationCleanup() {
@@ -127,6 +153,25 @@ final class ListeningSessionController {
               let channel = listeningModel.state.snapshot?.channels.first(where: { $0.id == channelID })
         else { return }
         libraryStore.recordConfirmedPlayback(LibraryChannelSnapshot(channel))
+    }
+
+    private var currentEntitledIDs: [LiveChannelID] {
+        listeningModel.state.snapshot?.channels.map(\.id) ?? []
+    }
+
+    private func navigate(_ direction: QueueDirection) -> Task<Void, Never>? {
+        guard var queue = playbackQueue,
+              let channelID = queue.candidate(
+                  direction,
+                  currentEntitledIDs: currentEntitledIDs,
+                  fullLineup: currentEntitledIDs
+              )
+        else { return nil }
+
+        playbackQueue = queue
+        revealGeneration += 1
+        libraryRevealRequest = LibraryRevealRequest(channelID: channelID, generation: revealGeneration)
+        return listeningModel.tune(channelID)
     }
 
     private func surface(for role: ListeningSurfaceRole) -> ListeningSurfaceState {
