@@ -5,6 +5,28 @@ import SiriusXMClient
 
 @MainActor
 final class LibraryStoreTests: XCTestCase {
+    func testPersistentContainerFailureFallsBackToAnInMemoryLibrary() throws {
+        enum PersistentContainerError: Error { case unavailable }
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let fallback = try ModelContainer(
+            for: FavoriteRecord.self,
+            RecentRecord.self,
+            PlayerPreferenceRecord.self,
+            configurations: configuration
+        )
+
+        let setup = LibraryStore.makeDefaultContainer(
+            persistentContainer: { throw PersistentContainerError.unavailable },
+            fallbackContainer: { fallback }
+        )
+        let store = LibraryStore(modelContainer: setup.container)
+        let snapshot = channel("fixture-fallback")
+
+        XCTAssertEqual(setup.persistence, .inMemoryFallback)
+        store.setFavorite(snapshot, isFavorite: true)
+        XCTAssertEqual(store.favorites, [snapshot])
+    }
+
     func testSettingFavoriteTrueTwiceKeepsOneStableRecord() throws {
         let store = try makeStore()
         let snapshot = channel("fixture-favorite")

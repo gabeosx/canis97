@@ -44,6 +44,14 @@ enum QueueDirectionAvailability: Equatable {
     case both
 }
 
+/// Describes whether small, non-secret library state survives a relaunch.
+/// A durable-store failure must not prevent listening; the app deliberately
+/// degrades to an in-memory library until the next launch can reopen storage.
+enum LibraryStorePersistence: Equatable {
+    case durable
+    case inMemoryFallback
+}
+
 /// A volatile, stable-ID queue captured from the collection that explicitly
 /// began playback. It deliberately knows nothing about media, sessions, or
 /// catalog records; callers reconcile it with the current entitled IDs.
@@ -214,6 +222,8 @@ final class LibraryStore {
     private let modelContext: ModelContext
     private let now: @Sendable () -> Date
 
+    private(set) var persistence: LibraryStorePersistence
+
     private(set) var favorites: [LibraryChannelSnapshot] = []
     private(set) var favoriteChannelIDs: [LiveChannelID] = []
     private(set) var recents: [LibraryChannelSnapshot] = []
@@ -221,10 +231,13 @@ final class LibraryStore {
     private(set) var alwaysOnTop = false
 
     init(
-        modelContainer: ModelContainer = LibraryStore.makeDefaultContainer(),
+        modelContainer: ModelContainer? = nil,
         now: @escaping @Sendable () -> Date = Date.init
     ) {
-        modelContext = ModelContext(modelContainer)
+        let setup = modelContainer.map { (container: $0, persistence: LibraryStorePersistence.durable) }
+            ?? Self.makeDefaultContainer()
+        modelContext = ModelContext(setup.container)
+        persistence = setup.persistence
         self.now = now
         publishFavorites()
         publishPlayerPreferences()
@@ -417,11 +430,27 @@ final class LibraryStore {
         }
     }
 
-    private static func makeDefaultContainer() -> ModelContainer {
+    static func makeDefaultContainer(
+        persistentContainer: () throws -> ModelContainer = {
+            try ModelContainer(for: FavoriteRecord.self, RecentRecord.self, PlayerPreferenceRecord.self)
+        },
+        fallbackContainer: () throws -> ModelContainer = {
+            let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+            return try ModelContainer(
+                for: FavoriteRecord.self,
+                RecentRecord.self,
+                PlayerPreferenceRecord.self,
+                configurations: configuration
+            )
+        }
+    ) -> (container: ModelContainer, persistence: LibraryStorePersistence) {
         do {
-            return try ModelContainer(for: FavoriteRecord.self, RecentRecord.self, PlayerPreferenceRecord.self)
+            return (try persistentContainer(), .durable)
         } catch {
-            preconditionFailure("Unable to initialize local library storage")
+            // The fallback is intentionally isolated from the on-disk store:
+            // a corrupt or migration-incompatible local database remains
+            // recoverable and cannot block authentication or playback.
+            return (try! fallbackContainer(), .inMemoryFallback)
         }
     }
 }
