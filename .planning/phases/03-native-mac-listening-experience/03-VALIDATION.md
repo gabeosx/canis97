@@ -94,6 +94,7 @@ The planner assigns final plan/task IDs. Every mapped behavior below must appear
 ## Validation Sign-Off
 
 - [ ] All tasks have run their `<automated>` verification after the owning RED-first scaffold step.
+- [x] Compact legibility remediation automated verification — focused compact/accessibility scope (12 tests), full suite (157 tests), and standalone app build all passed on 2026-08-21; see `03-08-CHECKPOINT-EVIDENCE.md` and commit `3f31d77`.
 - [ ] Sampling continuity: no three consecutive tasks lack automated verification.
 - [ ] Wave 0 covers all MISSING references.
 - [ ] No watch-mode flags are used.
@@ -107,4 +108,4 @@ The planner assigns final plan/task IDs. Every mapped behavior below must appear
 ## Plan 03-08 Checkpoint Status
 
 - [x] Task 1 native window lifecycle, system media surfaces, and audio routing — user-approved semantic evidence is recorded in `03-08-CHECKPOINT-EVIDENCE.md`.
-- [ ] Task 2 rendered states, keyboard focus, VoiceOver, and Reduce Motion — **blocked:** compact player is not legible at the required compact presentation; full Task 2 acceptance remains unapproved.
+- [ ] Task 2 rendered states, keyboard focus, VoiceOver, and Reduce Motion — **awaiting reinspection:** compact foreground contrast was remediated in `3f31d77` and automated checks pass, but the required 400 × 288 rendered-state, keyboard, VoiceOver, Reduce Motion, native-focus, and high-contrast acceptance remains unapproved until rerun on the fixed build.

@@ -22,17 +22,39 @@ acceptance item:
 
 ## Task 2 — Rendered states, keyboard focus, VoiceOver, and Reduce Motion
 
-**Status:** failed / not approved.
+**Status:** remediation built; manual reinspection required / not approved.
 
 **Blocking observation:** The compact player is not legible.
 
-This is a failing rendered-state and visual-legibility observation for Task 2's
-400 × 288 compact-player acceptance contract. Do not count the compact long-text
-backstop, native focus/high-contrast inspection, or the Task 2 checkpoint as
-approved until the compact presentation is made legible and the full Task 2
-checklist is rerun.
+This was a failing rendered-state and visual-legibility observation for Task 2's
+400 × 288 compact-player acceptance contract. The fallback compact canvas used
+`#111111` while inheriting the light SwiftUI appearance, so semantic `.primary`
+and default button foregrounds resolved black on black.
+
+**Remediation:** commit `3f31d77` adds a declarative dark system-foreground
+scheme to `NativeCompactPlayerStyle.fallback`. `CompactPlayerView` applies that
+scheme and semantic `.primary` foreground styling at its root, so it covers
+empty, pending, unavailable/error, and confirmed/fallback content without
+hard-coding fragile text colors or changing compact actions, accessibility,
+fixed sizing, Reduce Motion behavior, or the Phase 04 style seam. A regression
+contract requires both the dark fallback token and the root-level semantic
+foreground/color-scheme application.
+
+**Automated remediation evidence (2026-08-21):**
+
+- Focused `CompactPlayerPresentationTests` plus `AccessibilityContractTests`:
+  12 tests, zero failures.
+- Full `xcodebuild test -project SiriusMac.xcodeproj -scheme SiriusMac
+  -destination 'platform=macOS'`: 157 tests, zero failures.
+- Standalone `xcodebuild build -project SiriusMac.xcodeproj -scheme SiriusMac
+  -destination 'platform=macOS'`: succeeded.
+
+Do not count the compact long-text backstop, native focus/high-contrast
+inspection, VoiceOver/keyboard checks, or the Task 2 checkpoint as approved
+until the fixed build is re-rendered at 400 × 288 and the full Task 2 checklist
+is rerun.
 
 **Automated baseline:** `xcodebuild test -project SiriusMac.xcodeproj -scheme
-SiriusMac -destination 'platform=macOS'` passed on 2026-08-21 (156 tests, zero
-failures). This automated result does not replace the required rendered-state
-inspection.
+SiriusMac -destination 'platform=macOS'` passed on 2026-08-21 after remediation
+(157 tests, zero failures). This automated result does not replace the required
+rendered-state inspection.
