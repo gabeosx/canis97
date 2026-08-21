@@ -550,8 +550,18 @@ final class PlaybackCoordinator {
     }
 
     func tune(_ channelID: LiveChannelID) async {
+        let isReplacingConfirmedPlayback: Bool
+        switch state {
+        case .playing, .paused:
+            isReplacingConfirmedPlayback = true
+        case .awaitingLiveContract, .idle, .stopped, .unavailable:
+            isReplacingConfirmedPlayback = false
+        }
         let commandGeneration = supersedeActiveWork(clearItem: true)
         selectedChannelID = channelID
+        if isReplacingConfirmedPlayback {
+            state = .awaitingLiveContract
+        }
         await resolveAndInstall(channelID, commandGeneration: commandGeneration)
     }
 

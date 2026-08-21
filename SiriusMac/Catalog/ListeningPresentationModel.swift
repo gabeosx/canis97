@@ -225,7 +225,12 @@ final class ListeningPresentationModel {
         case .paused:
             // Pause retains the last confirmed active channel and its metadata.
             return
-        case .awaitingLiveContract, .idle, .playing(nil), .stopped, .unavailable:
+        case .awaitingLiveContract:
+            // A replacement tune is pending; continue to identify the last
+            // confirmed channel until the coordinator produces a terminal or
+            // newly confirmed state.
+            return
+        case .idle, .playing(nil), .stopped, .unavailable:
             guard confirmedChannelID != nil else { return }
             confirmedChannelID = nil
             metadataPresentation.clear()

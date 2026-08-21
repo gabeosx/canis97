@@ -401,13 +401,13 @@ final class ListeningSessionController {
     private func publishConfirmedSystemMediaState() {
         guard let systemMediaController else { return }
         let state = listeningModel.playbackState
+        setSystemCommandAvailability(using: systemMediaController)
 
         switch state {
         case .awaitingLiveContract:
             // Preserve the last confirmed state while a replacement tune is pending.
             guard listeningModel.confirmedChannelID != nil else {
                 systemMediaController.publish(nil)
-                systemMediaController.setSupportedCommandAvailability(playPause: false, previous: false, next: false)
                 return
             }
             return
@@ -422,13 +422,11 @@ final class ListeningSessionController {
                 playbackState: .playing
             )
             systemMediaController.publish(info)
-            setConfirmedSystemCommandAvailability(using: systemMediaController)
         case .paused:
             guard listeningModel.confirmedChannelID != nil,
                   let channelName = listeningModel.confirmedChannelLabel
             else {
                 systemMediaController.publish(nil)
-                systemMediaController.setSupportedCommandAvailability(playPause: false, previous: false, next: false)
                 return
             }
             let info = listeningModel.metadataPresentation.nowPlayingSemanticMetadata.systemNowPlayingInfo(
@@ -436,24 +434,18 @@ final class ListeningSessionController {
                 playbackState: .paused
             )
             systemMediaController.publish(info)
-            setConfirmedSystemCommandAvailability(using: systemMediaController)
         case .idle, .playing(nil), .stopped, .unavailable:
             systemMediaController.publish(nil)
-            systemMediaController.setSupportedCommandAvailability(playPause: false, previous: false, next: false)
         }
     }
 
-    private func setConfirmedSystemCommandAvailability(using systemMediaController: SystemMediaController) {
-        switch queueAvailability {
-        case .none:
-            systemMediaController.setSupportedCommandAvailability(playPause: true, previous: false, next: false)
-        case .previous:
-            systemMediaController.setSupportedCommandAvailability(playPause: true, previous: true, next: false)
-        case .next:
-            systemMediaController.setSupportedCommandAvailability(playPause: true, previous: false, next: true)
-        case .both:
-            systemMediaController.setSupportedCommandAvailability(playPause: true, previous: true, next: true)
-        }
+    private func setSystemCommandAvailability(using systemMediaController: SystemMediaController) {
+        let availability = commandAvailability
+        systemMediaController.setSupportedCommandAvailability(
+            playPause: availability.playPause,
+            previous: availability.previous,
+            next: availability.next
+        )
     }
 
     private var currentEntitledIDs: [LiveChannelID] {
@@ -476,24 +468,17 @@ final class ListeningSessionController {
     }
 
     private func handleSystemPlayPause() -> SystemRemoteCommandStatus {
-        switch listeningModel.playbackState {
-        case .playing:
-            return listeningModel.pausePlayback() == nil ? .commandFailed : .success
-        case .paused:
-            guard listeningModel.confirmedChannelID != nil else { return .commandFailed }
-            return listeningModel.resumePlaybackAtLiveEdge() == nil ? .commandFailed : .success
-        case .awaitingLiveContract, .idle, .stopped, .unavailable:
-            return .commandFailed
-        }
+        guard commandAvailability.playPause else { return .commandFailed }
+        return toggleConfirmedPlayback() == nil ? .commandFailed : .success
     }
 
     private func handleSystemPrevious() -> SystemRemoteCommandStatus {
-        guard queueAvailability == .previous || queueAvailability == .both else { return .commandFailed }
+        guard commandAvailability.previous else { return .commandFailed }
         return previous() == nil ? .commandFailed : .success
     }
 
     private func handleSystemNext() -> SystemRemoteCommandStatus {
-        guard queueAvailability == .next || queueAvailability == .both else { return .commandFailed }
+        guard commandAvailability.next else { return .commandFailed }
         return next() == nil ? .commandFailed : .success
     }
 

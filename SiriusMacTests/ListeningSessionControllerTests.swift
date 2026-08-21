@@ -298,6 +298,79 @@ final class ListeningSessionControllerTests: XCTestCase {
         XCTAssertFalse(controller.compactSurface.metadataPrimaryText?.contains(channel.rawValue) ?? false)
     }
 
+    func testPendingReplacementDisablesSystemMediaCommandsAndRejectsStaleHandlers() async throws {
+        let runtime = SessionPlaybackRuntime()
+        let catalog = ControlledSessionCatalog()
+        let commandCenter = SessionRemoteCommandCenter()
+        let nowPlaying = SessionNowPlayingPublisher()
+        let first = LiveChannelID("fixture-system-first")
+        let current = LiveChannelID("fixture-system-current")
+        let replacement = LiveChannelID("fixture-system-replacement")
+        let originIDs = [first, current, replacement]
+        let controller = makeController(
+            runtime: runtime,
+            client: catalog,
+            authenticationModel: AuthenticationPresentationModel(flow: EntitledSessionAuthenticationFlow()),
+            remoteCommandCenter: commandCenter,
+            nowPlayingPublisher: nowPlaying
+        )
+
+        let signIn = try XCTUnwrap(controller.authenticationModel.signIn())
+        await catalog.waitForCatalogRequests(count: 1)
+        await catalog.completeCatalog(with: .snapshot(LiveCatalogSnapshot(
+            channels: originIDs.map { LiveChannel(id: $0, name: "Channel \($0.rawValue)") },
+            freshness: .fresh
+        )))
+        await signIn.value
+        for _ in 0 ..< 10 {
+            if controller.listeningModel.state.snapshot != nil { break }
+            await Task.yield()
+        }
+
+        controller.startSystemMediaControls()
+        let firstTune = try XCTUnwrap(controller.tune(channelID: current, originIDs: originIDs))
+        await runtime.waitForObservation(count: 1)
+        runtime.confirmReady()
+        runtime.confirmPlaying()
+        await firstTune.value
+        for _ in 0 ..< 10 {
+            if controller.listeningModel.playbackState == .playing(current) {
+                break
+            }
+            await Task.yield()
+        }
+        XCTAssertEqual(controller.listeningModel.playbackState, .playing(current))
+        controller.startSystemMediaControls()
+        XCTAssertTrue(commandCenter.isEnabled(.playPause))
+        XCTAssertTrue(commandCenter.isEnabled(.previous))
+        XCTAssertTrue(commandCenter.isEnabled(.next))
+        let confirmedNowPlaying = try XCTUnwrap(nowPlaying.lastPublished)
+
+        let replacementTune = try XCTUnwrap(controller.tune(channelID: replacement, originIDs: originIDs))
+        await runtime.waitForObservation(count: 2)
+        await replacementTune.value
+        for _ in 0 ..< 10 {
+            if !commandCenter.isEnabled(.playPause),
+               !commandCenter.isEnabled(.previous),
+               !commandCenter.isEnabled(.next) {
+                break
+            }
+            await Task.yield()
+        }
+
+        XCTAssertEqual(controller.listeningModel.playbackState, .awaitingLiveContract)
+        XCTAssertFalse(commandCenter.isEnabled(.playPause))
+        XCTAssertFalse(commandCenter.isEnabled(.previous))
+        XCTAssertFalse(commandCenter.isEnabled(.next))
+        XCTAssertEqual(nowPlaying.lastPublished, confirmedNowPlaying)
+
+        XCTAssertEqual(commandCenter.sendIgnoringEnabled(.playPause), .commandFailed)
+        XCTAssertEqual(commandCenter.sendIgnoringEnabled(.previous), .commandFailed)
+        XCTAssertEqual(commandCenter.sendIgnoringEnabled(.next), .commandFailed)
+        await Task.yield()
+        XCTAssertEqual(runtime.observationCount, 2)
+    }
+
     func testRepeatedLibraryOpenRequestsReuseTheSingletonRoute() {
         let controller = makeController()
         let originalCoordinator = controller.librarySurface.coordinatorIdentity
@@ -319,7 +392,9 @@ final class ListeningSessionControllerTests: XCTestCase {
         runtime: SessionPlaybackRuntime = SessionPlaybackRuntime(),
         client: (any ClientAuthenticationFlow & ListeningFlow)? = nil,
         authenticationModel: AuthenticationPresentationModel? = nil,
-        libraryStore: LibraryStore? = nil
+        libraryStore: LibraryStore? = nil,
+        remoteCommandCenter: any RemoteCommandCenterControlling = SystemRemoteCommandCenterAdapter(),
+        nowPlayingPublisher: any NowPlayingInfoPublishing = SystemNowPlayingInfoAdapter()
     ) -> ListeningSessionController {
         let coordinator = PlaybackCoordinator(
             resolver: SessionPlaybackResolver(),
@@ -337,7 +412,9 @@ final class ListeningSessionControllerTests: XCTestCase {
         return ListeningSessionController(
             composition: composition,
             authenticationModel: authenticationModel,
-            libraryStore: libraryStore
+            libraryStore: libraryStore,
+            remoteCommandCenter: remoteCommandCenter,
+            nowPlayingPublisher: nowPlayingPublisher
         )
     }
 
@@ -454,7 +531,8 @@ private final class SessionMediaHandoff: SiriusXMAppleMediaHandoff, @unchecked S
 private final class SessionPlaybackRuntime: PlaybackPlayerRuntime {
     private var ready: (@MainActor @Sendable () -> Void)?
     private var playing: (@MainActor @Sendable () -> Void)?
-    private var observationWaiter: CheckedContinuation<Void, Never>?
+    private var observationWaiters: [Int: CheckedContinuation<Void, Never>] = [:]
+    private(set) var observationCount = 0
 
     func observe(
         _: AVPlayerItem,
@@ -465,8 +543,8 @@ private final class SessionPlaybackRuntime: PlaybackPlayerRuntime {
     ) -> any PlaybackItemObserving {
         ready = onReady
         playing = onPlaying
-        observationWaiter?.resume()
-        observationWaiter = nil
+        observationCount += 1
+        observationWaiters.removeValue(forKey: observationCount)?.resume()
         return SessionPlaybackObservation()
     }
 
@@ -475,9 +553,9 @@ private final class SessionPlaybackRuntime: PlaybackPlayerRuntime {
     func requestPause() {}
     func clearCurrentItem() {}
 
-    func waitForObservation() async {
-        guard ready == nil else { return }
-        await withCheckedContinuation { observationWaiter = $0 }
+    func waitForObservation(count: Int = 1) async {
+        guard observationCount < count else { return }
+        await withCheckedContinuation { observationWaiters[count] = $0 }
     }
 
     func confirmReady() { ready?() }
@@ -487,4 +565,45 @@ private final class SessionPlaybackRuntime: PlaybackPlayerRuntime {
 @MainActor
 private final class SessionPlaybackObservation: PlaybackItemObserving {
     func cancel() {}
+}
+
+@MainActor
+private final class SessionRemoteCommandCenter: RemoteCommandCenterControlling {
+    private final class Token: RemoteCommandTarget, Hashable {
+        nonisolated static func == (lhs: Token, rhs: Token) -> Bool { lhs === rhs }
+        nonisolated func hash(into hasher: inout Hasher) { hasher.combine(ObjectIdentifier(self)) }
+    }
+
+    private var handlers: [SystemRemoteCommand: [Token: () -> SystemRemoteCommandStatus]] = [:]
+    private var enabled: [SystemRemoteCommand: Bool] = [:]
+
+    func setEnabled(_ isEnabled: Bool, for command: SystemRemoteCommand) {
+        enabled[command] = isEnabled
+    }
+
+    func addTarget(
+        for command: SystemRemoteCommand,
+        handler: @escaping () -> SystemRemoteCommandStatus
+    ) -> any RemoteCommandTarget {
+        let token = Token()
+        handlers[command, default: [:]][token] = handler
+        return token
+    }
+
+    func removeTarget(_: any RemoteCommandTarget, for _: SystemRemoteCommand) {}
+
+    func isEnabled(_ command: SystemRemoteCommand) -> Bool { enabled[command] ?? true }
+
+    func sendIgnoringEnabled(_ command: SystemRemoteCommand) -> SystemRemoteCommandStatus {
+        handlers[command]?.values.first?() ?? .commandFailed
+    }
+}
+
+@MainActor
+private final class SessionNowPlayingPublisher: NowPlayingInfoPublishing {
+    private(set) var lastPublished: SystemNowPlayingInfo?
+
+    func publish(_ info: SystemNowPlayingInfo?) {
+        lastPublished = info
+    }
 }
