@@ -1,9 +1,9 @@
 ---
-status: complete
+status: diagnosed
 phase: 03-native-mac-listening-experience
 source: ["03-01-SUMMARY.md", "03-02-SUMMARY.md", "03-03-SUMMARY.md", "03-04-SUMMARY.md", "03-05-SUMMARY.md", "03-06-SUMMARY.md", "03-07-SUMMARY.md", "03-08-SUMMARY.md"]
 started: 2026-08-22T14:18:19Z
-updated: 2026-08-22T15:39:45Z
+updated: 2026-08-22T15:41:30Z
 ---
 
 ## Current Test
@@ -117,8 +117,16 @@ blocked: 0
   reason: "User reported: clicking around the library doesn't seem to work correctly - the highlighting doesn't move to a newly selected channel, the UI seems to hang when you click on a station briefly"
   severity: major
   test: 7
-  artifacts: []
-  missing: []
+  root_cause: "The selectable native List row also owns a SwiftUI double-click tap recognizer, which competes with and delays the List's single-click selection gesture."
+  artifacts:
+    - path: "SiriusMac/Catalog/ListeningView.swift"
+      issue: "Each tagged selectable row installs .onTapGesture(count: 2), delaying or suppressing immediate native single-click selection."
+    - path: "SiriusMacTests/LibraryStoreTests.swift"
+      issue: "Library view contract tests do not exercise real row selection or activation; no XCUITest target exists."
+  missing:
+    - "Separate native single-click selection from double-click activation without a competing SwiftUI tap recognizer."
+    - "Add launched-app UI automation for prompt highlight movement and exactly-one activation."
+  debug_session: ".planning/debug/library-selection-gesture-stall.md"
 
 - gap_id: G-03-17
   truth: "The fixed compact player window fits its 400 x 288 player canvas without an unintended large border or excess surrounding chrome."
@@ -126,5 +134,15 @@ blocked: 0
   reason: "User reported: the compact player opens with a large boarder around the player"
   severity: cosmetic
   test: 17
-  artifacts: []
-  missing: []
+  root_cause: "The compact scene starts at 760 x 620 and the window adapter accepts that current/autosaved frame unchanged; maximum-size policy does not shrink the already-large window around the fixed 400 x 288 canvas."
+  artifacts:
+    - path: "SiriusMac/SiriusMacApp.swift"
+      issue: "The compact/authentication scene has a 760 x 620 default size."
+    - path: "SiriusMac/Windows/CompactWindowController.swift"
+      issue: "Compact restoration applies any intersecting saved frame and returns without enforcing the exact compact content size."
+    - path: "SiriusMacTests/ListeningSessionControllerTests.swift"
+      issue: "Window tests cover policy values but not the configured NSWindow content frame after attachment."
+  missing:
+    - "Always enforce 400 x 288 compact content size while restoring only a safe window origin."
+    - "Add AppKit and launched-app assertions for compact window geometry."
+  debug_session: ".planning/debug/compact-window-excess-chrome.md"
