@@ -30,4 +30,34 @@ final class SiriusMacUITests: XCTestCase {
         XCTAssertEqual(compactCanvas.frame.width, 400, accuracy: 1)
         XCTAssertEqual(compactCanvas.frame.height, 320, accuracy: 1)
     }
+
+    func testSingleClickSelectsImmediatelyWithoutTuning() {
+        let firstRow = app.staticTexts["library.row.ui-test-1"].firstMatch
+        let secondRow = app.staticTexts["library.row.ui-test-2"].firstMatch
+        let tuneCount = app.staticTexts["library.tune-count"]
+        XCTAssertTrue(firstRow.waitForExistence(timeout: 5), app.debugDescription)
+        XCTAssertTrue(secondRow.exists)
+
+        firstRow.click()
+        XCTAssertEqual(firstRow.value as? String, "Selected")
+        XCTAssertEqual(tuneCount.value as? String, "0")
+
+        secondRow.click()
+        XCTAssertEqual(secondRow.value as? String, "Selected")
+        XCTAssertEqual(tuneCount.value as? String, "0")
+    }
+
+    func testDoubleClickAndReturnTuneExactlyOnce() {
+        let firstRow = app.staticTexts["library.row.ui-test-1"].firstMatch
+        let secondRow = app.staticTexts["library.row.ui-test-2"].firstMatch
+        let tuneCount = app.staticTexts["library.tune-count"]
+        XCTAssertTrue(firstRow.waitForExistence(timeout: 5), app.debugDescription)
+
+        firstRow.doubleClick()
+        XCTAssertEqual(tuneCount.value as? String, "1")
+
+        secondRow.click()
+        app.typeKey(.return, modifierFlags: [])
+        XCTAssertEqual(tuneCount.value as? String, "2")
+    }
 }
