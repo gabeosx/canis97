@@ -16,7 +16,10 @@ final class SiriusMacUITests: XCTestCase {
     }
 
     func testOfflineHarnessLaunchesCompactAndLibrary() {
-        XCTAssertTrue(app.otherElements["compact.canvas"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.tables["library.collection"].waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            app.groups["compact.canvas"].waitForExistence(timeout: 5),
+            app.debugDescription
+        )
+        XCTAssertTrue(app.outlines["library.collection"].waitForExistence(timeout: 5))
     }
 }

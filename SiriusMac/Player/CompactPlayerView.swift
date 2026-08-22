@@ -34,6 +34,7 @@ struct CompactPlayerView: View {
         .foregroundStyle(.primary)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Sirius Mac compact player")
+        .accessibilityIdentifier("compact.canvas")
     }
 
     private var contentColorScheme: ColorScheme {

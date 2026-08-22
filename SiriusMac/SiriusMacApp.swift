@@ -5,8 +5,20 @@ import SwiftUI
 struct SiriusMacApp: App {
     private let sessionController: ListeningSessionController?
     private let terminationObserver: ApplicationTerminationObserver?
+#if DEBUG
+    private let uiTestHarness: UITestHarness?
+#endif
 
     init() {
+#if DEBUG
+        if let uiTestHarness = UITestHarness.makeIfRequested() {
+            self.uiTestHarness = uiTestHarness
+            sessionController = nil
+            terminationObserver = nil
+            return
+        }
+        uiTestHarness = nil
+#endif
         sessionController = Self.makeSessionController()
         sessionController?.startSystemMediaControls()
         terminationObserver = sessionController.map { controller in
@@ -24,13 +36,7 @@ struct SiriusMacApp: App {
 
     var body: some Scene {
         WindowGroup("Sirius Mac", id: "sirius-compact") {
-            if let sessionController {
-                CompactAuthenticationRoot(controller: sessionController)
-            } else {
-                Color.clear
-                    .frame(minWidth: 760, minHeight: 620)
-                    .accessibilityHidden(true)
-            }
+            compactSceneContent
         }
         .defaultSize(width: 760, height: 620)
         .windowResizability(.contentMinSize)
@@ -39,16 +45,56 @@ struct SiriusMacApp: App {
         }
 
         Window("Library", id: "sirius-library") {
-            if let sessionController {
-                LibraryRoot(controller: sessionController)
-            } else {
-                Color.clear
-                    .frame(minWidth: 760, minHeight: 540)
-                    .accessibilityHidden(true)
-            }
+            librarySceneContent
         }
         .defaultSize(width: 980, height: 700)
         .windowResizability(.contentMinSize)
+    }
+
+    @ViewBuilder
+    private var compactSceneContent: some View {
+#if DEBUG
+        if let uiTestHarness {
+            UITestCompactRoot(harness: uiTestHarness)
+        } else if let sessionController {
+            CompactAuthenticationRoot(controller: sessionController)
+        } else {
+            Color.clear
+                .frame(minWidth: 760, minHeight: 620)
+                .accessibilityHidden(true)
+        }
+#else
+        if let sessionController {
+            CompactAuthenticationRoot(controller: sessionController)
+        } else {
+            Color.clear
+                .frame(minWidth: 760, minHeight: 620)
+                .accessibilityHidden(true)
+        }
+#endif
+    }
+
+    @ViewBuilder
+    private var librarySceneContent: some View {
+#if DEBUG
+        if let uiTestHarness {
+            UITestLibraryRoot(harness: uiTestHarness)
+        } else if let sessionController {
+            LibraryRoot(controller: sessionController)
+        } else {
+            Color.clear
+                .frame(minWidth: 760, minHeight: 540)
+                .accessibilityHidden(true)
+        }
+#else
+        if let sessionController {
+            LibraryRoot(controller: sessionController)
+        } else {
+            Color.clear
+                .frame(minWidth: 760, minHeight: 540)
+                .accessibilityHidden(true)
+        }
+#endif
     }
 }
 
@@ -223,5 +269,15 @@ enum SiriusMacLaunchMode {
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> Bool {
         environment["XCTestConfigurationFilePath"] != nil
+    }
+
+    static func isUITestMode(
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> Bool {
+#if DEBUG
+        environment["SIRIUS_MAC_UI_TEST_MODE"] == "1"
+#else
+        false
+#endif
     }
 }
