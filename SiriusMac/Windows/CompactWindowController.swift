@@ -80,6 +80,13 @@ enum WindowFrameRestoration {
         else { return nil }
         return savedFrame
     }
+
+    static func compactOriginToApply(savedFrame: CGRect, screens: [CGRect]) -> CGPoint? {
+        guard let validFrame = frameToApply(savedFrame: savedFrame, screens: screens),
+              screens.contains(where: { $0.contains(validFrame.origin) })
+        else { return nil }
+        return validFrame.origin
+    }
 }
 
 /// A role-scoped AppKit adapter. It never owns playback, app session state,
@@ -135,6 +142,24 @@ final class CompactWindowController {
         let key = "NSWindow Frame \(policy.frameAutosaveName)"
         let savedFrame = UserDefaults.standard.string(forKey: key).map(NSRectFromString)
         let visibleFrames = NSScreen.screens.map(\.visibleFrame)
+
+        if policy.role == .compact {
+            if let savedFrame,
+               let savedOrigin = WindowFrameRestoration.compactOriginToApply(
+                   savedFrame: savedFrame,
+                   screens: visibleFrames
+               )
+            {
+                window.setFrameOrigin(savedOrigin)
+                window.setContentSize(policy.defaultContentSize)
+                window.setFrameOrigin(savedOrigin)
+            } else {
+                window.setContentSize(policy.defaultContentSize)
+                center(window)
+            }
+            return
+        }
+
         if let savedFrame,
            let validFrame = WindowFrameRestoration.frameToApply(savedFrame: savedFrame, screens: visibleFrames)
         {
@@ -143,6 +168,10 @@ final class CompactWindowController {
         }
 
         window.setContentSize(policy.defaultContentSize)
+        center(window)
+    }
+
+    private func center(_ window: NSWindow) {
         if let screen = window.screen ?? NSScreen.main {
             let visible = screen.visibleFrame
             let size = window.frame.size
