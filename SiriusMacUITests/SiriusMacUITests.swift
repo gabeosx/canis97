@@ -51,13 +51,16 @@ final class SiriusMacUITests: XCTestCase {
         let firstRow = app.staticTexts["library.row.ui-test-1"].firstMatch
         let secondRow = app.staticTexts["library.row.ui-test-2"].firstMatch
         let tuneCount = app.staticTexts["library.tune-count"]
+        let tuneOrigin = app.staticTexts["library.tune-origin"]
         XCTAssertTrue(firstRow.waitForExistence(timeout: 5), app.debugDescription)
 
         firstRow.doubleClick()
         XCTAssertEqual(tuneCount.value as? String, "1")
+        XCTAssertEqual(tuneOrigin.value as? String, "ui-test-1,ui-test-2")
 
         secondRow.click()
         app.typeKey(.return, modifierFlags: [])
         XCTAssertEqual(tuneCount.value as? String, "2")
+        XCTAssertEqual(tuneOrigin.value as? String, "ui-test-1,ui-test-2")
     }
 }

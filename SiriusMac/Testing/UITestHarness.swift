@@ -13,6 +13,8 @@ final class UITestHarness {
     let libraryStore: LibraryStore
     private(set) var tuneCount = 0
     private(set) var confirmedChannelID: LiveChannelID?
+    private(set) var lastOriginIDs: [LiveChannelID] = []
+    private var isTuneInFlight = false
 
     static func makeIfRequested(
         environment: [String: String] = ProcessInfo.processInfo.environment
@@ -33,14 +35,21 @@ final class UITestHarness {
         _ = listeningModel.refresh()
     }
 
-    func tune(channelID: LiveChannelID, originIDs: [LiveChannelID]) {
-        guard !listeningModel.isTunePending,
+    func tune(channelID: LiveChannelID, originIDs: [LiveChannelID]) -> Bool {
+        guard !isTuneInFlight,
               originIDs.contains(channelID),
               listeningModel.state.snapshot?.channels.contains(where: { $0.id == channelID }) == true
-        else { return }
+        else { return false }
+        isTuneInFlight = true
         listeningModel.select(channelID)
         confirmedChannelID = channelID
+        lastOriginIDs = originIDs
         tuneCount += 1
+        Task { @MainActor [weak self] in
+            await Task.yield()
+            self?.isTuneInFlight = false
+        }
+        return true
     }
 }
 
@@ -85,13 +94,20 @@ struct UITestLibraryRoot: View {
         VStack(spacing: 0) {
             LibraryView(
                 model: harness.listeningModel,
-                libraryStore: harness.libraryStore
+                libraryStore: harness.libraryStore,
+                onTune: harness.tune(channelID:originIDs:)
             )
             Text("\(harness.tuneCount)")
                 .accessibilityIdentifier("library.tune-count")
                 .accessibilityLabel("Tune count")
                 .accessibilityValue("\(harness.tuneCount)")
                 .accessibilityHint(harness.confirmedChannelID?.rawValue ?? "No confirmed channel")
+                .frame(width: 1, height: 1)
+                .opacity(0.01)
+            Text(harness.lastOriginIDs.map(\.rawValue).joined(separator: ","))
+                .accessibilityIdentifier("library.tune-origin")
+                .accessibilityLabel("Tune origin")
+                .accessibilityValue(harness.lastOriginIDs.map(\.rawValue).joined(separator: ","))
                 .frame(width: 1, height: 1)
                 .opacity(0.01)
         }

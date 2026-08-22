@@ -273,6 +273,7 @@ struct LibraryView: View {
     @Bindable var model: ListeningPresentationModel
     let libraryStore: LibraryStore
     let controller: ListeningSessionController?
+    let onTune: (@MainActor (LiveChannelID, [LiveChannelID]) -> Bool)?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var tab: LibraryTab
     @State private var query = ""
@@ -282,13 +283,19 @@ struct LibraryView: View {
         model = controller.listeningModel
         libraryStore = controller.libraryStore
         self.controller = controller
+        onTune = nil
         _tab = State(initialValue: LibraryTab(rawValue: controller.libraryStore.selectedLibraryTab) ?? .channels)
     }
 
-    init(model: ListeningPresentationModel, libraryStore: LibraryStore) {
+    init(
+        model: ListeningPresentationModel,
+        libraryStore: LibraryStore,
+        onTune: (@MainActor (LiveChannelID, [LiveChannelID]) -> Bool)? = nil
+    ) {
         self.model = model
         self.libraryStore = libraryStore
         controller = nil
+        self.onTune = onTune
         _tab = State(initialValue: LibraryTab(rawValue: libraryStore.selectedLibraryTab) ?? .channels)
     }
 
@@ -367,16 +374,14 @@ struct LibraryView: View {
                     libraryRow(channel)
                         .id(channel.id)
                         .tag(channel.id)
-                        .contentShape(Rectangle())
-                        .onTapGesture(count: 2) {
-                            guard !model.isTunePending else { return }
-                            tune(channel)
-                        }
                 }
                 .listStyle(.inset)
                 .focused($focusTarget, equals: .collection)
                 .accessibilityIdentifier("library.collection")
                 .accessibilitySortPriority(27)
+                .background(NativeListDoubleActionBridge { clickedRow in
+                    tuneClickedRow(at: clickedRow)
+                })
                 .onSubmit { tuneSelectedChannel() }
                 .onKeyPress(.return) { tuneSelectedChannel(); return .handled }
                 .onKeyPress(.space) {
@@ -456,9 +461,22 @@ struct LibraryView: View {
         }
     }
 
-    private func tune(_ channel: LiveChannel) {
-        if let controller { _ = controller.tune(channelID: channel.id, originIDs: tabChannels.map(\.id)) }
-        else { model.select(channel.id); _ = model.tuneSelectedChannel() }
+    @discardableResult
+    private func tune(_ channel: LiveChannel) -> Bool {
+        guard !model.isTunePending else { return false }
+
+        let originIDs = tabChannels.map(\.id)
+        guard originIDs.contains(channel.id) else { return false }
+
+        if let onTune { return onTune(channel.id, originIDs) }
+        if let controller { return controller.tune(channelID: channel.id, originIDs: originIDs) != nil }
+        model.select(channel.id)
+        return model.tuneSelectedChannel() != nil
+    }
+
+    private func tuneClickedRow(at index: Int) {
+        guard filteredChannels.indices.contains(index) else { return }
+        _ = tune(filteredChannels[index])
     }
 
     private func tuneSelectedChannel() {
@@ -497,6 +515,7 @@ struct LibraryView: View {
 
     private func channelAccessibilityValue(_ channel: LiveChannel) -> String {
         [
+            model.selectedChannelID == channel.id ? "Selected" : nil,
             model.confirmedChannelID == channel.id ? "Now Playing" : nil,
             libraryStore.isFavorite(channel.id) ? "Favorite" : nil,
         ]
