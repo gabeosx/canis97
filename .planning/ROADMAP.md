@@ -281,6 +281,10 @@ Plans:
 
 - [x] 03-08-PLAN.md — Verify native windows, system media, audio routing, rendered states, and accessibility.
 
+**Wave 9 — UAT gap closure** *(blocked on Wave 8 completion)*
+
+- [ ] 03-09-PLAN.md — Fix compact-window excess chrome and delayed library selection with credential-free launched-app UI automation.
+
 **UI hint**: yes
 
 ### Phase 4: Safe Skins & Accessible Recovery
