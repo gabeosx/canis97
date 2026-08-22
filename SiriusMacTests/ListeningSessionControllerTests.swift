@@ -16,6 +16,34 @@ final class WindowLifecyclePolicyTests: XCTestCase {
         XCTAssertEqual(policy.frameAutosaveName, "SiriusMac.compact.frame")
     }
 
+    func testCompactAttachmentRetainsSavedOriginButResetsOversizedSavedContentSize() {
+        let key = "NSWindow Frame SiriusMac.compact.frame"
+        let previousValue = UserDefaults.standard.object(forKey: key)
+        defer {
+            if let previousValue {
+                UserDefaults.standard.set(previousValue, forKey: key)
+            } else {
+                UserDefaults.standard.removeObject(forKey: key)
+            }
+        }
+
+        let savedFrame = NSRect(x: 120, y: 96, width: 760, height: 620)
+        UserDefaults.standard.set(NSStringFromRect(savedFrame), forKey: key)
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 760, height: 620),
+            styleMask: [.titled, .closable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        let controller = CompactWindowController(role: .compact)
+
+        controller.attach(to: window, alwaysOnTop: false)
+
+        XCTAssertEqual(window.contentView?.frame.size, NSSize(width: 400, height: 288))
+        XCTAssertEqual(window.frame.origin, savedFrame.origin)
+    }
+
     func testLibraryPolicyIsResizableWithSeparateAutosaveName() {
         let policy = WindowLifecyclePolicy(role: .library)
 
