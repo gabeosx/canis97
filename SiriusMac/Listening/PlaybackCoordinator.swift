@@ -659,9 +659,18 @@ final class PlaybackCoordinator {
     }
 
     func stop() async {
+        stopImmediately()
+    }
+
+    /// Synchronous stop boundary used by the presentation model. It publishes
+    /// `.stopped` before an accepted-but-not-yet-dispatched tune worker can
+    /// cross into the coordinator, while retaining the async `stop()` API for
+    /// direct coordinator consumers.
+    func stopImmediately() {
         guard selectedChannelID != nil || state != .stopped else { return }
         _ = supersedeActiveWork(clearItem: true)
         selectedChannelID = nil
+        presentationGeneration = nil
         state = .stopped
     }
 

@@ -649,6 +649,42 @@ final class ListeningSessionControllerTests: XCTestCase {
         XCTAssertFalse(controller.listeningModel.isTunePending)
     }
 
+    func testStopSynchronouslyRevokesATuneHeldBeforeCoordinatorEntry() async throws {
+        let runtime = SessionPlaybackRuntime()
+        let resolver = ControlledSessionPlaybackResolver()
+        let dispatchGate = TuneDispatchGate()
+        let coordinator = PlaybackCoordinator(resolver: resolver, runtime: runtime)
+        let model = ListeningPresentationModel(
+            flow: SessionClient(),
+            playbackCoordinator: coordinator,
+            beforeCoordinatorTune: { await dispatchGate.wait() }
+        )
+        let channel = LiveChannelID("fixture-stop-before-coordinator-entry")
+
+        let tune = try XCTUnwrap(model.tune(channel))
+        await dispatchGate.waitForWorker()
+        XCTAssertTrue(model.isTunePending)
+
+        // There is deliberately no yield between Stop and releasing the
+        // accepted worker. Stop must revoke the request before its first
+        // resolver/install/play-capable coordinator call.
+        let stop = try XCTUnwrap(model.stopPlayback())
+        XCTAssertFalse(model.isTunePending)
+        XCTAssertEqual(model.playbackState, .stopped)
+        await stop.value
+
+        await dispatchGate.release()
+        await tune.value
+
+        let resolverCallCount = await resolver.calls(for: channel)
+        XCTAssertEqual(resolverCallCount, 0)
+        XCTAssertEqual(runtime.observationCount, 0)
+        XCTAssertEqual(runtime.installCount, 0)
+        XCTAssertEqual(runtime.playRequestCount, 0)
+        XCTAssertNil(coordinator.selectedChannelID)
+        XCTAssertEqual(coordinator.state, .stopped)
+    }
+
     func testQueuedOldSameChannelPlayingObservationCannotConfirmReplacementTune() async throws {
         let runtime = SessionPlaybackRuntime()
         let resolver = ControlledSessionPlaybackResolver()
@@ -694,7 +730,7 @@ final class ListeningSessionControllerTests: XCTestCase {
         XCTAssertEqual(controller.listeningModel.playbackState, .playing(channel))
     }
 
-    func testQueuedOldTerminalObservationCannotDisturbNewerTuneMetadata() async throws {
+    func testTerminalObservationIsAppliedBeforeANewerTuneCanClaimTheModel() async throws {
         let runtime = SessionPlaybackRuntime()
         let resolver = ControlledSessionPlaybackResolver()
         let first = LiveChannelID("fixture-generation-first")
@@ -718,16 +754,19 @@ final class ListeningSessionControllerTests: XCTestCase {
         }
         XCTAssertEqual(controller.listeningModel.confirmedChannelID, first)
 
-        // The item failure publishes a terminal state and queues its model
-        // callback. B claims the model before that callback is allowed to run.
+        // Model and coordinator share the main actor, so the terminal
+        // publication is applied before another tune can claim the model.
         runtime.confirmFailure(.networkUnavailable, observation: 1)
+        XCTAssertNil(controller.listeningModel.confirmedChannelID)
+        XCTAssertEqual(controller.listeningModel.playbackState, .unavailable(.networkUnavailable))
+
         let newerTune = try XCTUnwrap(controller.tune(channelID: replacement, originIDs: [first, replacement]))
         XCTAssertTrue(controller.listeningModel.isTunePending)
         await resolver.waitForResolution(of: replacement)
         await Task.yield()
 
         XCTAssertTrue(controller.listeningModel.isTunePending)
-        XCTAssertEqual(controller.listeningModel.confirmedChannelID, first)
+        XCTAssertNil(controller.listeningModel.confirmedChannelID)
         XCTAssertEqual(controller.listeningModel.playbackState, .awaitingLiveContract)
 
         newerTune.cancel()
@@ -1006,6 +1045,33 @@ private actor ControlledSessionPlaybackResolver: PlaybackResolving {
         continuations[channelID] = pending
         continuation.resume(returning: result)
     }
+
+    func calls(for channelID: LiveChannelID) -> Int {
+        calls[channelID] ?? 0
+    }
+}
+
+private actor TuneDispatchGate {
+    private var workerHasArrived = false
+    private var workerWaiters: [CheckedContinuation<Void, Never>] = []
+    private var releaseContinuation: CheckedContinuation<Void, Never>?
+
+    func wait() async {
+        workerHasArrived = true
+        workerWaiters.forEach { $0.resume() }
+        workerWaiters.removeAll()
+        await withCheckedContinuation { releaseContinuation = $0 }
+    }
+
+    func waitForWorker() async {
+        guard !workerHasArrived else { return }
+        await withCheckedContinuation { workerWaiters.append($0) }
+    }
+
+    func release() {
+        releaseContinuation?.resume()
+        releaseContinuation = nil
+    }
 }
 
 private final class SessionMediaHandoff: SiriusXMAppleMediaHandoff, @unchecked Sendable {
@@ -1027,6 +1093,8 @@ private final class SessionPlaybackRuntime: PlaybackPlayerRuntime {
     private var observations: [ObservationCallbacks] = []
     private var observationWaiters: [Int: CheckedContinuation<Void, Never>] = [:]
     private(set) var observationCount = 0
+    private(set) var installCount = 0
+    private(set) var playRequestCount = 0
 
     func observe(
         _: AVPlayerItem,
@@ -1046,8 +1114,8 @@ private final class SessionPlaybackRuntime: PlaybackPlayerRuntime {
         return SessionPlaybackObservation()
     }
 
-    func install(_: AVPlayerItem) {}
-    func requestPlay() {}
+    func install(_: AVPlayerItem) { installCount += 1 }
+    func requestPlay() { playRequestCount += 1 }
     func requestPause() {}
     func clearCurrentItem() {}
 

@@ -91,6 +91,28 @@ final class PlaybackInstallationOrderTests: XCTestCase {
         XCTAssertEqual(coordinator.state, .playing(channel))
     }
 
+    func testStateObserverReceivesSameGenerationPublicationsInlineInSourceOrder() async {
+        let resolver = InstallOrderResolver()
+        let runtime = InstallGatedPlaybackRuntime()
+        let coordinator = PlaybackCoordinator(resolver: resolver, runtime: runtime)
+        let channel = LiveChannelID("fixture-publication-order")
+        var publications: [PlaybackStatePublication] = []
+        coordinator.setStateObserver { publications.append($0) }
+
+        let tune = Task { await coordinator.tune(channel, presentationGeneration: 17) }
+        await resolver.waitForResolution(of: channel)
+        await resolver.complete(channel, with: .failed(.networkUnavailable))
+        _ = await tune.value
+
+        let commandPublications = publications.filter { $0.presentationGeneration == 17 }
+        XCTAssertEqual(commandPublications.count, 2)
+        XCTAssertEqual(commandPublications[0].generation, commandPublications[1].generation)
+        XCTAssertEqual(commandPublications.map(\.state), [
+            .awaitingLiveContract,
+            .unavailable(.networkUnavailable),
+        ])
+    }
+
     func testResolutionFailureOrMissingItemInstallsAndPlaysNothing() async {
         let resolver = InstallOrderResolver()
         let runtime = InstallGatedPlaybackRuntime()

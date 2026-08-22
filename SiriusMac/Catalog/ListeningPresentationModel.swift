@@ -52,11 +52,6 @@ final class ListeningTuneRequest {
     var value: Void {
         get async {
             await task.value
-            // A coordinator event captures state synchronously at its source,
-            // then applies that immutable publication on the model actor. Give
-            // that queued presentation turn a chance to settle before callers
-            // treat a completed request as an immediately navigable state.
-            await Task.yield()
         }
     }
 
@@ -88,7 +83,14 @@ final class ListeningPresentationModel {
     /// a same-channel retune must not be confirmed by an older `.playing`.
     private var tuneGeneration = 0
     private var activeTuneGeneration: Int?
+    /// The worker is retained only while its request owns the pending gate.
+    /// Stop and request cancellation revoke it before a queued worker is
+    /// allowed to enter PlaybackCoordinator.
+    private var activeTuneTask: Task<Void, Never>?
     private var lastAppliedCoordinatorGeneration = 0
+    /// Test-only dispatch seam for the command-boundary invariant: a request
+    /// may be accepted by the model before its worker reaches the coordinator.
+    private let beforeCoordinatorTune: (@MainActor @Sendable () async -> Void)?
 
     private(set) var state: ListeningPresentationState = .idle
     private(set) var playbackState: LivePlaybackState = .awaitingLiveContract
@@ -130,9 +132,14 @@ final class ListeningPresentationModel {
         }
     }
 
-    init(flow: any ListeningFlow, playbackCoordinator: PlaybackCoordinator? = nil) {
+    init(
+        flow: any ListeningFlow,
+        playbackCoordinator: PlaybackCoordinator? = nil,
+        beforeCoordinatorTune: (@MainActor @Sendable () async -> Void)? = nil
+    ) {
         self.flow = flow
         self.playbackCoordinator = playbackCoordinator
+        self.beforeCoordinatorTune = beforeCoordinatorTune
         self.metadataPresentation = (flow as? any MetadataFlow).map { MetadataPresentationModel(flow: $0) } ?? MetadataPresentationModel()
         observePlaybackState()
     }
@@ -200,16 +207,27 @@ final class ListeningPresentationModel {
         activeTuneID = tuneID
         activeTuneGeneration = presentationGeneration
         isTunePending = true
-        let task = Task { [weak self] in
-            guard !Task.isCancelled else { return }
+        let task = Task { @MainActor [weak self, playbackCoordinator] in
+            guard let self,
+                  self.isActiveTune(id: tuneID, presentationGeneration: presentationGeneration),
+                  !Task.isCancelled
+            else { return }
+            await self.beforeCoordinatorTune?()
+            // A Stop or cancellation can run while a test seam (or a future
+            // dispatch hop) holds this worker. Recheck the request authority
+            // at the coordinator boundary rather than trusting task order.
+            guard self.isActiveTune(id: tuneID, presentationGeneration: presentationGeneration),
+                  !Task.isCancelled
+            else { return }
             await playbackCoordinator.tune(channelID, presentationGeneration: presentationGeneration)
             guard !Task.isCancelled else { return }
-            self?.applyCompletedTuneState(
+            self.applyCompletedTuneState(
                 playbackCoordinator.statePublication,
                 for: tuneID,
                 presentationGeneration: presentationGeneration
             )
         }
+        activeTuneTask = task
         return ListeningTuneRequest(task: task) { [weak self] in
             self?.cancelTune(id: tuneID)
         }
@@ -227,13 +245,27 @@ final class ListeningPresentationModel {
 
     @discardableResult
     func stopPlayback() -> Task<Void, Never>? {
-        command { coordinator in await coordinator.stop() }
+        guard let playbackCoordinator else {
+            playbackState = .unavailable(.unsupported)
+            return nil
+        }
+
+        // Stop is a model-boundary revocation, not an asynchronously queued
+        // coordinator command. It retires/cancels the accepted request before
+        // its worker can begin resolving, then synchronously publishes the
+        // terminal coordinator state.
+        revokeActiveTuneForStop()
+        playbackCoordinator.stopImmediately()
+        applyConfirmedPlaybackState(playbackCoordinator.statePublication)
+        return Task {}
     }
 
     func reset() {
         playbackCoordinator?.invalidateForSessionEnd()
         activeTuneID = nil
         activeTuneGeneration = nil
+        activeTuneTask?.cancel()
+        activeTuneTask = nil
         generation += 1
         refreshTask?.cancel()
         refreshTask = nil
@@ -277,13 +309,10 @@ final class ListeningPresentationModel {
     private func observePlaybackState() {
         guard let playbackCoordinator else { return }
         playbackCoordinator.setStateObserver { [weak self] publication in
-            // `publication` is captured at the coordinator boundary. Deferring
-            // a reread of coordinator.state into Task would couple this event
-            // to a later command and reintroduce the same-channel race.
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                self.applyConfirmedPlaybackState(publication)
-            }
+            // Both sides are main-actor isolated. Applying inline preserves
+            // the coordinator's publication order, including multiple states
+            // from a single command generation.
+            self?.applyConfirmedPlaybackState(publication)
         }
     }
 
@@ -360,9 +389,18 @@ final class ListeningPresentationModel {
     /// longer matches the one active request.
     private func cancelTune(id tuneID: UUID) {
         guard activeTuneID == tuneID, let playbackCoordinator else { return }
+        let task = activeTuneTask
         retireActiveTune(id: tuneID)
+        task?.cancel()
         playbackCoordinator.cancelPendingTune()
         applyConfirmedPlaybackState(playbackCoordinator.statePublication)
+    }
+
+    private func revokeActiveTuneForStop() {
+        guard let activeTuneID else { return }
+        let task = activeTuneTask
+        retireActiveTune(id: activeTuneID)
+        task?.cancel()
     }
 
     private func retireActiveTuneIfMatching(_ publication: PlaybackStatePublication) {
@@ -376,6 +414,11 @@ final class ListeningPresentationModel {
         guard activeTuneID == tuneID else { return }
         activeTuneID = nil
         activeTuneGeneration = nil
+        activeTuneTask = nil
         isTunePending = false
+    }
+
+    private func isActiveTune(id tuneID: UUID, presentationGeneration: Int) -> Bool {
+        activeTuneID == tuneID && activeTuneGeneration == presentationGeneration
     }
 }
