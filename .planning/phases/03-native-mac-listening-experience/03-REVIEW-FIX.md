@@ -1,25 +1,25 @@
 ---
 phase: 03-native-mac-listening-experience
-fixed_at: 2026-08-22T13:38:56Z
+fixed_at: 2026-08-22T14:04:37Z
 review_path: /Users/gabe/sirius-mac/.planning/phases/03-native-mac-listening-experience/03-REVIEW.md
-iteration: post-cap-6
+iteration: final-bounded-ordering-repair
 findings_in_scope: 9
-fixed: 7
-skipped: 2
-status: partial
+fixed: 9
+skipped: 0
+status: all_fixed
 ---
 
 # Phase 03: Code Review Fix Report
 
-**Updated at:** 2026-08-22T13:38:56Z
+**Updated at:** 2026-08-22T14:04:37Z
 **Source review:** `/Users/gabe/sirius-mac/.planning/phases/03-native-mac-listening-experience/03-REVIEW.md`
-**Iteration:** post-cap-6
+**Iteration:** final-bounded-ordering-repair
 
 **Summary:**
 
 - Findings in scope: 9
-- Fixed: 7
-- Remaining: 2
+- Fixed: 9
+- Remaining: 0
 
 ## Fixed Issues
 
@@ -65,24 +65,34 @@ status: partial
 **Commit:** b12ae63
 **Applied fix:** Matching terminal publications (`.unavailable`, `.stopped`, and `.idle`) now retire the active tune identity. The session playback runtime retains its item-failure callback so deterministic tests can fire post-install failures. Replacement and same-channel-retune tests verify pending clears and a subsequent queue navigation or tune is accepted.
 
+### CR-01: Publications from one coordinator generation can be applied out of order
+
+**Files modified:** `SiriusMac/Catalog/ListeningPresentationModel.swift`, `SiriusMacTests/PlaybackInstallationOrderTests.swift`, `SiriusMacTests/ListeningSessionControllerTests.swift`
+**Commit:** c3b99f6
+**Applied fix:** Removed the unstructured observer task: the main-actor model now applies the coordinator's immutable publication inline, preserving source order for every state change in one coordinator generation. The request handle no longer uses `Task.yield()`. A deterministic observer test verifies `.awaitingLiveContract` then terminal publication delivery retains one generation and its source order; the replaced stale-terminal test verifies the terminal state is settled before a later tune can claim presentation ownership.
+
+### CR-02: Stop can execute before the pending tune task and allow it to start playback afterward
+
+**Files modified:** `SiriusMac/Catalog/ListeningPresentationModel.swift`, `SiriusMac/Listening/PlaybackCoordinator.swift`, `SiriusMacTests/ListeningSessionControllerTests.swift`
+**Commit:** c3b99f6
+**Applied fix:** The model now owns the accepted tune worker and checks its request identity both before and immediately after its dispatch seam. Stop synchronously retires and cancels that active request, then invokes the coordinator's synchronous stopped-state boundary before returning. The deterministic no-yield regression holds the worker before its first coordinator call, stops it, releases it, and proves zero resolve/install/play activity with a cleared pending gate and stopped coordinator.
+
 ## Verification
 
 All verification ran in the main checkout (the requested no-worktree mode).
 
-- Focused `ListeningSessionControllerTests`: passed (18 tests), including same-channel stale observations, stale terminal observations, post-install replacement failure, same-channel failure, and prior cancellation/no-yield regressions.
-- Focused coordinator suites (`ListeningCompositionTests`, `PlaybackInstallationOrderTests`) plus controller suite: passed, 61 tests.
-- Full `xcodebuild test`: passed, 180 tests.
+- Focused `ListeningSessionControllerTests`, `PlaybackInstallationOrderTests`, `MetadataPresentationTests`, and `ListeningCompositionTests`: passed, 76 tests.
+- Full `xcodebuild test`: passed, 182 tests.
 - `swift test` in `Packages/SiriusXMClient`: passed, 91 tests.
 - Standalone `./script/build_and_run.sh --build-only`: passed.
 - `git diff --check`: passed.
 
 ## Remaining Review Findings
 
-- **CR-01 (blocker):** publications sharing one coordinator generation lack an event sequence and are applied through independent tasks, so an older `.awaitingLiveContract` publication can arrive after a later playing/terminal publication and regress model state.
-- **CR-02 (blocker):** Stop can be queued before a just-created tune task reaches the coordinator; the stop then sees no selected channel, after which the older tune task can start playback despite the listener's Stop command.
+None. The single final independent review reported `clean` with zero critical, warning, or informational findings; its focused 31-test suite and diff check passed.
 
 ---
 
-_Updated: 2026-08-22T13:38:56Z_
+_Updated: 2026-08-22T14:04:37Z_
 _Fixer: the agent (gsd-code-fixer)_
-_Iteration: post-cap-6_
+_Iteration: final-bounded-ordering-repair_
