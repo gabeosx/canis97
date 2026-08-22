@@ -1,24 +1,24 @@
 ---
 phase: 03-native-mac-listening-experience
-fixed_at: 2026-08-21T21:51:31Z
+fixed_at: 2026-08-22T13:38:56Z
 review_path: /Users/gabe/sirius-mac/.planning/phases/03-native-mac-listening-experience/03-REVIEW.md
-iteration: post-cap-5
-findings_in_scope: 7
-fixed: 5
+iteration: post-cap-6
+findings_in_scope: 9
+fixed: 7
 skipped: 2
 status: partial
 ---
 
 # Phase 03: Code Review Fix Report
 
-**Updated at:** 2026-08-21T21:51:31Z
+**Updated at:** 2026-08-22T13:38:56Z
 **Source review:** `/Users/gabe/sirius-mac/.planning/phases/03-native-mac-listening-experience/03-REVIEW.md`
-**Iteration:** post-cap-5
+**Iteration:** post-cap-6
 
 **Summary:**
 
-- Findings in scope: 7
-- Fixed: 5
+- Findings in scope: 9
+- Fixed: 7
 - Remaining: 2
 
 ## Fixed Issues
@@ -53,23 +53,36 @@ status: partial
 **Commit:** 289eb46
 **Applied fix:** Assigned each accepted tune a model-owned UUID and channel identity. Cancellation now reaches `PlaybackCoordinator.cancelPendingTune()` only when the handle still matches that active request, retires that identity synchronously before invalidating coordinator work, and is locally idempotent. Matching completion, matching confirmed playback, and reset retire the identity; queued terminal observations from older work leave a newer request's pending gate intact. Deterministic regressions prove both repeated cancellation of an already-cancelled handle and first-time cancellation of an already-completed handle cannot stop a newer pending tune, which still confirms playback.
 
+### CR-01: Same-channel observations can retire a newer tune request
+
+**Files modified:** `SiriusMac/Catalog/ListeningPresentationModel.swift`, `SiriusMac/Listening/PlaybackCoordinator.swift`, `SiriusMacTests/ListeningSessionControllerTests.swift`
+**Commit:** b12ae63
+**Applied fix:** Added immutable `PlaybackStatePublication` values containing both the coordinator command generation and the model-owned presentation generation. The coordinator captures and supplies the publication at its state-change boundary; the model accepts a publication while pending only when its presentation generation matches the active request, and never rereads mutable coordinator state from a delayed callback. Regressions prove an old queued `.playing(A)` cannot confirm a newer same-channel retune and an old queued terminal state cannot clear B's pending gate or A's confirmed metadata.
+
+### CR-02: An item failure after installation permanently latches `isTunePending`
+
+**Files modified:** `SiriusMac/Catalog/ListeningPresentationModel.swift`, `SiriusMac/Listening/PlaybackCoordinator.swift`, `SiriusMacTests/ListeningSessionControllerTests.swift`
+**Commit:** b12ae63
+**Applied fix:** Matching terminal publications (`.unavailable`, `.stopped`, and `.idle`) now retire the active tune identity. The session playback runtime retains its item-failure callback so deterministic tests can fire post-install failures. Replacement and same-channel-retune tests verify pending clears and a subsequent queue navigation or tune is accepted.
+
 ## Verification
 
 All verification ran in the main checkout (the requested no-worktree mode).
 
-- Focused `ListeningSessionControllerTests`: passed (14 tests), including no-yield cancellation/navigation plus repeated and late cancellation of obsolete handles.
-- Full `xcodebuild test`: passed, 176 tests.
+- Focused `ListeningSessionControllerTests`: passed (18 tests), including same-channel stale observations, stale terminal observations, post-install replacement failure, same-channel failure, and prior cancellation/no-yield regressions.
+- Focused coordinator suites (`ListeningCompositionTests`, `PlaybackInstallationOrderTests`) plus controller suite: passed, 61 tests.
+- Full `xcodebuild test`: passed, 180 tests.
 - `swift test` in `Packages/SiriusXMClient`: passed, 91 tests.
 - Standalone `./script/build_and_run.sh --build-only`: passed.
 - `git diff --check`: passed.
 
 ## Remaining Review Findings
 
-- **CR-01 (blocker):** coordinator observations are correlated to active tunes by channel ID rather than request generation. A queued `.playing(A)` can incorrectly confirm a newer same-channel retune, and a queued old terminal observation can disturb newer pending state/metadata.
-- **CR-02 (blocker):** an item-level failure after installation publishes a terminal coordinator state after the tune task has returned, but the active request identity is never retired, permanently latching `isTunePending`.
+- **CR-01 (blocker):** publications sharing one coordinator generation lack an event sequence and are applied through independent tasks, so an older `.awaitingLiveContract` publication can arrive after a later playing/terminal publication and regress model state.
+- **CR-02 (blocker):** Stop can be queued before a just-created tune task reaches the coordinator; the stop then sees no selected channel, after which the older tune task can start playback despite the listener's Stop command.
 
 ---
 
-_Updated: 2026-08-21T21:51:31Z_
+_Updated: 2026-08-22T13:38:56Z_
 _Fixer: the agent (gsd-code-fixer)_
-_Iteration: post-cap-5_
+_Iteration: post-cap-6_
