@@ -649,6 +649,185 @@ final class ListeningSessionControllerTests: XCTestCase {
         XCTAssertFalse(controller.listeningModel.isTunePending)
     }
 
+    func testQueuedOldSameChannelPlayingObservationCannotConfirmReplacementTune() async throws {
+        let runtime = SessionPlaybackRuntime()
+        let resolver = ControlledSessionPlaybackResolver()
+        let channel = LiveChannelID("fixture-generation-same-channel")
+        let controller = makeController(
+            runtime: runtime,
+            resolver: resolver,
+            client: SessionClient(),
+            authenticationModel: AuthenticationPresentationModel(flow: EntitledSessionAuthenticationFlow())
+        )
+
+        let initialTune = try XCTUnwrap(controller.tune(channelID: channel, originIDs: [channel]))
+        await resolver.waitForResolution(of: channel)
+        await resolver.complete(channel, with: .available(SessionMediaHandoff()))
+        await runtime.waitForObservation()
+        runtime.confirmReady()
+        runtime.confirmPlaying()
+        await initialTune.value
+        for _ in 0 ..< 10 where controller.listeningModel.playbackState != .playing(channel) {
+            await Task.yield()
+        }
+        XCTAssertEqual(controller.listeningModel.playbackState, .playing(channel))
+
+        // This schedules the old generation's model observation. Retuning in
+        // the same actor turn must not let that observation confirm the new A.
+        runtime.confirmPlaying(observation: 1)
+        let replacement = try XCTUnwrap(controller.tune(channelID: channel, originIDs: [channel]))
+        XCTAssertTrue(controller.listeningModel.isTunePending)
+        await resolver.waitForResolution(of: channel, count: 2)
+        await Task.yield()
+        XCTAssertTrue(controller.listeningModel.isTunePending)
+        XCTAssertEqual(controller.listeningModel.playbackState, .awaitingLiveContract)
+
+        await resolver.complete(channel, with: .available(SessionMediaHandoff()))
+        await runtime.waitForObservation(count: 2)
+        runtime.confirmReady(observation: 2)
+        runtime.confirmPlaying(observation: 2)
+        await replacement.value
+        for _ in 0 ..< 10 where controller.listeningModel.playbackState != .playing(channel) {
+            await Task.yield()
+        }
+        XCTAssertFalse(controller.listeningModel.isTunePending)
+        XCTAssertEqual(controller.listeningModel.playbackState, .playing(channel))
+    }
+
+    func testQueuedOldTerminalObservationCannotDisturbNewerTuneMetadata() async throws {
+        let runtime = SessionPlaybackRuntime()
+        let resolver = ControlledSessionPlaybackResolver()
+        let first = LiveChannelID("fixture-generation-first")
+        let replacement = LiveChannelID("fixture-generation-replacement")
+        let controller = makeController(
+            runtime: runtime,
+            resolver: resolver,
+            client: SessionClient(),
+            authenticationModel: AuthenticationPresentationModel(flow: EntitledSessionAuthenticationFlow())
+        )
+
+        let initialTune = try XCTUnwrap(controller.tune(channelID: first, originIDs: [first, replacement]))
+        await resolver.waitForResolution(of: first)
+        await resolver.complete(first, with: .available(SessionMediaHandoff()))
+        await runtime.waitForObservation()
+        runtime.confirmReady()
+        runtime.confirmPlaying()
+        await initialTune.value
+        for _ in 0 ..< 10 where controller.listeningModel.confirmedChannelID != first {
+            await Task.yield()
+        }
+        XCTAssertEqual(controller.listeningModel.confirmedChannelID, first)
+
+        // The item failure publishes a terminal state and queues its model
+        // callback. B claims the model before that callback is allowed to run.
+        runtime.confirmFailure(.networkUnavailable, observation: 1)
+        let newerTune = try XCTUnwrap(controller.tune(channelID: replacement, originIDs: [first, replacement]))
+        XCTAssertTrue(controller.listeningModel.isTunePending)
+        await resolver.waitForResolution(of: replacement)
+        await Task.yield()
+
+        XCTAssertTrue(controller.listeningModel.isTunePending)
+        XCTAssertEqual(controller.listeningModel.confirmedChannelID, first)
+        XCTAssertEqual(controller.listeningModel.playbackState, .awaitingLiveContract)
+
+        newerTune.cancel()
+    }
+
+    func testReplacementItemFailureClearsPendingAndAllowsLaterNavigation() async throws {
+        let runtime = SessionPlaybackRuntime()
+        let resolver = ControlledSessionPlaybackResolver()
+        let catalog = ControlledSessionCatalog()
+        let first = LiveChannelID("fixture-item-failure-first")
+        let current = LiveChannelID("fixture-item-failure-current")
+        let next = LiveChannelID("fixture-item-failure-next")
+        let originIDs = [first, current, next]
+        let controller = makeController(
+            runtime: runtime,
+            resolver: resolver,
+            client: catalog,
+            authenticationModel: AuthenticationPresentationModel(flow: EntitledSessionAuthenticationFlow())
+        )
+
+        let signIn = try XCTUnwrap(controller.authenticationModel.signIn())
+        await catalog.waitForCatalogRequests(count: 1)
+        await catalog.completeCatalog(with: .snapshot(LiveCatalogSnapshot(
+            channels: originIDs.map { LiveChannel(id: $0, name: "Channel \($0.rawValue)") },
+            freshness: .fresh
+        )))
+        await signIn.value
+        for _ in 0 ..< 10 where controller.listeningModel.state.snapshot == nil {
+            await Task.yield()
+        }
+
+        let initialTune = try XCTUnwrap(controller.tune(channelID: current, originIDs: originIDs))
+        await resolver.waitForResolution(of: current)
+        await resolver.complete(current, with: .available(SessionMediaHandoff()))
+        await runtime.waitForObservation()
+        runtime.confirmReady()
+        runtime.confirmPlaying()
+        await initialTune.value
+        for _ in 0 ..< 10 where controller.listeningModel.playbackState != .playing(current) {
+            await Task.yield()
+        }
+        for _ in 0 ..< 10 where !controller.commandAvailability.next {
+            await Task.yield()
+        }
+        XCTAssertTrue(controller.commandAvailability.next)
+
+        let replacementTune = try XCTUnwrap(controller.next())
+        await resolver.waitForResolution(of: next)
+        await resolver.complete(next, with: .available(SessionMediaHandoff()))
+        await runtime.waitForObservation(count: 2)
+        runtime.confirmReady(observation: 2)
+        runtime.confirmFailure(.decoderUnavailable, observation: 2)
+        await replacementTune.value
+        for _ in 0 ..< 10 where controller.listeningModel.isTunePending {
+            await Task.yield()
+        }
+
+        XCTAssertFalse(controller.listeningModel.isTunePending)
+        XCTAssertEqual(controller.listeningModel.playbackState, .unavailable(.decoderUnavailable))
+        XCTAssertNotNil(controller.previous())
+    }
+
+    func testSameChannelRetuneItemFailureClearsPendingAndAllowsLaterNavigation() async throws {
+        let runtime = SessionPlaybackRuntime()
+        let resolver = ControlledSessionPlaybackResolver()
+        let channel = LiveChannelID("fixture-item-failure-same-channel")
+        let controller = makeController(
+            runtime: runtime,
+            resolver: resolver,
+            client: SessionClient(),
+            authenticationModel: AuthenticationPresentationModel(flow: EntitledSessionAuthenticationFlow())
+        )
+
+        let initialTune = try XCTUnwrap(controller.tune(channelID: channel, originIDs: [channel]))
+        await resolver.waitForResolution(of: channel)
+        await resolver.complete(channel, with: .available(SessionMediaHandoff()))
+        await runtime.waitForObservation()
+        runtime.confirmReady()
+        runtime.confirmPlaying()
+        await initialTune.value
+        for _ in 0 ..< 10 where controller.listeningModel.playbackState != .playing(channel) {
+            await Task.yield()
+        }
+
+        let retune = try XCTUnwrap(controller.tune(channelID: channel, originIDs: [channel]))
+        await resolver.waitForResolution(of: channel, count: 2)
+        await resolver.complete(channel, with: .available(SessionMediaHandoff()))
+        await runtime.waitForObservation(count: 2)
+        runtime.confirmReady(observation: 2)
+        runtime.confirmFailure(.networkUnavailable, observation: 2)
+        await retune.value
+        for _ in 0 ..< 10 where controller.listeningModel.isTunePending {
+            await Task.yield()
+        }
+
+        XCTAssertFalse(controller.listeningModel.isTunePending)
+        XCTAssertEqual(controller.listeningModel.playbackState, .unavailable(.networkUnavailable))
+        XCTAssertNotNil(controller.tune(channelID: channel, originIDs: [channel]))
+    }
+
     func testRepeatedLibraryOpenRequestsReuseTheSingletonRoute() {
         let controller = makeController()
         let originalCoordinator = controller.librarySurface.coordinatorIdentity
@@ -838,8 +1017,14 @@ private final class SessionMediaHandoff: SiriusXMAppleMediaHandoff, @unchecked S
 
 @MainActor
 private final class SessionPlaybackRuntime: PlaybackPlayerRuntime {
-    private var ready: (@MainActor @Sendable () -> Void)?
-    private var playing: (@MainActor @Sendable () -> Void)?
+    private struct ObservationCallbacks {
+        let ready: @MainActor @Sendable () -> Void
+        let playing: @MainActor @Sendable () -> Void
+        let paused: @MainActor @Sendable () -> Void
+        let failure: @MainActor @Sendable (LiveListeningFailure) -> Void
+    }
+
+    private var observations: [ObservationCallbacks] = []
     private var observationWaiters: [Int: CheckedContinuation<Void, Never>] = [:]
     private(set) var observationCount = 0
 
@@ -847,11 +1032,15 @@ private final class SessionPlaybackRuntime: PlaybackPlayerRuntime {
         _: AVPlayerItem,
         onReady: @escaping @MainActor @Sendable () -> Void,
         onPlaying: @escaping @MainActor @Sendable () -> Void,
-        onPaused _: @escaping @MainActor @Sendable () -> Void,
-        onFailure _: @escaping @MainActor @Sendable (LiveListeningFailure) -> Void
+        onPaused: @escaping @MainActor @Sendable () -> Void,
+        onFailure: @escaping @MainActor @Sendable (LiveListeningFailure) -> Void
     ) -> any PlaybackItemObserving {
-        ready = onReady
-        playing = onPlaying
+        observations.append(.init(
+            ready: onReady,
+            playing: onPlaying,
+            paused: onPaused,
+            failure: onFailure
+        ))
         observationCount += 1
         observationWaiters.removeValue(forKey: observationCount)?.resume()
         return SessionPlaybackObservation()
@@ -867,8 +1056,27 @@ private final class SessionPlaybackRuntime: PlaybackPlayerRuntime {
         await withCheckedContinuation { observationWaiters[count] = $0 }
     }
 
-    func confirmReady() { ready?() }
-    func confirmPlaying() { playing?() }
+    func confirmReady(observation: Int? = nil) {
+        callback(at: observation)?.ready()
+    }
+
+    func confirmPlaying(observation: Int? = nil) {
+        callback(at: observation)?.playing()
+    }
+
+    func confirmPaused(observation: Int? = nil) {
+        callback(at: observation)?.paused()
+    }
+
+    func confirmFailure(_ failure: LiveListeningFailure, observation: Int? = nil) {
+        callback(at: observation)?.failure(failure)
+    }
+
+    private func callback(at observation: Int?) -> ObservationCallbacks? {
+        let index = (observation ?? observationCount) - 1
+        guard observations.indices.contains(index) else { return nil }
+        return observations[index]
+    }
 }
 
 @MainActor

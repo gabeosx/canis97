@@ -476,6 +476,18 @@ private final class AVFoundationItemObservation: PlaybackItemObserving {
 /// The single composition-owned authority for all listening controls. Commands
 /// invalidate only obsolete resource/item work; presentation changes follow
 /// semantic resolution and observed AVFoundation state, never a command intent.
+struct PlaybackStatePublication: Equatable {
+    /// The coordinator's monotonically increasing command generation. This is
+    /// captured with the state so delayed presentation work can never reread a
+    /// newer mutable state and mistake it for the event that woke it.
+    let generation: Int
+    /// The presentation request that initiated this media command. The app
+    /// supplies this opaque value; direct coordinator consumers may leave it
+    /// unset.
+    let presentationGeneration: Int?
+    let state: LivePlaybackState
+}
+
 @MainActor
 @Observable
 final class PlaybackCoordinator {
@@ -511,8 +523,29 @@ final class PlaybackCoordinator {
     private var sleeping = false
     private var recoveryPendingAfterReconnect = false
     private var playbackMayRecover = false
+    private var stateObserver: (@MainActor @Sendable (PlaybackStatePublication) -> Void)?
 
-    private(set) var state: LivePlaybackState = .idle
+    /// Kept alongside state rather than derived when observed. A later command
+    /// can change `generation` before a queued observer runs, so callers must
+    /// consume this immutable event payload instead of consulting `state`.
+    private(set) var statePublication = PlaybackStatePublication(
+        generation: 0,
+        presentationGeneration: nil,
+        state: .idle
+    )
+    private var presentationGeneration: Int?
+
+    private(set) var state: LivePlaybackState = .idle {
+        didSet {
+            let publication = PlaybackStatePublication(
+                generation: generation,
+                presentationGeneration: presentationGeneration,
+                state: state
+            )
+            statePublication = publication
+            stateObserver?(publication)
+        }
+    }
     private(set) var selectedChannelID: LiveChannelID?
 
     init(
@@ -549,7 +582,17 @@ final class PlaybackCoordinator {
         }
     }
 
-    func tune(_ channelID: LiveChannelID) async {
+    /// Registers the composition's presentation observer. The callback receives
+    /// the immutable publication that caused the state change, rather than
+    /// requiring callers to reread mutable coordinator state on a later turn.
+    func setStateObserver(
+        _ observer: @escaping @MainActor @Sendable (PlaybackStatePublication) -> Void
+    ) {
+        stateObserver = observer
+        observer(statePublication)
+    }
+
+    func tune(_ channelID: LiveChannelID, presentationGeneration: Int? = nil) async {
         let isReplacingConfirmedPlayback: Bool
         switch state {
         case .playing, .paused:
@@ -559,7 +602,12 @@ final class PlaybackCoordinator {
         }
         let commandGeneration = supersedeActiveWork(clearItem: true)
         selectedChannelID = channelID
-        if isReplacingConfirmedPlayback {
+        self.presentationGeneration = presentationGeneration
+        // Model-owned requests need an explicit, request-tagged pending event
+        // even for an initial tune. Direct coordinator consumers retain their
+        // historic initial-idle contract and only publish awaiting on a
+        // confirmed-playback replacement.
+        if presentationGeneration != nil || isReplacingConfirmedPlayback {
             state = .awaitingLiveContract
         }
         await resolveAndInstall(channelID, commandGeneration: commandGeneration)

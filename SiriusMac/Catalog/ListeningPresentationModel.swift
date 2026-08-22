@@ -1,5 +1,4 @@
 import Foundation
-import Observation
 import SiriusXMClient
 
 /// The app-local semantic catalog boundary. Views never construct requests or
@@ -51,7 +50,14 @@ final class ListeningTuneRequest {
     }
 
     var value: Void {
-        get async { await task.value }
+        get async {
+            await task.value
+            // A coordinator event captures state synchronously at its source,
+            // then applies that immutable publication on the model actor. Give
+            // that queued presentation turn a chance to settle before callers
+            // treat a completed request as an immediately navigable state.
+            await Task.yield()
+        }
     }
 
     /// Invalidate the coordinator generation before cancelling the worker
@@ -77,7 +83,12 @@ final class ListeningPresentationModel {
     /// tune remains active. It is deliberately separate from the coordinator's
     /// internal generation, which is an implementation detail of media work.
     private var activeTuneID: UUID?
-    private var activeTuneChannelID: LiveChannelID?
+    /// A monotonic, model-owned identity carried through PlaybackCoordinator's
+    /// immutable state publications. Channel IDs are deliberately insufficient:
+    /// a same-channel retune must not be confirmed by an older `.playing`.
+    private var tuneGeneration = 0
+    private var activeTuneGeneration: Int?
+    private var lastAppliedCoordinatorGeneration = 0
 
     private(set) var state: ListeningPresentationState = .idle
     private(set) var playbackState: LivePlaybackState = .awaitingLiveContract
@@ -184,14 +195,20 @@ final class ListeningPresentationModel {
         }
 
         let tuneID = UUID()
+        tuneGeneration &+= 1
+        let presentationGeneration = tuneGeneration
         activeTuneID = tuneID
-        activeTuneChannelID = channelID
+        activeTuneGeneration = presentationGeneration
         isTunePending = true
         let task = Task { [weak self] in
             guard !Task.isCancelled else { return }
-            await playbackCoordinator.tune(channelID)
+            await playbackCoordinator.tune(channelID, presentationGeneration: presentationGeneration)
             guard !Task.isCancelled else { return }
-            self?.applyCompletedTuneState(playbackCoordinator.state, for: tuneID)
+            self?.applyCompletedTuneState(
+                playbackCoordinator.statePublication,
+                for: tuneID,
+                presentationGeneration: presentationGeneration
+            )
         }
         return ListeningTuneRequest(task: task) { [weak self] in
             self?.cancelTune(id: tuneID)
@@ -216,7 +233,7 @@ final class ListeningPresentationModel {
     func reset() {
         playbackCoordinator?.invalidateForSessionEnd()
         activeTuneID = nil
-        activeTuneChannelID = nil
+        activeTuneGeneration = nil
         generation += 1
         refreshTask?.cancel()
         refreshTask = nil
@@ -250,7 +267,7 @@ final class ListeningPresentationModel {
         }
         return Task { [weak self] in
             await operation(playbackCoordinator)
-            self?.applyConfirmedPlaybackState(playbackCoordinator.state)
+            self?.applyConfirmedPlaybackState(playbackCoordinator.statePublication)
         }
     }
 
@@ -259,23 +276,34 @@ final class ListeningPresentationModel {
     /// update the rendered semantic state.
     private func observePlaybackState() {
         guard let playbackCoordinator else { return }
-        applyConfirmedPlaybackState(playbackCoordinator.state)
-        withObservationTracking {
-            _ = playbackCoordinator.state
-        } onChange: { [weak self, playbackCoordinator] in
-            Task { @MainActor [weak self, playbackCoordinator] in
+        playbackCoordinator.setStateObserver { [weak self] publication in
+            // `publication` is captured at the coordinator boundary. Deferring
+            // a reread of coordinator.state into Task would couple this event
+            // to a later command and reintroduce the same-channel race.
+            Task { @MainActor [weak self] in
                 guard let self else { return }
-                self.applyConfirmedPlaybackState(playbackCoordinator.state)
-                self.observePlaybackState()
+                self.applyConfirmedPlaybackState(publication)
             }
         }
     }
 
-    private func applyConfirmedPlaybackState(_ state: LivePlaybackState) {
+    private func applyConfirmedPlaybackState(_ publication: PlaybackStatePublication) {
+        // An active presentation request accepts only its own coordinator
+        // publication. This prevents queued observations from a prior command
+        // (including a same-channel retune) from clearing its pending gate or
+        // replacing confirmed metadata.
+        if let activeTuneGeneration,
+           publication.presentationGeneration != activeTuneGeneration {
+            return
+        }
+        guard publication.generation >= lastAppliedCoordinatorGeneration else { return }
+        lastAppliedCoordinatorGeneration = publication.generation
+
+        let state = publication.state
         playbackState = state
         switch state {
         case let .playing(channelID?):
-            retireActiveTuneIfMatching(channelID: channelID)
+            retireActiveTuneIfMatching(publication)
             if activeTuneID == nil {
                 isTunePending = false
             }
@@ -284,9 +312,7 @@ final class ListeningPresentationModel {
             metadataPresentation.select(channelID)
         case .paused:
             // Pause retains the last confirmed active channel and its metadata.
-            if activeTuneChannelID == playbackCoordinator?.selectedChannelID {
-                retireActiveTuneIfMatching(channelID: activeTuneChannelID)
-            }
+            retireActiveTuneIfMatching(publication)
             if activeTuneID == nil {
                 isTunePending = false
             }
@@ -297,10 +323,10 @@ final class ListeningPresentationModel {
             // newly confirmed state.
             return
         case .idle, .playing(nil), .stopped, .unavailable:
-            // A queued observation from an older request can publish a
-            // terminal coordinator state after a newer request has already
-            // claimed this model. Leave that newer pending gate intact; its
-            // matching task completion is the authority that may retire it.
+            // A terminal publication from the active generation is conclusive
+            // even when it arrives after `tune` returned awaiting an item
+            // observation (for example AVFoundation item failure).
+            retireActiveTuneIfMatching(publication)
             if activeTuneID == nil {
                 isTunePending = false
             }
@@ -313,10 +339,17 @@ final class ListeningPresentationModel {
     /// Applies a task's terminal result only while it still owns the active
     /// request. A resolver that finishes after a cancellation or replacement
     /// must not retire the newer request's pending gate.
-    private func applyCompletedTuneState(_ state: LivePlaybackState, for tuneID: UUID) {
-        guard activeTuneID == tuneID else { return }
-        applyConfirmedPlaybackState(state)
-        if state != .awaitingLiveContract {
+    private func applyCompletedTuneState(
+        _ publication: PlaybackStatePublication,
+        for tuneID: UUID,
+        presentationGeneration: Int
+    ) {
+        guard activeTuneID == tuneID,
+              activeTuneGeneration == presentationGeneration,
+              publication.presentationGeneration == presentationGeneration
+        else { return }
+        applyConfirmedPlaybackState(publication)
+        if publication.state != .awaitingLiveContract {
             retireActiveTune(id: tuneID)
         }
     }
@@ -329,18 +362,20 @@ final class ListeningPresentationModel {
         guard activeTuneID == tuneID, let playbackCoordinator else { return }
         retireActiveTune(id: tuneID)
         playbackCoordinator.cancelPendingTune()
-        applyConfirmedPlaybackState(playbackCoordinator.state)
+        applyConfirmedPlaybackState(playbackCoordinator.statePublication)
     }
 
-    private func retireActiveTuneIfMatching(channelID: LiveChannelID?) {
-        guard let channelID, activeTuneChannelID == channelID, let activeTuneID else { return }
+    private func retireActiveTuneIfMatching(_ publication: PlaybackStatePublication) {
+        guard publication.presentationGeneration == activeTuneGeneration,
+              let activeTuneID
+        else { return }
         retireActiveTune(id: activeTuneID)
     }
 
     private func retireActiveTune(id tuneID: UUID) {
         guard activeTuneID == tuneID else { return }
         activeTuneID = nil
-        activeTuneChannelID = nil
+        activeTuneGeneration = nil
         isTunePending = false
     }
 }
