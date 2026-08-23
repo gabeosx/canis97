@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 03
 current_phase_name: native-mac-listening-experience
-status: executing
-stopped_at: Planned 03-09-PLAN.md
-last_updated: "2026-08-22T15:46:38.734Z"
-last_activity: 2026-08-22
-last_activity_desc: Planned Phase 03 UAT gap closure with launched-app UI automation
+status: blocked
+stopped_at: "03-09 implementation committed; launched verification awaits separately authorized safety review"
+last_updated: "2026-08-23T22:30:00Z"
+last_activity: 2026-08-23
+last_activity_desc: "Adopted lean Codex-first workflow; preserved Phase 03 launched-test safety block"
 progress:
   total_phases: 4
-  completed_phases: 4
+  completed_phases: 3
   total_plans: 55
   completed_plans: 54
 ---
@@ -27,20 +27,20 @@ See: .planning/PROJECT.md (updated 2026-08-18)
 
 ## Current Position
 
-Phase: 03 (native-mac-listening-experience) — EXECUTING
-Plan: 8 of 9
-Status: Ready to execute
-Last activity: 2026-08-22 — Planned Phase 03 UAT gap closure with launched-app UI automation
+Phase: 03 (native-mac-listening-experience) — BLOCKED
+Plan: 9 of 9
+Status: Implementation committed; launched verification requires a separately authorized safety review
+Last activity: 2026-08-23 — Workflow optimized without launching the app or tests
 
-Progress: [██████████] 100%
+Progress: [█████████░] 98%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 34
-- Average duration: —
-- Total execution time: 0 hours
+- Total plans completed: 54
+- Average duration: Not reliably tracked
+- Total execution time: Not reliably tracked
 
 **By Phase:**
 
@@ -245,6 +245,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-21T19:07:18.006Z
-Stopped at: Completed 03-08-PLAN.md
-Resume file: None
+Last session: 2026-08-23T22:30:00Z
+Stopped at: 03-09 implementation committed; launched verification blocked pending safety review
+Resume file: .planning/phases/03-native-mac-listening-experience/03-09-PLAN.md

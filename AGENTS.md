@@ -158,19 +158,63 @@ Architecture not yet mapped. Follow existing patterns found in the codebase.
 No project skills found. Add skills to any of: `.claude/skills/`, `.agents/skills/`, `.cursor/skills/`, `.github/skills/`, or `.codex/skills/` with a `SKILL.md` index file.
 <!-- GSD:skills-end -->
 
-<!-- GSD:workflow-start source:GSD defaults -->
+<!-- GSD:workflow-start source:Codex-first project policy -->
 
-## GSD Workflow Enforcement
+## Codex-First Development Workflow
 
-Before using Edit, Write, or other file-changing tools, start work through a GSD command so planning artifacts and execution context stay in sync.
+Direct Codex/ChatGPT implementation is the default. GSD commands are optional and are never a prerequisite for editing this repository.
 
-Use these entry points:
+Before changing files:
 
-- `/gsd-quick` for small fixes, doc updates, and ad-hoc tasks
-- `/gsd-debug` for investigation and bug fixing
-- `/gsd-execute-phase` for planned phase work
+- Read this file, inspect `git status` and the relevant diff, then read only the current roadmap goal and directly relevant source/tests.
+- Do not preload the full `.planning/` corpus. Treat `PROJECT.md` and roadmap success criteria as binding; detailed plans are advisory.
+- Preserve existing dirty work. Never reset, clean, restore, or revert changes that are not yours.
 
-Do not make direct repo edits outside a GSD workflow unless the user explicitly asks to bypass it.
+For normal feature and bug work:
+
+1. State a compact implementation approach in chat.
+2. Implement one coherent vertical slice.
+3. Add or update focused tests alongside the implementation.
+4. Run the narrowest safe validation first.
+5. Commit code and tests together when commits are requested or are part of the active workflow.
+6. Run full suites, one independent review, and human UAT once at the phase or release boundary.
+
+Do not generate research, context, discussion-log, UI-specification, validation, review-fix, and per-task summary artifacts by default. Update `.planning/ROADMAP.md` and `.planning/STATE.md` once at a real phase transition. Keep any phase summary concise.
+
+Use targeted security review for authentication, Keychain, provider adapters, skin import, support-bundle export, signing, notarization, and release work. GSD may be invoked only when the user explicitly requests it or when a bounded high-risk audit materially helps.
+
+## Safe Parallel Development
+
+Parallelize independent work, not shared state.
+
+- Up to three read-only agents may inspect distinct subsystems concurrently. Give each one a bounded question and reuse its findings.
+- At most two implementation workers may edit concurrently, with explicit non-overlapping file ownership. Workers must not stage, commit, or revert; one integrator owns Git and the combined diff.
+- The integrator exclusively owns `project.pbxproj`, shared schemes, `SiriusMacApp.swift`, package manifests, this file, and `.planning` coordination files.
+- Do not parallelize changes to the same public type, actor, persistence model, app composition root, playback/session coordinator, or authentication lifecycle.
+- Finish and integrate a changed `SiriusXMClient` public interface before parallel app work consumes it.
+
+Every concurrent compiler lane must use unique temporary paths. Never share DerivedData, SwiftPM scratch directories, module caches, result bundles, or logs.
+
+- Allow at most one `xcodebuild` process at a time.
+- One isolated `swift test` package lane may run beside one Xcode build-only lane.
+- Pure offline script tests using `mktemp` and injected fake hooks may run concurrently.
+- Serialize every `script/build_and_run.sh` invocation; its default build/cache/launcher paths and launch lock are shared.
+- Stop parallel editing before final validation so tests run against one reviewed snapshot.
+
+## Test and Live-Operation Safety
+
+The shared `SiriusMac` scheme contains both `SiriusMacTests` and `SiriusMacUITests`. An unqualified `xcodebuild test -scheme SiriusMac` can therefore launch UI automation.
+
+After the 2026-08-22 loginwindow incident:
+
+- Do not run `xcodebuild test`, `test-without-building`, `xctest`, `XCUIApplication.launch()`, a UI-test runner, or the SiriusMac app/test host until the user separately authorizes a safety review and that review establishes a safe execution environment. Isolated `SiriusXMClient` SwiftPM tests remain allowed.
+- `xcodebuild build-for-testing` is allowed because it compiles without launching tests or the app.
+- After the block is lifted, app-unit runs must select `-only-testing:SiriusMacTests` and disable test parallelism. UI tests remain a separate, serialized, explicitly authorized lane.
+- Never run `build_and_run.sh`, UI tests, app-hosted tests, or `live_compatibility_checkpoint.sh` concurrently.
+- Never parallelize authentication, Keychain, provider compatibility, catalog, tune, playback, telemetry, or other live SiriusXM checks.
+- Live activity requires explicit owner authorization, exactly one in-flight attempt, no automatic retry, and immediate stop on an unknown or unsafe state.
+
+Do not use blind sleep/poll jobs, duplicate agents investigating the same question, speculative abstractions, or repeated full-suite runs after small edits.
 <!-- GSD:workflow-end -->
 
 <!-- GSD:profile-start -->

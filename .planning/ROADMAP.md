@@ -246,7 +246,7 @@ Plans:
   4. A subscriber can add or remove favorites and return to an ordered list of successfully tuned recent channels, with neither feature retaining credentials, session material, or stream URLs.
   5. Audio continues while backgrounded or with the library closed; media keys and system Now Playing reflect confirmed player and metadata state, system routing works normally, and essential player/library actions remain keyboard- and VoiceOver-usable.
 
-**Plans**: 8/8 plans executed
+**Plans**: 8/9 plans executed
 
 Plans:
 **Wave 1**
