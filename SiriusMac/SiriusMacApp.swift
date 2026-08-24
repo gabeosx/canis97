@@ -30,7 +30,9 @@ struct SiriusMacApp: App {
     static func makeSessionController(
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> ListeningSessionController? {
-        guard !SiriusMacLaunchMode.isUnitTestHost(environment: environment) else { return nil }
+        guard !SiriusMacLaunchMode.isUnitTestHost(environment: environment),
+              !SiriusMacLaunchMode.isUITestRequested(environment: environment)
+        else { return nil }
         return ListeningSessionController()
     }
 
@@ -265,6 +267,12 @@ private struct LibraryRoot: View {
 /// intentionally inert so running tests cannot read, authenticate with, or
 /// erase the production Keychain session.
 enum SiriusMacLaunchMode {
+    static func isUITestRequested(
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> Bool {
+        environment["SIRIUS_MAC_UI_TEST_MODE"] == "1"
+    }
+
     static func isUnitTestHost(
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> Bool {
@@ -275,7 +283,7 @@ enum SiriusMacLaunchMode {
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> Bool {
 #if DEBUG
-        environment["SIRIUS_MAC_UI_TEST_MODE"] == "1"
+        isUITestRequested(environment: environment)
 #else
         false
 #endif

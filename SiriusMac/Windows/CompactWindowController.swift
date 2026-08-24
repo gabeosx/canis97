@@ -94,11 +94,17 @@ enum WindowFrameRestoration {
 @MainActor
 final class CompactWindowController {
     private let policy: WindowLifecyclePolicy
+    private let restoresPersistedFrame: Bool
     private var closeObserver: NSObjectProtocol?
     private weak var attachedWindow: NSWindow?
 
-    init(role: WindowRole, terminator: any ApplicationTerminating = NSApplicationTerminator()) {
+    init(
+        role: WindowRole,
+        terminator: any ApplicationTerminating = NSApplicationTerminator(),
+        restoresPersistedFrame: Bool = true
+    ) {
         policy = WindowLifecyclePolicy(role: role, terminator: terminator)
+        self.restoresPersistedFrame = restoresPersistedFrame
     }
 
     deinit {
@@ -124,7 +130,9 @@ final class CompactWindowController {
     }
 
     private func configure(_ window: NSWindow) {
-        window.setFrameAutosaveName(policy.frameAutosaveName)
+        if restoresPersistedFrame {
+            window.setFrameAutosaveName(policy.frameAutosaveName)
+        }
         window.contentMinSize = policy.minimumContentSize
 
         if policy.isResizable {
@@ -140,7 +148,9 @@ final class CompactWindowController {
 
     private func restoreFrameOrCenter(_ window: NSWindow) {
         let key = "NSWindow Frame \(policy.frameAutosaveName)"
-        let savedFrame = UserDefaults.standard.string(forKey: key).map(NSRectFromString)
+        let savedFrame = restoresPersistedFrame
+            ? UserDefaults.standard.string(forKey: key).map(NSRectFromString)
+            : nil
         let visibleFrames = NSScreen.screens.map(\.visibleFrame)
 
         if policy.role == .compact {
@@ -210,13 +220,20 @@ extension CompactWindowController: WindowLifecycleAttaching {}
 struct WindowAttachmentView: NSViewRepresentable {
     let role: WindowRole
     let alwaysOnTop: Bool
+    var restoresPersistedFrame = true
+    var contentRegionAccessibilityIdentifier: String? = nil
 
     func makeCoordinator() -> CompactWindowController {
-        CompactWindowController(role: role)
+        CompactWindowController(role: role, restoresPersistedFrame: restoresPersistedFrame)
     }
 
     func makeNSView(context: Context) -> NSView {
         let view = NSView(frame: .zero)
+        if let contentRegionAccessibilityIdentifier {
+            view.setAccessibilityElement(true)
+            view.setAccessibilityRole(.group)
+            view.setAccessibilityIdentifier(contentRegionAccessibilityIdentifier)
+        }
         DispatchQueue.main.async {
             guard let window = view.window else { return }
             context.coordinator.attach(to: window, alwaysOnTop: alwaysOnTop)

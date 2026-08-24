@@ -14,7 +14,6 @@ final class UITestHarness {
     private(set) var tuneCount = 0
     private(set) var confirmedChannelID: LiveChannelID?
     private(set) var lastOriginIDs: [LiveChannelID] = []
-    private var isTuneInFlight = false
 
     static func makeIfRequested(
         environment: [String: String] = ProcessInfo.processInfo.environment
@@ -36,19 +35,13 @@ final class UITestHarness {
     }
 
     func tune(channelID: LiveChannelID, originIDs: [LiveChannelID]) -> Bool {
-        guard !isTuneInFlight,
-              originIDs.contains(channelID),
+        guard originIDs.contains(channelID),
               listeningModel.state.snapshot?.channels.contains(where: { $0.id == channelID }) == true
         else { return false }
-        isTuneInFlight = true
         listeningModel.select(channelID)
         confirmedChannelID = channelID
         lastOriginIDs = originIDs
         tuneCount += 1
-        Task { @MainActor [weak self] in
-            await Task.yield()
-            self?.isTuneInFlight = false
-        }
         return true
     }
 }
@@ -82,7 +75,12 @@ struct UITestCompactRoot: View {
             ),
             onAction: { _ in }
         )
-        .background(WindowAttachmentView(role: .compact, alwaysOnTop: false))
+        .background(WindowAttachmentView(
+            role: .compact,
+            alwaysOnTop: false,
+            restoresPersistedFrame: false,
+            contentRegionAccessibilityIdentifier: "compact.content-region"
+        ))
         .onAppear { openWindow(id: "sirius-library") }
     }
 }
@@ -111,7 +109,11 @@ struct UITestLibraryRoot: View {
                 .frame(width: 1, height: 1)
                 .opacity(0.01)
         }
-        .background(WindowAttachmentView(role: .library, alwaysOnTop: false))
+        .background(WindowAttachmentView(
+            role: .library,
+            alwaysOnTop: false,
+            restoresPersistedFrame: false
+        ))
     }
 }
 #endif

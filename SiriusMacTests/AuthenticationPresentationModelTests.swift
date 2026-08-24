@@ -13,6 +13,13 @@ final class AuthenticationPresentationModelTests: XCTestCase {
         XCTAssertFalse(SiriusMacLaunchMode.isUnitTestHost(environment: [:]))
     }
 
+    func testUITestRequestFailsClosedOutsideTheDebugHarness() {
+        let environment = ["SIRIUS_MAC_UI_TEST_MODE": "1"]
+
+        XCTAssertTrue(SiriusMacLaunchMode.isUITestRequested(environment: environment))
+        XCTAssertNil(SiriusMacApp.makeSessionController(environment: environment))
+    }
+
     func testSemanticStatesHaveDistinctFixedPresentationCopy() {
         let model = AuthenticationPresentationModel()
         let states: [AuthenticationPresentationState] = [

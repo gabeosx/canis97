@@ -44,6 +44,54 @@ final class WindowLifecyclePolicyTests: XCTestCase {
         XCTAssertEqual(window.frame.origin, savedFrame.origin)
     }
 
+    func testCompactAttachmentCanIgnoreProductionFramePersistence() {
+        let key = "NSWindow Frame SiriusMac.compact.frame"
+        let previousValue = UserDefaults.standard.object(forKey: key)
+        defer {
+            if let previousValue {
+                UserDefaults.standard.set(previousValue, forKey: key)
+            } else {
+                UserDefaults.standard.removeObject(forKey: key)
+            }
+        }
+
+        let savedFrame = NSRect(x: 120, y: 96, width: 760, height: 620)
+        UserDefaults.standard.set(NSStringFromRect(savedFrame), forKey: key)
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 760, height: 620),
+            styleMask: [.titled, .closable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+
+        CompactWindowController(role: .compact, restoresPersistedFrame: false)
+            .attach(to: window, alwaysOnTop: false)
+
+        XCTAssertEqual(window.contentView?.frame.size, NSSize(width: 400, height: 288))
+        XCTAssertNotEqual(window.frame.origin, savedFrame.origin)
+    }
+
+    func testNativeDoubleActionBridgeForwardsAndRestoresTheTableSingleAction() {
+        let tableView = NSTableView()
+        let attachmentView = NSView()
+        tableView.addSubview(attachmentView)
+        let target = NativeTableActionSpy()
+        tableView.target = target
+        tableView.action = #selector(NativeTableActionSpy.handleSingleAction(_:))
+        let coordinator = NativeListDoubleActionBridge.Coordinator(onDoubleAction: { _ in })
+
+        coordinator.install(from: attachmentView)
+        guard let installedAction = tableView.action else {
+            return XCTFail("Expected the bridge to preserve a single-action route")
+        }
+        NSApp.sendAction(installedAction, to: tableView.target, from: tableView)
+
+        XCTAssertEqual(target.singleActionCount, 1)
+        coordinator.uninstall()
+        XCTAssertTrue(tableView.target === target)
+        XCTAssertEqual(tableView.action, #selector(NativeTableActionSpy.handleSingleAction(_:)))
+    }
+
     func testLibraryPolicyIsResizableWithSeparateAutosaveName() {
         let policy = WindowLifecyclePolicy(role: .library)
 
@@ -105,6 +153,15 @@ final class WindowLifecyclePolicyTests: XCTestCase {
         )
     }
 
+}
+
+@MainActor
+private final class NativeTableActionSpy: NSObject {
+    private(set) var singleActionCount = 0
+
+    @objc func handleSingleAction(_ sender: NSTableView) {
+        singleActionCount += 1
+    }
 }
 
 @MainActor

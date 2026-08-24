@@ -31,6 +31,7 @@ struct NativeListDoubleActionBridge: NSViewRepresentable {
         var onDoubleAction: @MainActor (Int) -> Void
         private weak var tableView: NSTableView?
         private weak var previousTarget: AnyObject?
+        private var previousAction: Selector?
         private var previousDoubleAction: Selector?
 
         init(onDoubleAction: @escaping @MainActor (Int) -> Void) {
@@ -44,9 +45,18 @@ struct NativeListDoubleActionBridge: NSViewRepresentable {
             uninstall()
             self.tableView = tableView
             previousTarget = tableView.target as AnyObject?
+            previousAction = tableView.action
             previousDoubleAction = tableView.doubleAction
             tableView.target = self
+            if previousAction != nil {
+                tableView.action = #selector(handleAction(_:))
+            }
             tableView.doubleAction = #selector(handleDoubleAction(_:))
+        }
+
+        @objc private func handleAction(_ sender: NSTableView) {
+            guard let previousAction else { return }
+            NSApp.sendAction(previousAction, to: previousTarget, from: sender)
         }
 
         @objc private func handleDoubleAction(_ sender: NSTableView) {
@@ -63,10 +73,12 @@ struct NativeListDoubleActionBridge: NSViewRepresentable {
             guard let tableView else { return }
             if tableView.target === self {
                 tableView.target = previousTarget
+                tableView.action = previousAction
                 tableView.doubleAction = previousDoubleAction
             }
             self.tableView = nil
             previousTarget = nil
+            previousAction = nil
             previousDoubleAction = nil
         }
 

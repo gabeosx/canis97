@@ -382,7 +382,6 @@ struct LibraryView: View {
                 .background(NativeListDoubleActionBridge { clickedRow in
                     tuneClickedRow(at: clickedRow)
                 })
-                .onSubmit { tuneSelectedChannel() }
                 .onKeyPress(.return) { tuneSelectedChannel(); return .handled }
                 .onKeyPress(.space) {
                     guard focusTarget != .search else { return .ignored }
