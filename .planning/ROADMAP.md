@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 0: Authentication Feasibility Gate** - Historical feasibility work that informed the accepted WebView-token/native-request architecture.
 - [x] **Phase 1: Safe Interoperability Foundation** - Subscribers get a fail-closed, private authorization foundation and a reusable client boundary. (completed 2026-08-18)
 - [x] **Phase 2: Authorized Live Listening** - Subscribers can browse entitled linear channels and listen reliably with truthful playback and metadata states. (completed 2026-08-20)
-- [ ] **Phase 3: Native Mac Listening Experience** - Subscribers control one shared listening session through native windows, local library features, and macOS media controls.
+- [x] **Phase 3: Native Mac Listening Experience** - Subscribers control one shared listening session through native windows, local library features, and macOS media controls. (completed 2026-08-24)
 - [ ] **Phase 4: Safe Skins & Accessible Recovery** - Subscribers can personalize the player with bundled or validated local skins without compromising safety or access.
 - [ ] **Phase 5: Public Release & Compatibility Support** - Subscribers can install trusted public releases and receive privacy-safe compatibility help.
 
@@ -246,7 +246,7 @@ Plans:
   4. A subscriber can add or remove favorites and return to an ordered list of successfully tuned recent channels, with neither feature retaining credentials, session material, or stream URLs.
   5. Audio continues while backgrounded or with the library closed; media keys and system Now Playing reflect confirmed player and metadata state, system routing works normally, and essential player/library actions remain keyboard- and VoiceOver-usable.
 
-**Plans**: 8/9 plans executed
+**Plans**: 9/9 plans executed
 
 Plans:
 **Wave 1**
@@ -283,7 +283,7 @@ Plans:
 
 **Wave 9 — UAT gap closure** *(blocked on Wave 8 completion)*
 
-- [ ] 03-09-PLAN.md — Fix compact-window excess chrome and delayed library selection with credential-free launched-app UI automation.
+- [x] 03-09-PLAN.md — Fix compact-window excess chrome and delayed library selection with credential-free launched-app UI automation.
 
 **UI hint**: yes
 

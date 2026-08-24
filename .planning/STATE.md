@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 03
-current_phase_name: native-mac-listening-experience
-status: blocked
-stopped_at: "03-09 implementation committed; launched verification awaits separately authorized safety review"
-last_updated: "2026-08-23T22:30:00Z"
-last_activity: 2026-08-23
-last_activity_desc: "Adopted lean Codex-first workflow; preserved Phase 03 launched-test safety block"
+current_phase: 04
+current_phase_name: safe-skins-accessible-recovery
+status: ready
+stopped_at: "Phase 03 complete; Phase 04 ready for planning"
+last_updated: "2026-08-24T13:00:11Z"
+last_activity: 2026-08-24
+last_activity_desc: "Closed Phase 03 UAT gaps with isolated launched-app verification and owner approval"
 progress:
-  total_phases: 4
-  completed_phases: 3
+  total_phases: 6
+  completed_phases: 4
   total_plans: 55
-  completed_plans: 54
+  completed_plans: 55
 ---
 
 # Project State
@@ -23,22 +23,22 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-18)
 
 **Core value:** Subscribers can reliably start and control a live SiriusXM stream from a delightful native Mac player, even as the unsupported SiriusXM integration evolves underneath it.
-**Current focus:** Phase 03 — native-mac-listening-experience
+**Current focus:** Phase 04 — safe-skins-accessible-recovery
 
 ## Current Position
 
-Phase: 03 (native-mac-listening-experience) — BLOCKED
-Plan: 9 of 9
-Status: Implementation committed; launched verification requires a separately authorized safety review
-Last activity: 2026-08-23 — Workflow optimized without launching the app or tests
+Phase: 04 (safe-skins-accessible-recovery) — READY FOR PLANNING
+Plan: Not yet planned
+Status: Phase 03 accepted; Phase 04 requirements and success criteria are ready for planning
+Last activity: 2026-08-24 — Plan 03-09 automated verification and human UAT passed
 
-Progress: [█████████░] 98%
+Planned-work progress: [██████████] 100% (55/55; Phase 04 plans TBD)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 54
+- Total plans completed: 55
 - Average duration: Not reliably tracked
 - Total execution time: Not reliably tracked
 
@@ -48,6 +48,7 @@ Progress: [█████████░] 98%
 |-------|-------|-------|----------|
 | 01 | 16 | - | - |
 | 02 | 18 | - | - |
+| 03 | 9 | - | - |
 
 **Recent Trend:**
 
@@ -113,6 +114,7 @@ Progress: [█████████░] 98%
 | Phase 03 P06 | 14m | 2 tasks | 6 files |
 | Phase 03 P07 | 19min | 2 tasks | 7 files |
 | Phase 03 P08 | 1257s | 2 tasks | 6 files |
+| Phase 03 P09 | multi-session | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -127,6 +129,9 @@ Decisions are logged in PROJECT.md. Active decisions affecting current work:
 - Phase 1: App-owned Keychain is the only persistent secret store, session material stays ephemeral, and diagnostics/fixtures exclude secrets by construction.
 - Phase 1: Deterministic WebView/native-request tests compile unconditionally and never depend on `.planning` artifact contents.
 - Phase 3: One playback coordinator owns the active player across native windows and system media controls.
+- Phase 3: UI validation uses a DEBUG-only offline composition selected before production session construction and isolated in a dedicated serialized scheme.
+- Phase 3: Compact restoration preserves only a safe origin and always reapplies the fixed 400 x 288 content size.
+- Phase 3: Native List owns browse selection while one AppKit double action owns explicit activation.
 - Phase 4: Skins are declarative local data/assets only and preserve accessible native semantics and recovery.
 
 All earlier Phase 0 feasibility-selection, proof-run, quartet, GO/NO-GO, and callback/native-path decisions are historical and superseded for product execution.
@@ -245,6 +250,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-23T22:30:00Z
-Stopped at: 03-09 implementation committed; launched verification blocked pending safety review
-Resume file: .planning/phases/03-native-mac-listening-experience/03-09-PLAN.md
+Last session: 2026-08-24T13:00:11Z
+Stopped at: Phase 03 complete; Phase 04 ready for planning
+Resume file: .planning/ROADMAP.md
