@@ -177,7 +177,10 @@ private struct CompactListeningSlice: View {
             appearance: appearanceController.selectedAppearance,
             onAction: perform,
             isAlwaysOnTop: controller.libraryStore.alwaysOnTop,
-            onAlwaysOnTopChanged: controller.libraryStore.setAlwaysOnTop
+            onAlwaysOnTopChanged: controller.libraryStore.setAlwaysOnTop,
+            onAppearanceRecovery: {
+                Task { await appearanceController.restoreNativeAppearance() }
+            }
         )
         .background(
             WindowAttachmentView(
@@ -287,7 +290,6 @@ private struct ListeningCommands: Commands {
                 Button("Use Native Appearance") {
                     Task { await appearanceController.restoreNativeAppearance() }
                 }
-                .disabled(appearanceController.selectedReference == .native)
 
                 Divider()
 

@@ -7,26 +7,36 @@ struct CompactPlayerView: View {
     let onAction: @MainActor (CompactPlayerAction) -> Void
     let isAlwaysOnTop: Bool
     let onAlwaysOnTopChanged: @MainActor (Bool) -> Void
+    let onAppearanceRecovery: @MainActor () -> Void
+    @State private var showsNativeAppearanceRecoveryStatus = false
 
-    private var style: CompactSkinStyle { appearance.style }
+    private var renderingAppearance: ValidatedSkinAppearance {
+        appearance.renderableAppearance { NSImage(contentsOf: $0) != nil }
+    }
+    private var style: CompactSkinStyle { renderingAppearance.style }
+    private var needsNativeAppearanceRecovery: Bool {
+        appearance.reference != .native && renderingAppearance.reference == .native
+    }
 
     init(
         presentation: CompactPlayerPresentation,
         appearance: ValidatedSkinAppearance = .native,
         onAction: @escaping @MainActor (CompactPlayerAction) -> Void,
         isAlwaysOnTop: Bool = false,
-        onAlwaysOnTopChanged: @escaping @MainActor (Bool) -> Void = { _ in }
+        onAlwaysOnTopChanged: @escaping @MainActor (Bool) -> Void = { _ in },
+        onAppearanceRecovery: @escaping @MainActor () -> Void = {}
     ) {
         self.presentation = presentation
         self.appearance = appearance
         self.onAction = onAction
         self.isAlwaysOnTop = isAlwaysOnTop
         self.onAlwaysOnTopChanged = onAlwaysOnTopChanged
+        self.onAppearanceRecovery = onAppearanceRecovery
     }
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            decorativeImage(at: appearance.backgroundAssetURL)
+            decorativeImage(at: renderingAppearance.backgroundAssetURL)
             VStack(alignment: .leading, spacing: style.sectionSpacing) {
                 if let channel = presentation.channelIdentity {
                     populatedContent(channel)
@@ -38,12 +48,21 @@ struct CompactPlayerView: View {
         }
         .frame(width: style.contentSize.width, height: style.contentSize.height, alignment: .topLeading)
         .background(Color(hex: style.dominantHex))
-        .clipShape(.rect(cornerRadius: appearance.cornerRadius))
+        .clipShape(.rect(cornerRadius: renderingAppearance.cornerRadius))
         .environment(\.colorScheme, contentColorScheme)
         .foregroundStyle(.primary)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Sirius Mac compact player")
         .accessibilityIdentifier("compact.canvas")
+        .onChange(of: needsNativeAppearanceRecovery, initial: true) { _, needsRecovery in
+            guard needsRecovery else { return }
+            showsNativeAppearanceRecoveryStatus = true
+            onAppearanceRecovery()
+        }
+        .onChange(of: appearance.reference) { _, reference in
+            guard reference != .native, !needsNativeAppearanceRecovery else { return }
+            showsNativeAppearanceRecoveryStatus = false
+        }
     }
 
     private var contentColorScheme: ColorScheme {
@@ -56,7 +75,7 @@ struct CompactPlayerView: View {
     @ViewBuilder
     private func populatedContent(_ channel: CompactPlayerPresentation.ChannelIdentity) -> some View {
         ZStack {
-            decorativeImage(at: appearance.metadataPanelAssetURL)
+            decorativeImage(at: renderingAppearance.metadataPanelAssetURL)
             HStack(alignment: .top, spacing: 8) {
                 artwork
                 VStack(alignment: .leading, spacing: 4) {
@@ -84,7 +103,7 @@ struct CompactPlayerView: View {
             .padding(4)
         }
         .background(Color(hex: style.secondaryHex))
-        .clipShape(.rect(cornerRadius: appearance.cornerRadius))
+        .clipShape(.rect(cornerRadius: renderingAppearance.cornerRadius))
         statusAndRecovery
         transport
         footer
@@ -105,7 +124,7 @@ struct CompactPlayerView: View {
         }
         .frame(width: 72, height: 72)
         .background(Color(hex: style.secondaryHex))
-        .clipShape(.rect(cornerRadius: appearance.cornerRadius))
+        .clipShape(.rect(cornerRadius: renderingAppearance.cornerRadius))
         .accessibilityLabel(presentation.channelIdentity.map { "Artwork for channel \($0.displayText)" } ?? "Channel artwork")
         .accessibilitySortPriority(60)
     }
@@ -157,6 +176,13 @@ struct CompactPlayerView: View {
             .accessibilityValue(status.accessibilityValue)
             .accessibilityIdentifier("compact.status")
             .accessibilitySortPriority(50)
+        }
+        if needsNativeAppearanceRecovery || showsNativeAppearanceRecoveryStatus {
+            Text("Native appearance restored because the selected decoration is unavailable.")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .accessibilityIdentifier("compact.appearance-recovery")
+                .accessibilitySortPriority(45)
         }
     }
 

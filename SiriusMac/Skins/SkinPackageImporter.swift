@@ -493,6 +493,13 @@ struct SkinPackageImporter: @unchecked Sendable {
         guard CGImageSourceGetCount(source) == 1 else {
             throw SkinPackageRejection.invalidImageFrameCount
         }
+        guard CGImageSourceCreateImageAtIndex(
+            source,
+            0,
+            [kCGImageSourceShouldCacheImmediately: true] as CFDictionary
+        ) != nil else {
+            throw SkinPackageRejection.unsupportedImageType
+        }
         guard let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
               let width = (properties[kCGImagePropertyPixelWidth] as? NSNumber)?.uint64Value,
               let height = (properties[kCGImagePropertyPixelHeight] as? NSNumber)?.uint64Value

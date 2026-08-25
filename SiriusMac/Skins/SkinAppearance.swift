@@ -91,6 +91,16 @@ struct ValidatedSkinAppearance: Identifiable, Equatable, Sendable {
 
     var id: SkinSelectionReference { reference }
 
+    /// Appearance assets are decoration only. If any requested decoration is
+    /// unavailable at render time, the complete static Native value wins.
+    func renderableAppearance(
+        _ assetIsUsable: (URL) -> Bool
+    ) -> ValidatedSkinAppearance {
+        let decorationURLs = [backgroundAssetURL, metadataPanelAssetURL].compactMap { $0 }
+        guard decorationURLs.allSatisfy(assetIsUsable) else { return .native }
+        return self
+    }
+
     static let native = Self(
         reference: .native,
         displayName: "Native",
@@ -427,20 +437,26 @@ final class SkinAppearanceController {
         }
     }
 
-    func restoreNativeAppearance() async {
-        guard selectedReference != .native else { return }
+    @discardableResult
+    func restoreNativeAppearance() async -> Bool {
         selectionGeneration += 1
-        selectedReference = .native
-        selectedAppearance = SkinAppearanceCatalog.nativeAppearance
+        let generation = selectionGeneration
+        publishNative()
         persistenceError = nil
-        guard let selectionStore else { return }
+        guard let selectionStore else { return true }
         do {
             _ = try await selectionStore.save(.native)
         } catch let error as SkinSelectionStoreError {
+            guard generation == selectionGeneration else { return false }
             persistenceError = error
+            return false
         } catch {
+            guard generation == selectionGeneration else { return false }
             persistenceError = .writeFailed
+            return false
         }
+        guard generation == selectionGeneration else { return false }
+        return true
     }
 
     func restorePersistedSelection() async {
