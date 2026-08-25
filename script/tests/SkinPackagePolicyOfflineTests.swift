@@ -97,7 +97,7 @@ private func runBoundaryMatrix() throws {
     }
     _ = try SkinPackagePolicy.preflight(maximumEntries)
     try expectRejection(.tooManyEntries, "entry count one over") {
-        try SkinPackagePolicy.preflight(maximumEntries + [directory("overflow")])
+        _ = try SkinPackagePolicy.preflight(maximumEntries + [directory("overflow")])
     }
 
     _ = try CanonicalSkinPath(
@@ -123,7 +123,7 @@ private func runBoundaryMatrix() throws {
     try expectRejection(.pathCollision, "POSIX case-fold collision") {
         _ = try preflight([file("asset.png"), file("ASSET.PNG")])
     }
-    try expectRejection(.pathCollision, "NFC-equivalent collision") {
+    try expectRejection(.duplicatePath, "NFC-equivalent canonical duplicate") {
         _ = try preflight([file("caf\u{00E9}.png"), file("cafe\u{0301}.png")])
     }
     try expectRejection(.pathPrefixConflict, "file used as directory prefix") {
@@ -152,7 +152,7 @@ private func runBoundaryMatrix() throws {
     exactExpanded.append(
         file(
             "f7.bin",
-            compressed: 83_886,
+            compressed: 83_887,
             expanded: standard.fileBytes - 1
         )
     )

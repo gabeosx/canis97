@@ -153,9 +153,36 @@ struct SkinPackageImporter: @unchecked Sendable {
 
         let start = nowNanoseconds()
         try checkProcessing(start: start)
-        let archiveBytes = try sourceURL.resourceValues(forKeys: [.fileSizeKey]).fileSize
-            .map(UInt64.init) ?? 0
+        let sourceValues: URLResourceValues
+        do {
+            sourceValues = try sourceURL.resourceValues(
+                forKeys: [.fileSizeKey, .isRegularFileKey, .isSymbolicLinkKey]
+            )
+        } catch {
+            throw SkinPackageRejection.sourceUnavailable
+        }
+        guard sourceURL.pathExtension == "siriusskin",
+              sourceValues.isRegularFile == true,
+              sourceValues.isSymbolicLink != true,
+              let fileSize = sourceValues.fileSize,
+              fileSize >= 0
+        else { throw SkinPackageRejection.sourceUnavailable }
+        let archiveBytes = UInt64(fileSize)
         try SkinPackagePolicy.validateArchiveSize(archiveBytes, limits: limits)
+
+        let centralDirectory: ZIPCentralDirectorySummary
+        do {
+            centralDirectory = try ZIPCentralDirectoryInspector.inspect(
+                Data(contentsOf: sourceURL, options: [.mappedIfSafe])
+            )
+        } catch let rejection as SkinPackageRejection {
+            throw rejection
+        } catch {
+            throw SkinPackageRejection.sourceUnavailable
+        }
+        guard !centralDirectory.containsEncryptedEntry else {
+            throw SkinPackageRejection.encryptedEntry
+        }
 
         let archive: Archive
         do {
@@ -165,6 +192,9 @@ struct SkinPackageImporter: @unchecked Sendable {
         }
 
         let entries = Array(archive)
+        guard entries.count == centralDirectory.entryCount else {
+            throw SkinPackageRejection.unsupportedEntry
+        }
         let descriptors = entries.map(Self.descriptor)
         let preflight = try SkinPackagePolicy.preflight(descriptors, limits: limits)
         try checkProcessing(start: start)
@@ -347,16 +377,9 @@ struct SkinPackageImporter: @unchecked Sendable {
         }
         guard let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
               let width = (properties[kCGImagePropertyPixelWidth] as? NSNumber)?.uint64Value,
-              let height = (properties[kCGImagePropertyPixelHeight] as? NSNumber)?.uint64Value,
-              width > 0,
-              height > 0,
-              width <= limits.imageDimension,
-              height <= limits.imageDimension
+              let height = (properties[kCGImagePropertyPixelHeight] as? NSNumber)?.uint64Value
         else { throw SkinPackageRejection.invalidImageDimensions }
-        let pixels = width.multipliedReportingOverflow(by: height)
-        guard !pixels.overflow, pixels.partialValue <= limits.imagePixels else {
-            throw pixels.overflow ? SkinPackageRejection.arithmeticOverflow : SkinPackageRejection.invalidImageDimensions
-        }
+        try SkinPackagePolicy.validateImageDimensions(width: width, height: height, limits: limits)
     }
 
     private func contentDigest(root: URL, files: [CanonicalSkinPath]) throws -> String {
@@ -410,6 +433,113 @@ struct SkinPackageImporter: @unchecked Sendable {
             uncompressedSize: entry.uncompressedSize,
             isEncrypted: false
         )
+    }
+}
+
+private struct ZIPCentralDirectorySummary: Sendable {
+    let entryCount: Int
+    let containsEncryptedEntry: Bool
+}
+
+/// ZIPFoundation intentionally hides encryption flags and does not construct
+/// public entries for encrypted records. This bounded preflight reads only the
+/// central-directory envelope needed to keep those records from disappearing
+/// before Sirius Mac's closed policy sees them; ZIPFoundation still owns entry
+/// decoding and all extraction mechanics.
+private enum ZIPCentralDirectoryInspector {
+    private static let endSignature: UInt32 = 0x0605_4b50
+    private static let entrySignature: UInt32 = 0x0201_4b50
+    private static let maximumCommentBytes = 65_535
+
+    static func inspect(_ data: Data) throws -> ZIPCentralDirectorySummary {
+        guard data.count >= 22,
+              let endOffset = findEndRecord(in: data)
+        else { throw SkinPackageRejection.sourceUnavailable }
+
+        let diskNumber = try uint16(data, at: endOffset + 4)
+        let directoryDisk = try uint16(data, at: endOffset + 6)
+        let diskEntries = try uint16(data, at: endOffset + 8)
+        let totalEntries = try uint16(data, at: endOffset + 10)
+        let directorySize = try uint32(data, at: endOffset + 12)
+        let directoryOffset = try uint32(data, at: endOffset + 16)
+        let commentLength = try uint16(data, at: endOffset + 20)
+
+        guard diskNumber == 0,
+              directoryDisk == 0,
+              diskEntries == totalEntries,
+              totalEntries != UInt16.max,
+              directorySize != UInt32.max,
+              directoryOffset != UInt32.max,
+              endOffset + 22 + Int(commentLength) == data.count
+        else { throw SkinPackageRejection.unsupportedEntry }
+
+        let start = Int(directoryOffset)
+        let size = Int(directorySize)
+        let end = start.addingReportingOverflow(size)
+        guard !end.overflow,
+              start >= 0,
+              end.partialValue <= endOffset,
+              end.partialValue <= data.count
+        else { throw SkinPackageRejection.sourceUnavailable }
+
+        var cursor = start
+        var containsEncryptedEntry = false
+        for _ in 0..<Int(totalEntries) {
+            guard try uint32(data, at: cursor) == entrySignature else {
+                throw SkinPackageRejection.sourceUnavailable
+            }
+            let flags = try uint16(data, at: cursor + 8)
+            containsEncryptedEntry = containsEncryptedEntry || (flags & 0x0001) != 0
+            let nameLength = Int(try uint16(data, at: cursor + 28))
+            let extraLength = Int(try uint16(data, at: cursor + 30))
+            let entryCommentLength = Int(try uint16(data, at: cursor + 32))
+            let variableLength = nameLength
+                .addingReportingOverflow(extraLength)
+            guard !variableLength.overflow else { throw SkinPackageRejection.arithmeticOverflow }
+            let allVariable = variableLength.partialValue
+                .addingReportingOverflow(entryCommentLength)
+            guard !allVariable.overflow else { throw SkinPackageRejection.arithmeticOverflow }
+            let recordLength = 46.addingReportingOverflow(allVariable.partialValue)
+            guard !recordLength.overflow else { throw SkinPackageRejection.arithmeticOverflow }
+            let next = cursor.addingReportingOverflow(recordLength.partialValue)
+            guard !next.overflow, next.partialValue <= end.partialValue else {
+                throw SkinPackageRejection.sourceUnavailable
+            }
+            cursor = next.partialValue
+        }
+        guard cursor == end.partialValue else { throw SkinPackageRejection.sourceUnavailable }
+        return ZIPCentralDirectorySummary(
+            entryCount: Int(totalEntries),
+            containsEncryptedEntry: containsEncryptedEntry
+        )
+    }
+
+    private static func findEndRecord(in data: Data) -> Int? {
+        let lowerBound = max(0, data.count - (22 + maximumCommentBytes))
+        guard data.count >= 4 else { return nil }
+        for offset in stride(from: data.count - 4, through: lowerBound, by: -1) {
+            if (try? uint32(data, at: offset)) == endSignature {
+                return offset
+            }
+        }
+        return nil
+    }
+
+    private static func uint16(_ data: Data, at offset: Int) throws -> UInt16 {
+        guard offset >= 0, offset + 2 <= data.count else {
+            throw SkinPackageRejection.sourceUnavailable
+        }
+        return UInt16(data[offset]) | (UInt16(data[offset + 1]) << 8)
+    }
+
+    private static func uint32(_ data: Data, at offset: Int) throws -> UInt32 {
+        guard offset >= 0, offset + 4 <= data.count else {
+            throw SkinPackageRejection.sourceUnavailable
+        }
+        return UInt32(data[offset])
+            | (UInt32(data[offset + 1]) << 8)
+            | (UInt32(data[offset + 2]) << 16)
+            | (UInt32(data[offset + 3]) << 24)
     }
 }
 

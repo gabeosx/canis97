@@ -240,6 +240,23 @@ enum SkinPackagePolicy {
         }
     }
 
+    static func validateImageDimensions(
+        width: UInt64,
+        height: UInt64,
+        limits: SkinPackageLimits = .standard
+    ) throws {
+        guard width > 0,
+              height > 0,
+              width <= limits.imageDimension,
+              height <= limits.imageDimension
+        else { throw SkinPackageRejection.invalidImageDimensions }
+        let pixels = width.multipliedReportingOverflow(by: height)
+        guard !pixels.overflow else { throw SkinPackageRejection.arithmeticOverflow }
+        guard pixels.partialValue <= limits.imagePixels else {
+            throw SkinPackageRejection.invalidImageDimensions
+        }
+    }
+
     static func checkProcessing(
         cancelled: Bool,
         startNanoseconds: UInt64,
