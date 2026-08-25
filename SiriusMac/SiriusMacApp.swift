@@ -1,10 +1,13 @@
 import Foundation
+import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 @main
 struct SiriusMacApp: App {
     private let sessionController: ListeningSessionController?
     private let appearanceController: SkinAppearanceController
+    private let skinImportCoordinator: SkinImportCoordinator
     private let terminationObserver: ApplicationTerminationObserver?
 #if DEBUG
     private let uiTestHarness: UITestHarness?
@@ -14,11 +17,17 @@ struct SiriusMacApp: App {
         let environment = ProcessInfo.processInfo.environment
         let allowsDurableAppearance = !SiriusMacLaunchMode.isUnitTestHost(environment: environment)
             && !SiriusMacLaunchMode.isUITestRequested(environment: environment)
+        let managedStore = ManagedSkinStore()
+        let importer = SkinPackageImporter(store: managedStore)
         let appearanceController = SkinAppearanceController(
-            catalog: .phaseOne,
+            catalog: SkinAppearanceCatalog.phaseOne.inserting(contentsOf: importer.loadManagedAppearances()),
             selectionStore: allowsDurableAppearance ? SkinSelectionStore() : nil
         )
         self.appearanceController = appearanceController
+        skinImportCoordinator = SkinImportCoordinator(
+            importer: importer,
+            appearanceController: appearanceController
+        )
         if allowsDurableAppearance {
             Task { await appearanceController.restorePersistedSelection() }
         }
@@ -57,7 +66,8 @@ struct SiriusMacApp: App {
         .commands {
             ListeningCommands(
                 controller: sessionController,
-                appearanceController: appearanceController
+                appearanceController: appearanceController,
+                skinImportCoordinator: skinImportCoordinator
             )
         }
 
@@ -221,6 +231,7 @@ private struct CompactListeningSlice: View {
 private struct ListeningCommands: Commands {
     let controller: ListeningSessionController?
     let appearanceController: SkinAppearanceController
+    let skinImportCoordinator: SkinImportCoordinator
     @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
@@ -257,6 +268,12 @@ private struct ListeningCommands: Commands {
                             )
                         }
                         .disabled(appearance.reference == appearanceController.selectedReference)
+                    }
+
+                    Divider()
+
+                    Button("Import Appearance…") {
+                        importAppearance()
                     }
                 }
 
@@ -300,6 +317,63 @@ private struct ListeningCommands: Commands {
                     )
                 )
             }
+        }
+    }
+
+    private func importAppearance() {
+        let panel = NSOpenPanel()
+        panel.title = "Import Appearance"
+        panel.prompt = "Import"
+        panel.allowedContentTypes = [UTType(importedAs: "com.siriusmac.skin-package", conformingTo: .zip)]
+        panel.allowsOtherFileTypes = false
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        guard panel.runModal() == .OK, let sourceURL = panel.url else { return }
+
+        Task {
+            do {
+                let result = try await skinImportCoordinator.importAndSelect(sourceURL)
+                showImportResult(result.selected ? .selected : .selectionUnchanged)
+            } catch let rejection as SkinPackageRejection {
+                showImportResult(rejection == .cancelled ? .cancelled : .rejected)
+            } catch {
+                showImportResult(.rejected)
+            }
+        }
+    }
+
+    private func showImportResult(_ result: SkinImportPresentation) {
+        let alert = NSAlert()
+        alert.alertStyle = result == .selected ? .informational : .warning
+        alert.messageText = result.title
+        alert.informativeText = result.detail
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
+    }
+}
+
+private enum SkinImportPresentation {
+    case selected
+    case selectionUnchanged
+    case cancelled
+    case rejected
+
+    var title: String {
+        switch self {
+        case .selected: "Appearance Imported"
+        case .selectionUnchanged: "Appearance Saved"
+        case .cancelled: "Import Cancelled"
+        case .rejected: "Appearance Not Imported"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .selected: "The validated appearance is now selected."
+        case .selectionUnchanged: "The validated appearance was saved, but your previous appearance remains selected."
+        case .cancelled: "Your previous appearance was not changed."
+        case .rejected: "The package did not meet the safe appearance requirements. Your previous appearance was not changed."
         }
     }
 }

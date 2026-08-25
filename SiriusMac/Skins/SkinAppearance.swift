@@ -215,6 +215,18 @@ struct SkinAppearanceCatalog: Sendable {
         appearancesByReference[reference]
     }
 
+    func inserting(_ appearance: ValidatedSkinAppearance) -> SkinAppearanceCatalog {
+        inserting(contentsOf: [appearance])
+    }
+
+    func inserting(contentsOf additions: [ValidatedSkinAppearance]) -> SkinAppearanceCatalog {
+        let replacementReferences = Set(additions.map(\.reference))
+        let retained = appearances.filter {
+            $0.reference != .native && !replacementReferences.contains($0.reference)
+        }
+        return SkinAppearanceCatalog(appearances: retained + additions)
+    }
+
     static let phaseOne = bundledCatalog()
 
     static func bundledCatalog(in bundle: Bundle = .main) -> SkinAppearanceCatalog {
@@ -239,13 +251,14 @@ struct SkinAppearanceCatalog: Sendable {
 @MainActor
 @Observable
 final class SkinAppearanceController {
-    let catalog: SkinAppearanceCatalog
+    private(set) var catalog: SkinAppearanceCatalog
 
     private(set) var selectedReference: SkinSelectionReference
     private(set) var selectedAppearance: ValidatedSkinAppearance
     private(set) var persistenceError: SkinSelectionStoreError?
     private let selectionStore: SkinSelectionStore?
     private var selectionGeneration = 0
+    private var latestImportedGeneration = 0
 
     init(
         catalog: SkinAppearanceCatalog,
@@ -261,33 +274,110 @@ final class SkinAppearanceController {
 
     var availableAppearances: [ValidatedSkinAppearance] { catalog.appearances }
 
-    func select(_ reference: SkinSelectionReference) async {
+    @discardableResult
+    func select(_ reference: SkinSelectionReference) async -> Bool {
         guard reference != selectedReference,
               let candidate = catalog.resolve(reference)
-        else { return }
+        else { return reference == selectedReference }
 
         selectionGeneration += 1
         let generation = selectionGeneration
         await Task.yield()
-        guard generation == selectionGeneration, !Task.isCancelled else { return }
+        guard generation == selectionGeneration, !Task.isCancelled else { return false }
 
         if let selectionStore {
             do {
                 _ = try await selectionStore.save(Self.persisted(reference))
             } catch let error as SkinSelectionStoreError {
-                guard generation == selectionGeneration else { return }
+                guard generation == selectionGeneration else { return false }
                 persistenceError = error
-                return
+                return false
             } catch {
-                guard generation == selectionGeneration else { return }
+                guard generation == selectionGeneration else { return false }
                 persistenceError = .writeFailed
-                return
+                return false
             }
         }
-        guard generation == selectionGeneration else { return }
+        guard generation == selectionGeneration else { return false }
         persistenceError = nil
         selectedReference = reference
         selectedAppearance = candidate
+        return true
+    }
+
+    @discardableResult
+    func registerImportedAndSelect(_ appearance: ValidatedSkinAppearance) async -> Bool {
+        let generation = latestImportedGeneration + 1
+        let authority = beginImportedSelection(generation: generation)
+        return await commitImportedSelection(
+            appearance,
+            generation: generation,
+            authority: authority
+        )
+    }
+
+    func registerImported(_ appearance: ValidatedSkinAppearance) {
+        guard appearance.reference.classification == .imported else { return }
+        catalog = catalog.inserting(appearance)
+    }
+
+    /// Reserves selection authority before an import waits for the serialized
+    /// transaction queue. A newer import or any ordinary selection invalidates
+    /// the returned token before durable or in-memory publication.
+    func beginImportedSelection(generation: Int) -> Int {
+        latestImportedGeneration = max(latestImportedGeneration, generation)
+        selectionGeneration += 1
+        return selectionGeneration
+    }
+
+    @discardableResult
+    func commitImportedSelection(
+        _ appearance: ValidatedSkinAppearance,
+        generation: Int,
+        authority: Int
+    ) async -> Bool {
+        guard appearance.reference.classification == .imported else { return false }
+        catalog = catalog.inserting(appearance)
+        guard generation == latestImportedGeneration,
+              authority == selectionGeneration,
+              !Task.isCancelled
+        else { return false }
+
+        await Task.yield()
+        guard generation == latestImportedGeneration,
+              authority == selectionGeneration,
+              !Task.isCancelled
+        else { return false }
+        if selectedReference == appearance.reference {
+            selectedAppearance = appearance
+            persistenceError = nil
+            return true
+        }
+        if let selectionStore {
+            do {
+                _ = try await selectionStore.save(Self.persisted(appearance.reference))
+            } catch let error as SkinSelectionStoreError {
+                guard generation == latestImportedGeneration,
+                      authority == selectionGeneration
+                else { return false }
+                persistenceError = error
+                return false
+            } catch {
+                guard generation == latestImportedGeneration,
+                      authority == selectionGeneration
+                else { return false }
+                persistenceError = .writeFailed
+                return false
+            }
+        }
+        guard generation == latestImportedGeneration,
+              authority == selectionGeneration,
+              !Task.isCancelled
+        else { return false }
+        persistenceError = nil
+        selectedReference = appearance.reference
+        selectedAppearance = appearance
+        return true
     }
 
     func restoreNativeAppearance() async {
