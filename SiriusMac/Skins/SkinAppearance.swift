@@ -215,6 +215,18 @@ struct SkinAppearanceCatalog: Sendable {
         appearancesByReference[reference]
     }
 
+    func inserting(_ appearance: ValidatedSkinAppearance) -> SkinAppearanceCatalog {
+        inserting(contentsOf: [appearance])
+    }
+
+    func inserting(contentsOf additions: [ValidatedSkinAppearance]) -> SkinAppearanceCatalog {
+        let replacementReferences = Set(additions.map(\.reference))
+        let retained = appearances.filter {
+            $0.reference != .native && !replacementReferences.contains($0.reference)
+        }
+        return SkinAppearanceCatalog(appearances: retained + additions)
+    }
+
     static let phaseOne = bundledCatalog()
 
     static func bundledCatalog(in bundle: Bundle = .main) -> SkinAppearanceCatalog {
@@ -239,7 +251,7 @@ struct SkinAppearanceCatalog: Sendable {
 @MainActor
 @Observable
 final class SkinAppearanceController {
-    let catalog: SkinAppearanceCatalog
+    private(set) var catalog: SkinAppearanceCatalog
 
     private(set) var selectedReference: SkinSelectionReference
     private(set) var selectedAppearance: ValidatedSkinAppearance
@@ -261,33 +273,42 @@ final class SkinAppearanceController {
 
     var availableAppearances: [ValidatedSkinAppearance] { catalog.appearances }
 
-    func select(_ reference: SkinSelectionReference) async {
+    @discardableResult
+    func select(_ reference: SkinSelectionReference) async -> Bool {
         guard reference != selectedReference,
               let candidate = catalog.resolve(reference)
-        else { return }
+        else { return reference == selectedReference }
 
         selectionGeneration += 1
         let generation = selectionGeneration
         await Task.yield()
-        guard generation == selectionGeneration, !Task.isCancelled else { return }
+        guard generation == selectionGeneration, !Task.isCancelled else { return false }
 
         if let selectionStore {
             do {
                 _ = try await selectionStore.save(Self.persisted(reference))
             } catch let error as SkinSelectionStoreError {
-                guard generation == selectionGeneration else { return }
+                guard generation == selectionGeneration else { return false }
                 persistenceError = error
-                return
+                return false
             } catch {
-                guard generation == selectionGeneration else { return }
+                guard generation == selectionGeneration else { return false }
                 persistenceError = .writeFailed
-                return
+                return false
             }
         }
-        guard generation == selectionGeneration else { return }
+        guard generation == selectionGeneration else { return false }
         persistenceError = nil
         selectedReference = reference
         selectedAppearance = candidate
+        return true
+    }
+
+    @discardableResult
+    func registerImportedAndSelect(_ appearance: ValidatedSkinAppearance) async -> Bool {
+        guard appearance.reference.classification == .imported else { return false }
+        catalog = catalog.inserting(appearance)
+        return await select(appearance.reference)
     }
 
     func restoreNativeAppearance() async {
