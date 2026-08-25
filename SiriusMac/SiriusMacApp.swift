@@ -4,12 +4,24 @@ import SwiftUI
 @main
 struct SiriusMacApp: App {
     private let sessionController: ListeningSessionController?
+    private let appearanceController: SkinAppearanceController
     private let terminationObserver: ApplicationTerminationObserver?
 #if DEBUG
     private let uiTestHarness: UITestHarness?
 #endif
 
     init() {
+        let environment = ProcessInfo.processInfo.environment
+        let allowsDurableAppearance = !SiriusMacLaunchMode.isUnitTestHost(environment: environment)
+            && !SiriusMacLaunchMode.isUITestRequested(environment: environment)
+        let appearanceController = SkinAppearanceController(
+            catalog: .phaseOne,
+            selectionStore: allowsDurableAppearance ? SkinSelectionStore() : nil
+        )
+        self.appearanceController = appearanceController
+        if allowsDurableAppearance {
+            Task { await appearanceController.restorePersistedSelection() }
+        }
 #if DEBUG
         if let uiTestHarness = UITestHarness.makeIfRequested() {
             self.uiTestHarness = uiTestHarness
@@ -43,7 +55,10 @@ struct SiriusMacApp: App {
         .defaultSize(width: 760, height: 620)
         .windowResizability(.contentMinSize)
         .commands {
-            ListeningCommands(controller: sessionController)
+            ListeningCommands(
+                controller: sessionController,
+                appearanceController: appearanceController
+            )
         }
 
         Window("Library", id: "sirius-library") {
@@ -59,7 +74,10 @@ struct SiriusMacApp: App {
         if let uiTestHarness {
             UITestCompactRoot(harness: uiTestHarness)
         } else if let sessionController {
-            CompactAuthenticationRoot(controller: sessionController)
+            CompactAuthenticationRoot(
+                controller: sessionController,
+                appearanceController: appearanceController
+            )
         } else {
             Color.clear
                 .frame(minWidth: 760, minHeight: 620)
@@ -67,7 +85,10 @@ struct SiriusMacApp: App {
         }
 #else
         if let sessionController {
-            CompactAuthenticationRoot(controller: sessionController)
+            CompactAuthenticationRoot(
+                controller: sessionController,
+                appearanceController: appearanceController
+            )
         } else {
             Color.clear
                 .frame(minWidth: 760, minHeight: 620)
@@ -102,12 +123,16 @@ struct SiriusMacApp: App {
 
 private struct CompactAuthenticationRoot: View {
     let controller: ListeningSessionController
+    let appearanceController: SkinAppearanceController
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         Group {
             if controller.authenticationModel.isReady {
-                CompactListeningSlice(controller: controller)
+                CompactListeningSlice(
+                    controller: controller,
+                    appearanceController: appearanceController
+                )
             } else {
                 AuthenticationView(controller: controller)
                     .frame(minWidth: 760, minHeight: 620)
@@ -122,6 +147,7 @@ private struct CompactAuthenticationRoot: View {
 
 private struct CompactListeningSlice: View {
     let controller: ListeningSessionController
+    let appearanceController: SkinAppearanceController
     @Environment(\.openWindow) private var openWindow
     @State private var lastConfirmedPresentation: CompactPlayerPresentation?
 
@@ -129,6 +155,7 @@ private struct CompactListeningSlice: View {
         let current = presentation
         CompactPlayerView(
             presentation: current.retainingConfirmedContent(from: lastConfirmedPresentation),
+            appearance: appearanceController.selectedAppearance,
             onAction: perform,
             isAlwaysOnTop: controller.libraryStore.alwaysOnTop,
             onAlwaysOnTopChanged: controller.libraryStore.setAlwaysOnTop
@@ -193,6 +220,7 @@ private struct CompactListeningSlice: View {
 @MainActor
 private struct ListeningCommands: Commands {
     let controller: ListeningSessionController?
+    let appearanceController: SkinAppearanceController
     @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
@@ -213,6 +241,29 @@ private struct ListeningCommands: Commands {
                     _ = controller.next()
                 }
                 .disabled(!controller.commandAvailability.next)
+
+                Divider()
+
+                Menu("Appearance") {
+                    ForEach(appearanceController.availableAppearances) { appearance in
+                        Button {
+                            Task { await appearanceController.select(appearance.reference) }
+                        } label: {
+                            Label(
+                                appearance.displayName,
+                                systemImage: appearance.reference == appearanceController.selectedReference
+                                    ? "checkmark"
+                                    : "circle"
+                            )
+                        }
+                        .disabled(appearance.reference == appearanceController.selectedReference)
+                    }
+                }
+
+                Button("Use Native Appearance") {
+                    Task { await appearanceController.restoreNativeAppearance() }
+                }
+                .disabled(appearanceController.selectedReference == .native)
 
                 Divider()
 

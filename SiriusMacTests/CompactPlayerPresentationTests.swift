@@ -174,6 +174,87 @@ final class CompactPlayerPresentationTests: XCTestCase {
         XCTAssertEqual(NativeCompactPlayerStyle.fallback.contentSize, .init(width: 400, height: 288))
     }
 
+    func testSelectedAppearanceReferenceRoundTripsEveryClassification() throws {
+        let encoder = JSONEncoder()
+        let decoder = JSONDecoder()
+
+        for classification in SkinClassification.allCases {
+            let reference = SkinSelectionReference(
+                identifier: try XCTUnwrap(SkinIdentifier(rawValue: "round-trip-\(classification.rawValue)")),
+                classification: classification
+            )
+            XCTAssertEqual(
+                try decoder.decode(SkinSelectionReference.self, from: encoder.encode(reference)),
+                reference
+            )
+        }
+    }
+
+    func testNativeBundledAndImportedAppearancesUseOneSelectionPath() async throws {
+        let bundled = try SkinManifestValidator.validate(
+            manifestData(identifier: "bundled-fixture", displayName: "Bundled Fixture"),
+            classification: .bundled
+        )
+        let imported = try SkinManifestValidator.validate(
+            manifestData(identifier: "imported-fixture", displayName: "Imported Fixture"),
+            classification: .imported
+        )
+        let controller = SkinAppearanceController(
+            catalog: SkinAppearanceCatalog(appearances: [bundled, imported])
+        )
+
+        XCTAssertEqual(controller.availableAppearances.first?.reference, .native)
+        for reference in [bundled.reference, imported.reference, .native] {
+            await controller.select(reference)
+            XCTAssertEqual(controller.selectedReference, reference)
+            XCTAssertEqual(controller.selectedAppearance.reference.classification, reference.classification)
+        }
+    }
+
+    func testSkinManifestCannotClaimWindowOrControlGeometry() throws {
+        var object = try XCTUnwrap(
+            JSONSerialization.jsonObject(
+                with: manifestData(identifier: "geometry-fixture", displayName: "Geometry Fixture")
+            ) as? [String: Any]
+        )
+
+        for (key, value) in [
+            ("contentWidth", 400),
+            ("contentHeight", 287),
+            ("transportControlSize", 32),
+            ("transportHitRegion", 31)
+        ] {
+            object[key] = value
+            let data = try JSONSerialization.data(withJSONObject: object)
+            XCTAssertThrowsError(try SkinManifestValidator.validate(data)) { error in
+                XCTAssertEqual(error as? SkinManifestValidationError, .unknownOrMissingKeys)
+            }
+            object.removeValue(forKey: key)
+        }
+    }
+
+    private func manifestData(identifier: String, displayName: String) -> Data {
+        Data(
+            #"""
+            {
+              "schemaVersion": 1,
+              "identifier": "\#(identifier)",
+              "displayName": "\#(displayName)",
+              "playerBackground": "#101010",
+              "metadataPanel": "#202020",
+              "accent": "#C6FF00",
+              "destructive": "#FF453A",
+              "foregroundScheme": "dark",
+              "contentPadding": 16,
+              "sectionSpacing": 8,
+              "cornerRadius": 4,
+              "backgroundAsset": null,
+              "metadataPanelAsset": null
+            }
+            """#.utf8
+        )
+    }
+
     private func unavailableMetadata() -> LiveMetadataState {
         LiveMetadataState(
             channelID: LiveChannelID("fixture-metadata"),
