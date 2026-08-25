@@ -1,35 +1,44 @@
+import AppKit
 import SwiftUI
 
 struct CompactPlayerView: View {
     let presentation: CompactPlayerPresentation
+    let appearance: ValidatedSkinAppearance
     let onAction: @MainActor (CompactPlayerAction) -> Void
     let isAlwaysOnTop: Bool
     let onAlwaysOnTopChanged: @MainActor (Bool) -> Void
-    private let style = NativeCompactPlayerStyle.fallback
+
+    private var style: CompactSkinStyle { appearance.style }
 
     init(
         presentation: CompactPlayerPresentation,
+        appearance: ValidatedSkinAppearance = .native,
         onAction: @escaping @MainActor (CompactPlayerAction) -> Void,
         isAlwaysOnTop: Bool = false,
         onAlwaysOnTopChanged: @escaping @MainActor (Bool) -> Void = { _ in }
     ) {
         self.presentation = presentation
+        self.appearance = appearance
         self.onAction = onAction
         self.isAlwaysOnTop = isAlwaysOnTop
         self.onAlwaysOnTopChanged = onAlwaysOnTopChanged
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: style.sectionSpacing) {
-            if let channel = presentation.channelIdentity {
-                populatedContent(channel)
-            } else {
-                emptyContent
+        ZStack(alignment: .topLeading) {
+            decorativeImage(at: appearance.backgroundAssetURL)
+            VStack(alignment: .leading, spacing: style.sectionSpacing) {
+                if let channel = presentation.channelIdentity {
+                    populatedContent(channel)
+                } else {
+                    emptyContent
+                }
             }
+            .padding(style.padding)
         }
-        .padding(style.padding)
         .frame(width: style.contentSize.width, height: style.contentSize.height, alignment: .topLeading)
         .background(Color(hex: style.dominantHex))
+        .clipShape(.rect(cornerRadius: appearance.cornerRadius))
         .environment(\.colorScheme, contentColorScheme)
         .foregroundStyle(.primary)
         .accessibilityElement(children: .contain)
@@ -46,30 +55,36 @@ struct CompactPlayerView: View {
 
     @ViewBuilder
     private func populatedContent(_ channel: CompactPlayerPresentation.ChannelIdentity) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            artwork
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 4) {
-                    Text(channel.displayText)
-                        .font(.system(size: 18, weight: .semibold))
-                        .lineLimit(1)
-                        .help(channel.displayText)
-                        .accessibilityLabel("Channel \(channel.displayText)")
-                    Spacer(minLength: 4)
-                    Button(action: { onAction(.toggleFavorite) }) {
-                        Image(systemName: presentation.isFavorite ? "star.fill" : "star")
+        ZStack {
+            decorativeImage(at: appearance.metadataPanelAssetURL)
+            HStack(alignment: .top, spacing: 8) {
+                artwork
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 4) {
+                        Text(channel.displayText)
+                            .font(.system(size: 18, weight: .semibold))
+                            .lineLimit(1)
+                            .help(channel.displayText)
+                            .accessibilityLabel("Channel \(channel.displayText)")
+                        Spacer(minLength: 4)
+                        Button(action: { onAction(.toggleFavorite) }) {
+                            Image(systemName: presentation.isFavorite ? "star.fill" : "star")
+                        }
+                        .buttonStyle(.borderless)
+                        .foregroundStyle(presentation.isFavorite ? Color(hex: style.accentHex) : .primary)
+                        .help(presentation.isFavorite ? "Remove from Favorites" : "Add to Favorites")
+                        .accessibilityIdentifier("compact.favorite")
+                        .accessibilityLabel(presentation.isFavorite ? "Remove from Favorites" : "Add to Favorites")
+                        .accessibilityValue(presentation.isFavorite ? "Favorite" : "Not favorite")
+                        .accessibilitySortPriority(40)
                     }
-                    .buttonStyle(.borderless)
-                    .foregroundStyle(presentation.isFavorite ? Color(hex: style.accentHex) : .primary)
-                    .help(presentation.isFavorite ? "Remove from Favorites" : "Add to Favorites")
-                    .accessibilityIdentifier("compact.favorite")
-                    .accessibilityLabel(presentation.isFavorite ? "Remove from Favorites" : "Add to Favorites")
-                    .accessibilityValue(presentation.isFavorite ? "Favorite" : "Not favorite")
-                    .accessibilitySortPriority(40)
+                    metadata
                 }
-                metadata
             }
+            .padding(4)
         }
+        .background(Color(hex: style.secondaryHex))
+        .clipShape(.rect(cornerRadius: appearance.cornerRadius))
         statusAndRecovery
         transport
         footer
@@ -90,7 +105,7 @@ struct CompactPlayerView: View {
         }
         .frame(width: 72, height: 72)
         .background(Color(hex: style.secondaryHex))
-        .clipShape(.rect(cornerRadius: 4))
+        .clipShape(.rect(cornerRadius: appearance.cornerRadius))
         .accessibilityLabel(presentation.channelIdentity.map { "Artwork for channel \($0.displayText)" } ?? "Channel artwork")
         .accessibilitySortPriority(60)
     }
@@ -221,6 +236,17 @@ struct CompactPlayerView: View {
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+    }
+
+    @ViewBuilder
+    private func decorativeImage(at url: URL?) -> some View {
+        if let url, let image = NSImage(contentsOf: url) {
+            Image(nsImage: image)
+                .resizable()
+                .scaledToFill()
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
     }
 }
 
