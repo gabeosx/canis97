@@ -66,8 +66,7 @@ struct SiriusMacApp: App {
         .commands {
             ListeningCommands(
                 controller: sessionController,
-                appearanceController: appearanceController,
-                skinImportCoordinator: skinImportCoordinator
+                appearanceController: appearanceController
             )
         }
 
@@ -76,6 +75,13 @@ struct SiriusMacApp: App {
         }
         .defaultSize(width: 980, height: 700)
         .windowResizability(.contentMinSize)
+
+        Settings {
+            SkinManagementView(
+                appearanceController: appearanceController,
+                skinImportCoordinator: skinImportCoordinator
+            )
+        }
     }
 
     @ViewBuilder
@@ -231,7 +237,6 @@ private struct CompactListeningSlice: View {
 private struct ListeningCommands: Commands {
     let controller: ListeningSessionController?
     let appearanceController: SkinAppearanceController
-    let skinImportCoordinator: SkinImportCoordinator
     @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
@@ -270,11 +275,10 @@ private struct ListeningCommands: Commands {
                         .disabled(appearance.reference == appearanceController.selectedReference)
                     }
 
-                    Divider()
+                }
 
-                    Button("Import Appearance…") {
-                        importAppearance()
-                    }
+                SettingsLink {
+                    Text("Manage Appearances…")
                 }
 
                 Button("Use Native Appearance") {
@@ -320,62 +324,6 @@ private struct ListeningCommands: Commands {
         }
     }
 
-    private func importAppearance() {
-        let panel = NSOpenPanel()
-        panel.title = "Import Appearance"
-        panel.prompt = "Import"
-        panel.allowedContentTypes = [UTType(importedAs: "com.siriusmac.skin-package", conformingTo: .zip)]
-        panel.allowsOtherFileTypes = false
-        panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = false
-        panel.canChooseFiles = true
-        guard panel.runModal() == .OK, let sourceURL = panel.url else { return }
-
-        Task {
-            do {
-                let result = try await skinImportCoordinator.importAndSelect(sourceURL)
-                showImportResult(result.selected ? .selected : .selectionUnchanged)
-            } catch let rejection as SkinPackageRejection {
-                showImportResult(rejection == .cancelled ? .cancelled : .rejected)
-            } catch {
-                showImportResult(.rejected)
-            }
-        }
-    }
-
-    private func showImportResult(_ result: SkinImportPresentation) {
-        let alert = NSAlert()
-        alert.alertStyle = result == .selected ? .informational : .warning
-        alert.messageText = result.title
-        alert.informativeText = result.detail
-        alert.addButton(withTitle: "OK")
-        alert.runModal()
-    }
-}
-
-private enum SkinImportPresentation {
-    case selected
-    case selectionUnchanged
-    case cancelled
-    case rejected
-
-    var title: String {
-        switch self {
-        case .selected: "Appearance Imported"
-        case .selectionUnchanged: "Appearance Saved"
-        case .cancelled: "Import Cancelled"
-        case .rejected: "Appearance Not Imported"
-        }
-    }
-
-    var detail: String {
-        switch self {
-        case .selected: "The validated appearance is now selected."
-        case .selectionUnchanged: "The validated appearance was saved, but your previous appearance remains selected."
-        case .cancelled: "Your previous appearance was not changed."
-        case .rejected: "The package did not meet the safe appearance requirements. Your previous appearance was not changed."
-        }
-    }
 }
 
 private struct LibraryRoot: View {

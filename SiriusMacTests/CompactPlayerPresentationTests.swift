@@ -233,6 +233,40 @@ final class CompactPlayerPresentationTests: XCTestCase {
         }
     }
 
+    func testAppearanceManagementReceivesOnlyStableSemanticAuthority() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: root.appendingPathComponent("SiriusMac/Skins/SkinManagementView.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(source.contains("let reference: SkinSelectionReference"))
+        XCTAssertTrue(source.contains("let classification: SkinClassification"))
+        XCTAssertTrue(source.contains("appearanceController.select(reference)"))
+        XCTAssertTrue(source.contains("skinImportCoordinator.importAndSelect(sourceURL)"))
+        XCTAssertFalse(source.contains("ListeningSessionController"))
+        XCTAssertFalse(source.contains("AccessibilityAnnouncer"))
+        XCTAssertFalse(source.contains("WindowLifecyclePolicy"))
+        XCTAssertFalse(source.contains("SkinManifest"))
+    }
+
+    func testAppSettingsAndPlayerMenuShareTheAppearanceManagementSurface() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: root.appendingPathComponent("SiriusMac/SiriusMacApp.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(source.contains("Settings {"))
+        XCTAssertTrue(source.contains("SkinManagementView("))
+        XCTAssertTrue(source.contains("Text(\"Manage Appearances…\")"))
+        XCTAssertTrue(source.contains("SettingsLink"))
+    }
+
     private func manifestData(identifier: String, displayName: String) -> Data {
         Data(
             #"""
