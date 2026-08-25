@@ -246,6 +246,7 @@ final class CompactPlayerPresentationTests: XCTestCase {
         XCTAssertTrue(source.contains("let classification: SkinClassification"))
         XCTAssertTrue(source.contains("appearanceController.select(reference)"))
         XCTAssertTrue(source.contains("skinImportCoordinator.importAndSelect(sourceURL)"))
+        XCTAssertTrue(source.contains("SkinPackageCompatibilityFailure.unsupportedSchema"))
         XCTAssertFalse(source.contains("ListeningSessionController"))
         XCTAssertFalse(source.contains("AccessibilityAnnouncer"))
         XCTAssertFalse(source.contains("WindowLifecyclePolicy"))

@@ -15,6 +15,10 @@ struct SkinImportResult: Sendable {
     let selected: Bool
 }
 
+enum SkinPackageCompatibilityFailure: Error, Equatable, Sendable {
+    case unsupportedSchema
+}
+
 struct ManagedSkinStore: @unchecked Sendable {
     enum PromotionOutcome: Sendable {
         case imported(URL)
@@ -427,6 +431,8 @@ struct SkinPackageImporter: @unchecked Sendable {
                     return destination
                 }
             )
+        } catch SkinManifestValidationError.unsupportedSchema {
+            throw SkinPackageCompatibilityFailure.unsupportedSchema
         } catch {
             throw SkinPackageRejection.invalidManifest
         }

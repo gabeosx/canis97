@@ -248,6 +248,8 @@ struct SkinManagementView: View {
                 }
             } catch let rejection as SkinPackageRejection {
                 errorPresentation = .importFailure(rejection)
+            } catch SkinPackageCompatibilityFailure.unsupportedSchema {
+                errorPresentation = .unsupportedSchema
             } catch is CancellationError {
                 errorPresentation = .cancelled
             } catch {
