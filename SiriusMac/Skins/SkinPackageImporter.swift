@@ -21,6 +21,13 @@ struct ManagedSkinStore: @unchecked Sendable {
         case unchanged(URL)
     }
 
+    struct PromotionTransaction: Sendable {
+        let outcome: PromotionOutcome
+        fileprivate let destinationURL: URL
+        fileprivate let backupURL: URL?
+        fileprivate let installedNewContent: Bool
+    }
+
     let skinsRootURL: URL
     let stagingRootURL: URL
     let packagesRootURL: URL
@@ -59,11 +66,11 @@ struct ManagedSkinStore: @unchecked Sendable {
         try? fileManager.removeItem(at: url)
     }
 
-    func promote(
+    func preparePromotion(
         stagingURL: URL,
         identifier: SkinIdentifier,
         digest: String
-    ) throws -> PromotionOutcome {
+    ) throws -> PromotionTransaction {
         guard isDirectChild(stagingURL, of: stagingRootURL) else {
             throw SkinPackageRejection.storageFailed
         }
@@ -74,26 +81,78 @@ struct ManagedSkinStore: @unchecked Sendable {
             if fileManager.fileExists(atPath: destination.path),
                try readDigest(at: destination) == digest {
                 try fileManager.removeItem(at: stagingURL)
-                return .unchanged(destination)
+                return PromotionTransaction(
+                    outcome: .unchanged(destination),
+                    destinationURL: destination,
+                    backupURL: nil,
+                    installedNewContent: false
+                )
             }
 
             try fileManager.createDirectory(at: packagesRootURL, withIntermediateDirectories: true)
             if fileManager.fileExists(atPath: destination.path) {
                 let backupName = ".backup-\(identifier.rawValue)-\(UUID().uuidString)"
-                _ = try fileManager.replaceItemAt(
-                    destination,
-                    withItemAt: stagingURL,
-                    backupItemName: backupName,
-                    options: [.usingNewMetadataOnly]
-                )
                 let backupURL = packagesRootURL.appendingPathComponent(backupName, isDirectory: true)
-                try? fileManager.removeItem(at: backupURL)
+                do {
+                    // Preserve an independent rollback source before the atomic
+                    // replacement call. That keeps the prior managed package
+                    // recoverable even if replacement itself reports failure.
+                    try fileManager.copyItem(at: destination, to: backupURL)
+                    _ = try fileManager.replaceItemAt(
+                        destination,
+                        withItemAt: stagingURL,
+                        backupItemName: nil,
+                        options: [.usingNewMetadataOnly]
+                    )
+                } catch {
+                    try restoreBackupIfPresent(backupURL, destination: destination)
+                    throw SkinPackageRejection.storageFailed
+                }
+                guard fileManager.fileExists(atPath: destination.path),
+                      fileManager.fileExists(atPath: backupURL.path)
+                else {
+                    try restoreBackupIfPresent(backupURL, destination: destination)
+                    throw SkinPackageRejection.storageFailed
+                }
+                return PromotionTransaction(
+                    outcome: .imported(destination),
+                    destinationURL: destination,
+                    backupURL: backupURL,
+                    installedNewContent: true
+                )
             } else {
                 try fileManager.moveItem(at: stagingURL, to: destination)
+                return PromotionTransaction(
+                    outcome: .imported(destination),
+                    destinationURL: destination,
+                    backupURL: nil,
+                    installedNewContent: true
+                )
             }
-            return .imported(destination)
         } catch let rejection as SkinPackageRejection {
             throw rejection
+        } catch {
+            throw SkinPackageRejection.storageFailed
+        }
+    }
+
+    func commit(_ transaction: PromotionTransaction) throws {
+        guard let backupURL = transaction.backupURL else { return }
+        do {
+            try fileManager.removeItem(at: backupURL)
+        } catch {
+            throw SkinPackageRejection.storageFailed
+        }
+    }
+
+    func rollback(_ transaction: PromotionTransaction) throws {
+        guard transaction.installedNewContent else { return }
+        do {
+            if let backupURL = transaction.backupURL {
+                try restoreBackupIfPresent(backupURL, destination: transaction.destinationURL)
+            } else if fileManager.fileExists(atPath: transaction.destinationURL.path) {
+                try fileManager.removeItem(at: transaction.destinationURL)
+            }
         } catch {
             throw SkinPackageRejection.storageFailed
         }
@@ -117,6 +176,14 @@ struct ManagedSkinStore: @unchecked Sendable {
         let url = packageURL.appendingPathComponent(".content-digest", isDirectory: false)
         guard fileManager.fileExists(atPath: url.path) else { return nil }
         return String(data: try Data(contentsOf: url), encoding: .utf8)
+    }
+
+    private func restoreBackupIfPresent(_ backupURL: URL, destination: URL) throws {
+        guard fileManager.fileExists(atPath: backupURL.path) else { return }
+        if fileManager.fileExists(atPath: destination.path) {
+            try fileManager.removeItem(at: destination)
+        }
+        try fileManager.moveItem(at: backupURL, to: destination)
     }
 
     private func isDirectChild(_ candidate: URL, of parent: URL) -> Bool {
@@ -261,20 +328,35 @@ struct SkinPackageImporter: @unchecked Sendable {
         let candidate = try validateCandidate(at: stagingURL, extractedFiles: Set(preflight.files))
         try checkProcessing(start: start)
         let digest = try contentDigest(root: stagingURL, files: preflight.files)
-        let promotion = try store.promote(
+        let promotion = try store.preparePromotion(
             stagingURL: stagingURL,
             identifier: candidate.reference.identifier,
             digest: digest
         )
         stagingWasPromoted = true
-        let managedURL: URL = switch promotion {
+        let managedURL: URL = switch promotion.outcome {
         case let .imported(url), let .unchanged(url): url
         }
-        let managedAppearance = try validateManagedCandidate(at: managedURL)
-        guard managedAppearance.reference.identifier == candidate.reference.identifier else {
+        do {
+            let managedAppearance = try validateManagedCandidate(at: managedURL)
+            let managedFiles = try regularPackageFiles(at: managedURL)
+            let managedDigest = try contentDigest(root: managedURL, files: managedFiles)
+            guard managedAppearance.reference.identifier == candidate.reference.identifier,
+                  managedDigest == digest
+            else { throw SkinPackageRejection.storageFailed }
+            try store.commit(promotion)
+            return (promotion.outcome, managedAppearance)
+        } catch {
+            do {
+                try store.rollback(promotion)
+            } catch {
+                throw SkinPackageRejection.storageFailed
+            }
+            if let rejection = error as? SkinPackageRejection {
+                throw rejection
+            }
             throw SkinPackageRejection.storageFailed
         }
-        return (promotion, managedAppearance)
     }
 
     func loadManagedAppearances() -> [ValidatedSkinAppearance] {
@@ -544,20 +626,62 @@ private enum ZIPCentralDirectoryInspector {
 }
 
 actor SkinImportCoordinator {
-    private let importer: SkinPackageImporter
+    typealias ImportOperation = @Sendable (URL) throws -> (
+        ManagedSkinStore.PromotionOutcome,
+        ValidatedSkinAppearance
+    )
+
+    private let importOperation: ImportOperation
     private let appearanceController: SkinAppearanceController
+    private var requestGeneration = 0
+    private var transactionActive = false
+    private var waitingOrder: [UUID] = []
+    private var waiting: [UUID: CheckedContinuation<Void, any Error>] = [:]
 
     init(
         importer: SkinPackageImporter,
         appearanceController: SkinAppearanceController
     ) {
-        self.importer = importer
+        importOperation = { sourceURL in
+            try importer.importPackage(at: sourceURL)
+        }
+        self.appearanceController = appearanceController
+    }
+
+    init(
+        importOperation: @escaping ImportOperation,
+        appearanceController: SkinAppearanceController
+    ) {
+        self.importOperation = importOperation
         self.appearanceController = appearanceController
     }
 
     func importAndSelect(_ sourceURL: URL) async throws -> SkinImportResult {
-        let (promotion, appearance) = try importer.importPackage(at: sourceURL)
-        let selected = await appearanceController.registerImportedAndSelect(appearance)
+        requestGeneration += 1
+        let generation = requestGeneration
+
+        try await acquireTransaction()
+        defer { releaseTransaction() }
+        guard !Task.isCancelled else { throw SkinPackageRejection.cancelled }
+
+        let (promotion, appearance) = try importOperation(sourceURL)
+        let selected: Bool
+        if generation == requestGeneration, !Task.isCancelled {
+            let authority = await appearanceController.beginImportedSelection(generation: generation)
+            if generation == requestGeneration, !Task.isCancelled {
+                selected = await appearanceController.commitImportedSelection(
+                    appearance,
+                    generation: generation,
+                    authority: authority
+                )
+            } else {
+                await appearanceController.registerImported(appearance)
+                selected = false
+            }
+        } else {
+            await appearanceController.registerImported(appearance)
+            selected = false
+        }
         let outcome: SkinImportResult.StorageOutcome = switch promotion {
         case .imported: .imported
         case .unchanged: .unchanged
@@ -567,5 +691,45 @@ actor SkinImportCoordinator {
             appearance: appearance,
             selected: selected
         )
+    }
+
+    private func acquireTransaction() async throws {
+        guard transactionActive else {
+            transactionActive = true
+            return
+        }
+
+        let identifier = UUID()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation {
+                (continuation: CheckedContinuation<Void, any Error>) in
+                guard !Task.isCancelled else {
+                    continuation.resume(throwing: SkinPackageRejection.cancelled)
+                    return
+                }
+                waitingOrder.append(identifier)
+                waiting[identifier] = continuation
+            }
+        } onCancel: {
+            Task { await self.cancelWaitingTransaction(identifier) }
+        }
+    }
+
+    private func cancelWaitingTransaction(_ identifier: UUID) {
+        waitingOrder.removeAll { $0 == identifier }
+        waiting.removeValue(forKey: identifier)?.resume(
+            throwing: SkinPackageRejection.cancelled
+        )
+    }
+
+    private func releaseTransaction() {
+        while let identifier = waitingOrder.first {
+            waitingOrder.removeFirst()
+            if let continuation = waiting.removeValue(forKey: identifier) {
+                continuation.resume()
+                return
+            }
+        }
+        transactionActive = false
     }
 }

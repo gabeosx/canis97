@@ -77,16 +77,19 @@ final class SkinPackageImporterTests: XCTestCase {
         let staleAuthority = controller.beginImportedSelection(generation: 1)
         let currentAuthority = controller.beginImportedSelection(generation: 2)
 
-        XCTAssertFalse(await controller.commitImportedSelection(
+        let staleSelected = await controller.commitImportedSelection(
             stale,
             generation: 1,
             authority: staleAuthority
-        ))
-        XCTAssertTrue(await controller.commitImportedSelection(
+        )
+        let currentSelected = await controller.commitImportedSelection(
             current,
             generation: 2,
             authority: currentAuthority
-        ))
+        )
+
+        XCTAssertFalse(staleSelected)
+        XCTAssertTrue(currentSelected)
         XCTAssertEqual(controller.selectedReference, current.reference)
         XCTAssertEqual(controller.catalog.resolve(stale.reference), stale)
     }
@@ -107,6 +110,60 @@ final class SkinPackageImporterTests: XCTestCase {
         XCTAssertNotEqual(first, second)
         XCTAssertEqual(first.deletingLastPathComponent(), store.stagingRootURL)
         XCTAssertEqual(second.deletingLastPathComponent(), store.stagingRootURL)
+    }
+
+    func testCancelledCoordinatorRequestDoesNotInvokeTransport() async {
+        let probe = SynchronousImportProbe()
+        let controller = SkinAppearanceController(catalog: .phaseOne)
+        let appearance = importedAppearance(
+            identifier: SkinIdentifier(rawValue: "creator.cancelled")!,
+            displayName: "Cancelled"
+        )
+        let coordinator = SkinImportCoordinator(
+            importOperation: { _ in
+                probe.recordInvocation()
+                return (.unchanged(URL(fileURLWithPath: "/managed")), appearance)
+            },
+            appearanceController: controller
+        )
+
+        let task = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            return try await coordinator.importAndSelect(URL(fileURLWithPath: "/source.siriusskin"))
+        }
+        do {
+            _ = try await task.value
+            XCTFail("A cancelled queued request must fail closed")
+        } catch {
+            XCTAssertEqual(error as? SkinPackageRejection, .cancelled)
+        }
+        XCTAssertEqual(probe.invocationCount, 0)
+        XCTAssertEqual(controller.selectedReference, .native)
+    }
+
+    func testPromotionRollbackRestoresPriorManagedPackage() throws {
+        let support = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let store = ManagedSkinStore(applicationSupportDirectory: support)
+        defer { try? FileManager.default.removeItem(at: support) }
+        let identifier = SkinIdentifier(rawValue: "creator.rollback-package")!
+        let destination = store.packagesRootURL
+            .appendingPathComponent(identifier.rawValue, isDirectory: true)
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        try Data("old".utf8).write(to: destination.appendingPathComponent("marker"))
+        try Data("old-digest".utf8).write(to: destination.appendingPathComponent(".content-digest"))
+        let staging = try store.makeStagingDirectory()
+        try Data("new".utf8).write(to: staging.appendingPathComponent("marker"))
+
+        let transaction = try store.preparePromotion(
+            stagingURL: staging,
+            identifier: identifier,
+            digest: "new-digest"
+        )
+        try store.rollback(transaction)
+
+        let restored = try String(contentsOf: destination.appendingPathComponent("marker"), encoding: .utf8)
+        XCTAssertEqual(restored, "old")
     }
 
     func testClosedPolicyCoversTransportEntryKindsAndCancellation() throws {
@@ -143,5 +200,18 @@ final class SkinPackageImporterTests: XCTestCase {
             backgroundAssetURL: nil,
             metadataPanelAssetURL: nil
         )
+    }
+}
+
+private final class SynchronousImportProbe: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+
+    var invocationCount: Int {
+        lock.withLock { count }
+    }
+
+    func recordInvocation() {
+        lock.withLock { count += 1 }
     }
 }
