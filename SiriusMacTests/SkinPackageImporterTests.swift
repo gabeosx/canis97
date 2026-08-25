@@ -312,6 +312,50 @@ final class SkinPackageImporterTests: XCTestCase {
         XCTAssertEqual(controller.availableAppearances.map(\.reference), [.native, bundled.reference])
     }
 
+    func testConcurrentSelectionInvalidatesSelectedRemovalBeforeDeletion() async throws {
+        let persistenceGate = RemovalPersistenceGate()
+        let deletionEvents = RemovalEventProbe()
+        let imported = importedAppearance(
+            identifier: SkinIdentifier(rawValue: "creator.concurrent-removal")!,
+            displayName: "Concurrent Removal"
+        )
+        let bundled = try SkinManifestValidator.validate(
+            manifestData(identifier: "bundled-concurrent", displayName: "Bundled Concurrent"),
+            classification: .bundled
+        )
+        let controller = SkinAppearanceController(
+            catalog: SkinAppearanceCatalog(appearances: [imported, bundled]),
+            initialReference: imported.reference,
+            selectionStore: selectionStore(write: persistenceGate.write),
+            removeImportedPackage: { _ in
+                deletionEvents.record("delete-package")
+                return true
+            }
+        )
+
+        let removalTask = Task {
+            await controller.removeImportedSkin(imported.reference)
+        }
+        for _ in 0..<1_000 where !persistenceGate.didStartFirstWrite {
+            await Task.yield()
+        }
+        XCTAssertTrue(persistenceGate.didStartFirstWrite)
+
+        let selectionTask = Task {
+            await controller.select(bundled.reference)
+        }
+        await Task.yield()
+        persistenceGate.releaseFirstWrite()
+
+        let removed = await removalTask.value
+        let selected = await selectionTask.value
+        XCTAssertFalse(removed)
+        XCTAssertTrue(selected)
+        XCTAssertTrue(deletionEvents.values.isEmpty)
+        XCTAssertEqual(controller.selectedReference, bundled.reference)
+        XCTAssertEqual(controller.catalog.resolve(imported.reference), imported)
+    }
+
     private func importedAppearance(
         identifier: SkinIdentifier,
         displayName: String
@@ -389,5 +433,31 @@ private final class RemovalEventProbe: @unchecked Sendable {
 
     func record(_ value: String) {
         lock.withLock { storedValues.append(value) }
+    }
+}
+
+private final class RemovalPersistenceGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private let firstWriteMayFinish = DispatchSemaphore(value: 0)
+    private var writeCount = 0
+    private var firstWriteStarted = false
+
+    var didStartFirstWrite: Bool {
+        lock.withLock { firstWriteStarted }
+    }
+
+    func write(_ data: Data, _ url: URL) throws {
+        let isFirstWrite = lock.withLock { () -> Bool in
+            writeCount += 1
+            guard writeCount == 1 else { return false }
+            firstWriteStarted = true
+            return true
+        }
+        guard isFirstWrite else { return }
+        _ = firstWriteMayFinish.wait(timeout: .now() + 2)
+    }
+
+    func releaseFirstWrite() {
+        firstWriteMayFinish.signal()
     }
 }
