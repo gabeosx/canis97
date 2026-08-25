@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "identifier": "signal-glow",
+  "displayName": "Signal Glow",
+  "playerBackground": "#07130D",
+  "metadataPanel": "#10291A",
+  "accent": "#63FF9B",
+  "destructive": "#FF5C70",
+  "foregroundScheme": "dark",
+  "contentPadding": 16,
+  "sectionSpacing": 8,
+  "cornerRadius": 8,
+  "backgroundAsset": null,
+  "metadataPanelAsset": null
+}

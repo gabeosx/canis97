@@ -215,36 +215,25 @@ struct SkinAppearanceCatalog: Sendable {
         appearancesByReference[reference]
     }
 
-    static let phaseOne: SkinAppearanceCatalog = {
-        let signalGlow: ValidatedSkinAppearance?
-        do {
-            signalGlow = try SkinManifestValidator.validate(
-                Data(signalGlowManifest.utf8),
-                classification: .bundled
-            )
-        } catch {
-            signalGlow = nil
-        }
-        return SkinAppearanceCatalog(appearances: signalGlow.map { [$0] } ?? [])
-    }()
+    static let phaseOne = bundledCatalog()
 
-    private static let signalGlowManifest = #"""
-    {
-      "schemaVersion": 1,
-      "identifier": "signal-glow",
-      "displayName": "Signal Glow",
-      "playerBackground": "#07130D",
-      "metadataPanel": "#10291A",
-      "accent": "#63FF9B",
-      "destructive": "#FF5C70",
-      "foregroundScheme": "dark",
-      "contentPadding": 16,
-      "sectionSpacing": 8,
-      "cornerRadius": 8,
-      "backgroundAsset": null,
-      "metadataPanelAsset": null
+    static func bundledCatalog(in bundle: Bundle = .main) -> SkinAppearanceCatalog {
+        let bundledAppearances: [ValidatedSkinAppearance] = ["SignalGlow", "TapeDeck"].compactMap { resourceName -> ValidatedSkinAppearance? in
+            guard let manifestURL = bundle.url(forResource: resourceName, withExtension: "json"),
+                  let data = try? Data(contentsOf: manifestURL)
+            else { return nil }
+            let resourceDirectory = manifestURL.deletingLastPathComponent()
+            return try? SkinManifestValidator.validate(
+                data,
+                classification: .bundled,
+                assetResolver: { path in
+                    let candidate = resourceDirectory.appendingPathComponent(path, isDirectory: false)
+                    return FileManager.default.fileExists(atPath: candidate.path) ? candidate : nil
+                }
+            )
+        }
+        return SkinAppearanceCatalog(appearances: bundledAppearances)
     }
-    """#
 }
 
 @MainActor

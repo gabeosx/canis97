@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "identifier": "tape-deck",
+  "displayName": "Tape Deck",
+  "playerBackground": "#21170F",
+  "metadataPanel": "#3B2A1C",
+  "accent": "#F0B45A",
+  "destructive": "#FF6B5E",
+  "foregroundScheme": "dark",
+  "contentPadding": 14,
+  "sectionSpacing": 6,
+  "cornerRadius": 2,
+  "backgroundAsset": null,
+  "metadataPanelAsset": null
+}
