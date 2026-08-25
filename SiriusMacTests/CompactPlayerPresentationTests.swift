@@ -233,6 +233,114 @@ final class CompactPlayerPresentationTests: XCTestCase {
         }
     }
 
+    func testAppearanceManagementReceivesOnlyStableSemanticAuthority() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: root.appendingPathComponent("SiriusMac/Skins/SkinManagementView.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(source.contains("let reference: SkinSelectionReference"))
+        XCTAssertTrue(source.contains("let classification: SkinClassification"))
+        XCTAssertTrue(source.contains("appearanceController.select(reference)"))
+        XCTAssertTrue(source.contains("skinImportCoordinator.importAndSelect(sourceURL)"))
+        XCTAssertTrue(source.contains("SkinPackageCompatibilityFailure.unsupportedSchema"))
+        XCTAssertFalse(source.contains("ListeningSessionController"))
+        XCTAssertFalse(source.contains("AccessibilityAnnouncer"))
+        XCTAssertFalse(source.contains("WindowLifecyclePolicy"))
+        XCTAssertFalse(source.contains("SkinManifest"))
+    }
+
+    func testAppSettingsAndPlayerMenuShareTheAppearanceManagementSurface() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: root.appendingPathComponent("SiriusMac/SiriusMacApp.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(source.contains("Settings {"))
+        XCTAssertTrue(source.contains("SkinManagementView("))
+        XCTAssertTrue(source.contains("Text(\"Manage Appearances…\")"))
+        XCTAssertTrue(source.contains("SettingsLink"))
+    }
+
+    func testUnrenderableDecorationFallsBackToStaticNativeAppearance() throws {
+        let imported = ValidatedSkinAppearance(
+            reference: SkinSelectionReference(
+                identifier: try XCTUnwrap(SkinIdentifier(rawValue: "imported-render-failure")),
+                classification: .imported
+            ),
+            displayName: "Imported Render Failure",
+            style: .fallback,
+            cornerRadius: 8,
+            backgroundAssetURL: URL(fileURLWithPath: "/managed/missing-background.png"),
+            metadataPanelAssetURL: nil
+        )
+
+        let rendered = imported.renderableAppearance { _ in false }
+
+        XCTAssertEqual(rendered, SkinAppearanceCatalog.nativeAppearance)
+    }
+
+    func testNativeBundledAndDecorationFreeImportedAppearancesKeepTheirValidatedValues() throws {
+        let bundled = try SkinManifestValidator.validate(
+            manifestData(identifier: "bundled-renderable", displayName: "Bundled Renderable"),
+            classification: .bundled
+        )
+        let imported = try SkinManifestValidator.validate(
+            manifestData(identifier: "imported-renderable", displayName: "Imported Renderable"),
+            classification: .imported
+        )
+
+        for appearance in [ValidatedSkinAppearance.native, bundled, imported] {
+            XCTAssertEqual(
+                appearance.renderableAppearance { _ in false },
+                appearance
+            )
+        }
+    }
+
+    func testPlayerRecoveryCommandIsDirectAndUnconditionallyEnabled() throws {
+        let source = try repositorySource("SiriusMac/SiriusMacApp.swift")
+        let commandStart = try XCTUnwrap(source.range(of: "Button(\"Use Native Appearance\")"))
+        let commandTail = source[commandStart.lowerBound...]
+        let commandBlock = String(commandTail.prefix(320))
+
+        XCTAssertTrue(commandBlock.contains("appearanceController.restoreNativeAppearance()"))
+        XCTAssertFalse(commandBlock.contains("catalog.resolve"))
+        XCTAssertFalse(commandBlock.contains("selectedAppearance"))
+        XCTAssertFalse(commandBlock.contains(".disabled"))
+    }
+
+    func testCompactAppearanceInputCannotChangeSemanticControlsOrGeometry() throws {
+        let source = try repositorySource("SiriusMac/Player/CompactPlayerView.swift")
+        let manifestSource = try repositorySource("SiriusMac/Skins/SkinAppearance.swift")
+
+        XCTAssertFalse(source.contains("switch appearance.reference.classification"))
+        XCTAssertTrue(source.contains("CompactPlayerPresentation.transportControlSize"))
+        XCTAssertTrue(source.contains(".frame(width: style.contentSize.width, height: style.contentSize.height"))
+        XCTAssertTrue(source.contains(".allowsHitTesting(false)"))
+        XCTAssertTrue(source.contains(".accessibilityHidden(true)"))
+        for forbiddenKey in [
+            "accessibilityLabel", "accessibilityValue", "accessibilityHint",
+            "accessibilitySortPriority", "actionName", "focusPriority",
+            "reduceMotion", "contentWidth", "contentHeight", "transportControlSize"
+        ] {
+            XCTAssertFalse(manifestSource.contains("\"\(forbiddenKey)\""))
+        }
+    }
+
+    private func repositorySource(_ path: String) throws -> String {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        return try String(contentsOf: root.appendingPathComponent(path), encoding: .utf8)
+    }
+
     private func manifestData(identifier: String, displayName: String) -> Data {
         Data(
             #"""

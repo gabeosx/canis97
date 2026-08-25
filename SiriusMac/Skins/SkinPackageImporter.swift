@@ -15,6 +15,10 @@ struct SkinImportResult: Sendable {
     let selected: Bool
 }
 
+enum SkinPackageCompatibilityFailure: Error, Equatable, Sendable {
+    case unsupportedSchema
+}
+
 struct ManagedSkinStore: @unchecked Sendable {
     enum PromotionOutcome: Sendable {
         case imported(URL)
@@ -33,10 +37,12 @@ struct ManagedSkinStore: @unchecked Sendable {
     let packagesRootURL: URL
 
     private let fileManager: FileManager
+    private let removeManagedPackage: (URL) throws -> Void
 
     init(
         applicationSupportDirectory: URL? = nil,
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        removeManagedPackage: ((URL) throws -> Void)? = nil
     ) {
         let support = applicationSupportDirectory
             ?? fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
@@ -47,6 +53,9 @@ struct ManagedSkinStore: @unchecked Sendable {
         stagingRootURL = skinsRootURL.appendingPathComponent(".staging", isDirectory: true)
         packagesRootURL = skinsRootURL.appendingPathComponent("Packages", isDirectory: true)
         self.fileManager = fileManager
+        self.removeManagedPackage = removeManagedPackage ?? { url in
+            try fileManager.removeItem(at: url)
+        }
     }
 
     func makeStagingDirectory() throws -> URL {
@@ -169,6 +178,37 @@ struct ManagedSkinStore: @unchecked Sendable {
                   let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
             else { return false }
             return values.isDirectory == true && values.isSymbolicLink != true
+        }
+    }
+
+    /// Removes only the exact managed directory for an imported reference.
+    /// An already-absent package is a successful, idempotent no-op.
+    @discardableResult
+    func removeImportedSkin(_ reference: SkinSelectionReference) throws -> Bool {
+        guard reference.classification == .imported else {
+            throw SkinPackageRejection.storageFailed
+        }
+        let packageURL = packagesRootURL.appendingPathComponent(
+            reference.identifier.rawValue,
+            isDirectory: true
+        )
+        guard isDirectChild(packageURL, of: packagesRootURL) else {
+            throw SkinPackageRejection.storageFailed
+        }
+        guard fileManager.fileExists(atPath: packageURL.path) else { return false }
+        do {
+            let values = try packageURL.resourceValues(
+                forKeys: [.isDirectoryKey, .isSymbolicLinkKey]
+            )
+            guard values.isDirectory == true, values.isSymbolicLink != true else {
+                throw SkinPackageRejection.storageFailed
+            }
+            try removeManagedPackage(packageURL)
+            return true
+        } catch let rejection as SkinPackageRejection {
+            throw rejection
+        } catch {
+            throw SkinPackageRejection.storageFailed
         }
     }
 
@@ -391,6 +431,8 @@ struct SkinPackageImporter: @unchecked Sendable {
                     return destination
                 }
             )
+        } catch SkinManifestValidationError.unsupportedSchema {
+            throw SkinPackageCompatibilityFailure.unsupportedSchema
         } catch {
             throw SkinPackageRejection.invalidManifest
         }
@@ -456,6 +498,13 @@ struct SkinPackageImporter: @unchecked Sendable {
         }
         guard CGImageSourceGetCount(source) == 1 else {
             throw SkinPackageRejection.invalidImageFrameCount
+        }
+        guard CGImageSourceCreateImageAtIndex(
+            source,
+            0,
+            [kCGImageSourceShouldCacheImmediately: true] as CFDictionary
+        ) != nil else {
+            throw SkinPackageRejection.unsupportedImageType
         }
         guard let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
               let width = (properties[kCGImagePropertyPixelWidth] as? NSNumber)?.uint64Value,
@@ -691,6 +740,13 @@ actor SkinImportCoordinator {
             appearance: appearance,
             selected: selected
         )
+    }
+
+    func removeImportedSkin(_ reference: SkinSelectionReference) async throws -> Bool {
+        try await acquireTransaction()
+        defer { releaseTransaction() }
+        guard !Task.isCancelled else { throw SkinPackageRejection.cancelled }
+        return await appearanceController.removeImportedSkin(reference)
     }
 
     private func acquireTransaction() async throws {

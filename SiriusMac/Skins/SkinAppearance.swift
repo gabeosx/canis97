@@ -91,6 +91,16 @@ struct ValidatedSkinAppearance: Identifiable, Equatable, Sendable {
 
     var id: SkinSelectionReference { reference }
 
+    /// Appearance assets are decoration only. If any requested decoration is
+    /// unavailable at render time, the complete static Native value wins.
+    func renderableAppearance(
+        _ assetIsUsable: (URL) -> Bool
+    ) -> ValidatedSkinAppearance {
+        let decorationURLs = [backgroundAssetURL, metadataPanelAssetURL].compactMap { $0 }
+        guard decorationURLs.allSatisfy(assetIsUsable) else { return .native }
+        return self
+    }
+
     static let native = Self(
         reference: .native,
         displayName: "Native",
@@ -227,6 +237,13 @@ struct SkinAppearanceCatalog: Sendable {
         return SkinAppearanceCatalog(appearances: retained + additions)
     }
 
+    func removingImported(_ reference: SkinSelectionReference) -> SkinAppearanceCatalog {
+        guard reference.classification == .imported else { return self }
+        return SkinAppearanceCatalog(
+            appearances: appearances.filter { $0.reference != reference }
+        )
+    }
+
     static let phaseOne = bundledCatalog()
 
     static func bundledCatalog(in bundle: Bundle = .main) -> SkinAppearanceCatalog {
@@ -256,17 +273,22 @@ final class SkinAppearanceController {
     private(set) var selectedReference: SkinSelectionReference
     private(set) var selectedAppearance: ValidatedSkinAppearance
     private(set) var persistenceError: SkinSelectionStoreError?
+    private(set) var removalError: SkinPackageRejection?
     private let selectionStore: SkinSelectionStore?
+    private let removeImportedPackage: ((SkinSelectionReference) throws -> Bool)?
     private var selectionGeneration = 0
     private var latestImportedGeneration = 0
+    private var removalsInProgress: Set<SkinSelectionReference> = []
 
     init(
         catalog: SkinAppearanceCatalog,
         initialReference: SkinSelectionReference = .native,
-        selectionStore: SkinSelectionStore? = nil
+        selectionStore: SkinSelectionStore? = nil,
+        removeImportedPackage: ((SkinSelectionReference) throws -> Bool)? = nil
     ) {
         self.catalog = catalog
         self.selectionStore = selectionStore
+        self.removeImportedPackage = removeImportedPackage
         let initialAppearance = catalog.resolve(initialReference) ?? SkinAppearanceCatalog.nativeAppearance
         selectedReference = initialAppearance.reference
         selectedAppearance = initialAppearance
@@ -276,7 +298,8 @@ final class SkinAppearanceController {
 
     @discardableResult
     func select(_ reference: SkinSelectionReference) async -> Bool {
-        guard reference != selectedReference,
+        guard !removalsInProgress.contains(reference),
+              reference != selectedReference,
               let candidate = catalog.resolve(reference)
         else { return reference == selectedReference }
 
@@ -317,7 +340,9 @@ final class SkinAppearanceController {
     }
 
     func registerImported(_ appearance: ValidatedSkinAppearance) {
-        guard appearance.reference.classification == .imported else { return }
+        guard appearance.reference.classification == .imported,
+              !removalsInProgress.contains(appearance.reference)
+        else { return }
         catalog = catalog.inserting(appearance)
     }
 
@@ -336,7 +361,9 @@ final class SkinAppearanceController {
         generation: Int,
         authority: Int
     ) async -> Bool {
-        guard appearance.reference.classification == .imported else { return false }
+        guard appearance.reference.classification == .imported,
+              !removalsInProgress.contains(appearance.reference)
+        else { return false }
         catalog = catalog.inserting(appearance)
         guard generation == latestImportedGeneration,
               authority == selectionGeneration,
@@ -380,20 +407,56 @@ final class SkinAppearanceController {
         return true
     }
 
-    func restoreNativeAppearance() async {
-        guard selectedReference != .native else { return }
+    /// Selected imported content must not be deleted until Native is durably
+    /// confirmed through the ordinary selection path.
+    @discardableResult
+    func removeImportedSkin(_ reference: SkinSelectionReference) async -> Bool {
+        guard reference.classification == .imported,
+              removalsInProgress.insert(reference).inserted
+        else { return false }
+        defer { removalsInProgress.remove(reference) }
+        removalError = nil
+
+        if selectedReference == reference {
+            guard await select(.native) else { return false }
+        } else {
+            selectionGeneration += 1
+        }
+
+        guard let removeImportedPackage else {
+            removalError = .storageFailed
+            return false
+        }
+        do {
+            _ = try removeImportedPackage(reference)
+            catalog = catalog.removingImported(reference)
+            return true
+        } catch {
+            removalError = .storageFailed
+            return false
+        }
+    }
+
+    @discardableResult
+    func restoreNativeAppearance() async -> Bool {
         selectionGeneration += 1
-        selectedReference = .native
-        selectedAppearance = SkinAppearanceCatalog.nativeAppearance
+        let generation = selectionGeneration
+        publishNative()
         persistenceError = nil
-        guard let selectionStore else { return }
+        guard let selectionStore else { return true }
         do {
             _ = try await selectionStore.save(.native)
         } catch let error as SkinSelectionStoreError {
+            guard generation == selectionGeneration else { return false }
             persistenceError = error
+            return false
         } catch {
+            guard generation == selectionGeneration else { return false }
             persistenceError = .writeFailed
+            return false
         }
+        guard generation == selectionGeneration else { return false }
+        return true
     }
 
     func restorePersistedSelection() async {
