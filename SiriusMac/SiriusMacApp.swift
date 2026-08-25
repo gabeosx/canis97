@@ -21,7 +21,10 @@ struct SiriusMacApp: App {
         let importer = SkinPackageImporter(store: managedStore)
         let appearanceController = SkinAppearanceController(
             catalog: SkinAppearanceCatalog.phaseOne.inserting(contentsOf: importer.loadManagedAppearances()),
-            selectionStore: allowsDurableAppearance ? SkinSelectionStore() : nil
+            selectionStore: allowsDurableAppearance ? SkinSelectionStore() : nil,
+            removeImportedPackage: { reference in
+                try managedStore.removeImportedSkin(reference)
+            }
         )
         self.appearanceController = appearanceController
         skinImportCoordinator = SkinImportCoordinator(

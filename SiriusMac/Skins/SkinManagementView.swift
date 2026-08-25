@@ -9,6 +9,8 @@ enum SkinManagementErrorPresentation: String, Identifiable, Equatable {
     case cancelled
     case storageFailure
     case selectionFailure
+    case removalFailure
+    case nativeRecoveryFailure
 
     var id: String { rawValue }
 
@@ -21,6 +23,8 @@ enum SkinManagementErrorPresentation: String, Identifiable, Equatable {
         case .cancelled: "Import Cancelled"
         case .storageFailure: "Appearance Couldn’t Be Saved"
         case .selectionFailure: "Appearance Saved, Not Selected"
+        case .removalFailure: "Appearance Couldn’t Be Removed"
+        case .nativeRecoveryFailure: "Native Appearance Not Confirmed"
         }
     }
 
@@ -40,6 +44,10 @@ enum SkinManagementErrorPresentation: String, Identifiable, Equatable {
             "Sirius Mac couldn’t save this appearance. Your current appearance was not changed. Try again."
         case .selectionFailure:
             "The validated appearance was saved, but your previous appearance remains selected. Select it again when ready."
+        case .removalFailure:
+            "Sirius Mac couldn’t remove the saved appearance. Native remains active if recovery already completed. Try again."
+        case .nativeRecoveryFailure:
+            "Sirius Mac couldn’t durably select Native, so the imported appearance was not removed. Try again."
         }
     }
 
@@ -70,11 +78,14 @@ struct SkinManagementView: View {
 
     @State private var presentsImporter = false
     @State private var importTask: Task<Void, Never>?
+    @State private var removalTask: Task<Void, Never>?
+    @State private var removalConfirmation: SkinRemovalConfirmation?
     @State private var statusMessage: String?
     @State private var errorPresentation: SkinManagementErrorPresentation?
     @FocusState private var focusedReference: SkinSelectionReference?
 
     private var isImporting: Bool { importTask != nil }
+    private var isBusy: Bool { importTask != nil || removalTask != nil }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -105,7 +116,7 @@ struct SkinManagementView: View {
                     errorPresentation = nil
                     presentsImporter = true
                 }
-                .disabled(isImporting)
+                .disabled(isBusy)
                 .frame(minHeight: 32)
                 .accessibilityIdentifier("appearance.management.import")
                 .accessibilityHint("Choose one local .siriusskin package")
@@ -137,7 +148,26 @@ struct SkinManagementView: View {
                 dismissButton: .default(Text("OK"))
             )
         }
-        .onDisappear { importTask?.cancel() }
+        .confirmationDialog(
+            "Remove Appearance?",
+            isPresented: Binding(
+                get: { removalConfirmation != nil },
+                set: { if !$0 { removalConfirmation = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: removalConfirmation
+        ) { confirmation in
+            Button("Remove \(confirmation.displayName)", role: .destructive) {
+                beginRemoval(confirmation)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { confirmation in
+            Text("Remove \(confirmation.displayName) from this Mac? Native and bundled appearances cannot be removed.")
+        }
+        .onDisappear {
+            importTask?.cancel()
+            removalTask?.cancel()
+        }
     }
 
     @ViewBuilder
@@ -147,7 +177,7 @@ struct SkinManagementView: View {
     ) -> some View {
         Section(title) {
             if appearances.isEmpty {
-                Text("No (title.lowercased()) appearances")
+                Text("No \(title.lowercased()) appearances")
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(appearances) { appearance in
@@ -158,7 +188,8 @@ struct SkinManagementView: View {
                         isSelected: appearance.reference == appearanceController.selectedReference,
                         onSelect: {
                             select(appearance.reference)
-                        }
+                        },
+                        onRemove: removalAction(for: appearance)
                     )
                     .focused($focusedReference, equals: appearance.reference)
                 }
@@ -200,7 +231,7 @@ struct SkinManagementView: View {
     }
 
     private func beginImport(_ sourceURL: URL) {
-        guard importTask == nil else { return }
+        guard !isBusy else { return }
         statusMessage = nil
         errorPresentation = nil
         importTask = Task { @MainActor in
@@ -224,6 +255,55 @@ struct SkinManagementView: View {
             }
         }
     }
+
+    private func requestRemoval(_ appearance: ValidatedSkinAppearance) {
+        guard appearance.reference.classification == .imported, !isBusy else { return }
+        statusMessage = nil
+        errorPresentation = nil
+        removalConfirmation = SkinRemovalConfirmation(
+            reference: appearance.reference,
+            displayName: appearance.displayName
+        )
+    }
+
+    private func removalAction(
+        for appearance: ValidatedSkinAppearance
+    ) -> (@MainActor () -> Void)? {
+        guard appearance.reference.classification == .imported else { return nil }
+        return { requestRemoval(appearance) }
+    }
+
+    private func beginRemoval(_ confirmation: SkinRemovalConfirmation) {
+        guard !isBusy else { return }
+        statusMessage = nil
+        errorPresentation = nil
+        removalTask = Task { @MainActor in
+            defer { removalTask = nil }
+            do {
+                let removed = try await skinImportCoordinator.removeImportedSkin(confirmation.reference)
+                guard removed else {
+                    errorPresentation = appearanceController.removalError == .storageFailed
+                        ? .removalFailure
+                        : .nativeRecoveryFailure
+                    focusedReference = appearanceController.selectedReference
+                    return
+                }
+                statusMessage = "Appearance removed."
+                focusedReference = appearanceController.selectedReference
+            } catch let rejection as SkinPackageRejection where rejection == .cancelled {
+                errorPresentation = .cancelled
+            } catch {
+                errorPresentation = .removalFailure
+            }
+        }
+    }
+}
+
+private struct SkinRemovalConfirmation: Identifiable {
+    let reference: SkinSelectionReference
+    let displayName: String
+
+    var id: SkinSelectionReference { reference }
 }
 
 struct SkinManagementRow: View {
@@ -232,6 +312,7 @@ struct SkinManagementRow: View {
     let classification: SkinClassification
     let isSelected: Bool
     let onSelect: @MainActor () -> Void
+    let onRemove: (@MainActor () -> Void)?
 
     var body: some View {
         HStack(spacing: 12) {
@@ -251,9 +332,16 @@ struct SkinManagementRow: View {
             Button(isSelected ? "Selected" : "Select", action: onSelect)
                 .disabled(isSelected)
                 .frame(minWidth: 80, minHeight: 32)
-                .accessibilityLabel("Select (displayName)")
+                .accessibilityLabel("Select \(displayName)")
                 .accessibilityValue(isSelected ? "Selected" : "Not selected")
-                .accessibilityIdentifier("appearance.management.select.(reference.identifier.rawValue)")
+                .accessibilityIdentifier("appearance.management.select.\(reference.identifier.rawValue)")
+            if let onRemove {
+                Button("Remove", role: .destructive, action: onRemove)
+                    .frame(minHeight: 32)
+                    .accessibilityLabel("Remove \(displayName)")
+                    .accessibilityHint("Asks for confirmation before removing this imported appearance")
+                    .accessibilityIdentifier("appearance.management.remove.\(reference.identifier.rawValue)")
+            }
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("\(displayName), \(classificationLabel)")

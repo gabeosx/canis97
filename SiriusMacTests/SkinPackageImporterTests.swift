@@ -279,8 +279,11 @@ final class SkinPackageImporterTests: XCTestCase {
             }
         )
 
-        XCTAssertTrue(await controller.removeImportedSkin(imported.reference))
-        XCTAssertTrue(await controller.removeImportedSkin(imported.reference))
+        let firstRemoval = await controller.removeImportedSkin(imported.reference)
+        let repeatedRemoval = await controller.removeImportedSkin(imported.reference)
+
+        XCTAssertTrue(firstRemoval)
+        XCTAssertTrue(repeatedRemoval)
         XCTAssertEqual(events.values, ["delete-attempt", "delete-attempt"])
         XCTAssertEqual(controller.selectedReference, .native)
         XCTAssertNil(controller.catalog.resolve(imported.reference))
@@ -300,8 +303,11 @@ final class SkinPackageImporterTests: XCTestCase {
             }
         )
 
-        XCTAssertFalse(await controller.removeImportedSkin(.native))
-        XCTAssertFalse(await controller.removeImportedSkin(bundled.reference))
+        let nativeRemoval = await controller.removeImportedSkin(.native)
+        let bundledRemoval = await controller.removeImportedSkin(bundled.reference)
+
+        XCTAssertFalse(nativeRemoval)
+        XCTAssertFalse(bundledRemoval)
         XCTAssertTrue(events.values.isEmpty)
         XCTAssertEqual(controller.availableAppearances.map(\.reference), [.native, bundled.reference])
     }

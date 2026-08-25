@@ -227,6 +227,13 @@ struct SkinAppearanceCatalog: Sendable {
         return SkinAppearanceCatalog(appearances: retained + additions)
     }
 
+    func removingImported(_ reference: SkinSelectionReference) -> SkinAppearanceCatalog {
+        guard reference.classification == .imported else { return self }
+        return SkinAppearanceCatalog(
+            appearances: appearances.filter { $0.reference != reference }
+        )
+    }
+
     static let phaseOne = bundledCatalog()
 
     static func bundledCatalog(in bundle: Bundle = .main) -> SkinAppearanceCatalog {
@@ -256,17 +263,22 @@ final class SkinAppearanceController {
     private(set) var selectedReference: SkinSelectionReference
     private(set) var selectedAppearance: ValidatedSkinAppearance
     private(set) var persistenceError: SkinSelectionStoreError?
+    private(set) var removalError: SkinPackageRejection?
     private let selectionStore: SkinSelectionStore?
+    private let removeImportedPackage: ((SkinSelectionReference) throws -> Bool)?
     private var selectionGeneration = 0
     private var latestImportedGeneration = 0
+    private var removalsInProgress: Set<SkinSelectionReference> = []
 
     init(
         catalog: SkinAppearanceCatalog,
         initialReference: SkinSelectionReference = .native,
-        selectionStore: SkinSelectionStore? = nil
+        selectionStore: SkinSelectionStore? = nil,
+        removeImportedPackage: ((SkinSelectionReference) throws -> Bool)? = nil
     ) {
         self.catalog = catalog
         self.selectionStore = selectionStore
+        self.removeImportedPackage = removeImportedPackage
         let initialAppearance = catalog.resolve(initialReference) ?? SkinAppearanceCatalog.nativeAppearance
         selectedReference = initialAppearance.reference
         selectedAppearance = initialAppearance
@@ -276,7 +288,8 @@ final class SkinAppearanceController {
 
     @discardableResult
     func select(_ reference: SkinSelectionReference) async -> Bool {
-        guard reference != selectedReference,
+        guard !removalsInProgress.contains(reference),
+              reference != selectedReference,
               let candidate = catalog.resolve(reference)
         else { return reference == selectedReference }
 
@@ -317,7 +330,9 @@ final class SkinAppearanceController {
     }
 
     func registerImported(_ appearance: ValidatedSkinAppearance) {
-        guard appearance.reference.classification == .imported else { return }
+        guard appearance.reference.classification == .imported,
+              !removalsInProgress.contains(appearance.reference)
+        else { return }
         catalog = catalog.inserting(appearance)
     }
 
@@ -336,7 +351,9 @@ final class SkinAppearanceController {
         generation: Int,
         authority: Int
     ) async -> Bool {
-        guard appearance.reference.classification == .imported else { return false }
+        guard appearance.reference.classification == .imported,
+              !removalsInProgress.contains(appearance.reference)
+        else { return false }
         catalog = catalog.inserting(appearance)
         guard generation == latestImportedGeneration,
               authority == selectionGeneration,
@@ -378,6 +395,36 @@ final class SkinAppearanceController {
         selectedReference = appearance.reference
         selectedAppearance = appearance
         return true
+    }
+
+    /// Selected imported content must not be deleted until Native is durably
+    /// confirmed through the ordinary selection path.
+    @discardableResult
+    func removeImportedSkin(_ reference: SkinSelectionReference) async -> Bool {
+        guard reference.classification == .imported,
+              removalsInProgress.insert(reference).inserted
+        else { return false }
+        defer { removalsInProgress.remove(reference) }
+        removalError = nil
+
+        if selectedReference == reference {
+            guard await select(.native) else { return false }
+        } else {
+            selectionGeneration += 1
+        }
+
+        guard let removeImportedPackage else {
+            removalError = .storageFailed
+            return false
+        }
+        do {
+            _ = try removeImportedPackage(reference)
+            catalog = catalog.removingImported(reference)
+            return true
+        } catch {
+            removalError = .storageFailed
+            return false
+        }
     }
 
     func restoreNativeAppearance() async {
