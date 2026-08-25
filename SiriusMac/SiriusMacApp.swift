@@ -11,7 +11,17 @@ struct SiriusMacApp: App {
 #endif
 
     init() {
-        appearanceController = SkinAppearanceController(catalog: .phaseOne)
+        let environment = ProcessInfo.processInfo.environment
+        let allowsDurableAppearance = !SiriusMacLaunchMode.isUnitTestHost(environment: environment)
+            && !SiriusMacLaunchMode.isUITestRequested(environment: environment)
+        let appearanceController = SkinAppearanceController(
+            catalog: .phaseOne,
+            selectionStore: allowsDurableAppearance ? SkinSelectionStore() : nil
+        )
+        self.appearanceController = appearanceController
+        if allowsDurableAppearance {
+            Task { await appearanceController.restorePersistedSelection() }
+        }
 #if DEBUG
         if let uiTestHarness = UITestHarness.makeIfRequested() {
             self.uiTestHarness = uiTestHarness

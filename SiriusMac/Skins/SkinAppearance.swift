@@ -254,13 +254,17 @@ final class SkinAppearanceController {
 
     private(set) var selectedReference: SkinSelectionReference
     private(set) var selectedAppearance: ValidatedSkinAppearance
+    private(set) var persistenceError: SkinSelectionStoreError?
+    private let selectionStore: SkinSelectionStore?
     private var selectionGeneration = 0
 
     init(
         catalog: SkinAppearanceCatalog,
-        initialReference: SkinSelectionReference = .native
+        initialReference: SkinSelectionReference = .native,
+        selectionStore: SkinSelectionStore? = nil
     ) {
         self.catalog = catalog
+        self.selectionStore = selectionStore
         let initialAppearance = catalog.resolve(initialReference) ?? SkinAppearanceCatalog.nativeAppearance
         selectedReference = initialAppearance.reference
         selectedAppearance = initialAppearance
@@ -277,6 +281,22 @@ final class SkinAppearanceController {
         let generation = selectionGeneration
         await Task.yield()
         guard generation == selectionGeneration, !Task.isCancelled else { return }
+
+        if let selectionStore {
+            do {
+                _ = try await selectionStore.save(Self.persisted(reference))
+            } catch let error as SkinSelectionStoreError {
+                guard generation == selectionGeneration else { return }
+                persistenceError = error
+                return
+            } catch {
+                guard generation == selectionGeneration else { return }
+                persistenceError = .writeFailed
+                return
+            }
+        }
+        guard generation == selectionGeneration else { return }
+        persistenceError = nil
         selectedReference = reference
         selectedAppearance = candidate
     }
@@ -286,5 +306,76 @@ final class SkinAppearanceController {
         selectionGeneration += 1
         selectedReference = .native
         selectedAppearance = SkinAppearanceCatalog.nativeAppearance
+        persistenceError = nil
+        guard let selectionStore else { return }
+        do {
+            _ = try await selectionStore.save(.native)
+        } catch let error as SkinSelectionStoreError {
+            persistenceError = error
+        } catch {
+            persistenceError = .writeFailed
+        }
+    }
+
+    func restorePersistedSelection() async {
+        guard let selectionStore else { return }
+        selectionGeneration += 1
+        let generation = selectionGeneration
+
+        let persisted: PersistedSkinSelection?
+        do {
+            persisted = try await selectionStore.load()
+        } catch let error as SkinSelectionStoreError {
+            guard generation == selectionGeneration else { return }
+            persistenceError = error
+            publishNative()
+            return
+        } catch {
+            guard generation == selectionGeneration else { return }
+            persistenceError = .readFailed
+            publishNative()
+            return
+        }
+
+        guard generation == selectionGeneration else { return }
+        guard let persisted,
+              let reference = Self.reference(persisted),
+              let appearance = catalog.resolve(reference)
+        else {
+            publishNative()
+            return
+        }
+        persistenceError = nil
+        selectedReference = reference
+        selectedAppearance = appearance
+    }
+
+    private func publishNative() {
+        selectedReference = .native
+        selectedAppearance = SkinAppearanceCatalog.nativeAppearance
+    }
+
+    private static func persisted(_ reference: SkinSelectionReference) -> PersistedSkinSelection {
+        let classification: PersistedSkinClassification = switch reference.classification {
+        case .native: .native
+        case .bundled: .bundled
+        case .imported: .imported
+        }
+        return PersistedSkinSelection(
+            identifier: reference.identifier.rawValue,
+            classification: classification
+        )
+    }
+
+    private static func reference(_ persisted: PersistedSkinSelection) -> SkinSelectionReference? {
+        guard let identifier = SkinIdentifier(rawValue: persisted.identifier) else { return nil }
+        let classification: SkinClassification = switch persisted.classification {
+        case .native: .native
+        case .bundled: .bundled
+        case .imported: .imported
+        }
+        let reference = SkinSelectionReference(identifier: identifier, classification: classification)
+        guard reference.classification != .native || reference == .native else { return nil }
+        return reference
     }
 }

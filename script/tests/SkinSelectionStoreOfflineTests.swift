@@ -24,8 +24,8 @@ struct SkinSelectionStoreOfflineTests {
                 identifier: "fixture-\(classification.rawValue)",
                 classification: classification
             )
-            try await expect(await store.save(selection), equals: true)
-            try await expect(await store.load(), equals: selection)
+            try expect(try await store.save(selection), equals: true)
+            try expect(try await store.load(), equals: selection)
         }
     }
 
@@ -35,10 +35,10 @@ struct SkinSelectionStoreOfflineTests {
         let store = SkinSelectionStore(applicationSupportDirectory: root)
         let selection = PersistedSkinSelection(identifier: "signal-glow", classification: .bundled)
 
-        try await expect(await store.save(selection), equals: true)
-        let recordURL = await store.selectionFileURL
+        try expect(try await store.save(selection), equals: true)
+        let recordURL = store.selectionFileURL
         let before = try recordIdentity(at: recordURL)
-        try await expect(await store.save(selection), equals: false)
+        try expect(try await store.save(selection), equals: false)
         let after = try recordIdentity(at: recordURL)
 
         try expect(after.number, equals: before.number)
@@ -50,7 +50,7 @@ struct SkinSelectionStoreOfflineTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let liveStore = SkinSelectionStore(applicationSupportDirectory: root)
         let prior = PersistedSkinSelection(identifier: "signal-glow", classification: .bundled)
-        try await expect(await liveStore.save(prior), equals: true)
+        try expect(try await liveStore.save(prior), equals: true)
 
         let live = SkinSelectionFileOperations.live
         let failing = SkinSelectionFileOperations(
@@ -74,14 +74,14 @@ struct SkinSelectionStoreOfflineTests {
         } catch let error as SkinSelectionStoreError {
             try expect(error, equals: .writeFailed)
         }
-        try await expect(await liveStore.load(), equals: prior)
+        try expect(try await liveStore.load(), equals: prior)
     }
 
     private static func testMalformedRecordsRecoverToNative() async throws {
         let root = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         let store = SkinSelectionStore(applicationSupportDirectory: root)
-        let recordURL = await store.selectionFileURL
+        let recordURL = store.selectionFileURL
         try FileManager.default.createDirectory(
             at: recordURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
@@ -96,10 +96,10 @@ struct SkinSelectionStoreOfflineTests {
 
         for malformed in malformedRecords {
             try malformed.write(to: recordURL)
-            try await expect(await store.restoredSelectionOrNative(), equals: .native)
+            try expect(await store.restoredSelectionOrNative(), equals: .native)
         }
         try FileManager.default.removeItem(at: recordURL)
-        try await expect(await store.restoredSelectionOrNative(), equals: .native)
+        try expect(await store.restoredSelectionOrNative(), equals: .native)
     }
 
     private static func testMetadataOnlyRecord() async throws {
@@ -109,9 +109,9 @@ struct SkinSelectionStoreOfflineTests {
         let selection = PersistedSkinSelection(identifier: "fixture-imported", classification: .imported)
         _ = try await store.save(selection)
 
-        let data = try Data(contentsOf: await store.selectionFileURL)
+        let data = try Data(contentsOf: store.selectionFileURL)
         let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        try expect(Set(object?.keys ?? []), equals: ["schemaVersion", "identifier", "classification"])
+        try expect(Set(object?.keys.map { $0 } ?? []), equals: ["schemaVersion", "identifier", "classification"])
     }
 
     private static func temporaryDirectory() throws -> URL {
