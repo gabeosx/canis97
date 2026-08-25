@@ -301,13 +301,13 @@ Plans:
   4. A package with an unknown schema, unsafe/traversal/symlink path, disallowed file type, or excessive file, archive, decoded-asset, image, or processing budget is rejected safely.
   5. A failed or invalid skin preserves the prior valid appearance and offers a built-in recovery path; custom appearance cannot remove semantic controls, usable hit targets, readable focus/state indicators, or the unskinned native fallback.
 
-**Plans**: 3 plans
+**Plans**: 1/3 plans executed
 
 Plans:
 
 **Wave 1**
 
-- [ ] 04-01-PLAN.md — Deliver the selected-appearance tracer, metadata-only persistence, permanent Native fallback, and two bundled skins through one closed renderer contract.
+- [x] 04-01-PLAN.md — Deliver the selected-appearance tracer, metadata-only persistence, permanent Native fallback, and two bundled skins through one closed renderer contract.
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -347,5 +347,5 @@ Active product execution proceeds 1 → 2 → 3 → 4 → 5. Phase 0 is retained
 | 1. Safe Interoperability Foundation | 16/16 | Complete    | 2026-08-18 |
 | 2. Authorized Live Listening | 18/18 | Complete    | 2026-08-20 |
 | 3. Native Mac Listening Experience | 8/8 | In Progress|  |
-| 4. Safe Skins & Accessible Recovery | 0/3 | Planned | - |
+| 4. Safe Skins & Accessible Recovery | 1/3 | In Progress|  |
 | 5. Public Release & Compatibility Support | 0/TBD | Not started | - |
