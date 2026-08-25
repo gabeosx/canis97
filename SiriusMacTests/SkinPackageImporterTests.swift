@@ -63,6 +63,52 @@ final class SkinPackageImporterTests: XCTestCase {
         XCTAssertEqual(controller.catalog.resolve(imported.reference), imported)
     }
 
+    func testImportedSelectionAuthorityRejectsAStaleGeneration() async {
+        let controller = SkinAppearanceController(catalog: .phaseOne)
+        let stale = importedAppearance(
+            identifier: SkinIdentifier(rawValue: "creator.stale")!,
+            displayName: "Stale"
+        )
+        let current = importedAppearance(
+            identifier: SkinIdentifier(rawValue: "creator.current")!,
+            displayName: "Current"
+        )
+
+        let staleAuthority = controller.beginImportedSelection(generation: 1)
+        let currentAuthority = controller.beginImportedSelection(generation: 2)
+
+        XCTAssertFalse(await controller.commitImportedSelection(
+            stale,
+            generation: 1,
+            authority: staleAuthority
+        ))
+        XCTAssertTrue(await controller.commitImportedSelection(
+            current,
+            generation: 2,
+            authority: currentAuthority
+        ))
+        XCTAssertEqual(controller.selectedReference, current.reference)
+        XCTAssertEqual(controller.catalog.resolve(stale.reference), stale)
+    }
+
+    func testStagingDirectoriesAreTransactionUnique() throws {
+        let support = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let store = ManagedSkinStore(applicationSupportDirectory: support)
+        defer { try? FileManager.default.removeItem(at: support) }
+
+        let first = try store.makeStagingDirectory()
+        let second = try store.makeStagingDirectory()
+        defer {
+            store.removeStagingDirectory(first)
+            store.removeStagingDirectory(second)
+        }
+
+        XCTAssertNotEqual(first, second)
+        XCTAssertEqual(first.deletingLastPathComponent(), store.stagingRootURL)
+        XCTAssertEqual(second.deletingLastPathComponent(), store.stagingRootURL)
+    }
+
     func testClosedPolicyCoversTransportEntryKindsAndCancellation() throws {
         XCTAssertThrowsError(
             try SkinPackagePolicy.preflight([
