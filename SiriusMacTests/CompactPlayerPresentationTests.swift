@@ -34,6 +34,60 @@ final class CompactPlayerPresentationTests: XCTestCase {
         XCTAssertEqual(PlayerSemanticStyleRole.allCases, [.playerBackground, .metadataPanel, .accent, .destructive, .label, .body, .heading, .display])
     }
 
+    func testClosedSurfaceVocabularyMapsEveryValidatedAppearanceRole() throws {
+        let appearance = try SkinManifestValidator.validate(
+            manifestData(identifier: "surface-fixture", displayName: "Surface Fixture"),
+            classification: .imported
+        )
+
+        XCTAssertEqual(
+            CompactSkinSurface.allCases,
+            [.canvas, .metadata, .status, .transport, .footer, .interactiveAccent, .criticalState]
+        )
+
+        for surface in CompactSkinSurface.allCases {
+            let treatment = appearance.surfaceTreatment(for: surface)
+            XCTAssertTrue(treatment.fillHex.hasPrefix("#"))
+            XCTAssertTrue(treatment.strokeHex.hasPrefix("#"))
+            XCTAssertTrue(treatment.tintHex.hasPrefix("#"))
+            XCTAssertTrue((0 ... 1).contains(treatment.fillOpacity))
+            XCTAssertTrue((0 ... 1).contains(treatment.strokeOpacity))
+        }
+
+        XCTAssertEqual(appearance.surfaceTreatment(for: .canvas).fillHex, "#101010")
+        XCTAssertEqual(appearance.surfaceTreatment(for: .metadata).fillHex, "#202020")
+        XCTAssertEqual(appearance.surfaceTreatment(for: .interactiveAccent).tintHex, "#C6FF00")
+        XCTAssertEqual(appearance.surfaceTreatment(for: .criticalState).tintHex, "#FF453A")
+    }
+
+    func testUnusableDecorationFallsBackBeforeSurfaceTreatmentIsDerived() throws {
+        let imported = ValidatedSkinAppearance(
+            reference: SkinSelectionReference(
+                identifier: try XCTUnwrap(SkinIdentifier(rawValue: "surface-render-failure")),
+                classification: .imported
+            ),
+            displayName: "Surface Render Failure",
+            style: CompactSkinStyle(
+                contentSize: .init(width: 400, height: 288),
+                dominantHex: "#001122",
+                secondaryHex: "#113355",
+                accentHex: "#66FFAA",
+                destructiveHex: "#FF3355",
+                foregroundColorScheme: .dark,
+                padding: 16,
+                sectionSpacing: 8
+            ),
+            cornerRadius: 8,
+            backgroundAssetURL: URL(fileURLWithPath: "/managed/missing-surface.png"),
+            metadataPanelAssetURL: nil
+        )
+
+        let rendered = imported.renderableAppearance { _ in false }
+
+        XCTAssertEqual(rendered.surfaceTreatment(for: .canvas), ValidatedSkinAppearance.native.surfaceTreatment(for: .canvas))
+        XCTAssertEqual(rendered.surfaceTreatment(for: .criticalState), ValidatedSkinAppearance.native.surfaceTreatment(for: .criticalState))
+    }
+
     func testFallbackStyleProvidesDarkSystemForegroundsForEveryCompactState() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -45,7 +99,7 @@ final class CompactPlayerPresentationTests: XCTestCase {
 
         XCTAssertTrue(source.contains(".environment(\\.colorScheme, contentColorScheme)"))
         XCTAssertTrue(source.contains(".foregroundStyle(.primary)"))
-        XCTAssertTrue(source.contains(".background(Color(hex: style.dominantHex))"))
+        XCTAssertTrue(source.contains("surfaceBackground(.canvas)"))
     }
 
     func testViewActionsStayOutsideThePresentationValue() {
@@ -321,6 +375,9 @@ final class CompactPlayerPresentationTests: XCTestCase {
         let manifestSource = try repositorySource("SiriusMac/Skins/SkinAppearance.swift")
 
         XCTAssertFalse(source.contains("switch appearance.reference.classification"))
+        for surface in CompactSkinSurface.allCases {
+            XCTAssertTrue(source.contains(".\(surface.rawValue)"))
+        }
         XCTAssertTrue(source.contains("CompactPlayerPresentation.transportControlSize"))
         XCTAssertTrue(source.contains(".frame(width: style.contentSize.width, height: style.contentSize.height"))
         XCTAssertTrue(source.contains(".allowsHitTesting(false)"))
@@ -334,11 +391,40 @@ final class CompactPlayerPresentationTests: XCTestCase {
         }
     }
 
+    func testBundledAppearancesUseDistinctSharedNormalSurfaceTreatments() throws {
+        let native = ValidatedSkinAppearance.native
+        let signalGlow = try bundledAppearance(named: "SignalGlow")
+        let tapeDeck = try bundledAppearance(named: "TapeDeck")
+        let normalSurfaces = CompactSkinSurface.allCases.filter { $0 != .criticalState }
+
+        for surface in normalSurfaces {
+            XCTAssertNotEqual(signalGlow.surfaceTreatment(for: surface), native.surfaceTreatment(for: surface), "Signal Glow should differ from Native at \(surface)")
+            XCTAssertNotEqual(tapeDeck.surfaceTreatment(for: surface), native.surfaceTreatment(for: surface), "Tape Deck should differ from Native at \(surface)")
+            XCTAssertNotEqual(signalGlow.surfaceTreatment(for: surface), tapeDeck.surfaceTreatment(for: surface), "Bundled appearances should differ at \(surface)")
+        }
+        XCTAssertEqual(NativeCompactPlayerStyle.fallback.contentSize, .init(width: 400, height: 288))
+        XCTAssertEqual(CompactPlayerPresentation.transportControlSize, 32)
+    }
+
     private func repositorySource(_ path: String) throws -> String {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
         return try String(contentsOf: root.appendingPathComponent(path), encoding: .utf8)
+    }
+
+    private func bundledAppearance(named name: String) throws -> ValidatedSkinAppearance {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let url = root
+            .appendingPathComponent("SiriusMac/Skins/Bundled")
+            .appendingPathComponent(name)
+            .appendingPathExtension("json")
+        return try SkinManifestValidator.validate(
+            Data(contentsOf: url),
+            classification: .bundled
+        )
     }
 
     private func manifestData(identifier: String, displayName: String) -> Data {

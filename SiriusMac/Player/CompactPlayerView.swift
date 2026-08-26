@@ -47,7 +47,8 @@ struct CompactPlayerView: View {
             .padding(style.padding)
         }
         .frame(width: style.contentSize.width, height: style.contentSize.height, alignment: .topLeading)
-        .background(Color(hex: style.dominantHex))
+        .background(surfaceBackground(.canvas))
+        .tint(surfaceTint(.interactiveAccent))
         .clipShape(.rect(cornerRadius: renderingAppearance.cornerRadius))
         .environment(\.colorScheme, contentColorScheme)
         .foregroundStyle(.primary)
@@ -90,6 +91,7 @@ struct CompactPlayerView: View {
                             Image(systemName: presentation.isFavorite ? "star.fill" : "star")
                         }
                         .buttonStyle(.borderless)
+                        .background(surfaceBackground(.interactiveAccent))
                         .foregroundStyle(presentation.isFavorite ? Color(hex: style.accentHex) : .primary)
                         .help(presentation.isFavorite ? "Remove from Favorites" : "Add to Favorites")
                         .accessibilityIdentifier("compact.favorite")
@@ -102,7 +104,7 @@ struct CompactPlayerView: View {
             }
             .padding(4)
         }
-        .background(Color(hex: style.secondaryHex))
+        .background(surfaceBackground(.metadata))
         .clipShape(.rect(cornerRadius: renderingAppearance.cornerRadius))
         statusAndRecovery
         transport
@@ -123,7 +125,7 @@ struct CompactPlayerView: View {
             }
         }
         .frame(width: 72, height: 72)
-        .background(Color(hex: style.secondaryHex))
+        .background(surfaceBackground(.metadata))
         .clipShape(.rect(cornerRadius: renderingAppearance.cornerRadius))
         .accessibilityLabel(presentation.channelIdentity.map { "Artwork for channel \($0.displayText)" } ?? "Channel artwork")
         .accessibilitySortPriority(60)
@@ -155,6 +157,7 @@ struct CompactPlayerView: View {
     @ViewBuilder
     private var statusAndRecovery: some View {
         if let status = presentation.status {
+            let surface = statusSurface(for: status)
             HStack(spacing: 4) {
                 switch status {
                 case .pending:
@@ -173,6 +176,11 @@ struct CompactPlayerView: View {
             }
             .font(.system(size: 12))
             .foregroundStyle(.secondary)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(surfaceBackground(surface))
+            .tint(surfaceTint(surface))
             .accessibilityValue(status.accessibilityValue)
             .accessibilityIdentifier("compact.status")
             .accessibilitySortPriority(50)
@@ -181,6 +189,11 @@ struct CompactPlayerView: View {
             Text("Native appearance restored because the selected decoration is unavailable.")
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 4)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(surfaceBackground(.criticalState))
+                .tint(surfaceTint(.criticalState))
                 .accessibilityIdentifier("compact.appearance-recovery")
                 .accessibilitySortPriority(45)
         }
@@ -195,6 +208,9 @@ struct CompactPlayerView: View {
                 transportButton("Next", systemImage: "forward.fill", enabled: transport.nextEnabled, action: .next)
             }
             .frame(maxWidth: .infinity)
+            .padding(4)
+            .background(surfaceBackground(.transport))
+            .tint(surfaceTint(.interactiveAccent))
         }
     }
 
@@ -235,6 +251,9 @@ struct CompactPlayerView: View {
             }
         }
         .font(.system(size: 12))
+        .padding(4)
+        .background(surfaceBackground(.footer))
+        .tint(surfaceTint(.interactiveAccent))
     }
 
     private func accessibilityIdentifier(for action: CompactPlayerAction) -> String {
@@ -262,6 +281,32 @@ struct CompactPlayerView: View {
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+    }
+
+    private func statusSurface(for status: CompactPlayerPresentation.Status) -> CompactSkinSurface {
+        switch status {
+        case .unavailable:
+            .criticalState
+        case .pending, .playing, .paused, .stopped:
+            .status
+        }
+    }
+
+    private func surfaceBackground(_ surface: CompactSkinSurface) -> some View {
+        let treatment = renderingAppearance.surfaceTreatment(for: surface)
+        return RoundedRectangle(cornerRadius: renderingAppearance.cornerRadius)
+            .fill(Color(hex: treatment.fillHex).opacity(treatment.fillOpacity))
+            .overlay {
+                RoundedRectangle(cornerRadius: renderingAppearance.cornerRadius)
+                    .stroke(
+                        Color(hex: treatment.strokeHex).opacity(treatment.strokeOpacity),
+                        lineWidth: 1
+                    )
+            }
+    }
+
+    private func surfaceTint(_ surface: CompactSkinSurface) -> Color {
+        Color(hex: renderingAppearance.surfaceTreatment(for: surface).tintHex)
     }
 
     @ViewBuilder

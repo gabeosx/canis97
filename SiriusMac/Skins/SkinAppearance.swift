@@ -81,6 +81,28 @@ enum SkinManifestValidationError: Error, Equatable {
 
 typealias CompactSkinStyle = NativeCompactPlayerStyle
 
+/// A closed, app-owned vocabulary for the compact player's visual regions.
+/// Appearances can choose finite color tokens, but cannot add surfaces or
+/// influence control, layout, accessibility, or playback behavior.
+enum CompactSkinSurface: String, CaseIterable, Sendable {
+    case canvas
+    case metadata
+    case status
+    case transport
+    case footer
+    case interactiveAccent
+    case criticalState
+}
+
+/// Fixed renderer chrome derived from a validated finite appearance.
+struct CompactSkinSurfaceTreatment: Equatable, Sendable {
+    let fillHex: String
+    let strokeHex: String
+    let tintHex: String
+    let fillOpacity: Double
+    let strokeOpacity: Double
+}
+
 struct ValidatedSkinAppearance: Identifiable, Equatable, Sendable {
     let reference: SkinSelectionReference
     let displayName: String
@@ -99,6 +121,70 @@ struct ValidatedSkinAppearance: Identifiable, Equatable, Sendable {
         let decorationURLs = [backgroundAssetURL, metadataPanelAssetURL].compactMap { $0 }
         guard decorationURLs.allSatisfy(assetIsUsable) else { return .native }
         return self
+    }
+
+    /// Projects the already-renderable appearance into fixed renderer chrome.
+    /// All opacity and stroke choices are application constants, rather than
+    /// part of the skin manifest's authority.
+    func surfaceTreatment(for surface: CompactSkinSurface) -> CompactSkinSurfaceTreatment {
+        switch surface {
+        case .canvas:
+            .init(
+                fillHex: style.dominantHex,
+                strokeHex: style.secondaryHex,
+                tintHex: style.accentHex,
+                fillOpacity: 1,
+                strokeOpacity: 0.5
+            )
+        case .metadata:
+            .init(
+                fillHex: style.secondaryHex,
+                strokeHex: style.accentHex,
+                tintHex: style.accentHex,
+                fillOpacity: 0.96,
+                strokeOpacity: 0.52
+            )
+        case .status:
+            .init(
+                fillHex: style.dominantHex,
+                strokeHex: style.accentHex,
+                tintHex: style.accentHex,
+                fillOpacity: 0.9,
+                strokeOpacity: 0.42
+            )
+        case .transport:
+            .init(
+                fillHex: style.secondaryHex,
+                strokeHex: style.accentHex,
+                tintHex: style.accentHex,
+                fillOpacity: 0.9,
+                strokeOpacity: 0.58
+            )
+        case .footer:
+            .init(
+                fillHex: style.dominantHex,
+                strokeHex: style.secondaryHex,
+                tintHex: style.accentHex,
+                fillOpacity: 0.9,
+                strokeOpacity: 0.7
+            )
+        case .interactiveAccent:
+            .init(
+                fillHex: style.dominantHex,
+                strokeHex: style.accentHex,
+                tintHex: style.accentHex,
+                fillOpacity: 0.82,
+                strokeOpacity: 0.82
+            )
+        case .criticalState:
+            .init(
+                fillHex: style.dominantHex,
+                strokeHex: style.destructiveHex,
+                tintHex: style.destructiveHex,
+                fillOpacity: 0.9,
+                strokeOpacity: 0.9
+            )
+        }
     }
 
     static let native = Self(
