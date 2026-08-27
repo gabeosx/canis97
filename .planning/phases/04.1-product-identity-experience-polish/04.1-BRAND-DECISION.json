@@ -1,472 +1,64 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-	<key>approval</key>
-	<dict>
-		<key>rejectionReason</key>
-		<string>Human feedback on 2026-08-27 rejected Modulune because it felt too long and multi-syllabic.</string>
-		<key>rejectedCandidate</key>
-		<string>Modulune</string>
-		<key>state</key>
-		<string>pending-human-decision</string>
-	</dict>
-	<key>attorneyReviewRequired</key>
-	<true/>
-	<key>candidateBrief</key>
-	<dict>
-		<key>excludedTermsAndImagery</key>
-		<array>
-			<string>Sirius</string>
-			<string>XM</string>
-			<string>SiriusXM</string>
-			<string>official-affiliation wording</string>
-			<string>provider logos or dog imagery</string>
-			<string>channel artwork</string>
-			<string>Apple hardware</string>
-			<string>standard-control facsimiles</string>
-			<string>other players' trade dress</string>
-		</array>
-		<key>goods</key>
-		<string>Native macOS music and radio player for subscribers</string>
-		<key>style</key>
-		<string>Original 2000s desktop music-player nostalgia without provider affiliation; prefer a one- or two-syllable name with no forced portmanteau.</string>
-	</dict>
-	<key>candidateScreeningSources</key>
-	<array>
-		<dict>
-			<key>candidate</key>
-			<string>Rove</string>
-			<key>checkedOn</key>
-			<string>2026-08-27</string>
-			<key>finding</key>
-			<string>Rove - Capture Joy is an iPhone mindfulness-recording app. It is a real same-name app conflict, but the captured listing is not a music player.</string>
-			<key>url</key>
-			<string>https://apps.apple.com/es/app/rove-capture-joy/id6761004061</string>
-		</dict>
-		<dict>
-			<key>candidate</key>
-			<string>Mote</string>
-			<key>checkedOn</key>
-			<string>2026-08-27</string>
-			<key>finding</key>
-			<string>Apple Music lists MOTE as an active recording artist; the name also has voice-recording education software use, so it was rejected.</string>
-			<key>url</key>
-			<string>https://music.apple.com/us/artist/mote/1734489135</string>
-		</dict>
-		<dict>
-			<key>candidate</key>
-			<string>Quell</string>
-			<key>checkedOn</key>
-			<string>2026-08-27</string>
-			<key>finding</key>
-			<string>Quell is already a wellness product and app. It remains a stylistic alternative, not a preferred product identity.</string>
-			<key>url</key>
-			<string>https://www.thequellapp.com/</string>
-		</dict>
-		<dict>
-			<key>candidate</key>
-			<string>Rill</string>
-			<key>checkedOn</key>
-			<string>2026-08-27</string>
-			<key>finding</key>
-			<string>Spotify lists an active artist named Rill, creating a direct music-category collision; the candidate was rejected.</string>
-			<key>url</key>
-			<string>https://open.spotify.com/artist/2C9gfZqYe1UrhZP3ADjIm9</string>
-		</dict>
-	</array>
-	<key>decisionScope</key>
-	<string>Product identity proposal only; this record does not authorize SiriusXM service access, use of provider marks, or a public launch.</string>
-	<key>legalClearanceClaim</key>
-	<false/>
-	<key>queryEvidence</key>
-	<array>
-		<dict>
-			<key>category</key>
-			<string>exact</string>
-			<key>checkedOn</key>
-			<string>2026-08-27</string>
-			<key>query</key>
-			<string>Rove</string>
-			<key>resultSummary</key>
-			<string>Preliminary web screening surfaced a same-name iPhone mindfulness-recording app, but no direct music-player result in the captured pass. Direct TMSearch review is still unresolved.</string>
-			<key>sourceURL</key>
-			<string>https://tmsearch.uspto.gov/</string>
-		</dict>
-		<dict>
-			<key>category</key>
-			<string>spaced</string>
-			<key>checkedOn</key>
-			<string>2026-08-27</string>
-			<key>query</key>
-			<string>Ro Ve</string>
-			<key>resultSummary</key>
-			<string>Variant recorded for federal review; unresolved pending direct result review.</string>
-			<key>sourceURL</key>
-			<string>https://tmsearch.uspto.gov/</string>
-		</dict>
-		<dict>
-			<key>category</key>
-			<string>hyphenated</string>
-			<key>checkedOn</key>
-			<string>2026-08-27</string>
-			<key>query</key>
-			<string>Ro-ve</string>
-			<key>resultSummary</key>
-			<string>Variant recorded for federal review; unresolved pending direct result review.</string>
-			<key>sourceURL</key>
-			<string>https://tmsearch.uspto.gov/</string>
-		</dict>
-		<dict>
-			<key>category</key>
-			<string>plural</string>
-			<key>checkedOn</key>
-			<string>2026-08-27</string>
-			<key>query</key>
-			<string>Roves</string>
-			<key>resultSummary</key>
-			<string>Variant recorded for federal review; unresolved pending direct result review.</string>
-			<key>sourceURL</key>
-			<string>https://tmsearch.uspto.gov/</string>
-		</dict>
-		<dict>
-			<key>category</key>
-			<string>phonetic</string>
-			<key>checkedOn</key>
-			<string>2026-08-27</string>
-			<key>query</key>
-			<string>rohv OR rove</string>
-			<key>resultSummary</key>
-			<string>Sound-alike query recorded because similarity can turn on pronunciation; unresolved pending counsel review.</string>
-			<key>sourceURL</key>
-			<string>https://tmsearch.uspto.gov/</string>
-		</dict>
-		<dict>
-			<key>category</key>
-			<string>misspelling</string>
-			<key>checkedOn</key>
-			<string>2026-08-27</string>
-			<key>query</key>
-			<string>Rovee OR Rov OR Rova</string>
-			<key>resultSummary</key>
-			<string>Likely misspellings recorded; unresolved pending direct TMSearch review.</string>
-			<key>sourceURL</key>
-			<string>https://tmsearch.uspto.gov/</string>
-		</dict>
-		<dict>
-			<key>category</key>
-			<string>related-goods</string>
-			<key>checkedOn</key>
-			<string>2026-08-27</string>
-			<key>query</key>
-			<string>Rove software music radio streaming player</string>
-			<key>resultSummary</key>
-			<string>Related-goods scope recorded for software, music, radio, and streaming; no registration conclusion is claimed.</string>
-			<key>sourceURL</key>
-			<string>https://www.uspto.gov/trademarks/search/federal-trademark-searching</string>
-		</dict>
-		<dict>
-			<key>category</key>
-			<string>common-law</string>
-			<key>checkedOn</key>
-			<string>2026-08-27</string>
-			<key>query</key>
-			<string>"Rove" music player OR radio app</string>
-			<key>resultSummary</key>
-			<string>Public web search did not surface an exact music-player or radio-app result in the captured pass; common-law use can be unindexed and remains unresolved.</string>
-			<key>sourceURL</key>
-			<string>https://www.google.com/search?q=%22Rove%22+music+player+OR+radio+app</string>
-		</dict>
-		<dict>
-			<key>category</key>
-			<string>app-listing</string>
-			<key>checkedOn</key>
-			<string>2026-08-27</string>
-			<key>query</key>
-			<string>"Rove" macOS app</string>
-			<key>resultSummary</key>
-			<string>App discovery surfaced Rove - Capture Joy, an iPhone mindfulness-recording app, not a music player; store/listing and related-goods review remain unresolved.</string>
-			<key>sourceURL</key>
-			<string>https://apps.apple.com/es/app/rove-capture-joy/id6761004061</string>
-		</dict>
-		<dict>
-			<key>category</key>
-			<string>repository</string>
-			<key>checkedOn</key>
-			<string>2026-08-27</string>
-			<key>query</key>
-			<string>"Rove" GitHub</string>
-			<key>resultSummary</key>
-			<string>Repository discovery surfaced multiple non-audio uses; no exact music-player repository was captured, but manual review remains required.</string>
-			<key>sourceURL</key>
-			<string>https://github.com/search?q=Rove&amp;type=repositories</string>
-		</dict>
-		<dict>
-			<key>category</key>
-			<string>domain</string>
-			<key>checkedOn</key>
-			<string>2026-08-27</string>
-			<key>query</key>
-			<string>rove.com WHOIS and registrar availability</string>
-			<key>resultSummary</key>
-			<string>ICANN lookup route recorded; registration, ownership, and jurisdictional implications are unresolved and must not be inferred from name screening.</string>
-			<key>sourceURL</key>
-			<string>https://lookup.icann.org/en/lookup</string>
-		</dict>
-		<dict>
-			<key>category</key>
-			<string>business-registry</string>
-			<key>checkedOn</key>
-			<string>2026-08-27</string>
-			<key>query</key>
-			<string>Rove business registry</string>
-			<key>resultSummary</key>
-			<string>Public discovery query recorded; state and local registry review remains unresolved.</string>
-			<key>sourceURL</key>
-			<string>https://www.google.com/search?q=%22Rove%22+business+registry</string>
-		</dict>
-		<dict>
-			<key>category</key>
-			<string>federal-mark</string>
-			<key>checkedOn</key>
-			<string>2026-08-27</string>
-			<key>query</key>
-			<string>Rove AND (software OR music OR radio OR streaming)</string>
-			<key>resultSummary</key>
-			<string>Federal related-goods query recorded; live/pending/dead status and related-goods analysis remain attorney-review work.</string>
-			<key>sourceURL</key>
-			<string>https://tmsearch.uspto.gov/</string>
-		</dict>
-		<dict>
-			<key>category</key>
-			<string>international</string>
-			<key>checkedOn</key>
-			<string>2026-08-27</string>
-			<key>query</key>
-			<string>Rove Global Brand Database / Madrid Monitor / TMview</string>
-			<key>resultSummary</key>
-			<string>International-search route recorded; no international clearance conclusion is claimed.</string>
-			<key>sourceURL</key>
-			<string>https://branddb.wipo.int/</string>
-		</dict>
-		<dict>
-			<key>category</key>
-			<string>icon-design-code</string>
-			<key>checkedOn</key>
-			<string>2026-08-27</string>
-			<key>query</key>
-			<string>Design elements: circular disc, concentric arcs, radiating signal, abstract musical device</string>
-			<key>resultSummary</key>
-			<string>Design-code lookup route recorded for the Orbital Signal composition; counsel must compare actual design marks and commercial impression.</string>
-			<key>sourceURL</key>
-			<string>https://www.uspto.gov/trademarks/search/design-search-codes</string>
-		</dict>
-	</array>
-	<key>recordDate</key>
-	<string>2026-08-27</string>
-	<key>schemaVersion</key>
-	<integer>1</integer>
-	<key>screeningSources</key>
-	<array>
-		<dict>
-			<key>checkedOn</key>
-			<string>2026-08-27</string>
-			<key>resultSummary</key>
-			<string>Defined the required federal, common-law, domain, business-registry, and international scope; it also states that attorney interpretation may be appropriate.</string>
-			<key>source</key>
-			<string>USPTO comprehensive clearance guidance</string>
-			<key>url</key>
-			<string>https://www.uspto.gov/trademarks/search/comprehensive-clearance-search-similar-trademarks</string>
-		</dict>
-		<dict>
-			<key>checkedOn</key>
-			<string>2026-08-27</string>
-			<key>resultSummary</key>
-			<string>Used to assess similar sound, appearance, meaning, commercial impression, and related goods/services; it supplies no availability conclusion.</string>
-			<key>source</key>
-			<string>USPTO likelihood-of-confusion guidance</string>
-			<key>url</key>
-			<string>https://www.uspto.gov/trademarks/search/likelihood-confusion</string>
-		</dict>
-		<dict>
-			<key>checkedOn</key>
-			<string>2026-08-27</string>
-			<key>resultSummary</key>
-			<string>Public search entry point recorded for federal-mark queries. Full result review and live/dead status assessment remain attorney-review work.</string>
-			<key>source</key>
-			<string>USPTO Trademark Search system</string>
-			<key>url</key>
-			<string>https://tmsearch.uspto.gov/</string>
-		</dict>
-		<dict>
-			<key>checkedOn</key>
-			<string>2026-08-27</string>
-			<key>resultSummary</key>
-			<string>Used to frame the Orbital Signal design-element query; no reverse-image or design-mark clearance conclusion is claimed.</string>
-			<key>source</key>
-			<string>USPTO design search codes guidance</string>
-			<key>url</key>
-			<string>https://www.uspto.gov/trademarks/search/design-search-codes</string>
-		</dict>
-		<dict>
-			<key>checkedOn</key>
-			<string>2026-08-27</string>
-			<key>resultSummary</key>
-			<string>Confirms one layered Icon Composer file and 1024×1024 artwork guidance; it is not a trademark source.</string>
-			<key>source</key>
-			<string>Apple Icon Composer documentation</string>
-			<key>url</key>
-			<string>https://developer.apple.com/documentation/xcode/creating-your-app-icon-using-icon-composer</string>
-		</dict>
-		<dict>
-			<key>checkedOn</key>
-			<string>2026-08-27</string>
-			<key>resultSummary</key>
-			<string>Supports the deliberate exclusion of provider marks and the statement that no service or mark authorization follows from this work.</string>
-			<key>source</key>
-			<string>SiriusXM Web Terms of Use</string>
-			<key>url</key>
-			<string>https://www.siriusxm.com/sxm-web-terms-of-use</string>
-		</dict>
-	</array>
-	<key>screeningStatement</key>
-	<string>Independent screening completed for a preliminary product decision only — not legal clearance. A qualified U.S.-licensed trademark attorney must review the selected mark before public launch or registration.</string>
-	<key>selectedIdentity</key>
-	<dict>
-		<key>appBundleIdentifier</key>
-		<string>com.rove.player</string>
-		<key>appLogSubsystem</key>
-		<string>com.rove.player</string>
-		<key>appTypeName</key>
-		<string>RoveApp</string>
-		<key>applicationSupportDirectoryName</key>
-		<string>Rove</string>
-		<key>authenticationFrameAutosaveName</key>
-		<string>Rove.authentication.frame</string>
-		<key>compactFrameAutosaveName</key>
-		<string>Rove.compact.frame</string>
-		<key>compactSceneID</key>
-		<string>rove-compact</string>
-		<key>displayName</key>
-		<string>Rove</string>
-		<key>environmentPrefix</key>
-		<string>ROVE</string>
-		<key>executableName</key>
-		<string>Rove</string>
-		<key>iconBasename</key>
-		<string>ProductIcon</string>
-		<key>iconConcept</key>
-		<string>Orbital Signal: a text-free layered midnight-blue disc, offset warm signal arcs, and a small luminous core. The geometry evokes a compact music device and visualizer without copying a provider mark, hardware silhouette, standard control, or another player's trade dress.</string>
-		<key>libraryFrameAutosaveName</key>
-		<string>Rove.library.frame</string>
-		<key>librarySceneID</key>
-		<string>rove-library</string>
-		<key>moduleName</key>
-		<string>Rove</string>
-		<key>nonAffiliationStatement</key>
-		<string>Rove is an independent app and is not affiliated with, endorsed by, or sponsored by Sirius XM Radio LLC.</string>
-		<key>schemeFileName</key>
-		<string>Rove.xcscheme</string>
-		<key>schemeName</key>
-		<string>Rove</string>
-		<key>scriptPrefix</key>
-		<string>rove</string>
-		<key>skinPackageExtension</key>
-		<string>roveskin</string>
-		<key>skinPackageTypeIdentifier</key>
-		<string>com.rove.skin-package</string>
-		<key>targetName</key>
-		<string>Rove</string>
-		<key>uiTestBundleIdentifier</key>
-		<string>com.rove.player.uitests</string>
-		<key>uiTestTargetName</key>
-		<string>RoveUITests</string>
-		<key>uiValidationSchemeFileName</key>
-		<string>RoveUIValidation.xcscheme</string>
-		<key>uiValidationSchemeName</key>
-		<string>RoveUIValidation</string>
-		<key>unitTestBundleIdentifier</key>
-		<string>com.rove.player.tests</string>
-		<key>unitTestTargetName</key>
-		<string>RoveTests</string>
-	</dict>
-	<key>shortlist</key>
-	<array>
-		<dict>
-			<key>mainCollisionConcern</key>
-			<string>A same-name iPhone mindfulness-recording app exists; no direct music-player result surfaced in this preliminary indexed search.</string>
-			<key>name</key>
-			<string>Rove</string>
-			<key>pronunciation</key>
-			<string>rohv</string>
-			<key>rationale</key>
-			<string>One syllable, plain to say, and compact enough for a small desktop player. It suggests movement through a personal listening world without naming the provider or borrowing a known player vocabulary.</string>
-			<key>screeningOutcome</key>
-			<string>Preferred for human decision only. The captured web pass found a non-audio iPhone app, but no direct music-player collision; federal, domain, business, and international review remain open.</string>
-			<key>status</key>
-			<string>preferred-proposed</string>
-			<key>syllables</key>
-			<integer>1</integer>
-			<key>unresolvedSimilarity</key>
-			<string>Rove is an ordinary English word with broad existing use; counsel must assess the same-name app, sound, appearance, meaning, commercial impression, and related-goods risk.</string>
-		</dict>
-		<dict>
-			<key>mainCollisionConcern</key>
-			<string>Existing MOTE artist and voice-recording education product create avoidable audio and software adjacency.</string>
-			<key>name</key>
-			<string>Mote</string>
-			<key>pronunciation</key>
-			<string>moht</string>
-			<key>rationale</key>
-			<string>One-syllable, small-object feel with a compact-device character.</string>
-			<key>screeningOutcome</key>
-			<string>Rejected in the preliminary pass because direct audio-adjacent uses surfaced.</string>
-			<key>status</key>
-			<string>rejected</string>
-			<key>syllables</key>
-			<integer>1</integer>
-		</dict>
-		<dict>
-			<key>mainCollisionConcern</key>
-			<string>Existing Quell wellness and medical-device products make a clean software identity unlikely despite no direct player result in the captured pass.</string>
-			<key>name</key>
-			<string>Quell</string>
-			<key>pronunciation</key>
-			<string>kwell</string>
-			<key>rationale</key>
-			<string>One syllable, calm, and visually clean, but it points more to silence than listening.</string>
-			<key>screeningOutcome</key>
-			<string>Held as a stylistic alternative, not selected; existing product use warrants counsel review before any further investment.</string>
-			<key>status</key>
-			<string>screened-not-selected</string>
-			<key>syllables</key>
-			<integer>1</integer>
-		</dict>
-		<dict>
-			<key>mainCollisionConcern</key>
-			<string>Active artist and music listings create a direct music-category collision.</string>
-			<key>name</key>
-			<string>Rill</string>
-			<key>pronunciation</key>
-			<string>rill</string>
-			<key>rationale</key>
-			<string>One syllable with a quietly flowing feel and no forced construction.</string>
-			<key>screeningOutcome</key>
-			<string>Rejected in the preliminary pass because an active artist use surfaced.</string>
-			<key>status</key>
-			<string>rejected</string>
-			<key>syllables</key>
-			<integer>1</integer>
-		</dict>
-	</array>
-	<key>status</key>
-	<string>proposed</string>
-	<key>unresolvedSimilarities</key>
-	<array>
-		<string>Rove has not received a comprehensive federal, state, common-law, international, or design-mark clearance search.</string>
-		<string>The captured web pass surfaced a same-name iPhone mindfulness-recording app; counsel must assess sound, appearance, meaning, commercial impression, and related-goods risk.</string>
-		<string>Domain registration status, business names, app listings, repository names, and unindexed common-law use require direct review.</string>
-		<string>The Orbital Signal composition needs design-mark review for circular signal, radio-wave, and visualizer motifs before public use.</string>
-	</array>
+<plist version="1.0"><dict>
+<key>approval</key><dict>
+<key>rejectedCandidate</key><string>Modulune; Rove; Quell; Mote; Rill</string>
+<key>rejectionReason</key><string>Human feedback on 2026-08-27 rejected Modulune as too long and multi-syllabic, then rejected Rove and its generic short-name slate as not evocative of 1990s/2000s music-player culture.</string>
+<key>state</key><string>pending-human-decision</string>
 </dict>
-</plist>
+<key>attorneyReviewRequired</key><true/>
+<key>candidateBrief</key><dict>
+<key>excludedTermsAndImagery</key><array><string>Sirius</string><string>XM</string><string>SiriusXM</string><string>official-affiliation wording</string><string>provider logos or dog imagery</string><string>channel artwork</string><string>Apple hardware</string><string>standard-control facsimiles</string><string>other players' trade dress</string></array>
+<key>goods</key><string>Native macOS music and radio player for subscribers</string>
+<key>style</key><string>Late-1990s/early-2000s desktop music-player culture: burned CDs, MP3 bitrates, bitmap skins, spectrum scopes, equalizers, and chunky desktop hardware. Prefer one or two easy syllables; a short two-word compound is acceptable when it names a real era-specific idea rather than a forced portmanteau.</string>
+</dict>
+<key>decisionScope</key><string>Product identity proposal only; this record does not authorize SiriusXM service access, use of provider marks, or a public launch.</string>
+<key>legalClearanceClaim</key><false/>
+<key>recordDate</key><string>2026-08-27</string>
+<key>schemaVersion</key><integer>1</integer>
+<key>screeningStatement</key><string>Independent screening completed for a preliminary product decision only — not legal clearance. A qualified U.S.-licensed trademark attorney must review the selected mark before public launch or registration.</string>
+<key>screeningSources</key><array>
+<dict><key>source</key><string>USPTO comprehensive clearance guidance</string><key>url</key><string>https://www.uspto.gov/trademarks/search/comprehensive-clearance-search-similar-trademarks</string><key>checkedOn</key><string>2026-08-27</string><key>resultSummary</key><string>Defines the federal, common-law, domain, business-registry, and international scope; attorney interpretation remains appropriate.</string></dict>
+<dict><key>source</key><string>USPTO likelihood-of-confusion guidance</string><key>url</key><string>https://www.uspto.gov/trademarks/search/likelihood-confusion</string><key>checkedOn</key><string>2026-08-27</string><key>resultSummary</key><string>Frames similarity by sound, appearance, meaning, commercial impression, and related goods/services; it supplies no availability conclusion.</string></dict>
+<dict><key>source</key><string>USPTO Trademark Search system</string><key>url</key><string>https://tmsearch.uspto.gov/</string><key>checkedOn</key><string>2026-08-27</string><key>resultSummary</key><string>Public entry point for federal-mark queries. Full record review and live/dead status assessment remain attorney-review work.</string></dict>
+<dict><key>source</key><string>USPTO design search codes guidance</string><key>url</key><string>https://www.uspto.gov/trademarks/search/design-search-codes</string><key>checkedOn</key><string>2026-08-27</string><key>resultSummary</key><string>Used to frame the icon design-element query; no design-mark clearance conclusion is claimed.</string></dict>
+</array>
+<key>candidateScreeningSources</key><array>
+<dict><key>candidate</key><string>Bit Deck</string><key>checkedOn</key><string>2026-08-27</string><key>finding</key><string>Exact web, app, and repository queries captured no direct music-player result. The phrase still uses two descriptive era terms, so federal, common-law, domain, and business-name review remain required before use.</string><key>url</key><string>https://www.google.com/search?q=%22Bit+Deck%22+music+player+app</string></dict>
+<dict><key>candidate</key><string>Bleep</string><key>checkedOn</key><string>2026-08-27</string><key>finding</key><string>Bleep is an established music retailer with digital-music and MP3-player-related goods. It is a direct category collision.</string><key>url</key><string>https://tmdb.eu/marke/EU-013601042%3A%3Ableep-bleep-limited.html</string></dict>
+<dict><key>candidate</key><string>Burn</string><key>checkedOn</key><string>2026-08-27</string><key>finding</key><string>Burn describes a core CD-R-era player action and is weak for the proposed software goods; public trademark material also records music/software retail use.</string><key>url</key><string>https://uspto.report/TM/78188133</string></dict>
+<dict><key>candidate</key><string>Scope</string><key>checkedOn</key><string>2026-08-27</string><key>finding</key><string>Fun's Scope is a current Web3 music-player app, while contemporary player documentation uses scope as a visualizer term. The word is direct audio-app adjacency.</string><key>url</key><string>https://play.google.com/store/apps/details?hl=en_US&amp;id=com.funsscope</string></dict>
+<dict><key>candidate</key><string>Raster</string><key>checkedOn</key><string>2026-08-27</string><key>finding</key><string>Raster Music Tracker is current music software, creating a direct visualizer/tracker and related-goods collision.</string><key>url</key><string>https://gitlab.com/amarok8bit/time-wizard-music-player</string></dict>
+<dict><key>candidate</key><string>Blit</string><key>checkedOn</key><string>2026-08-27</string><key>finding</key><string>BLIT IT trademark material covers computer software for portable media players, and Blit is an active software-studio name. It is an avoidable software collision.</string><key>url</key><string>https://trademarks.justia.com/owners/blit-it-inc-2950757/</string></dict>
+</array>
+<key>queryEvidence</key><array>
+<dict><key>category</key><string>exact</string><key>query</key><string>Bit Deck</string><key>checkedOn</key><string>2026-08-27</string><key>resultSummary</key><string>Preliminary indexed web search captured no exact music-player or app result; this is not a clearance conclusion.</string><key>sourceURL</key><string>https://www.google.com/search?q=%22Bit+Deck%22+music+player+app</string></dict>
+<dict><key>category</key><string>spaced</string><key>query</key><string>Bit Deck</string><key>checkedOn</key><string>2026-08-27</string><key>resultSummary</key><string>Spaced form recorded for direct federal review; live/dead status remains unresolved.</string><key>sourceURL</key><string>https://tmsearch.uspto.gov/</string></dict>
+<dict><key>category</key><string>hyphenated</string><key>query</key><string>Bit-Deck</string><key>checkedOn</key><string>2026-08-27</string><key>resultSummary</key><string>Hyphenated variant recorded for direct federal review; live/dead status remains unresolved.</string><key>sourceURL</key><string>https://tmsearch.uspto.gov/</string></dict>
+<dict><key>category</key><string>plural</string><key>query</key><string>Bit Decks</string><key>checkedOn</key><string>2026-08-27</string><key>resultSummary</key><string>Plural variant recorded for direct federal review; live/dead status remains unresolved.</string><key>sourceURL</key><string>https://tmsearch.uspto.gov/</string></dict>
+<dict><key>category</key><string>phonetic</string><key>query</key><string>bit dek OR bitdeck</string><key>checkedOn</key><string>2026-08-27</string><key>resultSummary</key><string>Sound-alike and closed-compound variants recorded because similarity can turn on pronunciation and commercial impression.</string><key>sourceURL</key><string>https://tmsearch.uspto.gov/</string></dict>
+<dict><key>category</key><string>misspelling</string><key>query</key><string>BitDek OR BitDecks OR Bitt Deck</string><key>checkedOn</key><string>2026-08-27</string><key>resultSummary</key><string>Likely misspellings recorded; direct search and counsel review remain required.</string><key>sourceURL</key><string>https://tmsearch.uspto.gov/</string></dict>
+<dict><key>category</key><string>related-goods</string><key>query</key><string>Bit Deck software music radio streaming player</string><key>checkedOn</key><string>2026-08-27</string><key>resultSummary</key><string>Related-goods scope recorded for downloadable software, music, radio, and streaming. No registration conclusion is claimed.</string><key>sourceURL</key><string>https://www.uspto.gov/trademarks/search/federal-trademark-searching</string></dict>
+<dict><key>category</key><string>common-law</string><key>query</key><string>Bit Deck music player OR radio app</string><key>checkedOn</key><string>2026-08-27</string><key>resultSummary</key><string>Preliminary indexed search captured no direct music-player or radio-app result; unindexed common-law use remains unresolved.</string><key>sourceURL</key><string>https://www.google.com/search?q=%22Bit+Deck%22+music+player+OR+radio+app</string></dict>
+<dict><key>category</key><string>app-listing</string><key>query</key><string>Bit Deck macOS app</string><key>checkedOn</key><string>2026-08-27</string><key>resultSummary</key><string>Preliminary app-discovery query captured no exact macOS app result; App Store and other store review remains incomplete.</string><key>sourceURL</key><string>https://www.google.com/search?q=%22Bit+Deck%22+macOS+app</string></dict>
+<dict><key>category</key><string>repository</string><key>query</key><string>Bit Deck GitHub</string><key>checkedOn</key><string>2026-08-27</string><key>resultSummary</key><string>Preliminary repository discovery captured no exact music-player repository; manual repository and package-registry review remains required.</string><key>sourceURL</key><string>https://github.com/search?q=%22Bit+Deck%22&amp;type=repositories</string></dict>
+<dict><key>category</key><string>domain</string><key>query</key><string>bitdeck.com WHOIS and registrar availability</string><key>checkedOn</key><string>2026-08-27</string><key>resultSummary</key><string>ICANN lookup route recorded; registration, ownership, and jurisdictional implications are unresolved and must not be inferred from this screen.</string><key>sourceURL</key><string>https://lookup.icann.org/en/lookup</string></dict>
+<dict><key>category</key><string>business-registry</string><key>query</key><string>Bit Deck business registry</string><key>checkedOn</key><string>2026-08-27</string><key>resultSummary</key><string>Public discovery route recorded; state and local registry review remains unresolved.</string><key>sourceURL</key><string>https://www.google.com/search?q=%22Bit+Deck%22+business+registry</string></dict>
+<dict><key>category</key><string>federal-mark</string><key>query</key><string>Bit Deck AND software OR music OR radio OR streaming</string><key>checkedOn</key><string>2026-08-27</string><key>resultSummary</key><string>Federal related-goods query recorded; actual records, status, and related-goods analysis remain attorney-review work.</string><key>sourceURL</key><string>https://tmsearch.uspto.gov/</string></dict>
+<dict><key>category</key><string>international</string><key>query</key><string>Bit Deck Global Brand Database / Madrid Monitor / TMview</string><key>checkedOn</key><string>2026-08-27</string><key>resultSummary</key><string>International-search route recorded; no international clearance conclusion is claimed.</string><key>sourceURL</key><string>https://branddb.wipo.int/</string></dict>
+<dict><key>category</key><string>icon-design-code</string><key>query</key><string>Design elements: circular disc, concentric arcs, radiating signal, abstract music-device display</string><key>checkedOn</key><string>2026-08-27</string><key>resultSummary</key><string>Design-code lookup route recorded for the existing Orbital Signal composition; counsel must compare actual design marks and commercial impression.</string><key>sourceURL</key><string>https://www.uspto.gov/trademarks/search/design-search-codes</string></dict>
+</array>
+<key>selectedIdentity</key><dict>
+<key>displayName</key><string>Bit Deck</string><key>appTypeName</key><string>BitDeckApp</string><key>targetName</key><string>BitDeck</string><key>moduleName</key><string>BitDeck</string><key>executableName</key><string>BitDeck</string><key>appBundleIdentifier</key><string>com.bitdeck.player</string><key>unitTestTargetName</key><string>BitDeckTests</string><key>unitTestBundleIdentifier</key><string>com.bitdeck.player.tests</string><key>uiTestTargetName</key><string>BitDeckUITests</string><key>uiTestBundleIdentifier</key><string>com.bitdeck.player.uitests</string><key>schemeName</key><string>BitDeck</string><key>schemeFileName</key><string>BitDeck.xcscheme</string><key>uiValidationSchemeName</key><string>BitDeckUIValidation</string><key>uiValidationSchemeFileName</key><string>BitDeckUIValidation.xcscheme</string><key>skinPackageTypeIdentifier</key><string>com.bitdeck.skin-package</string><key>skinPackageExtension</key><string>bitdeckskin</string><key>applicationSupportDirectoryName</key><string>Bit Deck</string><key>appLogSubsystem</key><string>com.bitdeck.player</string><key>environmentPrefix</key><string>BITDECK</string><key>scriptPrefix</key><string>bitdeck</string><key>compactSceneID</key><string>bitdeck-compact</string><key>librarySceneID</key><string>bitdeck-library</string><key>authenticationFrameAutosaveName</key><string>BitDeck.authentication.frame</string><key>compactFrameAutosaveName</key><string>BitDeck.compact.frame</string><key>libraryFrameAutosaveName</key><string>BitDeck.library.frame</string><key>iconBasename</key><string>ProductIcon</string><key>iconConcept</key><string>Orbital Signal: a text-free layered midnight-blue disc, offset warm signal arcs, and a small luminous core. The geometry evokes a compact music device and spectrum visualizer without copying a provider mark, hardware silhouette, standard control, or another player's trade dress.</string><key>nonAffiliationStatement</key><string>Bit Deck is an independent app and is not affiliated with, endorsed by, or sponsored by Sirius XM Radio LLC.</string>
+</dict>
+<key>shortlist</key><array>
+<dict><key>name</key><string>Bit Deck</string><key>pronunciation</key><string>bit deck</string><key>syllables</key><integer>2</integer><key>rationale</key><string>“Bit” recalls MP3 bitrate displays and “deck” recalls CD, MiniDisc, and desktop player panels. It makes the 1999–2004 culture legible without borrowing a player name or trade dress.</string><key>mainCollisionConcern</key><string>Both terms occur in technology and music contexts; the compound needs comprehensive clearance.</string><key>screeningOutcome</key><string>Preferred for human decision only. No direct music-player result surfaced in the captured screen, but it is not legal clearance.</string><key>status</key><string>preferred-proposed</string><key>unresolvedSimilarity</key><string>Compound, sound-alike, closed-compound, and related-goods uses require counsel review.</string></dict>
+<dict><key>name</key><string>Bleep</string><key>pronunciation</key><string>bleep</string><key>syllables</key><integer>1</integer><key>rationale</key><string>Dial-up alerts, cue sounds, and pixel-display culture.</string><key>mainCollisionConcern</key><string>Established digital-music retail and MP3-player-related goods.</string><key>screeningOutcome</key><string>Rejected: direct music-category use.</string><key>status</key><string>rejected</string></dict>
+<dict><key>name</key><string>Burn</string><key>pronunciation</key><string>burn</string><key>syllables</key><integer>1</integer><key>rationale</key><string>Making a mix CD.</string><key>mainCollisionConcern</key><string>Core CD-R action, too descriptive and widely used around music/software.</string><key>screeningOutcome</key><string>Rejected: weak and audio/software-adjacent.</string><key>status</key><string>rejected</string></dict>
+<dict><key>name</key><string>Scope</string><key>pronunciation</key><string>skohp</string><key>syllables</key><integer>1</integer><key>rationale</key><string>A spectrum/oscilloscope visualizer window, a recognizable old desktop-player motif.</string><key>mainCollisionConcern</key><string>Current music-player use and visualizer terminology.</string><key>screeningOutcome</key><string>Rejected: direct music-app and visualizer collision.</string><key>status</key><string>rejected</string></dict>
+<dict><key>name</key><string>Raster</string><key>pronunciation</key><string>RASS-ter</string><key>syllables</key><integer>2</integer><key>rationale</key><string>Bitmap skins, CRT pixels, and visualizer graphics.</string><key>mainCollisionConcern</key><string>Raster Music Tracker is current music software.</string><key>screeningOutcome</key><string>Rejected: direct tracker/music-software collision.</string><key>status</key><string>rejected</string></dict>
+<dict><key>name</key><string>Blit</string><key>pronunciation</key><string>blit</string><key>syllables</key><integer>1</integer><key>rationale</key><string>The bitmap operation behind late-1990s skins and pixel UI.</string><key>mainCollisionConcern</key><string>Existing software and portable-media-player trademark material use BLIT/BLIT IT.</string><key>screeningOutcome</key><string>Rejected: direct software/portable-media-player collision.</string><key>status</key><string>rejected</string></dict>
+</array>
+<key>status</key><string>proposed</string>
+<key>unresolvedSimilarities</key><array><string>Bit Deck has not received a comprehensive federal, state, common-law, international, or design-mark clearance search.</string><string>The words “bit” and “deck” are each used in technology and music contexts; counsel must assess sound, appearance, meaning, commercial impression, and related-goods risk for the compound.</string><string>Domain registration status, business names, app listings, repository names, and unindexed common-law use require direct review.</string><string>The Orbital Signal composition needs design-mark review for circular signal, radio-wave, and visualizer motifs before public use.</string></array>
+</dict></plist>
