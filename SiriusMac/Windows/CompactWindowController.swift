@@ -60,9 +60,17 @@ final class WindowLifecyclePolicy {
 
     var frameAutosaveName: String {
         switch role {
-        case .authentication: "SiriusMac.authentication.frame"
-        case .compact: "SiriusMac.compact.frame"
-        case .library: "SiriusMac.library.frame"
+        case .authentication: ProductIdentity.FrameAutosaveName.authentication
+        case .compact: ProductIdentity.FrameAutosaveName.compact
+        case .library: ProductIdentity.FrameAutosaveName.library
+        }
+    }
+
+    var legacyFrameAutosaveName: String {
+        switch role {
+        case .authentication: ProductIdentity.Legacy.authenticationFrameAutosaveName
+        case .compact: ProductIdentity.Legacy.compactFrameAutosaveName
+        case .library: ProductIdentity.Legacy.libraryFrameAutosaveName
         }
     }
 
@@ -90,6 +98,36 @@ enum WindowFrameRestoration {
               screens.contains(where: { $0.contains(validFrame.origin) })
         else { return nil }
         return validFrame.origin
+    }
+}
+
+enum WindowFrameMigration {
+    static func migratedFrameString(
+        currentValue: String?,
+        legacyValue: String?,
+        role: WindowRole,
+        screens: [CGRect]
+    ) -> String? {
+        guard currentValue == nil, let legacyValue else { return nil }
+        let legacyFrame = NSRectFromString(legacyValue)
+
+        switch role {
+        case .compact:
+            guard let origin = WindowFrameRestoration.compactOriginToApply(
+                savedFrame: legacyFrame,
+                screens: screens
+            ) else { return nil }
+            return NSStringFromRect(NSRect(
+                origin: origin,
+                size: CGSize(width: 400, height: 288)
+            ))
+        case .authentication, .library:
+            guard let validFrame = WindowFrameRestoration.frameToApply(
+                savedFrame: legacyFrame,
+                screens: screens
+            ) else { return nil }
+            return NSStringFromRect(validFrame)
+        }
     }
 }
 
@@ -135,6 +173,7 @@ final class CompactWindowController {
 
     private func configure(_ window: NSWindow) {
         if restoresPersistedFrame {
+            migrateLegacyFrameIfNeeded()
             window.setFrameAutosaveName(policy.frameAutosaveName)
         }
         window.contentMinSize = policy.minimumContentSize
@@ -156,6 +195,19 @@ final class CompactWindowController {
         }
 
         restoreFrameOrCenter(window)
+    }
+
+    private func migrateLegacyFrameIfNeeded() {
+        let currentKey = "NSWindow Frame \(policy.frameAutosaveName)"
+        let legacyKey = "NSWindow Frame \(policy.legacyFrameAutosaveName)"
+        let defaults = UserDefaults.standard
+        guard let migrated = WindowFrameMigration.migratedFrameString(
+            currentValue: defaults.string(forKey: currentKey),
+            legacyValue: defaults.string(forKey: legacyKey),
+            role: policy.role,
+            screens: NSScreen.screens.map(\.visibleFrame)
+        ) else { return }
+        defaults.set(migrated, forKey: currentKey)
     }
 
     private func restoreFrameOrCenter(_ window: NSWindow) {

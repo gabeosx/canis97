@@ -29,7 +29,7 @@ final class WindowLifecyclePolicyTests: XCTestCase {
         XCTAssertEqual(policy.minimumContentSize, CGSize(width: 400, height: 288))
         XCTAssertFalse(policy.isResizable)
         XCTAssertFalse(policy.allowsFullScreen)
-        XCTAssertEqual(policy.frameAutosaveName, "SiriusMac.compact.frame")
+        XCTAssertEqual(policy.frameAutosaveName, ProductIdentity.compactFrameAutosaveName)
     }
 
     func testAuthenticationPolicyRestoresAUsableResizablePrimaryWindow() {
@@ -39,7 +39,7 @@ final class WindowLifecyclePolicyTests: XCTestCase {
         XCTAssertEqual(policy.minimumContentSize, CGSize(width: 760, height: 620))
         XCTAssertTrue(policy.isResizable)
         XCTAssertTrue(policy.allowsFullScreen)
-        XCTAssertEqual(policy.frameAutosaveName, "SiriusMac.authentication.frame")
+        XCTAssertEqual(policy.frameAutosaveName, ProductIdentity.authenticationFrameAutosaveName)
     }
 
     func testAuthenticationAttachmentReversesCompactWindowRestrictionsAfterSignOut() {
@@ -60,7 +60,7 @@ final class WindowLifecyclePolicyTests: XCTestCase {
     }
 
     func testCompactAttachmentRetainsSavedOriginButResetsOversizedSavedContentSize() {
-        let key = "NSWindow Frame SiriusMac.compact.frame"
+        let key = "NSWindow Frame \(ProductIdentity.compactFrameAutosaveName)"
         let previousValue = UserDefaults.standard.object(forKey: key)
         defer {
             if let previousValue {
@@ -88,7 +88,7 @@ final class WindowLifecyclePolicyTests: XCTestCase {
     }
 
     func testCompactAttachmentCanIgnoreProductionFramePersistence() {
-        let key = "NSWindow Frame SiriusMac.compact.frame"
+        let key = "NSWindow Frame \(ProductIdentity.compactFrameAutosaveName)"
         let previousValue = UserDefaults.standard.object(forKey: key)
         defer {
             if let previousValue {
@@ -142,7 +142,7 @@ final class WindowLifecyclePolicyTests: XCTestCase {
         XCTAssertEqual(policy.minimumContentSize, CGSize(width: 760, height: 540))
         XCTAssertTrue(policy.isResizable)
         XCTAssertTrue(policy.allowsFullScreen)
-        XCTAssertEqual(policy.frameAutosaveName, "SiriusMac.library.frame")
+        XCTAssertEqual(policy.frameAutosaveName, ProductIdentity.libraryFrameAutosaveName)
     }
 
     func testRestoresOnlyFramesIntersectingAnAvailableScreen() {
@@ -155,6 +155,32 @@ final class WindowLifecyclePolicyTests: XCTestCase {
             visibleFrame
         )
         XCTAssertNil(WindowFrameRestoration.frameToApply(savedFrame: offscreenFrame, screens: screens))
+    }
+
+    func testFrameMigrationPreservesOnlyAVisibleLegacyCompactOrigin() {
+        let screens = [CGRect(x: 0, y: 0, width: 1_440, height: 900)]
+        let visibleLegacy = NSStringFromRect(NSRect(x: 120, y: 96, width: 760, height: 620))
+        let migrated = WindowFrameMigration.migratedFrameString(
+            currentValue: nil,
+            legacyValue: visibleLegacy,
+            role: .compact,
+            screens: screens
+        )
+
+        XCTAssertEqual(NSRectFromString(try! XCTUnwrap(migrated)).origin, CGPoint(x: 120, y: 96))
+        XCTAssertEqual(NSRectFromString(try! XCTUnwrap(migrated)).size, CGSize(width: 400, height: 288))
+        XCTAssertNil(WindowFrameMigration.migratedFrameString(
+            currentValue: nil,
+            legacyValue: NSStringFromRect(NSRect(x: 9_000, y: 9_000, width: 760, height: 620)),
+            role: .compact,
+            screens: screens
+        ))
+        XCTAssertNil(WindowFrameMigration.migratedFrameString(
+            currentValue: "already-current",
+            legacyValue: visibleLegacy,
+            role: .compact,
+            screens: screens
+        ))
     }
 
     func testPrimaryWindowCloseRequestsTerminationOnlyOnceWhileLibraryCloseDoesNothing() {

@@ -8,6 +8,9 @@ readonly MIGRATION="$ROOT/SiriusMac/App/ProductIdentityMigration.swift"
 readonly LIBRARY_STORE="$ROOT/SiriusMac/Library/LibraryStore.swift"
 readonly SELECTION_STORE="$ROOT/SiriusMac/Skins/SkinSelectionStore.swift"
 readonly PACKAGE_IMPORTER="$ROOT/SiriusMac/Skins/SkinPackageImporter.swift"
+readonly WINDOW_CONTROLLER="$ROOT/SiriusMac/Windows/CompactWindowController.swift"
+readonly KEYCHAIN_STORE="$ROOT/SiriusMac/Security/KeychainCredentialStore.swift"
+readonly CLIENT_PACKAGE="$ROOT/Packages/SiriusXMClient/Package.swift"
 readonly AUTH_VIEW="$ROOT/SiriusMac/Authentication/AuthenticationView.swift"
 readonly ICON="$ROOT/SiriusMac/Assets/ProductIcon.icon"
 
@@ -80,6 +83,14 @@ check_migration() {
   rg -Fq 'validatedImportedPackageExists' "$SELECTION_STORE" || fail 'imported selection migration must require a validated package'
   rg -Fq 'ProductIdentity.Legacy.applicationSupportDirectoryName' "$PACKAGE_IMPORTER" || fail 'managed packages must retain legacy read compatibility'
   rg -Fq 'migrateLegacyPackagesIfNeeded' "$PACKAGE_IMPORTER" || fail 'managed packages require a validated compatibility copy'
+  require_file "$WINDOW_CONTROLLER"; require_file "$KEYCHAIN_STORE"; require_file "$CLIENT_PACKAGE"
+  rg -Fq 'ProductIdentity.FrameAutosaveName' "$WINDOW_CONTROLLER" || fail 'window writes must use approved product-owned frame names'
+  rg -Fq 'ProductIdentity.Legacy.compactFrameAutosaveName' "$WINDOW_CONTROLLER" || fail 'window migration must retain legacy read names'
+  rg -Fq 'WindowFrameMigration.migratedFrameString' "$WINDOW_CONTROLLER" || fail 'window migration must validate legacy frames before copying'
+  rg -Fq 'Bundle.main.bundleIdentifier ?? "com.siriusmac.player"' "$KEYCHAIN_STORE" || fail 'legacy Keychain service fallback changed'
+  rg -Fq 'account: String = "approved-reusable-credential"' "$KEYCHAIN_STORE" || fail 'Keychain account changed'
+  ! rg -Fq 'ProductIdentity' "$KEYCHAIN_STORE" || fail 'Keychain must not participate in identity migration'
+  rg -Fq 'name: "SiriusXMClient"' "$CLIENT_PACKAGE" || fail 'provider client package identity changed'
   printf 'product-identity migration contract: PASS\n'
 }
 
