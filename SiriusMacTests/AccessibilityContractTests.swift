@@ -81,6 +81,33 @@ final class AccessibilityContractTests: XCTestCase {
         XCTAssertFalse(source.contains("NSOpenPanel"))
     }
 
+    func testProductOwnedPresentationKeepsAccessibilityAndRecoveryAppOwned() throws {
+        let librarySource = try repositorySource("SiriusMac/Catalog/ListeningView.swift")
+        let managementSource = try repositorySource("SiriusMac/Skins/SkinManagementView.swift")
+        let appSource = try repositorySource("SiriusMac/SiriusMacApp.swift")
+
+        XCTAssertTrue(librarySource.contains("ProductIdentity.displayName) library"))
+        XCTAssertTrue(librarySource.contains("accessibilitySortPriority(30)"))
+        XCTAssertTrue(librarySource.contains("accessibilitySortPriority(29)"))
+        XCTAssertTrue(librarySource.contains("accessibilitySortPriority(27)"))
+        XCTAssertTrue(managementSource.contains("ProductIdentity.skinPackageTypeIdentifier"))
+        XCTAssertTrue(managementSource.contains("ProductIdentity.Legacy.skinPackageTypeIdentifier"))
+        XCTAssertTrue(managementSource.contains("@FocusState private var focusedReference"))
+        XCTAssertTrue(appSource.contains("Button(\"Use Native Appearance\")"))
+        XCTAssertTrue(appSource.contains("CommandMenu(\"Player\")"))
+        XCTAssertFalse(managementSource.contains("accessibilityLabel(appearance.displayName)"))
+    }
+
+    func testSkinImportKeepsBothExtensionsBehindTheClosedImporter() throws {
+        let importerSource = try repositorySource("SiriusMac/Skins/SkinPackageImporter.swift")
+
+        XCTAssertTrue(importerSource.contains("ProductIdentity.skinPackageExtension"))
+        XCTAssertTrue(importerSource.contains("ProductIdentity.Legacy.skinPackageExtension"))
+        XCTAssertTrue(importerSource.contains("validateManagedPackage"))
+        XCTAssertFalse(importerSource.contains("JavaScript"))
+        XCTAssertFalse(importerSource.contains("WebKit"))
+    }
+
     private func repositorySource(_ path: String) throws -> String {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

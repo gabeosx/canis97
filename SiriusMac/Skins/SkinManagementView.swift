@@ -31,9 +31,9 @@ enum SkinManagementErrorPresentation: String, Identifiable, Equatable {
     var detail: String {
         switch self {
         case .invalidPackage:
-            "Choose a valid .siriusskin package and try again. Your current appearance was not changed."
+            "Choose a valid .\(ProductIdentity.skinPackageExtension) package and try again. Your current appearance was not changed."
         case .unsupportedSchema:
-            "This package uses an appearance version Sirius Mac doesn’t support. Your current appearance was not changed."
+            "This package uses an appearance version \(ProductIdentity.displayName) doesn’t support. Your current appearance was not changed."
         case .unsafeContent:
             "This package contains content that safe appearances don’t allow. Your current appearance was not changed."
         case .overBudget:
@@ -41,13 +41,13 @@ enum SkinManagementErrorPresentation: String, Identifiable, Equatable {
         case .cancelled:
             "The import stopped before making any appearance change."
         case .storageFailure:
-            "Sirius Mac couldn’t save this appearance. Your current appearance was not changed. Try again."
+            "\(ProductIdentity.displayName) couldn’t save this appearance. Your current appearance was not changed. Try again."
         case .selectionFailure:
             "The validated appearance was saved, but your previous appearance remains selected. Select it again when ready."
         case .removalFailure:
-            "Sirius Mac couldn’t remove the saved appearance. Native remains active if recovery already completed. Try again."
+            "\(ProductIdentity.displayName) couldn’t remove the saved appearance. Native remains active if recovery already completed. Try again."
         case .nativeRecoveryFailure:
-            "Sirius Mac couldn’t durably select Native, so the imported appearance was not removed. Try again."
+            "\(ProductIdentity.displayName) couldn’t durably select Native, so the imported appearance was not removed. Try again."
         }
     }
 
@@ -119,7 +119,7 @@ struct SkinManagementView: View {
                 .disabled(isBusy)
                 .frame(minHeight: 32)
                 .accessibilityIdentifier("appearance.management.import")
-                .accessibilityHint("Choose one local .siriusskin package")
+                .accessibilityHint("Choose one local .\(ProductIdentity.skinPackageExtension) package")
 
                 if isImporting {
                     ProgressView()
@@ -137,7 +137,10 @@ struct SkinManagementView: View {
         .frame(minWidth: 520, minHeight: 460)
         .fileImporter(
             isPresented: $presentsImporter,
-            allowedContentTypes: [UTType(importedAs: "com.siriusmac.skin-package", conformingTo: .zip)],
+            allowedContentTypes: [
+                UTType(importedAs: ProductIdentity.skinPackageTypeIdentifier, conformingTo: .zip),
+                UTType(importedAs: ProductIdentity.Legacy.skinPackageTypeIdentifier, conformingTo: .zip),
+            ],
             allowsMultipleSelection: false,
             onCompletion: handleImportSelection
         )

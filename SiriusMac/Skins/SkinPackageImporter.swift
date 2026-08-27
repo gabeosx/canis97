@@ -340,7 +340,8 @@ struct SkinPackageImporter: @unchecked Sendable {
         } catch {
             throw SkinPackageRejection.sourceUnavailable
         }
-        guard sourceURL.pathExtension == "siriusskin",
+        guard [ProductIdentity.skinPackageExtension, ProductIdentity.Legacy.skinPackageExtension]
+            .contains(sourceURL.pathExtension),
               sourceValues.isRegularFile == true,
               sourceValues.isSymbolicLink != true,
               let fileSize = sourceValues.fileSize,

@@ -22,7 +22,7 @@ final class SystemAccessibilityAnnouncementPoster: AccessibilityAnnouncementPost
     }
 }
 
-/// The only state changes Sirius Mac may announce. Cases intentionally carry
+/// The only state changes the app may announce. Cases intentionally carry
 /// no provider content, error text, credentials, URLs, renderer strings, or
 /// transport values.
 enum AccessibilityAnnouncementEvent: Hashable {

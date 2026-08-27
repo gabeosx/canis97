@@ -310,7 +310,7 @@ struct LibraryView: View {
         .frame(minWidth: 760, minHeight: 540, alignment: .top)
         .tint(LibraryPalette.accent)
         .environment(\.colorScheme, .dark)
-        .accessibilityLabel("Sirius Mac library")
+        .accessibilityLabel("\(ProductIdentity.displayName) library")
     }
 
     private var libraryTabPicker: some View {
@@ -705,13 +705,13 @@ struct LibraryView: View {
 
     private var persistenceNotice: String? {
         if libraryStore.lastLoadFailed {
-            return "Sirius Mac couldn’t read part of your saved library. It kept the affected collection unchanged instead of showing the read as an empty result."
+            return "\(ProductIdentity.displayName) couldn’t read part of your saved library. It kept the affected collection unchanged instead of showing the read as an empty result."
         }
         if libraryStore.lastSaveFailed {
-            return "Sirius Mac couldn’t save the last library change or preference. Existing durable library data was not modified."
+            return "\(ProductIdentity.displayName) couldn’t save the last library change or preference. Existing durable library data was not modified."
         }
         if libraryStore.persistence == .inMemoryFallback {
-            return "Favorites, Recents, and remembered player settings are unavailable until Sirius Mac can reopen its library storage."
+            return "Favorites, Recents, and remembered player settings are unavailable until \(ProductIdentity.displayName) can reopen its library storage."
         }
         return nil
     }

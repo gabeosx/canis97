@@ -15,6 +15,10 @@ readonly AUTH_VIEW="$ROOT/SiriusMac/Authentication/AuthenticationView.swift"
 readonly APP="$ROOT/SiriusMac/SiriusMacApp.swift"
 readonly ABOUT_VIEW="$ROOT/SiriusMac/App/AboutProductView.swift"
 readonly AUTH_ORACLE="$ROOT/SiriusMac/Authentication/ClosedAuthenticationOracle.swift"
+readonly LISTENING_VIEW="$ROOT/SiriusMac/Catalog/ListeningView.swift"
+readonly SKIN_MANAGEMENT_VIEW="$ROOT/SiriusMac/Skins/SkinManagementView.swift"
+readonly SKIN_IMPORTER="$ROOT/SiriusMac/Skins/SkinPackageImporter.swift"
+readonly ACCESSIBILITY_TESTS="$ROOT/SiriusMacTests/AccessibilityContractTests.swift"
 readonly ICON="$ROOT/SiriusMac/Assets/ProductIcon.icon"
 
 fail() { printf 'product-identity contract: %s\n' "$*" >&2; exit 1; }
@@ -109,6 +113,13 @@ check_presentation() {
   rg -Fq 'connects subscribers to SiriusXM using their own subscriber account' "$ABOUT_VIEW" || fail 'About view must keep the factual subscriber-service boundary'
   rg -Fq 'ProductIdentity.displayName' "$AUTH_ORACLE" || fail 'authentication outcomes must lead with the product identity'
   rg -Fq 'SiriusXM did not accept' "$AUTH_ORACLE" || fail 'provider rejection copy must remain factual'
+  require_file "$LISTENING_VIEW"; require_file "$SKIN_MANAGEMENT_VIEW"; require_file "$SKIN_IMPORTER"; require_file "$ACCESSIBILITY_TESTS"
+  rg -Fq 'ProductIdentity.displayName) library' "$LISTENING_VIEW" || fail 'library accessibility label must use the product identity'
+  rg -Fq 'ProductIdentity.skinPackageTypeIdentifier' "$SKIN_MANAGEMENT_VIEW" || fail 'appearance importer must accept the approved skin type'
+  rg -Fq 'ProductIdentity.Legacy.skinPackageTypeIdentifier' "$SKIN_MANAGEMENT_VIEW" || fail 'appearance importer must retain the legacy skin type'
+  rg -Fq 'ProductIdentity.skinPackageExtension' "$SKIN_IMPORTER" || fail 'skin importer must accept the approved extension'
+  rg -Fq 'ProductIdentity.Legacy.skinPackageExtension' "$SKIN_IMPORTER" || fail 'skin importer must retain the legacy extension'
+  rg -Fq 'testProductOwnedPresentationKeepsAccessibilityAndRecoveryAppOwned' "$ACCESSIBILITY_TESTS" || fail 'structural accessibility coverage is required'
   ! rg -Fq 'struct SiriusMacApp: App' "$APP" || fail 'legacy app entry-point type remains'
   printf 'product-identity presentation contract: PASS\n'
 }
