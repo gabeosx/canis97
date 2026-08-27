@@ -22,7 +22,10 @@ check_tracer() {
   artifact_status="$(/usr/bin/plutil -extract status raw "$ARTIFACT")"
   [[ "$artifact_status" == "proposed" || "$artifact_status" == "rescreen-required" ]] || fail "tracer requires proposed or rescreen-required artifact status"
   if [[ "$artifact_status" == "rescreen-required" ]]; then
-    [[ "$(/usr/bin/plutil -extract selectedIdentityDisposition raw "$ARTIFACT")" == "withdrawn-after-bitdeck-rescreen" ]] || fail "rescreen-required artifact must quarantine the withdrawn identity"
+    case "$(/usr/bin/plutil -extract selectedIdentityDisposition raw "$ARTIFACT")" in
+      withdrawn-after-bitdeck-rescreen|withdrawn-after-bitjuke-rescreen) ;;
+      *) fail "rescreen-required artifact must quarantine the withdrawn identity" ;;
+    esac
   fi
   [[ "$(/usr/bin/plutil -extract legalClearanceClaim raw "$ARTIFACT")" == "false" ]] || fail "legalClearanceClaim must remain false"
   [[ "$(/usr/bin/plutil -extract attorneyReviewRequired raw "$ARTIFACT")" == "true" ]] || fail "attorneyReviewRequired must remain true"

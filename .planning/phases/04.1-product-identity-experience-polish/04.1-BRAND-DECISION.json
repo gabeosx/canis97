@@ -1,63 +1,419 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-<key>approval</key><dict>
-<key>rejectedCandidate</key><string>Modulune; Rove; Quell; Mote; Rill; BitDeck; Bit Deck; Bit-Deck</string>
-<key>rejectionReason</key><string>Human feedback on 2026-08-27 rejected Modulune as too long and multi-syllabic, then rejected Rove and its generic short-name slate as not evocative of 1990s/2000s music-player culture. A subsequent exact-spelling screen rejected BitDeck and its spaced and hyphenated forms: current indexed sources identify BitDeck, LLC as a software business using bitdeck.com, a BitDeck mobile-app developer/listing, a federal BITDECK filing for downloadable mobile applications, and an unrelated bitdeck software package. This is a screening finding, not a legal opinion.</string>
-<key>state</key><string>rescreen-required</string>
+<plist version="1.0">
+<dict>
+	<key>approval</key>
+	<dict>
+		<key>rejectedCandidate</key>
+		<string>Modulune; Rove; Quell; Mote; Rill; BitDeck; Bit Deck; Bit-Deck; Bitjuke; BitJuke; bitjuke; Bit Juke; Bit-Juke</string>
+		<key>rejectionReason</key>
+		<string>The user selected Bitjuke for a full screen on 2026-08-27, but the exact name is already documented as BitJuke/BitTunes, a physical product that let people select songs with mobile phones and pay using Bitcoin wallets. The exact Bitjuke string also identifies Hebei Bitjuke Technology Co., Ltd. as a software-patent assignee. These direct music-device and software-name signals are enough to reject the name as a preliminary proposal without making any legal conclusion.</string>
+		<key>state</key>
+		<string>rescreen-required</string>
+	</dict>
+	<key>attorneyReviewRequired</key>
+	<true/>
+	<key>candidateBrief</key>
+	<dict>
+		<key>excludedTermsAndImagery</key>
+		<array>
+			<string>Sirius</string>
+			<string>XM</string>
+			<string>SiriusXM</string>
+			<string>official-affiliation wording</string>
+			<string>provider logos or dog imagery</string>
+			<string>channel artwork</string>
+			<string>Apple hardware</string>
+			<string>standard-control facsimiles</string>
+			<string>other players' trade dress</string>
+		</array>
+		<key>goods</key>
+		<string>Native macOS music and radio player for subscribers</string>
+		<key>style</key>
+		<string>Late-1990s/early-2000s desktop music-player culture: burned CDs, MP3 bitrates, bitmap skins, spectrum scopes, equalizers, and chunky desktop hardware. Prefer one or two easy syllables and avoid forced portmanteaux.</string>
+	</dict>
+	<key>candidateScreeningSources</key>
+	<array>
+		<dict>
+			<key>candidate</key>
+			<string>Bitjuke / BitJuke / Bit Juke / Bit-Juke</string>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>finding</key>
+			<string>A public project description identifies BitJuke / BitTunes as a physical product for selecting songs from a mobile phone and paying via a Bitcoin wallet. This is a material music-device and user-selection collision for the proposed player.</string>
+			<key>url</key>
+			<string>https://www.linkedin.com/in/alinalebron</string>
+		</dict>
+		<dict>
+			<key>candidate</key>
+			<string>Bitjuke / BitJuke</string>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>finding</key>
+			<string>Patent material names Hebei Bitjuke Technology Co., Ltd. as the assignee of software-related technology. It is not a trademark-status source, but it is a current exact-name technology-company signal that adds avoidable software confusion risk.</string>
+			<key>url</key>
+			<string>https://patents.google.com/patent/CN118332093B/en</string>
+		</dict>
+		<dict>
+			<key>candidate</key>
+			<string>BitDeck / Bit Deck / Bit-Deck</string>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>finding</key>
+			<string>Previously rejected. Public sources identify BitDeck, LLC, app/software use, bitdeck.com, and federal-filing material for downloadable mobile applications.</string>
+			<key>url</key>
+			<string>https://www.bitdeck.com/privacy-policy/</string>
+		</dict>
+	</array>
+	<key>decisionScope</key>
+	<string>Product identity screening only. This record does not authorize SiriusXM service access, use of provider marks, or a public launch.</string>
+	<key>legalClearanceClaim</key>
+	<false/>
+	<key>queryEvidence</key>
+	<array>
+		<dict>
+			<key>category</key>
+			<string>exact-joined</string>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>query</key>
+			<string>Bitjuke / BitJuke / bitjuke</string>
+			<key>resultSummary</key>
+			<string>Exact-name use found: BitJuke / BitTunes was a physical song-selection product. The proposed player would share the exact word and overlapping music-selection commercial impression.</string>
+			<key>sourceURL</key>
+			<string>https://www.linkedin.com/in/alinalebron</string>
+		</dict>
+		<dict>
+			<key>category</key>
+			<string>capitalization-and-spaced-hyphenated</string>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>query</key>
+			<string>BitJuke / bitjuke / Bit Juke / Bit-Juke</string>
+			<key>resultSummary</key>
+			<string>Capitalization, spaces, and hyphens do not change the ordinary pronunciation or commercial impression of the existing BitJuke music-product use. The family is rejected together; this is not a likelihood-of-confusion opinion.</string>
+			<key>sourceURL</key>
+			<string>https://www.uspto.gov/trademarks/search/likelihood-confusion</string>
+		</dict>
+		<dict>
+			<key>category</key>
+			<string>plural-and-misspelling</string>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>query</key>
+			<string>Bitjukes / Bit Jukes / Bit-Jukes / BitJook / BitJuk</string>
+			<key>resultSummary</key>
+			<string>Related plural and spelling variants were screened as sound-alikes. No availability conclusion is claimed for any variant because the exact BitJuke music-product collision already rejects the family.</string>
+			<key>sourceURL</key>
+			<string>https://tmsearch.uspto.gov/</string>
+		</dict>
+		<dict>
+			<key>category</key>
+			<string>phonetic-and-meaning</string>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>query</key>
+			<string>bit juke / bit jook / bit jukebox</string>
+			<key>resultSummary</key>
+			<string>The candidate is pronounced bit juke and deliberately evokes a digital jukebox. That shared meaning compounds the direct BitJuke music-selection collision.</string>
+			<key>sourceURL</key>
+			<string>https://www.uspto.gov/trademarks/search/likelihood-confusion</string>
+		</dict>
+		<dict>
+			<key>category</key>
+			<string>related-goods</string>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>query</key>
+			<string>BitJuke music selection mobile phone jukebox player software</string>
+			<key>resultSummary</key>
+			<string>The documented BitJuke product selected songs from mobile phones. Music selection and jukebox/player behavior are directly adjacent to the planned native player.</string>
+			<key>sourceURL</key>
+			<string>https://www.linkedin.com/in/alinalebron</string>
+		</dict>
+		<dict>
+			<key>category</key>
+			<string>common-law</string>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>query</key>
+			<string>BitJuke / BitTunes project</string>
+			<key>resultSummary</key>
+			<string>Public project-description evidence records use of the exact BitJuke name in a music-product context. It is common-law/use evidence only; ownership, scope, and current status require counsel review.</string>
+			<key>sourceURL</key>
+			<string>https://www.linkedin.com/in/alinalebron</string>
+		</dict>
+		<dict>
+			<key>category</key>
+			<string>app-listings</string>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>query</key>
+			<string>BitJuke app listing</string>
+			<key>resultSummary</key>
+			<string>App Store search route recorded. The static screen did not establish a uniquely attributable current BitJuke listing; that absence is not an availability conclusion and does not outweigh the music-product collision.</string>
+			<key>sourceURL</key>
+			<string>https://apps.apple.com/us/search?term=BitJuke</string>
+		</dict>
+		<dict>
+			<key>category</key>
+			<string>app-listings</string>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>query</key>
+			<string>BitJuke Google Play</string>
+			<key>resultSummary</key>
+			<string>Google Play search route recorded. No uniquely attributable current BitJuke listing was relied on; counsel must review if the name is ever reconsidered.</string>
+			<key>sourceURL</key>
+			<string>https://play.google.com/store/search?q=BitJuke&amp;c=apps</string>
+		</dict>
+		<dict>
+			<key>category</key>
+			<string>repository-and-package</string>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>query</key>
+			<string>BitJuke GitHub repositories and package registries</string>
+			<key>resultSummary</key>
+			<string>Repository search route recorded. No uniquely attributable exact repository or package was relied on, but the name is rejected independently because of the music-product and technology-company signals.</string>
+			<key>sourceURL</key>
+			<string>https://github.com/search?q=BitJuke&amp;type=repositories</string>
+		</dict>
+		<dict>
+			<key>category</key>
+			<string>domain</string>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>query</key>
+			<string>bitjuke.com and BitJuke domain variants</string>
+			<key>resultSummary</key>
+			<string>RDAP domain query route recorded. Registrant and availability status were not independently resolved in this screen and must not be inferred from a query route.</string>
+			<key>sourceURL</key>
+			<string>https://rdap.verisign.com/com/v1/domain/bitjuke.com</string>
+		</dict>
+		<dict>
+			<key>category</key>
+			<string>business-registry</string>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>query</key>
+			<string>Hebei Bitjuke Technology Co., Ltd.</string>
+			<key>resultSummary</key>
+			<string>Patent-assignee material identifies an exact-name technology company. Formal company-registry verification remains an international-counsel item, but the result is an avoidable exact-name software signal.</string>
+			<key>sourceURL</key>
+			<string>https://patents.google.com/patent/CN118332093B/en</string>
+		</dict>
+		<dict>
+			<key>category</key>
+			<string>federal-mark</string>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>query</key>
+			<string>BITJUKE / BIT JUKE / BIT-JUKE for software, music, radio, streaming, or consumer electronics</string>
+			<key>resultSummary</key>
+			<string>Official federal-search route recorded. This screen makes no claim that a federal result is absent, live, dead, registered, or available; full USPTO/TSDR review is required before any renewed consideration.</string>
+			<key>sourceURL</key>
+			<string>https://tmsearch.uspto.gov/</string>
+		</dict>
+		<dict>
+			<key>category</key>
+			<string>international</string>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>query</key>
+			<string>Bitjuke / Bit Juke / Bit-Juke in WIPO Global Brand Database, Madrid Monitor, and TMview</string>
+			<key>resultSummary</key>
+			<string>International trademark-search route recorded. The China-based exact-name technology-company signal makes an international review especially important; no international clearance conclusion is claimed.</string>
+			<key>sourceURL</key>
+			<string>https://branddb.wipo.int/en/quicksearch</string>
+		</dict>
+		<dict>
+			<key>category</key>
+			<string>icon-design-code</string>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>query</key>
+			<string>Design elements: circular disc, concentric arcs, radiating signal, abstract music-device display</string>
+			<key>resultSummary</key>
+			<string>The existing text-free Orbital Signal composition remains a separate design-mark review item. It is not altered for a rejected word mark and no design clearance is claimed.</string>
+			<key>sourceURL</key>
+			<string>https://www.uspto.gov/trademarks/search/design-search-codes</string>
+		</dict>
+	</array>
+	<key>recordDate</key>
+	<string>2026-08-27</string>
+	<key>schemaVersion</key>
+	<integer>1</integer>
+	<key>screeningSources</key>
+	<array>
+		<dict>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>resultSummary</key>
+			<string>Defines federal, common-law, domain, business-registry, and international search scope; attorney interpretation remains necessary.</string>
+			<key>source</key>
+			<string>USPTO comprehensive clearance guidance</string>
+			<key>url</key>
+			<string>https://www.uspto.gov/trademarks/search/comprehensive-clearance-search-similar-trademarks</string>
+		</dict>
+		<dict>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>resultSummary</key>
+			<string>Similarity turns on sound, appearance, meaning, commercial impression, and related goods and services; the guidance does not establish name availability.</string>
+			<key>source</key>
+			<string>USPTO likelihood-of-confusion guidance</string>
+			<key>url</key>
+			<string>https://www.uspto.gov/trademarks/search/likelihood-confusion</string>
+		</dict>
+		<dict>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>resultSummary</key>
+			<string>Official federal-mark query route; a full live/dead status and record review remains counsel work.</string>
+			<key>source</key>
+			<string>USPTO Trademark Search</string>
+			<key>url</key>
+			<string>https://tmsearch.uspto.gov/</string>
+		</dict>
+		<dict>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>resultSummary</key>
+			<string>Design-mark screen route for the Orbital Signal icon concept; no design-mark clearance is claimed.</string>
+			<key>source</key>
+			<string>USPTO design search codes guidance</string>
+			<key>url</key>
+			<string>https://www.uspto.gov/trademarks/search/design-search-codes</string>
+		</dict>
+	</array>
+	<key>screeningStatement</key>
+	<string>This is an independent preliminary screen, not legal clearance. A qualified trademark attorney must review any selected mark before public launch or registration.</string>
+	<key>selectedIdentity</key>
+	<dict>
+		<key>appBundleIdentifier</key>
+		<string>com.bitdeck.player</string>
+		<key>appLogSubsystem</key>
+		<string>com.bitdeck.player</string>
+		<key>appTypeName</key>
+		<string>BitDeckApp</string>
+		<key>applicationSupportDirectoryName</key>
+		<string>Bit Deck</string>
+		<key>authenticationFrameAutosaveName</key>
+		<string>BitDeck.authentication.frame</string>
+		<key>compactFrameAutosaveName</key>
+		<string>BitDeck.compact.frame</string>
+		<key>compactSceneID</key>
+		<string>bitdeck-compact</string>
+		<key>displayName</key>
+		<string>Bit Deck</string>
+		<key>environmentPrefix</key>
+		<string>BITDECK</string>
+		<key>executableName</key>
+		<string>BitDeck</string>
+		<key>iconBasename</key>
+		<string>ProductIcon</string>
+		<key>iconConcept</key>
+		<string>Orbital Signal: a text-free layered midnight-blue disc, offset warm signal arcs, and a small luminous core. The geometry evokes a compact music device and spectrum visualizer without copying a provider mark, hardware silhouette, standard control, or another player's trade dress.</string>
+		<key>libraryFrameAutosaveName</key>
+		<string>BitDeck.library.frame</string>
+		<key>librarySceneID</key>
+		<string>bitdeck-library</string>
+		<key>moduleName</key>
+		<string>BitDeck</string>
+		<key>nonAffiliationStatement</key>
+		<string>Bit Deck is an independent app and is not affiliated with, endorsed by, or sponsored by Sirius XM Radio LLC.</string>
+		<key>schemeFileName</key>
+		<string>BitDeck.xcscheme</string>
+		<key>schemeName</key>
+		<string>BitDeck</string>
+		<key>scriptPrefix</key>
+		<string>bitdeck</string>
+		<key>skinPackageExtension</key>
+		<string>bitdeckskin</string>
+		<key>skinPackageTypeIdentifier</key>
+		<string>com.bitdeck.skin-package</string>
+		<key>targetName</key>
+		<string>BitDeck</string>
+		<key>uiTestBundleIdentifier</key>
+		<string>com.bitdeck.player.uitests</string>
+		<key>uiTestTargetName</key>
+		<string>BitDeckUITests</string>
+		<key>uiValidationSchemeFileName</key>
+		<string>BitDeckUIValidation.xcscheme</string>
+		<key>uiValidationSchemeName</key>
+		<string>BitDeckUIValidation</string>
+		<key>unitTestBundleIdentifier</key>
+		<string>com.bitdeck.player.tests</string>
+		<key>unitTestTargetName</key>
+		<string>BitDeckTests</string>
+	</dict>
+	<key>selectedIdentityDisposition</key>
+	<string>withdrawn-after-bitjuke-rescreen</string>
+	<key>shortlist</key>
+	<array>
+		<dict>
+			<key>mainCollisionConcern</key>
+			<string>Existing exact BitJuke song-selection music product plus an exact-name technology-company signal.</string>
+			<key>name</key>
+			<string>Bitjuke / BitJuke / Bit Juke / Bit-Juke</string>
+			<key>pronunciation</key>
+			<string>bit juke</string>
+			<key>rationale</key>
+			<string>The user liked its compact digital-jukebox sound and early-2000s player energy.</string>
+			<key>screeningOutcome</key>
+			<string>Rejected after full preliminary screen: direct music-product adjacency and exact-name software association make this an avoidable collision.</string>
+			<key>status</key>
+			<string>rejected-after-rescreen</string>
+			<key>syllables</key>
+			<integer>2</integer>
+			<key>unresolvedSimilarity</key>
+			<string>Live federal and international marks, formal business-registration records, domain ownership, and the current scope of the historical product all require counsel review if the name is reconsidered.</string>
+		</dict>
+		<dict>
+			<key>mainCollisionConcern</key>
+			<string>Existing software, app/developer, domain, package-registry, and federal-filing signals.</string>
+			<key>name</key>
+			<string>BitDeck / Bit Deck / Bit-Deck</string>
+			<key>pronunciation</key>
+			<string>bit deck</string>
+			<key>screeningOutcome</key>
+			<string>Rejected after rescreen.</string>
+			<key>status</key>
+			<string>rejected-after-rescreen</string>
+			<key>syllables</key>
+			<integer>2</integer>
+		</dict>
+		<dict>
+			<key>mainCollisionConcern</key>
+			<string>Established digital-music retail and MP3-player-related goods.</string>
+			<key>name</key>
+			<string>Bleep</string>
+			<key>screeningOutcome</key>
+			<string>Rejected: direct music-category use.</string>
+			<key>status</key>
+			<string>rejected</string>
+		</dict>
+		<dict>
+			<key>mainCollisionConcern</key>
+			<string>Current music-tracker software.</string>
+			<key>name</key>
+			<string>Raster</string>
+			<key>screeningOutcome</key>
+			<string>Rejected: direct tracker/music-software collision.</string>
+			<key>status</key>
+			<string>rejected</string>
+		</dict>
+	</array>
+	<key>status</key>
+	<string>rescreen-required</string>
+	<key>unresolvedSimilarities</key>
+	<array>
+		<string>Bitjuke/BitJuke is rejected for a documented music-product collision and an exact-name technology-company signal; the spelling family is not a deployable identity.</string>
+		<string>No federal or international availability claim is made. Direct live/dead USPTO/TSDR, WIPO/Madrid/TMview, and counsel review remain needed for any future candidate.</string>
+		<string>Domain and formal business-registry scope were not independently resolved; the collision does not depend on them.</string>
+		<string>The retained Bit Deck selectedIdentity exists solely to keep the offline tracer coherent while a replacement is screened. It is withdrawn and must not be approved or deployed.</string>
+		<string>The text-free Orbital Signal icon requires separate design-mark comparison before public use.</string>
+	</array>
 </dict>
-<key>attorneyReviewRequired</key><true/>
-<key>candidateBrief</key><dict>
-<key>excludedTermsAndImagery</key><array><string>Sirius</string><string>XM</string><string>SiriusXM</string><string>official-affiliation wording</string><string>provider logos or dog imagery</string><string>channel artwork</string><string>Apple hardware</string><string>standard-control facsimiles</string><string>other players' trade dress</string></array>
-<key>goods</key><string>Native macOS music and radio player for subscribers</string>
-<key>style</key><string>Late-1990s/early-2000s desktop music-player culture: burned CDs, MP3 bitrates, bitmap skins, spectrum scopes, equalizers, and chunky desktop hardware. Prefer one or two easy syllables; a short two-word compound is acceptable when it names a real era-specific idea rather than a forced portmanteau.</string>
-</dict>
-<key>decisionScope</key><string>Product identity proposal only; this record does not authorize SiriusXM service access, use of provider marks, or a public launch.</string>
-<key>legalClearanceClaim</key><false/>
-<key>recordDate</key><string>2026-08-27</string>
-<key>schemaVersion</key><integer>1</integer>
-<key>screeningStatement</key><string>Independent screening completed for a preliminary product decision only — not legal clearance. A qualified U.S.-licensed trademark attorney must review the selected mark before public launch or registration.</string>
-<key>screeningSources</key><array>
-<dict><key>source</key><string>USPTO comprehensive clearance guidance</string><key>url</key><string>https://www.uspto.gov/trademarks/search/comprehensive-clearance-search-similar-trademarks</string><key>checkedOn</key><string>2026-08-27</string><key>resultSummary</key><string>Defines the federal, common-law, domain, business-registry, and international scope; attorney interpretation remains appropriate.</string></dict>
-<dict><key>source</key><string>USPTO likelihood-of-confusion guidance</string><key>url</key><string>https://www.uspto.gov/trademarks/search/likelihood-confusion</string><key>checkedOn</key><string>2026-08-27</string><key>resultSummary</key><string>Frames similarity by sound, appearance, meaning, commercial impression, and related goods/services; it supplies no availability conclusion.</string></dict>
-<dict><key>source</key><string>USPTO Trademark Search system</string><key>url</key><string>https://tmsearch.uspto.gov/</string><key>checkedOn</key><string>2026-08-27</string><key>resultSummary</key><string>Public entry point for federal-mark queries. Full record review and live/dead status assessment remain attorney-review work.</string></dict>
-<dict><key>source</key><string>USPTO design search codes guidance</string><key>url</key><string>https://www.uspto.gov/trademarks/search/design-search-codes</string><key>checkedOn</key><string>2026-08-27</string><key>resultSummary</key><string>Used to frame the icon design-element query; no design-mark clearance conclusion is claimed.</string></dict>
-</array>
-<key>candidateScreeningSources</key><array>
-<dict><key>candidate</key><string>BitDeck / Bit Deck / Bit-Deck</string><key>checkedOn</key><string>2026-08-27</string><key>finding</key><string>Rejected after joined-spelling screen. Indexed sources identify BitDeck, LLC as a software business using bitdeck.com, a BitDeck mobile-app developer/listing, and federal BITDECK filing material for downloadable mobile applications. The exact, spaced, and hyphenated forms share pronunciation and commercial impression; do not treat any as a defensible preliminary product proposal without counsel review.</string><key>url</key><string>https://www.bitdeck.com/privacy-policy/</string></dict>
-<dict><key>candidate</key><string>Bleep</string><key>checkedOn</key><string>2026-08-27</string><key>finding</key><string>Bleep is an established music retailer with digital-music and MP3-player-related goods. It is a direct category collision.</string><key>url</key><string>https://tmdb.eu/marke/EU-013601042%3A%3Ableep-bleep-limited.html</string></dict>
-<dict><key>candidate</key><string>Burn</string><key>checkedOn</key><string>2026-08-27</string><key>finding</key><string>Burn describes a core CD-R-era player action and is weak for the proposed software goods; public trademark material also records music/software retail use.</string><key>url</key><string>https://uspto.report/TM/78188133</string></dict>
-<dict><key>candidate</key><string>Scope</string><key>checkedOn</key><string>2026-08-27</string><key>finding</key><string>Fun's Scope is a current Web3 music-player app, while contemporary player documentation uses scope as a visualizer term. The word is direct audio-app adjacency.</string><key>url</key><string>https://play.google.com/store/apps/details?hl=en_US&amp;id=com.funsscope</string></dict>
-<dict><key>candidate</key><string>Raster</string><key>checkedOn</key><string>2026-08-27</string><key>finding</key><string>Raster Music Tracker is current music software, creating a direct visualizer/tracker and related-goods collision.</string><key>url</key><string>https://gitlab.com/amarok8bit/time-wizard-music-player</string></dict>
-<dict><key>candidate</key><string>Blit</string><key>checkedOn</key><string>2026-08-27</string><key>finding</key><string>BLIT IT trademark material covers computer software for portable media players, and Blit is an active software-studio name. It is an avoidable software collision.</string><key>url</key><string>https://trademarks.justia.com/owners/blit-it-inc-2950757/</string></dict>
-</array>
-<key>queryEvidence</key><array>
-<dict><key>category</key><string>exact-joined</string><key>query</key><string>BitDeck / Bitdeck / bitdeck</string><key>checkedOn</key><string>2026-08-27</string><key>resultSummary</key><string>Indexed results identify BitDeck, LLC as a software-development business and its bitdeck.com site. This direct exact-name software use is enough to reject the joined form as a preliminary proposal.</string><key>sourceURL</key><string>https://www.linkedin.com/company/bitdeck-llc</string></dict>
-<dict><key>category</key><string>spaced-and-hyphenated</string><key>query</key><string>Bit Deck / Bit-Deck / BitDeck</string><key>checkedOn</key><string>2026-08-27</string><key>resultSummary</key><string>The spaced and hyphenated variants retain the same two-syllable pronunciation and commercial impression as the exact joined software name. They are rejected with BitDeck; this is not a likelihood-of-confusion opinion.</string><key>sourceURL</key><string>https://www.uspto.gov/trademarks/search/likelihood-confusion</string></dict>
-<dict><key>category</key><string>plural-and-misspelling</string><key>query</key><string>BitDecks / Bit Decks / BitDek / Bitt Deck</string><key>checkedOn</key><string>2026-08-27</string><key>resultSummary</key><string>Variants were screened as related forms. The exact BitDeck collision makes this family unsuitable for the current selection; no availability conclusion is claimed for each variant.</string><key>sourceURL</key><string>https://tmsearch.uspto.gov/</string></dict>
-<dict><key>category</key><string>phonetic</string><key>query</key><string>bit dek / bit deck / bitdeck</string><key>checkedOn</key><string>2026-08-27</string><key>resultSummary</key><string>All forms are pronounced “bit deck.” The existing exact software name makes a sound-alike distinction unsuitable for this preliminary screen.</string><key>sourceURL</key><string>https://www.uspto.gov/trademarks/search/likelihood-confusion</string></dict>
-<dict><key>category</key><string>related-goods</string><key>query</key><string>BITDECK downloadable mobile applications; software; music; radio; streaming player</string><key>checkedOn</key><string>2026-08-27</string><key>resultSummary</key><string>Third-party indexed federal filing material identifies a BITDECK application (serial 86295779) covering downloadable mobile applications. Current official status and scope require direct TSDR review, but the software-adjacent record is a rejection signal for this screen.</string><key>sourceURL</key><string>https://trademarks.justia.com/category/computer-and-scientific/2014/may/30/</string></dict>
-<dict><key>category</key><string>common-law</string><key>query</key><string>BitDeck software business</string><key>checkedOn</key><string>2026-08-27</string><key>resultSummary</key><string>BitDeck, LLC publicly describes itself as a software-development business founded in 2014. This is common-law/business-use evidence, not a statement about its current trademark rights.</string><key>sourceURL</key><string>https://www.linkedin.com/company/bitdeck-llc</string></dict>
-<dict><key>category</key><string>app-listing</string><key>query</key><string>BitDeck mobile application</string><key>checkedOn</key><string>2026-08-27</string><key>resultSummary</key><string>App-discovery results identify BitDeck as the developer for a Google Play application. That existing software/app association rejects BitDeck for this preliminary proposal; macOS App Store coverage remains an attorney-review item.</string><key>sourceURL</key><string>https://apptopia.com/google-play/app/com.bitdeck.emailtextmessages/about</string></dict>
-<dict><key>category</key><string>repository-and-package</string><key>query</key><string>bitdeck repository and package registries</string><key>checkedOn</key><string>2026-08-27</string><key>resultSummary</key><string>The Rust package registry contains an unrelated bitdeck package. It is not the decisive collision, but it confirms existing software use of the exact lower-case string.</string><key>sourceURL</key><string>https://docs.rs/bitdeck/latest/bitdeck/</string></dict>
-<dict><key>category</key><string>domain</string><key>query</key><string>bitdeck.com</string><key>checkedOn</key><string>2026-08-27</string><key>resultSummary</key><string>bitdeck.com is in use and its privacy policy identifies Bitdeck LLC. The exact .com is therefore unavailable for this candidate; ownership and legal implications remain counsel-review work.</string><key>sourceURL</key><string>https://www.bitdeck.com/privacy-policy/</string></dict>
-<dict><key>category</key><string>business-registry</string><key>query</key><string>BitDeck, LLC</string><key>checkedOn</key><string>2026-08-27</string><key>resultSummary</key><string>Business-discovery results identify BitDeck, LLC as a self-owned software-development company. Formal state-registry verification remains outside this preliminary screen.</string><key>sourceURL</key><string>https://www.linkedin.com/company/bitdeck-llc</string></dict>
-<dict><key>category</key><string>federal-mark</string><key>query</key><string>BITDECK / 86295779</string><key>checkedOn</key><string>2026-08-27</string><key>resultSummary</key><string>Publicly indexed filing material reports a BITDECK federal application with serial number 86295779 for downloadable mobile applications. Direct USPTO TSDR status verification remains required; the filing is recorded here as a rejection signal, not a registration-status claim.</string><key>sourceURL</key><string>https://tsdr.uspto.gov/#caseNumber=86295779&amp;caseSearchType=US_APPLICATION&amp;caseType=SERIAL_NO&amp;searchType=statusSearch</string></dict>
-<dict><key>category</key><string>international</string><key>query</key><string>BitDeck / Bit Deck / Bit-Deck Global Brand Database, Madrid Monitor, and TMview</string><key>checkedOn</key><string>2026-08-27</string><key>resultSummary</key><string>International search route recorded; no international clearance conclusion is claimed. The domestic software-use collision already rejects this candidate family for the current preliminary proposal.</string><key>sourceURL</key><string>https://branddb.wipo.int/en/quicksearch</string></dict>
-<dict><key>category</key><string>icon-design-code</string><key>query</key><string>Design elements: circular disc, concentric arcs, radiating signal, abstract music-device display</string><key>checkedOn</key><string>2026-08-27</string><key>resultSummary</key><string>Design-code lookup route recorded for the existing Orbital Signal composition; counsel must compare actual design marks and commercial impression.</string><key>sourceURL</key><string>https://www.uspto.gov/trademarks/search/design-search-codes</string></dict>
-</array>
-<key>selectedIdentity</key><dict>
-<key>displayName</key><string>Bit Deck</string><key>appTypeName</key><string>BitDeckApp</string><key>targetName</key><string>BitDeck</string><key>moduleName</key><string>BitDeck</string><key>executableName</key><string>BitDeck</string><key>appBundleIdentifier</key><string>com.bitdeck.player</string><key>unitTestTargetName</key><string>BitDeckTests</string><key>unitTestBundleIdentifier</key><string>com.bitdeck.player.tests</string><key>uiTestTargetName</key><string>BitDeckUITests</string><key>uiTestBundleIdentifier</key><string>com.bitdeck.player.uitests</string><key>schemeName</key><string>BitDeck</string><key>schemeFileName</key><string>BitDeck.xcscheme</string><key>uiValidationSchemeName</key><string>BitDeckUIValidation</string><key>uiValidationSchemeFileName</key><string>BitDeckUIValidation.xcscheme</string><key>skinPackageTypeIdentifier</key><string>com.bitdeck.skin-package</string><key>skinPackageExtension</key><string>bitdeckskin</string><key>applicationSupportDirectoryName</key><string>Bit Deck</string><key>appLogSubsystem</key><string>com.bitdeck.player</string><key>environmentPrefix</key><string>BITDECK</string><key>scriptPrefix</key><string>bitdeck</string><key>compactSceneID</key><string>bitdeck-compact</string><key>librarySceneID</key><string>bitdeck-library</string><key>authenticationFrameAutosaveName</key><string>BitDeck.authentication.frame</string><key>compactFrameAutosaveName</key><string>BitDeck.compact.frame</string><key>libraryFrameAutosaveName</key><string>BitDeck.library.frame</string><key>iconBasename</key><string>ProductIcon</string><key>iconConcept</key><string>Orbital Signal: a text-free layered midnight-blue disc, offset warm signal arcs, and a small luminous core. The geometry evokes a compact music device and spectrum visualizer without copying a provider mark, hardware silhouette, standard control, or another player's trade dress.</string><key>nonAffiliationStatement</key><string>Bit Deck is an independent app and is not affiliated with, endorsed by, or sponsored by Sirius XM Radio LLC.</string>
-</dict>
-<key>selectedIdentityDisposition</key><string>withdrawn-after-bitdeck-rescreen</string>
-<key>shortlist</key><array>
-<dict><key>name</key><string>BitDeck / Bit Deck / Bit-Deck</string><key>pronunciation</key><string>bit deck</string><key>syllables</key><integer>2</integer><key>rationale</key><string>“Bit” recalls MP3 bitrate displays and “deck” recalls CD, MiniDisc, and desktop player panels. The late-1990s/early-2000s rationale fits the brief, but it cannot overcome an existing exact-name software business and app/federal-filing signals.</string><key>mainCollisionConcern</key><string>Existing BitDeck software business, app/developer use, bitdeck.com use, exact lower-case software package, and public federal-filing material for downloadable mobile applications.</string><key>screeningOutcome</key><string>Rejected: BitDeck is not a defensible preliminary product proposal. The same spoken and commercial impression makes the spaced and hyphenated forms unsuitable too.</string><key>status</key><string>rejected-after-rescreen</string><key>unresolvedSimilarity</key><string>Current federal status, international results, state registries, and counsel analysis remain unresolved; none is needed to avoid this exact software-name collision.</string></dict>
-<dict><key>name</key><string>Bleep</string><key>pronunciation</key><string>bleep</string><key>syllables</key><integer>1</integer><key>rationale</key><string>Dial-up alerts, cue sounds, and pixel-display culture.</string><key>mainCollisionConcern</key><string>Established digital-music retail and MP3-player-related goods.</string><key>screeningOutcome</key><string>Rejected: direct music-category use.</string><key>status</key><string>rejected</string></dict>
-<dict><key>name</key><string>Burn</string><key>pronunciation</key><string>burn</string><key>syllables</key><integer>1</integer><key>rationale</key><string>Making a mix CD.</string><key>mainCollisionConcern</key><string>Core CD-R action, too descriptive and widely used around music/software.</string><key>screeningOutcome</key><string>Rejected: weak and audio/software-adjacent.</string><key>status</key><string>rejected</string></dict>
-<dict><key>name</key><string>Scope</string><key>pronunciation</key><string>skohp</string><key>syllables</key><integer>1</integer><key>rationale</key><string>A spectrum/oscilloscope visualizer window, a recognizable old desktop-player motif.</string><key>mainCollisionConcern</key><string>Current music-player use and visualizer terminology.</string><key>screeningOutcome</key><string>Rejected: direct music-app and visualizer collision.</string><key>status</key><string>rejected</string></dict>
-<dict><key>name</key><string>Raster</string><key>pronunciation</key><string>RASS-ter</string><key>syllables</key><integer>2</integer><key>rationale</key><string>Bitmap skins, CRT pixels, and visualizer graphics.</string><key>mainCollisionConcern</key><string>Raster Music Tracker is current music software.</string><key>screeningOutcome</key><string>Rejected: direct tracker/music-software collision.</string><key>status</key><string>rejected</string></dict>
-<dict><key>name</key><string>Blit</string><key>pronunciation</key><string>blit</string><key>syllables</key><integer>1</integer><key>rationale</key><string>The bitmap operation behind late-1990s skins and pixel UI.</string><key>mainCollisionConcern</key><string>Existing software and portable-media-player trademark material use BLIT/BLIT IT.</string><key>screeningOutcome</key><string>Rejected: direct software/portable-media-player collision.</string><key>status</key><string>rejected</string></dict>
-</array>
-<key>status</key><string>rescreen-required</string>
-<key>unresolvedSimilarities</key><array><string>BitDeck has existing software, app/developer, domain, package-registry, and federal-filing signals; the joined, spaced, and hyphenated forms are withdrawn rather than treated as available.</string><string>The earlier selectedIdentity is retained only as a quarantined tracer record while a new identity is screened; it is not an approved or deployable tuple.</string><string>Current federal status, state/business registries, international results, and full common-law scope require direct counsel review if any related name is later considered.</string><string>The Orbital Signal composition needs design-mark review for circular signal, radio-wave, and visualizer motifs before public use.</string></array>
-</dict></plist>
+</plist>
