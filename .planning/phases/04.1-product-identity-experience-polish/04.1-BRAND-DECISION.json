@@ -5,9 +5,9 @@
 	<key>approval</key>
 	<dict>
 		<key>rejectedCandidate</key>
-		<string>Modulune; Rove; Quell; Mote; Rill; BitDeck; Bit Deck; Bit-Deck; Bitjuke; BitJuke; bitjuke; Bit Juke; Bit-Juke</string>
+		<string>Modulune; Rove; Quell; Mote; Rill; BitDeck; Bit Deck; Bit-Deck; Bitjuke; BitJuke; bitjuke; Bit Juke; Bit-Juke; Cueamp; CueAmp; cueamp; Cue Amp; Cue-Amp</string>
 		<key>rejectionReason</key>
-		<string>The user selected Bitjuke for a full screen on 2026-08-27, but the exact name is already documented as BitJuke/BitTunes, a physical product that let people select songs with mobile phones and pay using Bitcoin wallets. The exact Bitjuke string also identifies Hebei Bitjuke Technology Co., Ltd. as a software-patent assignee. These direct music-device and software-name signals are enough to reject the name as a preliminary proposal without making any legal conclusion.</string>
+		<string>The user requested a full Cueamp screen on 2026-08-27. An archived 1983 industry catalog identifies the CONEX CueAmp UM33 as a stereo eight-channel cue and monitor amplifier for radio and television stations. The exact CueAmp/Cue Amp spelling therefore has a direct historical professional-audio and broadcasting-device association. In addition, current professional-audio documentation uses “cue amp” generically for powered headphone/cue outputs, weakening the candidate's distinctiveness for audio software. These category-adjacent signals are enough to reject the name as a preliminary proposal without making any legal conclusion.</string>
 		<key>state</key>
 		<string>rescreen-required</string>
 	</dict>
@@ -34,6 +34,26 @@
 	</dict>
 	<key>candidateScreeningSources</key>
 	<array>
+		<dict>
+			<key>candidate</key>
+			<string>Cueamp / CueAmp / cueamp / Cue Amp / Cue-Amp</string>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>finding</key>
+			<string>An archived 1983 Allied Radio catalog names the CONEX CueAmp UM33 as a stereo eight-channel cue and monitor amplifier for radio and television stations. The exact spelling and directly adjacent audio/broadcasting goods create an avoidable identity conflict.</string>
+			<key>url</key>
+			<string>https://www.worldradiohistory.com/Archive-Catalogs/Distributors/Allied-1983.pdf</string>
+		</dict>
+		<dict>
+			<key>candidate</key>
+			<string>Cueamp / Cue Amp</string>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>finding</key>
+			<string>Dangerous Music uses “cue amp” as the ordinary name for a powered headphone/cue output. This is not an ownership record, but it confirms that the phrase is descriptive, category-common language in professional audio.</string>
+			<key>url</key>
+			<string>https://www.dangerousmusic.com/faq</string>
+		</dict>
 		<dict>
 			<key>candidate</key>
 			<string>Bitjuke / BitJuke / Bit Juke / Bit-Juke</string>
@@ -71,6 +91,19 @@
 	<false/>
 	<key>queryEvidence</key>
 	<array>
+		<dict><key>category</key><string>exact-joined</string><key>checkedOn</key><string>2026-08-27</string><key>query</key><string>Cueamp / CueAmp / cueamp</string><key>resultSummary</key><string>Exact-name use found: the CONEX CueAmp UM33 was marketed as a stereo cue and monitor amplifier for radio and television stations. The exact spelling overlaps audio/broadcast equipment and the proposed player's commercial field.</string><key>sourceURL</key><string>https://www.worldradiohistory.com/Archive-Catalogs/Distributors/Allied-1983.pdf</string></dict>
+		<dict><key>category</key><string>capitalization-and-spaced-hyphenated</string><key>checkedOn</key><string>2026-08-27</string><key>query</key><string>CueAmp / cueamp / Cue Amp / Cue-Amp</string><key>resultSummary</key><string>Capitalization, spacing, and hyphenation preserve the ordinary pronunciation and commercial impression of “cue amp.” The CueAmp historical product and present generic pro-audio use mean this spelling family is rejected together; this is not a likelihood-of-confusion opinion.</string><key>sourceURL</key><string>https://www.uspto.gov/trademarks/search/likelihood-confusion</string></dict>
+		<dict><key>category</key><string>plural-and-misspelling</string><key>checkedOn</key><string>2026-08-27</string><key>query</key><string>CueAmps / Cue Amps / Cue-Amps / Qamp / Q-Amp</string><key>resultSummary</key><string>Plural and phonetic variants were screened as sound-alikes. No availability conclusion is claimed because the exact CueAmp radio-studio product and descriptive “cue amp” wording already reject the family.</string><key>sourceURL</key><string>https://tmsearch.uspto.gov/</string></dict>
+		<dict><key>category</key><string>phonetic-and-meaning</string><key>checkedOn</key><string>2026-08-27</string><key>query</key><string>cue amp / cue amplifier / headphone cue amplifier</string><key>resultSummary</key><string>“Cue amp” is understood in professional audio as a cue/headphone amplification function. That descriptive meaning and the historical exact product use make the proposed word unsuitable for an audio player without a distinctiveness conclusion.</string><key>sourceURL</key><string>https://www.dangerousmusic.com/faq</string></dict>
+		<dict><key>category</key><string>related-goods</string><key>checkedOn</key><string>2026-08-27</string><key>query</key><string>CONEX CueAmp UM33 radio television monitor amplifier</string><key>resultSummary</key><string>The documented CueAmp is audio/broadcast monitoring equipment. Even though the planned product is software, its audio-player purpose creates an adjacent commercial impression and avoids a clean independent identity.</string><key>sourceURL</key><string>https://www.worldradiohistory.com/Archive-Catalogs/Distributors/Allied-1983.pdf</string></dict>
+		<dict><key>category</key><string>common-law</string><key>checkedOn</key><string>2026-08-27</string><key>query</key><string>CONEX CueAmp / CueAmp UM33</string><key>resultSummary</key><string>The archived catalog is evidence of historical public use of the exact CueAmp product name, not proof of current ownership, scope, or enforceability. Those matters require counsel if the name is reconsidered.</string><key>sourceURL</key><string>https://www.worldradiohistory.com/Archive-Catalogs/Distributors/Allied-1983.pdf</string></dict>
+		<dict><key>category</key><string>app-listings</string><key>checkedOn</key><string>2026-08-27</string><key>query</key><string>Cueamp App Store and Google Play</string><key>resultSummary</key><string>Public app-store search routes were recorded. This preliminary screen did not rely on a uniquely attributable current Cueamp app listing; absence of a reviewed listing is not an availability conclusion and does not outweigh the hardware/category collision.</string><key>sourceURL</key><string>https://apps.apple.com/us/search?term=Cueamp</string></dict>
+		<dict><key>category</key><string>repository-and-package</string><key>checkedOn</key><string>2026-08-27</string><key>query</key><string>Cueamp GitHub repositories, npm, Swift Package Index, and CocoaPods</string><key>resultSummary</key><string>Public repository and package-registry search routes were recorded. No uniquely attributable exact package was relied on; the candidate is independently rejected for historical audio-device use and descriptive audio terminology.</string><key>sourceURL</key><string>https://github.com/search?q=Cueamp&amp;type=repositories</string></dict>
+		<dict><key>category</key><string>domain</string><key>checkedOn</key><string>2026-08-27</string><key>query</key><string>cueamp.com and CueAmp domain variants</string><key>resultSummary</key><string>RDAP domain query route recorded. Registrant and availability status were not independently resolved and must not be inferred from the query route; the rejection does not depend on domain status.</string><key>sourceURL</key><string>https://rdap.verisign.com/com/v1/domain/cueamp.com</string></dict>
+		<dict><key>category</key><string>business-registry</string><key>checkedOn</key><string>2026-08-27</string><key>query</key><string>CONEX CueAmp business and corporate records</string><key>resultSummary</key><string>The archived product source identifies CONEX, but this screen did not establish corporate succession or a current formal registry entry. The historical exact audio-product use remains enough to avoid the candidate; formal records need counsel review if reconsidered.</string><key>sourceURL</key><string>https://www.worldradiohistory.com/Archive-Catalogs/Distributors/Allied-1983.pdf</string></dict>
+		<dict><key>category</key><string>federal-mark</string><key>checkedOn</key><string>2026-08-27</string><key>query</key><string>CUEAMP / CUE AMP / CUE-AMP for software, music, radio, streaming, or consumer electronics</string><key>resultSummary</key><string>Official federal-search route recorded. This screen makes no claim that a federal result is absent, live, dead, registered, or available; full USPTO/TSDR review is required before any renewed consideration.</string><key>sourceURL</key><string>https://tmsearch.uspto.gov/</string></dict>
+		<dict><key>category</key><string>international</string><key>checkedOn</key><string>2026-08-27</string><key>query</key><string>Cueamp / CueAmp / Cue Amp in WIPO Global Brand Database, Madrid Monitor, and TMview</string><key>resultSummary</key><string>International trademark-search routes were recorded. No international clearance conclusion is claimed; a direct record review remains necessary if the candidate is ever reconsidered.</string><key>sourceURL</key><string>https://branddb.wipo.int/en/quicksearch</string></dict>
+		<dict><key>category</key><string>icon-design-code</string><key>checkedOn</key><string>2026-08-27</string><key>query</key><string>Design elements: circular disc, concentric arcs, radiating signal, abstract music-device display</string><key>resultSummary</key><string>The retained text-free Orbital Signal composition remains a separate design-mark review item. The Cueamp word screen does not alter the icon and no design clearance is claimed.</string><key>sourceURL</key><string>https://www.uspto.gov/trademarks/search/design-search-codes</string></dict>
 		<dict>
 			<key>category</key>
 			<string>exact-joined</string>
@@ -349,9 +382,27 @@
 		<string>BitDeckTests</string>
 	</dict>
 	<key>selectedIdentityDisposition</key>
-	<string>withdrawn-after-bitjuke-rescreen</string>
+	<string>withdrawn-after-cueamp-rescreen</string>
 	<key>shortlist</key>
 	<array>
+		<dict>
+			<key>mainCollisionConcern</key>
+			<string>Exact historical CONEX CueAmp radio-studio cue/monitor amplifier and category-common “cue amp” terminology in professional audio.</string>
+			<key>name</key>
+			<string>Cueamp / CueAmp / cueamp / Cue Amp / Cue-Amp</string>
+			<key>pronunciation</key>
+			<string>cue amp</string>
+			<key>rationale</key>
+			<string>The user liked its joined, compact late-1990s/early-2000s music-software feel.</string>
+			<key>screeningOutcome</key>
+			<string>Rejected after full preliminary screen: an exact historical audio/broadcast product and directly descriptive pro-audio wording make it an avoidable collision for a music and radio player.</string>
+			<key>status</key>
+			<string>rejected-after-rescreen</string>
+			<key>syllables</key>
+			<integer>2</integer>
+			<key>unresolvedSimilarity</key>
+			<string>Live federal and international marks, formal business succession, domain ownership, and the historical product’s current scope require counsel review if the name is ever reconsidered.</string>
+		</dict>
 		<dict>
 			<key>mainCollisionConcern</key>
 			<string>Existing exact BitJuke song-selection music product plus an exact-name technology-company signal.</string>
@@ -409,6 +460,7 @@
 	<string>rescreen-required</string>
 	<key>unresolvedSimilarities</key>
 	<array>
+		<string>Cueamp/CueAmp is rejected for an exact historical CONEX CueAmp radio-studio amplifier and category-common “cue amp” professional-audio terminology; the spelling family is not a deployable identity.</string>
 		<string>Bitjuke/BitJuke is rejected for a documented music-product collision and an exact-name technology-company signal; the spelling family is not a deployable identity.</string>
 		<string>No federal or international availability claim is made. Direct live/dead USPTO/TSDR, WIPO/Madrid/TMview, and counsel review remain needed for any future candidate.</string>
 		<string>Domain and formal business-registry scope were not independently resolved; the collision does not depend on them.</string>
