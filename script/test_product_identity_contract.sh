@@ -20,16 +20,22 @@ check_tracer() {
   /usr/bin/plutil -lint "$ARTIFACT" >/dev/null
   local artifact_status
   artifact_status="$(/usr/bin/plutil -extract status raw "$ARTIFACT")"
-  [[ "$artifact_status" == "proposed" || "$artifact_status" == "rescreen-required" ]] || fail "tracer requires proposed or rescreen-required artifact status"
+  [[ "$artifact_status" == "proposed" || "$artifact_status" == "rescreen-required" || "$artifact_status" == "approved" ]] || fail "tracer requires proposed, rescreen-required, or approved artifact status"
   if [[ "$artifact_status" == "rescreen-required" ]]; then
     case "$(/usr/bin/plutil -extract selectedIdentityDisposition raw "$ARTIFACT")" in
       withdrawn-after-bitdeck-rescreen|withdrawn-after-bitjuke-rescreen|withdrawn-after-cueamp-rescreen|withdrawn-after-pixaud-rescreen) ;;
       *) fail "rescreen-required artifact must quarantine the withdrawn identity" ;;
     esac
   fi
+  if [[ "$artifact_status" == "approved" ]]; then
+    [[ "$(/usr/bin/plutil -extract approval.state raw "$ARTIFACT")" == "approved-product-decision" ]] || fail "approved artifact must record an approved product decision"
+    [[ "$(/usr/bin/plutil -extract approval.decisionText raw "$ARTIFACT")" == "approve exact tuple" ]] || fail "approved artifact must record the exact user decision"
+    [[ -n "$(/usr/bin/plutil -extract approval.approvedOn raw "$ARTIFACT")" ]] || fail "approved artifact must record an approval date"
+    [[ "$(/usr/bin/plutil -extract selectedIdentityDisposition raw "$ARTIFACT")" == "approved-exact-tuple" ]] || fail "approved artifact must freeze the exact tuple"
+  fi
   [[ "$(/usr/bin/plutil -extract legalClearanceClaim raw "$ARTIFACT")" == "false" ]] || fail "legalClearanceClaim must remain false"
   [[ "$(/usr/bin/plutil -extract attorneyReviewRequired raw "$ARTIFACT")" == "true" ]] || fail "attorneyReviewRequired must remain true"
-  local required_keys=(displayName appTypeName targetName moduleName executableName appBundleIdentifier unitTestTargetName unitTestBundleIdentifier uiTestTargetName uiTestBundleIdentifier schemeName uiValidationSchemeName skinPackageTypeIdentifier skinPackageExtension applicationSupportDirectoryName appLogSubsystem environmentPrefix scriptPrefix compactSceneID librarySceneID authenticationFrameAutosaveName compactFrameAutosaveName libraryFrameAutosaveName iconBasename iconConcept nonAffiliationStatement)
+  local required_keys=(displayName appTypeName targetName moduleName executableName appBundleIdentifier unitTestTargetName unitTestBundleIdentifier uiTestTargetName uiTestBundleIdentifier schemeName schemeFileName uiValidationSchemeName uiValidationSchemeFileName skinPackageTypeIdentifier skinPackageExtension applicationSupportDirectoryName appLogSubsystem environmentPrefix scriptPrefix compactSceneID librarySceneID authenticationFrameAutosaveName compactFrameAutosaveName libraryFrameAutosaveName iconBasename iconConcept nonAffiliationStatement)
   local key
   local expected_line
   for key in "${required_keys[@]}"; do

@@ -4,12 +4,18 @@
 <dict>
 	<key>approval</key>
 	<dict>
+		<key>approvedOn</key>
+		<string>2026-08-27</string>
+		<key>decisionEffect</key>
+		<string>The user approved this exact product identity tuple for downstream Phase 04.1 consumers. This approval is not legal clearance, permission to use provider marks, service authorization, or public-launch authorization.</string>
+		<key>decisionText</key>
+		<string>approve exact tuple</string>
 		<key>proposedCandidate</key>
 		<string>Canis97</string>
 		<key>proposalRationale</key>
-		<string>Canis97 is a compact visual wordmark and a 1997 desktop-audio-era allusion. “Canis” is a deliberate, indirect reference to Sirius in Canis Major; “97” references Winamp's 1997 initial release without copying its name, trade dress, or mascot. This is a preliminary product proposal only, pending explicit human decision and attorney review.</string>
+		<string>Canis97 is a compact visual wordmark and a 1997 desktop-audio-era allusion. “Canis” is a deliberate, indirect reference to Sirius in Canis Major; “97” references Winamp's 1997 initial release without copying its name, trade dress, or mascot. It remains subject to attorney review before public launch or registration.</string>
 		<key>state</key>
-		<string>pending-human-decision</string>
+		<string>approved-product-decision</string>
 	</dict>
 	<key>attorneyReviewRequired</key>
 	<true/>
@@ -480,7 +486,7 @@
 		<string>Canis97Tests</string>
 	</dict>
 	<key>selectedIdentityDisposition</key>
-	<string>proposed-pending-human-decision</string>
+	<string>approved-exact-tuple</string>
 	<key>shortlist</key>
 	<array>
 		<dict>
@@ -493,9 +499,9 @@
 			<key>rationale</key>
 			<string>Compact visual wordmark with a subtle Sirius reference through Canis Major and a 1997 desktop-audio-era allusion. It is intentionally not a provider name or Winamp reference.</string>
 			<key>screeningOutcome</key>
-			<string>Proposed pending human decision: no exact commercial Canis97 player/app/software result was established in the limited screen. The existing Canis recording artist and unrelated CANIS wolf-head filing are disclosed risks; no legal-clearance or availability conclusion is made.</string>
+			<string>Approved as a product decision after the preliminary screen: no exact commercial Canis97 player/app/software result was established in the limited screen. The existing Canis recording artist and unrelated CANIS wolf-head filing are disclosed risks; no legal-clearance or availability conclusion is made.</string>
 			<key>status</key>
-			<string>proposed-pending-human-decision</string>
+			<string>approved-product-decision</string>
 			<key>syllables</key>
 			<integer>6</integer>
 			<key>unresolvedSimilarity</key>
@@ -591,7 +597,7 @@
 		</dict>
 	</array>
 	<key>status</key>
-	<string>proposed</string>
+	<string>approved</string>
 	<key>unresolvedSimilarities</key>
 	<array>
 		<string>Canis97 is a preliminary proposal, not legal clearance or availability. The dominant Canis root has an active recording-artist use and unrelated dog/outdoor marks; attorney review must assess sound, appearance, meaning, commercial impression, and related goods before public launch or registration.</string>
