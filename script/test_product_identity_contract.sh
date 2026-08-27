@@ -4,6 +4,10 @@ set -euo pipefail
 readonly ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly ARTIFACT="$ROOT/.planning/phases/04.1-product-identity-experience-polish/04.1-BRAND-DECISION.json"
 readonly IDENTITY="$ROOT/SiriusMac/App/ProductIdentity.swift"
+readonly MIGRATION="$ROOT/SiriusMac/App/ProductIdentityMigration.swift"
+readonly LIBRARY_STORE="$ROOT/SiriusMac/Library/LibraryStore.swift"
+readonly SELECTION_STORE="$ROOT/SiriusMac/Skins/SkinSelectionStore.swift"
+readonly PACKAGE_IMPORTER="$ROOT/SiriusMac/Skins/SkinPackageImporter.swift"
 readonly AUTH_VIEW="$ROOT/SiriusMac/Authentication/AuthenticationView.swift"
 readonly ICON="$ROOT/SiriusMac/Assets/ProductIcon.icon"
 
@@ -60,8 +64,28 @@ check_tracer() {
   printf 'product-identity tracer: PASS\n'
 }
 
+check_migration() {
+  check_tracer
+  require_file "$MIGRATION"; require_file "$LIBRARY_STORE"; require_file "$SELECTION_STORE"; require_file "$PACKAGE_IMPORTER"
+  rg -q 'enum ProductIdentityMigrationOutcome' "$MIGRATION" || fail 'migration must use a closed outcome'
+  rg -q 'writeCompletionMarker' "$MIGRATION" || fail 'migration must persist a completion marker only after verification'
+  rg -q 'readDestination' "$MIGRATION" || fail 'migration must reread its destination'
+  rg -q 'verifyDestination' "$MIGRATION" || fail 'migration must verify its destination'
+  ! rg -n 'SecItem|AuthenticationCredential|URLSession|HTTPCookieStorage|SiriusXMClient' "$MIGRATION" || fail 'migration operation surface must remain non-secret and provider-free'
+  rg -Fq 'ProductIdentity.applicationSupportDirectoryName' "$LIBRARY_STORE" || fail 'library destination must use the approved namespace'
+  rg -Fq 'ProductIdentity.Legacy.applicationSupportDirectoryName' "$LIBRARY_STORE" || fail 'library must retain legacy read compatibility'
+  rg -Fq 'migrateLegacyRecords' "$LIBRARY_STORE" || fail 'library migration must remain semantic'
+  rg -Fq 'verifyLegacyRecords' "$LIBRARY_STORE" || fail 'library migration must verify its semantic destination'
+  rg -Fq 'ProductIdentity.applicationSupportDirectoryName' "$SELECTION_STORE" || fail 'selection destination must use the approved namespace'
+  rg -Fq 'validatedImportedPackageExists' "$SELECTION_STORE" || fail 'imported selection migration must require a validated package'
+  rg -Fq 'ProductIdentity.Legacy.applicationSupportDirectoryName' "$PACKAGE_IMPORTER" || fail 'managed packages must retain legacy read compatibility'
+  rg -Fq 'migrateLegacyPackagesIfNeeded' "$PACKAGE_IMPORTER" || fail 'managed packages require a validated compatibility copy'
+  printf 'product-identity migration contract: PASS\n'
+}
+
 case "${1:-}" in
   --tracer) check_tracer ;;
-  --migration|--presentation|--appearance|--cutover|--final-source|--built-product) fail "${1} contract is staged for its downstream plan and is not green during the proposed-identity tracer" ;;
+  --migration) check_migration ;;
+  --presentation|--appearance|--cutover|--final-source|--built-product) fail "${1} contract is staged for its downstream plan and is not green during the proposed-identity tracer" ;;
   *) printf 'usage: %s --tracer|--migration|--presentation|--appearance|--cutover|--final-source|--built-product\n' "$0" >&2; exit 64 ;;
 esac

@@ -17,6 +17,62 @@ final class SkinPackageImporterTests: XCTestCase {
             store.skinsRootURL
         )
         XCTAssertNotEqual(store.stagingRootURL, store.packagesRootURL)
+        XCTAssertTrue(store.skinsRootURL.path.contains("/Canis97/Skins"))
+        XCTAssertTrue(store.legacyPackagesRootURL.path.contains("/Sirius Mac/Skins/Packages"))
+    }
+
+    func testLegacyManagedPackageCopiesOnlyAfterValidationAndRetainsTheSource() throws {
+        let support = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Canis97ManagedMigration-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: support) }
+        let store = ManagedSkinStore(applicationSupportDirectory: support)
+        let legacyPackage = store.legacyPackagesRootURL.appendingPathComponent(
+            "creator.legacy",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(at: legacyPackage, withIntermediateDirectories: true)
+        try manifestData(identifier: "creator.legacy", displayName: "Legacy")
+            .write(to: legacyPackage.appendingPathComponent("manifest.json"))
+
+        store.migrateLegacyPackagesIfNeeded()
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: legacyPackage.path))
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: store.packagesRootURL.appendingPathComponent("creator.legacy").path
+        ))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: store.migrationMarkerURL.path))
+    }
+
+    func testLegacyImportedSelectionRequiresAValidatedManagedPackage() async throws {
+        let support = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Canis97SelectionMigration-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: support) }
+        let legacyURL = support
+            .appendingPathComponent(ProductIdentity.Legacy.applicationSupportDirectoryName, isDirectory: true)
+            .appendingPathComponent(ProductIdentity.Legacy.appearanceSelectionFileName)
+        try FileManager.default.createDirectory(at: legacyURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try JSONEncoder().encode(PersistedSkinSelection(
+            identifier: "creator.legacy",
+            classification: .imported
+        )).write(to: legacyURL)
+
+        let rejectedStore = SkinSelectionStore(
+            applicationSupportDirectory: support,
+            validatedImportedPackageExists: { _ in false }
+        )
+        XCTAssertEqual(await rejectedStore.restoredSelectionOrNative(), .native)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: rejectedStore.selectionFileURL.path))
+
+        let acceptedStore = SkinSelectionStore(
+            applicationSupportDirectory: support,
+            validatedImportedPackageExists: { $0 == "creator.legacy" }
+        )
+        XCTAssertEqual(
+            try await acceptedStore.load(),
+            PersistedSkinSelection(identifier: "creator.legacy", classification: .imported)
+        )
+        XCTAssertTrue(FileManager.default.fileExists(atPath: legacyURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: acceptedStore.migrationMarkerURL.path))
     }
 
     func testImportedCatalogReplacementUsesOneReference() {

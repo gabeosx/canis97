@@ -505,7 +505,7 @@ final class LibraryStore {
         }
     }
 
-    /// Sirius Mac owns an explicit store instead of SwiftData's process-wide
+    /// Canis97 owns an explicit store instead of SwiftData's process-wide
     /// `Application Support/default.store`, which can collide with another
     /// model or an earlier development build and force an in-memory fallback.
     private static func makeAppSpecificPersistentContainer() throws -> ModelContainer {
@@ -516,11 +516,20 @@ final class LibraryStore {
             appropriateFor: nil,
             create: true
         )
-        let directory = applicationSupport.appendingPathComponent("Sirius Mac", isDirectory: true)
+        let directory = applicationSupport.appendingPathComponent(
+            ProductIdentity.applicationSupportDirectoryName,
+            isDirectory: true
+        )
+        let legacyDirectory = applicationSupport.appendingPathComponent(
+            ProductIdentity.Legacy.applicationSupportDirectoryName,
+            isDirectory: true
+        )
         try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         return try makePersistentContainer(
-            at: directory.appendingPathComponent("Library.store"),
-            migratingLegacyStoreAt: applicationSupport.appendingPathComponent("default.store"),
+            at: directory.appendingPathComponent(ProductIdentity.NonSecretStorage.libraryStoreFileName),
+            migratingLegacyStoreAt: legacyDirectory.appendingPathComponent(
+                ProductIdentity.Legacy.libraryStoreFileName
+            ),
             fileManager: fileManager
         )
     }
@@ -536,16 +545,28 @@ final class LibraryStore {
             at: storeURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
-        let container = try modelContainer(at: storeURL, name: "SiriusMacLibrary")
-        let markerURL = storeURL.appendingPathExtension("legacy-migration-complete")
+        let destinationAlreadyExists = fileManager.fileExists(atPath: storeURL.path)
+        let container = try modelContainer(at: storeURL, name: "Canis97Library")
+        let markerURL = storeURL
+            .deletingLastPathComponent()
+            .appendingPathComponent(
+                ProductIdentity.NonSecretStorage.migrationMarkerDirectoryName,
+                isDirectory: true
+            )
+            .appendingPathComponent(ProductIdentity.NonSecretStorage.libraryMigrationMarkerName)
 
         guard !fileManager.fileExists(atPath: markerURL.path) else { return container }
+        guard !destinationAlreadyExists else {
+            try writeMigrationMarker(at: markerURL, fileManager: fileManager)
+            return container
+        }
         if let legacyStoreURL,
            legacyStoreURL.standardizedFileURL != storeURL.standardizedFileURL,
            fileManager.fileExists(atPath: legacyStoreURL.path) {
             try migrateLegacyRecords(from: legacyStoreURL, into: container)
+            try verifyLegacyRecords(from: legacyStoreURL, in: container)
+            try writeMigrationMarker(at: markerURL, fileManager: fileManager)
         }
-        try Data().write(to: markerURL, options: .atomic)
         return container
     }
 
@@ -608,6 +629,46 @@ final class LibraryStore {
         if destination.hasChanges {
             try destination.save()
         }
+    }
+
+    private static func verifyLegacyRecords(
+        from legacyStoreURL: URL,
+        in destinationContainer: ModelContainer
+    ) throws {
+        let sourceContainer = try modelContainer(at: legacyStoreURL, name: "SiriusMacLegacyLibrary")
+        let source = ModelContext(sourceContainer)
+        let destination = ModelContext(destinationContainer)
+
+        let destinationFavoriteIDs = Set(
+            try destination.fetch(FetchDescriptor<FavoriteRecord>()).compactMap(\.snapshot).map(\.id.rawValue)
+        )
+        let legacyFavoriteIDs = Set(
+            try source.fetch(FetchDescriptor<FavoriteRecord>()).compactMap(\.snapshot).map(\.id.rawValue)
+        )
+        guard legacyFavoriteIDs.isSubset(of: destinationFavoriteIDs) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+
+        let destinationRecentIDs = Set(
+            try destination.fetch(FetchDescriptor<RecentRecord>()).compactMap(\.snapshot).map(\.id.rawValue)
+        )
+        let legacyRecentIDs = Set(
+            try source.fetch(FetchDescriptor<RecentRecord>()).compactMap(\.snapshot).map(\.id.rawValue)
+        )
+        guard legacyRecentIDs.isSubset(of: destinationRecentIDs) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+
+        let legacyPreferences = try source.fetch(FetchDescriptor<PlayerPreferenceRecord>()).first
+        let destinationPreferences = try destination.fetch(FetchDescriptor<PlayerPreferenceRecord>()).first
+        guard legacyPreferences == nil || destinationPreferences != nil else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+    }
+
+    private static func writeMigrationMarker(at url: URL, fileManager: FileManager) throws {
+        try fileManager.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data().write(to: url, options: .atomic)
     }
 
 }

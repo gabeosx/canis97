@@ -64,21 +64,36 @@ struct SkinSelectionFileOperations: @unchecked Sendable {
 
 actor SkinSelectionStore {
     nonisolated let selectionFileURL: URL
+    nonisolated let legacySelectionFileURL: URL
+    nonisolated let migrationMarkerURL: URL
 
     private let fileOperations: SkinSelectionFileOperations
+    private let validatedImportedPackageExists: (String) -> Bool
     private let encoder: JSONEncoder
 
     init(
         applicationSupportDirectory: URL? = nil,
-        fileOperations: SkinSelectionFileOperations = .live
+        fileOperations: SkinSelectionFileOperations = .live,
+        validatedImportedPackageExists: ((String) -> Bool)? = nil
     ) {
         let supportDirectory = applicationSupportDirectory
             ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
         selectionFileURL = supportDirectory
-            .appendingPathComponent("Sirius Mac", isDirectory: true)
-            .appendingPathComponent("appearance-selection.json", isDirectory: false)
+            .appendingPathComponent(ProductIdentity.applicationSupportDirectoryName, isDirectory: true)
+            .appendingPathComponent(ProductIdentity.NonSecretStorage.appearanceSelectionFileName, isDirectory: false)
+        legacySelectionFileURL = supportDirectory
+            .appendingPathComponent(ProductIdentity.Legacy.applicationSupportDirectoryName, isDirectory: true)
+            .appendingPathComponent(ProductIdentity.Legacy.appearanceSelectionFileName, isDirectory: false)
+        migrationMarkerURL = supportDirectory
+            .appendingPathComponent(ProductIdentity.applicationSupportDirectoryName, isDirectory: true)
+            .appendingPathComponent(ProductIdentity.NonSecretStorage.migrationMarkerDirectoryName, isDirectory: true)
+            .appendingPathComponent(ProductIdentity.NonSecretStorage.appearanceSelectionMigrationMarkerName)
         self.fileOperations = fileOperations
+        self.validatedImportedPackageExists = validatedImportedPackageExists ?? { identifier in
+            ManagedSkinStore(applicationSupportDirectory: supportDirectory)
+                .validatedManagedPackageExists(identifier: identifier)
+        }
         encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
     }
@@ -90,6 +105,13 @@ actor SkinSelectionStore {
         if let current = try? load(), current == selection {
             return false
         }
+
+        try replaceSelection(with: selection)
+        return true
+    }
+
+    private func replaceSelection(with selection: PersistedSkinSelection) throws {
+        try Self.validate(selection)
 
         let directoryURL = selectionFileURL.deletingLastPathComponent()
         let temporaryURL = directoryURL.appendingPathComponent(
@@ -106,7 +128,6 @@ actor SkinSelectionStore {
             } else {
                 try fileOperations.move(temporaryURL, selectionFileURL)
             }
-            return true
         } catch {
             try? fileOperations.remove(temporaryURL)
             throw SkinSelectionStoreError.writeFailed
@@ -114,14 +135,36 @@ actor SkinSelectionStore {
     }
 
     func load() throws -> PersistedSkinSelection? {
+        try migrateLegacySelectionIfNeeded()
         guard fileOperations.fileExists(selectionFileURL) else { return nil }
-        let data: Data
-        do {
-            data = try fileOperations.read(selectionFileURL)
-        } catch {
-            throw SkinSelectionStoreError.readFailed
-        }
+        return try Self.decodeSelection(from: fileOperations.read(selectionFileURL))
+    }
 
+    private func migrateLegacySelectionIfNeeded() throws {
+        guard !fileOperations.fileExists(selectionFileURL),
+              !fileOperations.fileExists(migrationMarkerURL),
+              fileOperations.fileExists(legacySelectionFileURL)
+        else { return }
+
+        guard let legacyData = try? fileOperations.read(legacySelectionFileURL),
+              let legacySelection = try? Self.decodeSelection(from: legacyData),
+              legacySelection.classification != .imported
+                || validatedImportedPackageExists(legacySelection.identifier)
+        else { return }
+
+        try replaceSelection(with: legacySelection)
+        guard try loadCurrentSelection() == legacySelection else {
+            throw SkinSelectionStoreError.writeFailed
+        }
+        try writeMigrationMarker()
+    }
+
+    private func loadCurrentSelection() throws -> PersistedSkinSelection? {
+        guard fileOperations.fileExists(selectionFileURL) else { return nil }
+        return try Self.decodeSelection(from: fileOperations.read(selectionFileURL))
+    }
+
+    private static func decodeSelection(from data: Data) throws -> PersistedSkinSelection {
         guard let object = try? JSONSerialization.jsonObject(with: data),
               let dictionary = object as? [String: Any],
               Set(dictionary.keys) == ["schemaVersion", "identifier", "classification"]
@@ -138,6 +181,26 @@ actor SkinSelectionStore {
         }
         try Self.validate(selection)
         return selection
+    }
+
+    private func writeMigrationMarker() throws {
+        let directoryURL = migrationMarkerURL.deletingLastPathComponent()
+        let temporaryURL = directoryURL.appendingPathComponent(
+            ".appearance-selection-migration.\(UUID().uuidString).tmp",
+            isDirectory: false
+        )
+        do {
+            try fileOperations.createDirectory(directoryURL)
+            try fileOperations.write(Data(), temporaryURL)
+            if fileOperations.fileExists(migrationMarkerURL) {
+                try fileOperations.replace(temporaryURL, migrationMarkerURL)
+            } else {
+                try fileOperations.move(temporaryURL, migrationMarkerURL)
+            }
+        } catch {
+            try? fileOperations.remove(temporaryURL)
+            throw SkinSelectionStoreError.writeFailed
+        }
     }
 
     /// Startup recovery deliberately collapses every local record problem to

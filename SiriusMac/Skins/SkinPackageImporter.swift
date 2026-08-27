@@ -35,6 +35,8 @@ struct ManagedSkinStore: @unchecked Sendable {
     let skinsRootURL: URL
     let stagingRootURL: URL
     let packagesRootURL: URL
+    let legacyPackagesRootURL: URL
+    let migrationMarkerURL: URL
 
     private let fileManager: FileManager
     private let removeManagedPackage: (URL) throws -> Void
@@ -48,10 +50,18 @@ struct ManagedSkinStore: @unchecked Sendable {
             ?? fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? fileManager.temporaryDirectory
         skinsRootURL = support
-            .appendingPathComponent("Sirius Mac", isDirectory: true)
-            .appendingPathComponent("Skins", isDirectory: true)
+            .appendingPathComponent(ProductIdentity.applicationSupportDirectoryName, isDirectory: true)
+            .appendingPathComponent(ProductIdentity.NonSecretStorage.managedSkinsDirectoryName, isDirectory: true)
         stagingRootURL = skinsRootURL.appendingPathComponent(".staging", isDirectory: true)
         packagesRootURL = skinsRootURL.appendingPathComponent("Packages", isDirectory: true)
+        legacyPackagesRootURL = support
+            .appendingPathComponent(ProductIdentity.Legacy.applicationSupportDirectoryName, isDirectory: true)
+            .appendingPathComponent(ProductIdentity.Legacy.managedSkinsDirectoryName, isDirectory: true)
+            .appendingPathComponent("Packages", isDirectory: true)
+        migrationMarkerURL = support
+            .appendingPathComponent(ProductIdentity.applicationSupportDirectoryName, isDirectory: true)
+            .appendingPathComponent(ProductIdentity.NonSecretStorage.migrationMarkerDirectoryName, isDirectory: true)
+            .appendingPathComponent(ProductIdentity.NonSecretStorage.managedSkinsMigrationMarkerName)
         self.fileManager = fileManager
         self.removeManagedPackage = removeManagedPackage ?? { url in
             try fileManager.removeItem(at: url)
@@ -181,6 +191,60 @@ struct ManagedSkinStore: @unchecked Sendable {
         }
     }
 
+    /// Copies only legacy packages that validate again as managed Canis97
+    /// packages. The old package root is retained regardless of the outcome.
+    func migrateLegacyPackagesIfNeeded() {
+        guard !fileManager.fileExists(atPath: migrationMarkerURL.path) else { return }
+        guard managedPackageURLs().isEmpty else {
+            try? writeMigrationMarker()
+            return
+        }
+        guard let legacyURLs = try? fileManager.contentsOfDirectory(
+            at: legacyPackagesRootURL,
+            includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey],
+            options: [.skipsHiddenFiles]
+        ) else { return }
+
+        for legacyURL in legacyURLs {
+            guard isDirectChild(legacyURL, of: legacyPackagesRootURL),
+                  let values = try? legacyURL.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey]),
+                  values.isDirectory == true,
+                  values.isSymbolicLink != true
+            else { return }
+
+            let destinationURL = packagesRootURL.appendingPathComponent(
+                legacyURL.lastPathComponent,
+                isDirectory: true
+            )
+            guard isDirectChild(destinationURL, of: packagesRootURL),
+                  !fileManager.fileExists(atPath: destinationURL.path)
+            else { return }
+
+            do {
+                try fileManager.createDirectory(at: packagesRootURL, withIntermediateDirectories: true)
+                try fileManager.copyItem(at: legacyURL, to: destinationURL)
+                guard validatedManagedPackageExists(identifier: legacyURL.lastPathComponent) else {
+                    try? fileManager.removeItem(at: destinationURL)
+                    return
+                }
+            } catch {
+                try? fileManager.removeItem(at: destinationURL)
+                return
+            }
+        }
+
+        try? writeMigrationMarker()
+    }
+
+    func validatedManagedPackageExists(identifier: String) -> Bool {
+        let candidate = packagesRootURL.appendingPathComponent(identifier, isDirectory: true)
+        guard isDirectChild(candidate, of: packagesRootURL),
+              fileManager.fileExists(atPath: candidate.path)
+        else { return false }
+        return (try? SkinPackageImporter(store: self, fileManager: fileManager)
+            .validateManagedPackage(at: candidate)) != nil
+    }
+
     /// Removes only the exact managed directory for an imported reference.
     /// An already-absent package is a successful, idempotent no-op.
     @discardableResult
@@ -224,6 +288,14 @@ struct ManagedSkinStore: @unchecked Sendable {
             try fileManager.removeItem(at: destination)
         }
         try fileManager.moveItem(at: backupURL, to: destination)
+    }
+
+    private func writeMigrationMarker() throws {
+        try fileManager.createDirectory(
+            at: migrationMarkerURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data().write(to: migrationMarkerURL, options: .atomic)
     }
 
     private func isDirectChild(_ candidate: URL, of parent: URL) -> Bool {
@@ -400,6 +472,7 @@ struct SkinPackageImporter: @unchecked Sendable {
     }
 
     func loadManagedAppearances() -> [ValidatedSkinAppearance] {
+        store.migrateLegacyPackagesIfNeeded()
         store.managedPackageURLs().compactMap { try? validateManagedCandidate(at: $0) }
     }
 
@@ -452,6 +525,10 @@ struct SkinPackageImporter: @unchecked Sendable {
         }
         let files = try regularPackageFiles(at: root)
         return try validateCandidate(at: root, extractedFiles: Set(files))
+    }
+
+    func validateManagedPackage(at root: URL) throws -> ValidatedSkinAppearance {
+        try validateManagedCandidate(at: root)
     }
 
     private func regularPackageFiles(at root: URL) throws -> [CanonicalSkinPath] {

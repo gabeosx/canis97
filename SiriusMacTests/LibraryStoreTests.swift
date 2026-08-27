@@ -197,6 +197,38 @@ final class LibraryStoreTests: XCTestCase {
 }
 
 @MainActor
+final class ProductIdentityLibraryMigrationTests: XCTestCase {
+    func testApprovedDestinationImportsLegacyRecordsWithoutMovingTheLegacyStore() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Canis97LibraryMigration-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let legacyURL = root
+            .appendingPathComponent(ProductIdentity.Legacy.applicationSupportDirectoryName, isDirectory: true)
+            .appendingPathComponent(ProductIdentity.Legacy.libraryStoreFileName)
+        let destinationURL = root
+            .appendingPathComponent(ProductIdentity.applicationSupportDirectoryName, isDirectory: true)
+            .appendingPathComponent(ProductIdentity.NonSecretStorage.libraryStoreFileName)
+
+        let legacyContainer = try LibraryStore.makePersistentContainer(at: legacyURL)
+        let snapshot = LibraryChannelSnapshot(
+            id: LiveChannelID("canis97-legacy"),
+            name: "Legacy",
+            displayNumber: 97,
+            category: "Fixture"
+        )
+        LibraryStore(modelContainer: legacyContainer).setFavorite(snapshot, isFavorite: true)
+
+        let migrated = try LibraryStore.makePersistentContainer(
+            at: destinationURL,
+            migratingLegacyStoreAt: legacyURL
+        )
+
+        XCTAssertEqual(LibraryStore(modelContainer: migrated).favorites, [snapshot])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: legacyURL.path))
+    }
+}
+
+@MainActor
 final class PlaybackQueueContractTests: XCTestCase {
     func testCapturedQueueKeepsExactOrderAndNeverWraps() {
         let ids = values("one", "two", "three", "four")
