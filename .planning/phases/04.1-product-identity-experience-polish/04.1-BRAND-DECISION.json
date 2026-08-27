@@ -4,6 +4,10 @@
 <dict>
 	<key>approval</key>
 	<dict>
+		<key>rejectionReason</key>
+		<string>Human feedback on 2026-08-27 rejected Modulune because it felt too long and multi-syllabic.</string>
+		<key>rejectedCandidate</key>
+		<string>Modulune</string>
 		<key>state</key>
 		<string>pending-human-decision</string>
 	</dict>
@@ -26,8 +30,51 @@
 		<key>goods</key>
 		<string>Native macOS music and radio player for subscribers</string>
 		<key>style</key>
-		<string>Original 2000s desktop music-player nostalgia without provider affiliation</string>
+		<string>Original 2000s desktop music-player nostalgia without provider affiliation; prefer a one- or two-syllable name with no forced portmanteau.</string>
 	</dict>
+	<key>candidateScreeningSources</key>
+	<array>
+		<dict>
+			<key>candidate</key>
+			<string>Rove</string>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>finding</key>
+			<string>Rove - Capture Joy is an iPhone mindfulness-recording app. It is a real same-name app conflict, but the captured listing is not a music player.</string>
+			<key>url</key>
+			<string>https://apps.apple.com/es/app/rove-capture-joy/id6761004061</string>
+		</dict>
+		<dict>
+			<key>candidate</key>
+			<string>Mote</string>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>finding</key>
+			<string>Apple Music lists MOTE as an active recording artist; the name also has voice-recording education software use, so it was rejected.</string>
+			<key>url</key>
+			<string>https://music.apple.com/us/artist/mote/1734489135</string>
+		</dict>
+		<dict>
+			<key>candidate</key>
+			<string>Quell</string>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>finding</key>
+			<string>Quell is already a wellness product and app. It remains a stylistic alternative, not a preferred product identity.</string>
+			<key>url</key>
+			<string>https://www.thequellapp.com/</string>
+		</dict>
+		<dict>
+			<key>candidate</key>
+			<string>Rill</string>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>finding</key>
+			<string>Spotify lists an active artist named Rill, creating a direct music-category collision; the candidate was rejected.</string>
+			<key>url</key>
+			<string>https://open.spotify.com/artist/2C9gfZqYe1UrhZP3ADjIm9</string>
+		</dict>
+	</array>
 	<key>decisionScope</key>
 	<string>Product identity proposal only; this record does not authorize SiriusXM service access, use of provider marks, or a public launch.</string>
 	<key>legalClearanceClaim</key>
@@ -40,9 +87,9 @@
 			<key>checkedOn</key>
 			<string>2026-08-27</string>
 			<key>query</key>
-			<string>Modulune</string>
+			<string>Rove</string>
 			<key>resultSummary</key>
-			<string>Recorded as a federal-mark query; public web indexing returned no exact music-player result, but TMSearch result review is still unresolved.</string>
+			<string>Preliminary web screening surfaced a same-name iPhone mindfulness-recording app, but no direct music-player result in the captured pass. Direct TMSearch review is still unresolved.</string>
 			<key>sourceURL</key>
 			<string>https://tmsearch.uspto.gov/</string>
 		</dict>
@@ -52,7 +99,7 @@
 			<key>checkedOn</key>
 			<string>2026-08-27</string>
 			<key>query</key>
-			<string>Modu Lune</string>
+			<string>Ro Ve</string>
 			<key>resultSummary</key>
 			<string>Variant recorded for federal review; unresolved pending direct result review.</string>
 			<key>sourceURL</key>
@@ -64,7 +111,7 @@
 			<key>checkedOn</key>
 			<string>2026-08-27</string>
 			<key>query</key>
-			<string>Modu-Lune</string>
+			<string>Ro-ve</string>
 			<key>resultSummary</key>
 			<string>Variant recorded for federal review; unresolved pending direct result review.</string>
 			<key>sourceURL</key>
@@ -76,7 +123,7 @@
 			<key>checkedOn</key>
 			<string>2026-08-27</string>
 			<key>query</key>
-			<string>Modulunes</string>
+			<string>Roves</string>
 			<key>resultSummary</key>
 			<string>Variant recorded for federal review; unresolved pending direct result review.</string>
 			<key>sourceURL</key>
@@ -88,7 +135,7 @@
 			<key>checkedOn</key>
 			<string>2026-08-27</string>
 			<key>query</key>
-			<string>mod you loon</string>
+			<string>rohv OR rove</string>
 			<key>resultSummary</key>
 			<string>Sound-alike query recorded because similarity can turn on pronunciation; unresolved pending counsel review.</string>
 			<key>sourceURL</key>
@@ -100,7 +147,7 @@
 			<key>checkedOn</key>
 			<string>2026-08-27</string>
 			<key>query</key>
-			<string>Moduloon OR Modulun OR ModuLune</string>
+			<string>Rovee OR Rov OR Rova</string>
 			<key>resultSummary</key>
 			<string>Likely misspellings recorded; unresolved pending direct TMSearch review.</string>
 			<key>sourceURL</key>
@@ -112,7 +159,7 @@
 			<key>checkedOn</key>
 			<string>2026-08-27</string>
 			<key>query</key>
-			<string>Modulune software music radio streaming player</string>
+			<string>Rove software music radio streaming player</string>
 			<key>resultSummary</key>
 			<string>Related-goods scope recorded for software, music, radio, and streaming; no registration conclusion is claimed.</string>
 			<key>sourceURL</key>
@@ -124,11 +171,11 @@
 			<key>checkedOn</key>
 			<string>2026-08-27</string>
 			<key>query</key>
-			<string>"Modulune" music player OR radio app</string>
+			<string>"Rove" music player OR radio app</string>
 			<key>resultSummary</key>
-			<string>Public web search returned no exact indexed product hit in the captured screening pass; common-law use can be unindexed and remains unresolved.</string>
+			<string>Public web search did not surface an exact music-player or radio-app result in the captured pass; common-law use can be unindexed and remains unresolved.</string>
 			<key>sourceURL</key>
-			<string>https://www.google.com/search?q=%22Modulune%22+music+player+OR+radio+app</string>
+			<string>https://www.google.com/search?q=%22Rove%22+music+player+OR+radio+app</string>
 		</dict>
 		<dict>
 			<key>category</key>
@@ -136,11 +183,11 @@
 			<key>checkedOn</key>
 			<string>2026-08-27</string>
 			<key>query</key>
-			<string>"Modulune" macOS app</string>
+			<string>"Rove" macOS app</string>
 			<key>resultSummary</key>
-			<string>Public web search returned no exact indexed macOS-app hit in the captured pass; store/listing review remains unresolved.</string>
+			<string>App discovery surfaced Rove - Capture Joy, an iPhone mindfulness-recording app, not a music player; store/listing and related-goods review remain unresolved.</string>
 			<key>sourceURL</key>
-			<string>https://www.google.com/search?q=%22Modulune%22+macOS+app</string>
+			<string>https://apps.apple.com/es/app/rove-capture-joy/id6761004061</string>
 		</dict>
 		<dict>
 			<key>category</key>
@@ -148,11 +195,11 @@
 			<key>checkedOn</key>
 			<string>2026-08-27</string>
 			<key>query</key>
-			<string>"Modulune" GitHub</string>
+			<string>"Rove" GitHub</string>
 			<key>resultSummary</key>
-			<string>Repository search query recorded; no exact indexed repository conflict was surfaced in the captured pass, but manual review remains required.</string>
+			<string>Repository discovery surfaced multiple non-audio uses; no exact music-player repository was captured, but manual review remains required.</string>
 			<key>sourceURL</key>
-			<string>https://github.com/search?q=Modulune&amp;type=repositories</string>
+			<string>https://github.com/search?q=Rove&amp;type=repositories</string>
 		</dict>
 		<dict>
 			<key>category</key>
@@ -160,7 +207,7 @@
 			<key>checkedOn</key>
 			<string>2026-08-27</string>
 			<key>query</key>
-			<string>modulune.com WHOIS and registrar availability</string>
+			<string>rove.com WHOIS and registrar availability</string>
 			<key>resultSummary</key>
 			<string>ICANN lookup route recorded; registration, ownership, and jurisdictional implications are unresolved and must not be inferred from name screening.</string>
 			<key>sourceURL</key>
@@ -172,11 +219,11 @@
 			<key>checkedOn</key>
 			<string>2026-08-27</string>
 			<key>query</key>
-			<string>Modulune business registry</string>
+			<string>Rove business registry</string>
 			<key>resultSummary</key>
 			<string>Public discovery query recorded; state and local registry review remains unresolved.</string>
 			<key>sourceURL</key>
-			<string>https://www.google.com/search?q=%22Modulune%22+business+registry</string>
+			<string>https://www.google.com/search?q=%22Rove%22+business+registry</string>
 		</dict>
 		<dict>
 			<key>category</key>
@@ -184,7 +231,7 @@
 			<key>checkedOn</key>
 			<string>2026-08-27</string>
 			<key>query</key>
-			<string>Modulune AND (software OR music OR radio OR streaming)</string>
+			<string>Rove AND (software OR music OR radio OR streaming)</string>
 			<key>resultSummary</key>
 			<string>Federal related-goods query recorded; live/pending/dead status and related-goods analysis remain attorney-review work.</string>
 			<key>sourceURL</key>
@@ -196,7 +243,7 @@
 			<key>checkedOn</key>
 			<string>2026-08-27</string>
 			<key>query</key>
-			<string>Modulune Global Brand Database / Madrid Monitor / TMview</string>
+			<string>Rove Global Brand Database / Madrid Monitor / TMview</string>
 			<key>resultSummary</key>
 			<string>International-search route recorded; no international clearance conclusion is claimed.</string>
 			<key>sourceURL</key>
@@ -287,105 +334,137 @@
 	<key>selectedIdentity</key>
 	<dict>
 		<key>appBundleIdentifier</key>
-		<string>com.modulune.player</string>
+		<string>com.rove.player</string>
 		<key>appLogSubsystem</key>
-		<string>com.modulune.player</string>
+		<string>com.rove.player</string>
 		<key>appTypeName</key>
-		<string>ModuluneApp</string>
+		<string>RoveApp</string>
 		<key>applicationSupportDirectoryName</key>
-		<string>Modulune</string>
+		<string>Rove</string>
 		<key>authenticationFrameAutosaveName</key>
-		<string>Modulune.authentication.frame</string>
+		<string>Rove.authentication.frame</string>
 		<key>compactFrameAutosaveName</key>
-		<string>Modulune.compact.frame</string>
+		<string>Rove.compact.frame</string>
 		<key>compactSceneID</key>
-		<string>modulune-compact</string>
+		<string>rove-compact</string>
 		<key>displayName</key>
-		<string>Modulune</string>
+		<string>Rove</string>
 		<key>environmentPrefix</key>
-		<string>MODULUNE</string>
+		<string>ROVE</string>
 		<key>executableName</key>
-		<string>Modulune</string>
+		<string>Rove</string>
 		<key>iconBasename</key>
 		<string>ProductIcon</string>
 		<key>iconConcept</key>
 		<string>Orbital Signal: a text-free layered midnight-blue disc, offset warm signal arcs, and a small luminous core. The geometry evokes a compact music device and visualizer without copying a provider mark, hardware silhouette, standard control, or another player's trade dress.</string>
 		<key>libraryFrameAutosaveName</key>
-		<string>Modulune.library.frame</string>
+		<string>Rove.library.frame</string>
 		<key>librarySceneID</key>
-		<string>modulune-library</string>
+		<string>rove-library</string>
 		<key>moduleName</key>
-		<string>Modulune</string>
+		<string>Rove</string>
 		<key>nonAffiliationStatement</key>
-		<string>Modulune is an independent app and is not affiliated with, endorsed by, or sponsored by Sirius XM Radio LLC.</string>
+		<string>Rove is an independent app and is not affiliated with, endorsed by, or sponsored by Sirius XM Radio LLC.</string>
 		<key>schemeFileName</key>
-		<string>Modulune.xcscheme</string>
+		<string>Rove.xcscheme</string>
 		<key>schemeName</key>
-		<string>Modulune</string>
+		<string>Rove</string>
 		<key>scriptPrefix</key>
-		<string>modulune</string>
+		<string>rove</string>
 		<key>skinPackageExtension</key>
-		<string>moduluneskin</string>
+		<string>roveskin</string>
 		<key>skinPackageTypeIdentifier</key>
-		<string>com.modulune.skin-package</string>
+		<string>com.rove.skin-package</string>
 		<key>targetName</key>
-		<string>Modulune</string>
+		<string>Rove</string>
 		<key>uiTestBundleIdentifier</key>
-		<string>com.modulune.player.uitests</string>
+		<string>com.rove.player.uitests</string>
 		<key>uiTestTargetName</key>
-		<string>ModuluneUITests</string>
+		<string>RoveUITests</string>
 		<key>uiValidationSchemeFileName</key>
-		<string>ModuluneUIValidation.xcscheme</string>
+		<string>RoveUIValidation.xcscheme</string>
 		<key>uiValidationSchemeName</key>
-		<string>ModuluneUIValidation</string>
+		<string>RoveUIValidation</string>
 		<key>unitTestBundleIdentifier</key>
-		<string>com.modulune.player.tests</string>
+		<string>com.rove.player.tests</string>
 		<key>unitTestTargetName</key>
-		<string>ModuluneTests</string>
+		<string>RoveTests</string>
 	</dict>
 	<key>shortlist</key>
 	<array>
 		<dict>
+			<key>mainCollisionConcern</key>
+			<string>A same-name iPhone mindfulness-recording app exists; no direct music-player result surfaced in this preliminary indexed search.</string>
 			<key>name</key>
-			<string>Modulune</string>
+			<string>Rove</string>
+			<key>pronunciation</key>
+			<string>rohv</string>
 			<key>rationale</key>
-			<string>An invented, pronounceable name that suggests modular late-night listening without naming the provider or borrowing a known player vocabulary.</string>
+			<string>One syllable, plain to say, and compact enough for a small desktop player. It suggests movement through a personal listening world without naming the provider or borrowing a known player vocabulary.</string>
+			<key>screeningOutcome</key>
+			<string>Preferred for human decision only. The captured web pass found a non-audio iPhone app, but no direct music-player collision; federal, domain, business, and international review remain open.</string>
 			<key>status</key>
 			<string>preferred-proposed</string>
+			<key>syllables</key>
+			<integer>1</integer>
 			<key>unresolvedSimilarity</key>
-			<string>The components 'module' and 'lune' are individually used by other products; counsel must evaluate sound, appearance, meaning, and related-goods risk.</string>
+			<string>Rove is an ordinary English word with broad existing use; counsel must assess the same-name app, sound, appearance, meaning, commercial impression, and related-goods risk.</string>
 		</dict>
 		<dict>
+			<key>mainCollisionConcern</key>
+			<string>Existing MOTE artist and voice-recording education product create avoidable audio and software adjacency.</string>
 			<key>name</key>
-			<string>Cadence Relay</string>
+			<string>Mote</string>
+			<key>pronunciation</key>
+			<string>moht</string>
 			<key>rationale</key>
-			<string>Rejected because Cadence is a crowded music and software term, creating avoidable related-goods ambiguity.</string>
+			<string>One-syllable, small-object feel with a compact-device character.</string>
+			<key>screeningOutcome</key>
+			<string>Rejected in the preliminary pass because direct audio-adjacent uses surfaced.</string>
 			<key>status</key>
 			<string>rejected</string>
+			<key>syllables</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
+			<key>mainCollisionConcern</key>
+			<string>Existing Quell wellness and medical-device products make a clean software identity unlikely despite no direct player result in the captured pass.</string>
 			<key>name</key>
-			<string>Neon Cassette</string>
+			<string>Quell</string>
+			<key>pronunciation</key>
+			<string>kwell</string>
 			<key>rationale</key>
-			<string>Rejected because it is descriptive of a retro aesthetic and risks leaning on established cassette-player trade dress.</string>
+			<string>One syllable, calm, and visually clean, but it points more to silence than listening.</string>
+			<key>screeningOutcome</key>
+			<string>Held as a stylistic alternative, not selected; existing product use warrants counsel review before any further investment.</string>
 			<key>status</key>
-			<string>rejected</string>
+			<string>screened-not-selected</string>
+			<key>syllables</key>
+			<integer>1</integer>
 		</dict>
 		<dict>
+			<key>mainCollisionConcern</key>
+			<string>Active artist and music listings create a direct music-category collision.</string>
 			<key>name</key>
-			<string>Vector Dial</string>
+			<string>Rill</string>
+			<key>pronunciation</key>
+			<string>rill</string>
 			<key>rationale</key>
-			<string>Rejected because both words are common in consumer electronics and the compound is insufficiently distinctive for this category.</string>
+			<string>One syllable with a quietly flowing feel and no forced construction.</string>
+			<key>screeningOutcome</key>
+			<string>Rejected in the preliminary pass because an active artist use surfaced.</string>
 			<key>status</key>
 			<string>rejected</string>
+			<key>syllables</key>
+			<integer>1</integer>
 		</dict>
 	</array>
 	<key>status</key>
 	<string>proposed</string>
 	<key>unresolvedSimilarities</key>
 	<array>
-		<string>Modulune has not received a comprehensive federal, state, common-law, international, or design-mark clearance search.</string>
-		<string>The component words and similar pronunciations may collide with marks in software, music, radio, or adjacent consumer-electronics goods.</string>
+		<string>Rove has not received a comprehensive federal, state, common-law, international, or design-mark clearance search.</string>
+		<string>The captured web pass surfaced a same-name iPhone mindfulness-recording app; counsel must assess sound, appearance, meaning, commercial impression, and related-goods risk.</string>
 		<string>Domain registration status, business names, app listings, repository names, and unindexed common-law use require direct review.</string>
 		<string>The Orbital Signal composition needs design-mark review for circular signal, radio-wave, and visualizer motifs before public use.</string>
 	</array>
