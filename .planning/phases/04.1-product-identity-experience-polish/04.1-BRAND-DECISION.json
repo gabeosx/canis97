@@ -4,12 +4,12 @@
 <dict>
 	<key>approval</key>
 	<dict>
-		<key>rejectedCandidate</key>
-		<string>Modulune; Rove; Quell; Mote; Rill; BitDeck; Bit Deck; Bit-Deck; Bitjuke; BitJuke; bitjuke; Bit Juke; Bit-Juke; Cueamp; CueAmp; cueamp; Cue Amp; Cue-Amp; Pixaud; PixAud; pixaud; Pix Aud; Pix-Aud; Pixauds; Piksawd; Pixod; Pixawd; Pix Audio</string>
-		<key>rejectionReason</key>
-		<string>The user requested a full Pixaud screen on 2026-08-27. Exact-name results identify Pixaud as a named figure in West End Games' 1991/1992 Torg publication “Pixaud's Practical Grimoire,” making it a pre-existing entertainment-property word rather than a clean invented term. The intended “pix-aud”/“pix audio” reading is also not self-evident and pulls the candidate toward the established PIX audio/video-recorder field. The screen does not determine rights, ownership, or likelihood of confusion; these avoidable identity and pronunciation risks are enough to reject the name as a preliminary proposal.</string>
+		<key>proposedCandidate</key>
+		<string>Canis97</string>
+		<key>proposalRationale</key>
+		<string>Canis97 is a compact visual wordmark and a 1997 desktop-audio-era allusion. “Canis” is a deliberate, indirect reference to Sirius in Canis Major; “97” references Winamp's 1997 initial release without copying its name, trade dress, or mascot. This is a preliminary product proposal only, pending explicit human decision and attorney review.</string>
 		<key>state</key>
-		<string>rescreen-required</string>
+		<string>pending-human-decision</string>
 	</dict>
 	<key>attorneyReviewRequired</key>
 	<true/>
@@ -103,6 +103,56 @@
 			<string>Established PIX audio/video recorder coverage makes the intended “pix audio” reading commercially adjacent to professional media equipment. This is not an exact Pixaud mark result, but it compounds the pronunciation and audio-category ambiguity for a player.</string>
 			<key>url</key>
 			<string>https://www.tvtechnology.com/be-blogs/5571</string>
+		</dict>
+		<dict>
+			<key>candidate</key>
+			<string>Canis97 / Canis 97 / Canis-97</string>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>finding</key>
+			<string>NASA identifies Sirius as the brightest star in the night sky in the constellation Canis Major. This supports the intended indirect celestial reference, while also confirming that the reference must stay verbal and abstract rather than become dog imagery or provider-adjacent branding.</string>
+			<key>url</key>
+			<string>https://science.nasa.gov/universe/stars/types/</string>
+		</dict>
+		<dict>
+			<key>candidate</key>
+			<string>Canis97</string>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>finding</key>
+			<string>Winamp's own community forum records its release in 1997. The “97” component is used solely as a historical software-era allusion; it must not copy Winamp's name, llama mascot, interface, or any other trade dress.</string>
+			<key>url</key>
+			<string>https://forums.winamp.com/forum/community-center/general-discussions/25720-what-happened-to-amp</string>
+		</dict>
+		<dict>
+			<key>candidate</key>
+			<string>Canis97 / Canis 97 / Canis-97</string>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>finding</key>
+			<string>A Firecrawl exact-variant search for software, music, audio, radio, streaming, and apps returned no commercial product or software result for the candidate family. This is a limited public-index result, not a domain, trademark, or availability conclusion.</string>
+			<key>url</key>
+			<string>https://firecrawl.dev/</string>
+		</dict>
+		<dict>
+			<key>candidate</key>
+			<string>Canis / Canis97</string>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>finding</key>
+			<string>Spotify lists an active recording artist named Canis. It is not the same proposed mark or a software product, but it is a related entertainment-category use and an explicit attorney-review risk for a public music player.</string>
+			<key>url</key>
+			<string>https://open.spotify.com/intl-ar/artist/6OPdGHW0QD6WknWX2tlzJm</string>
+		</dict>
+		<dict>
+			<key>candidate</key>
+			<string>Canis / Canis97</string>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>finding</key>
+			<string>Public federal-filing material records a stylized CANIS wolf-head application for outdoor goods. It does not establish a Canis97 software conflict, but it reinforces the project's no-dog-imagery rule and requires counsel to examine the current record and related marks.</string>
+			<key>url</key>
+			<string>https://uspto.report/TM/97162381</string>
 		</dict>
 	</array>
 	<key>decisionScope</key>
@@ -305,6 +355,21 @@
 		<dict><key>category</key><string>federal-mark</string><key>checkedOn</key><string>2026-08-27</string><key>query</key><string>PIXAUD / PIX AUD / PIX-AUD / PIX AUDIO for software, music, radio, streaming, imaging, visualizer, or consumer electronics</string><key>resultSummary</key><string>Official federal-search route recorded. This screen makes no claim that a federal result is absent, live, dead, registered, or available; direct USPTO/TSDR record review remains required before any future consideration.</string><key>sourceURL</key><string>https://tmsearch.uspto.gov/</string></dict>
 		<dict><key>category</key><string>international</string><key>checkedOn</key><string>2026-08-27</string><key>query</key><string>Pixaud / PixAud / Pix Aud / Pix-Aud in WIPO Global Brand Database, Madrid Monitor, and TMview</string><key>resultSummary</key><string>International trademark-search routes were recorded. No international clearance conclusion is claimed; direct record review and counsel remain necessary if the candidate is ever reconsidered.</string><key>sourceURL</key><string>https://branddb.wipo.int/en/quicksearch</string></dict>
 		<dict><key>category</key><string>icon-design-code</string><key>checkedOn</key><string>2026-08-27</string><key>query</key><string>Design elements: circular disc, concentric arcs, radiating signal, abstract music-device display</string><key>resultSummary</key><string>The retained text-free Orbital Signal composition remains a separate design-mark review item. It is not altered for the rejected Pixaud word screen and no design clearance is claimed.</string><key>sourceURL</key><string>https://www.uspto.gov/trademarks/search/design-search-codes</string></dict>
+		<dict><key>category</key><string>historical-rationale</string><key>checkedOn</key><string>2026-08-27</string><key>query</key><string>Sirius Canis Major authoritative astronomy source</string><key>resultSummary</key><string>NASA identifies Sirius as the brightest star in the night sky in Canis Major. “Canis” is therefore an indirect astronomical reference, not provider wording. The proposal must retain an abstract celestial interpretation, no dog imagery, no provider mark, and clear non-affiliation copy.</string><key>sourceURL</key><string>https://science.nasa.gov/universe/stars/types/</string></dict>
+		<dict><key>category</key><string>historical-rationale</string><key>checkedOn</key><string>2026-08-27</string><key>query</key><string>Winamp 1997 initial release source</string><key>resultSummary</key><string>A Winamp-hosted forum's historical account places Winamp's public release in 1997. “97” is a permissible era allusion only; it neither invokes nor licenses the Winamp name, mascot, interface, skin format, or trade dress.</string><key>sourceURL</key><string>https://forums.winamp.com/forum/community-center/general-discussions/25720-what-happened-to-amp</string></dict>
+		<dict><key>category</key><string>exact-joined</string><key>checkedOn</key><string>2026-08-27</string><key>query</key><string>Canis97</string><key>resultSummary</key><string>Public exact-name searches did not establish a commercial software, music-player, streaming, radio, or consumer-electronics product using Canis97. A historical personal-profile username is not treated as commercial use and no personal details are retained. This limited result is not an availability conclusion.</string><key>sourceURL</key><string>https://www.google.com/search?q=%22Canis97%22</string></dict>
+		<dict><key>category</key><string>capitalization-and-spaced-hyphenated</string><key>checkedOn</key><string>2026-08-27</string><key>query</key><string>Canis97 / CANIS97 / canis97 / Canis 97 / Canis-97</string><key>resultSummary</key><string>Exact and presentation variants were screened together. No commercial audio/software use was established for the exact family in public web search, but separation or hyphenation does not remove the dominant Canis component and should not be treated as clearance.</string><key>sourceURL</key><string>https://www.google.com/search?q=%22Canis+97%22+OR+%22Canis-97%22</string></dict>
+		<dict><key>category</key><string>plural-and-misspelling</string><key>checkedOn</key><string>2026-08-27</string><key>query</key><string>Canis97s / Canis 97s / Canis-97s / Canis 1997 / Canis Nine Seven / Canis ninety-seven</string><key>resultSummary</key><string>Plural, year-expanded, and spoken variants were screened as sound-alikes. No exact commercial player/app result was established, but the Canis root has existing music and non-music uses; counsel must assess similarity by sound, appearance, meaning, and related goods.</string><key>sourceURL</key><string>https://www.uspto.gov/trademarks/search/likelihood-confusion</string></dict>
+		<dict><key>category</key><string>phonetic-and-meaning</string><key>checkedOn</key><string>2026-08-27</string><key>query</key><string>Canis ninety-seven / Canis nine-seven / Canis Major / Dog Star</string><key>resultSummary</key><string>Recommended pronunciation is “CAN-iss ninety-seven” in narration and “CAN-iss nine-seven” in casual speech. The celestial allusion is intelligible only when explained; otherwise Canis can read as Latin/scientific dog terminology. This is a brand-fit and confusion risk, not a legal conclusion.</string><key>sourceURL</key><string>https://science.nasa.gov/image-article/apod-1996-september-02-sirius-the-brightest-star-in-the-night/</string></dict>
+		<dict><key>category</key><string>related-goods</string><key>checkedOn</key><string>2026-08-27</string><key>query</key><string>Canis music player audio software radio streaming</string><key>resultSummary</key><string>Spotify lists an active recording artist named Canis. This is not an exact Canis97 software product, but music/entertainment use is commercially adjacent enough to require direct attorney review before public launch.</string><key>sourceURL</key><string>https://open.spotify.com/intl-ar/artist/6OPdGHW0QD6WknWX2tlzJm</string></dict>
+		<dict><key>category</key><string>common-law</string><key>checkedOn</key><string>2026-08-27</string><key>query</key><string>Canis recording artist music producer</string><key>resultSummary</key><string>The public artist profile is use evidence only. It does not prove ownership, territorial scope, enforceability, or a likelihood of confusion, but prevents a clean no-use conclusion for the dominant word.</string><key>sourceURL</key><string>https://open.spotify.com/intl-ar/artist/6OPdGHW0QD6WknWX2tlzJm</string></dict>
+		<dict><key>category</key><string>app-listings</string><key>checkedOn</key><string>2026-08-27</string><key>query</key><string>Canis97 App Store and Google Play</string><key>resultSummary</key><string>Public app-store search routes were recorded. This screen did not rely on any uniquely attributable exact Canis97 app listing; absence of a reviewed listing is not an availability conclusion.</string><key>sourceURL</key><string>https://apps.apple.com/us/search?term=Canis97</string></dict>
+		<dict><key>category</key><string>repository-and-package</string><key>checkedOn</key><string>2026-08-27</string><key>query</key><string>Canis97 GitHub repositories, npm, Swift Package Index, and CocoaPods</string><key>resultSummary</key><string>Public repository and package-registry search routes were checked. No uniquely attributable exact Canis97 package was established; registry absence is not a trademark or domain conclusion.</string><key>sourceURL</key><string>https://github.com/search?q=Canis97&amp;type=repositories</string></dict>
+		<dict><key>category</key><string>domain</string><key>checkedOn</key><string>2026-08-27</string><key>query</key><string>canis97.com and Canis97 domain variants</string><key>resultSummary</key><string>RDAP query route recorded. Registrant and availability were not independently resolved and must not be inferred from a route; domain status is not a basis for this proposal.</string><key>sourceURL</key><string>https://rdap.verisign.com/com/v1/domain/canis97.com</string></dict>
+		<dict><key>category</key><string>business-registry</string><key>checkedOn</key><string>2026-08-27</string><key>query</key><string>Canis97 / Canis 97 / Canis-97 business and corporate records</string><key>resultSummary</key><string>This preliminary screen did not establish a formal exact-name business registry record. It did identify unrelated Canis commercial uses; formal jurisdictional registry review remains counsel work.</string><key>sourceURL</key><string>https://opencorporates.com/companies?q=Canis97</string></dict>
+		<dict><key>category</key><string>federal-mark</string><key>checkedOn</key><string>2026-08-27</string><key>query</key><string>CANIS97 / CANIS 97 / CANIS-97 and CANIS for software, music, radio, streaming, or consumer electronics</string><key>resultSummary</key><string>Official federal-search route recorded. Public filing material also records a stylized CANIS wolf-head application for outdoor goods, not an exact Canis97 software result. Full USPTO/TSDR live/dead and related-goods review remains mandatory before launch or registration.</string><key>sourceURL</key><string>https://tmsearch.uspto.gov/</string></dict>
+		<dict><key>category</key><string>international</string><key>checkedOn</key><string>2026-08-27</string><key>query</key><string>Canis97 / Canis 97 / Canis-97 / CANIS in WIPO Global Brand Database, Madrid Monitor, and TMview</string><key>resultSummary</key><string>International trademark-search routes were recorded. No international clearance conclusion is claimed; a direct live-record and counsel review remain needed before any public use.</string><key>sourceURL</key><string>https://branddb.wipo.int/en/quicksearch</string></dict>
+		<dict><key>category</key><string>icon-design-code</string><key>checkedOn</key><string>2026-08-27</string><key>query</key><string>Design elements: circular disc, offset signal arcs, luminous core, abstract celestial signal</string><key>resultSummary</key><string>The retained text-free Orbital Signal icon remains a separate design-mark review item. It deliberately excludes dog/provider imagery, names, text, controls, and player trade dress; no design clearance is claimed.</string><key>sourceURL</key><string>https://www.uspto.gov/trademarks/search/design-search-codes</string></dict>
 	</array>
 	<key>recordDate</key>
 	<string>2026-08-27</string>
@@ -358,66 +423,84 @@
 	<key>selectedIdentity</key>
 	<dict>
 		<key>appBundleIdentifier</key>
-		<string>com.bitdeck.player</string>
+		<string>com.canis97.player</string>
 		<key>appLogSubsystem</key>
-		<string>com.bitdeck.player</string>
+		<string>com.canis97.player</string>
 		<key>appTypeName</key>
-		<string>BitDeckApp</string>
+		<string>Canis97App</string>
 		<key>applicationSupportDirectoryName</key>
-		<string>Bit Deck</string>
+		<string>Canis97</string>
 		<key>authenticationFrameAutosaveName</key>
-		<string>BitDeck.authentication.frame</string>
+		<string>Canis97.authentication.frame</string>
 		<key>compactFrameAutosaveName</key>
-		<string>BitDeck.compact.frame</string>
+		<string>Canis97.compact.frame</string>
 		<key>compactSceneID</key>
-		<string>bitdeck-compact</string>
+		<string>canis97-compact</string>
 		<key>displayName</key>
-		<string>Bit Deck</string>
+		<string>Canis97</string>
 		<key>environmentPrefix</key>
-		<string>BITDECK</string>
+		<string>CANIS97</string>
 		<key>executableName</key>
-		<string>BitDeck</string>
+		<string>Canis97</string>
 		<key>iconBasename</key>
 		<string>ProductIcon</string>
 		<key>iconConcept</key>
-		<string>Orbital Signal: a text-free layered midnight-blue disc, offset warm signal arcs, and a small luminous core. The geometry evokes a compact music device and spectrum visualizer without copying a provider mark, hardware silhouette, standard control, or another player's trade dress.</string>
+		<string>Orbital Signal: a text-free layered midnight-blue disc, offset warm signal arcs, and a small luminous core. Its abstract celestial signal language supports Canis97's Canis Major reference without dog imagery, provider marks, hardware silhouettes, standard controls, or another player's trade dress.</string>
 		<key>libraryFrameAutosaveName</key>
-		<string>BitDeck.library.frame</string>
+		<string>Canis97.library.frame</string>
 		<key>librarySceneID</key>
-		<string>bitdeck-library</string>
+		<string>canis97-library</string>
 		<key>moduleName</key>
-		<string>BitDeck</string>
+		<string>Canis97</string>
 		<key>nonAffiliationStatement</key>
-		<string>Bit Deck is an independent app and is not affiliated with, endorsed by, or sponsored by Sirius XM Radio LLC.</string>
+		<string>Canis97 is an independent app and is not affiliated with, endorsed by, or sponsored by Sirius XM Radio LLC.</string>
 		<key>schemeFileName</key>
-		<string>BitDeck.xcscheme</string>
+		<string>Canis97.xcscheme</string>
 		<key>schemeName</key>
-		<string>BitDeck</string>
+		<string>Canis97</string>
 		<key>scriptPrefix</key>
-		<string>bitdeck</string>
+		<string>canis97</string>
 		<key>skinPackageExtension</key>
-		<string>bitdeckskin</string>
+		<string>canis97skin</string>
 		<key>skinPackageTypeIdentifier</key>
-		<string>com.bitdeck.skin-package</string>
+		<string>com.canis97.skin-package</string>
 		<key>targetName</key>
-		<string>BitDeck</string>
+		<string>Canis97</string>
 		<key>uiTestBundleIdentifier</key>
-		<string>com.bitdeck.player.uitests</string>
+		<string>com.canis97.player.uitests</string>
 		<key>uiTestTargetName</key>
-		<string>BitDeckUITests</string>
+		<string>Canis97UITests</string>
 		<key>uiValidationSchemeFileName</key>
-		<string>BitDeckUIValidation.xcscheme</string>
+		<string>Canis97UIValidation.xcscheme</string>
 		<key>uiValidationSchemeName</key>
-		<string>BitDeckUIValidation</string>
+		<string>Canis97UIValidation</string>
 		<key>unitTestBundleIdentifier</key>
-		<string>com.bitdeck.player.tests</string>
+		<string>com.canis97.player.tests</string>
 		<key>unitTestTargetName</key>
-		<string>BitDeckTests</string>
+		<string>Canis97Tests</string>
 	</dict>
 	<key>selectedIdentityDisposition</key>
-	<string>withdrawn-after-pixaud-rescreen</string>
+	<string>proposed-pending-human-decision</string>
 	<key>shortlist</key>
 	<array>
+		<dict>
+			<key>mainCollisionConcern</key>
+			<string>Canis is already used by a recording artist and by unrelated dog/outdoor marks. No exact Canis97 software/music-player collision was established in this preliminary public screen, but the dominant root and related entertainment use require attorney review.</string>
+			<key>name</key>
+			<string>Canis97 / CANIS97 / canis97 / Canis 97 / Canis-97</string>
+			<key>pronunciation</key>
+			<string>Recommended: “CAN-iss ninety-seven” for narration; “CAN-iss nine-seven” conversationally. The joined visual wordmark is compact, but the spoken form is six syllables in the full reading and five in the casual reading.</string>
+			<key>rationale</key>
+			<string>Compact visual wordmark with a subtle Sirius reference through Canis Major and a 1997 desktop-audio-era allusion. It is intentionally not a provider name or Winamp reference.</string>
+			<key>screeningOutcome</key>
+			<string>Proposed pending human decision: no exact commercial Canis97 player/app/software result was established in the limited screen. The existing Canis recording artist and unrelated CANIS wolf-head filing are disclosed risks; no legal-clearance or availability conclusion is made.</string>
+			<key>status</key>
+			<string>proposed-pending-human-decision</string>
+			<key>syllables</key>
+			<integer>6</integer>
+			<key>unresolvedSimilarity</key>
+			<string>Attorney review must compare the Canis artist/common-law record, live USPTO and international records, domains, business registries, and the proposed text-free Orbital Signal design before public launch or registration.</string>
+		</dict>
 		<dict>
 			<key>mainCollisionConcern</key>
 			<string>Existing Pixaud entertainment-property/title use, no stable public pronunciation, and an adjacent “Pix Audio” reading alongside established PIX audio/video recorder goods.</string>
@@ -508,15 +591,18 @@
 		</dict>
 	</array>
 	<key>status</key>
-	<string>rescreen-required</string>
+	<string>proposed</string>
 	<key>unresolvedSimilarities</key>
 	<array>
+		<string>Canis97 is a preliminary proposal, not legal clearance or availability. The dominant Canis root has an active recording-artist use and unrelated dog/outdoor marks; attorney review must assess sound, appearance, meaning, commercial impression, and related goods before public launch or registration.</string>
+		<string>The intended Canis Major / Sirius reference must remain abstract and text-independent in the icon. The identity must use no dog imagery, provider marks, or official-affiliation implication; the non-affiliation statement does not license provider marks or authorize service access.</string>
+		<string>“97” is only a historical-era allusion to Winamp's 1997 initial release. It must not copy or imply sponsorship by Winamp, its mascot, interface, skin formats, or trade dress.</string>
 		<string>Pixaud/PixAud is rejected for historical entertainment-property use in a published Torg title, unstable pronunciation, and an adjacent “Pix Audio” reading; the spelling family is not a deployable identity.</string>
 		<string>Cueamp/CueAmp is rejected for an exact historical CONEX CueAmp radio-studio amplifier and category-common “cue amp” professional-audio terminology; the spelling family is not a deployable identity.</string>
 		<string>Bitjuke/BitJuke is rejected for a documented music-product collision and an exact-name technology-company signal; the spelling family is not a deployable identity.</string>
 		<string>No federal or international availability claim is made. Direct live/dead USPTO/TSDR, WIPO/Madrid/TMview, and counsel review remain needed for any future candidate.</string>
 		<string>Domain and formal business-registry scope were not independently resolved; the collision does not depend on them.</string>
-		<string>The retained Bit Deck selectedIdentity exists solely to keep the offline tracer coherent while a replacement is screened. It is withdrawn and must not be approved or deployed.</string>
+		<string>Bit Deck is withdrawn and must not be approved or deployed. The selectedIdentity now records Canis97 solely as a pending human decision, with no downstream Xcode, persistent-namespace, or release-facing cutover authorized.</string>
 		<string>The text-free Orbital Signal icon requires separate design-mark comparison before public use.</string>
 	</array>
 </dict>
