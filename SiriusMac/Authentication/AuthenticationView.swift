@@ -195,6 +195,16 @@ private struct WebViewAuthenticationContainer: View {
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 4)
 
+            Text("\(ProductIdentity.displayName) connects to your SiriusXM subscriber account.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 4)
+
+            Text(ProductIdentity.nonAffiliationStatement)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 4)
+
             WebAuthenticationView(bridge: bridge)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .clipShape(.rect(cornerRadius: AuthenticationLayout.webViewCornerRadius))

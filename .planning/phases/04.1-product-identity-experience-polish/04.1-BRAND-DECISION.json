@@ -1,0 +1,393 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>approval</key>
+	<dict>
+		<key>state</key>
+		<string>pending-human-decision</string>
+	</dict>
+	<key>attorneyReviewRequired</key>
+	<true/>
+	<key>candidateBrief</key>
+	<dict>
+		<key>excludedTermsAndImagery</key>
+		<array>
+			<string>Sirius</string>
+			<string>XM</string>
+			<string>SiriusXM</string>
+			<string>official-affiliation wording</string>
+			<string>provider logos or dog imagery</string>
+			<string>channel artwork</string>
+			<string>Apple hardware</string>
+			<string>standard-control facsimiles</string>
+			<string>other players' trade dress</string>
+		</array>
+		<key>goods</key>
+		<string>Native macOS music and radio player for subscribers</string>
+		<key>style</key>
+		<string>Original 2000s desktop music-player nostalgia without provider affiliation</string>
+	</dict>
+	<key>decisionScope</key>
+	<string>Product identity proposal only; this record does not authorize SiriusXM service access, use of provider marks, or a public launch.</string>
+	<key>legalClearanceClaim</key>
+	<false/>
+	<key>queryEvidence</key>
+	<array>
+		<dict>
+			<key>category</key>
+			<string>exact</string>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>query</key>
+			<string>Modulune</string>
+			<key>resultSummary</key>
+			<string>Recorded as a federal-mark query; public web indexing returned no exact music-player result, but TMSearch result review is still unresolved.</string>
+			<key>sourceURL</key>
+			<string>https://tmsearch.uspto.gov/</string>
+		</dict>
+		<dict>
+			<key>category</key>
+			<string>spaced</string>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>query</key>
+			<string>Modu Lune</string>
+			<key>resultSummary</key>
+			<string>Variant recorded for federal review; unresolved pending direct result review.</string>
+			<key>sourceURL</key>
+			<string>https://tmsearch.uspto.gov/</string>
+		</dict>
+		<dict>
+			<key>category</key>
+			<string>hyphenated</string>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>query</key>
+			<string>Modu-Lune</string>
+			<key>resultSummary</key>
+			<string>Variant recorded for federal review; unresolved pending direct result review.</string>
+			<key>sourceURL</key>
+			<string>https://tmsearch.uspto.gov/</string>
+		</dict>
+		<dict>
+			<key>category</key>
+			<string>plural</string>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>query</key>
+			<string>Modulunes</string>
+			<key>resultSummary</key>
+			<string>Variant recorded for federal review; unresolved pending direct result review.</string>
+			<key>sourceURL</key>
+			<string>https://tmsearch.uspto.gov/</string>
+		</dict>
+		<dict>
+			<key>category</key>
+			<string>phonetic</string>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>query</key>
+			<string>mod you loon</string>
+			<key>resultSummary</key>
+			<string>Sound-alike query recorded because similarity can turn on pronunciation; unresolved pending counsel review.</string>
+			<key>sourceURL</key>
+			<string>https://tmsearch.uspto.gov/</string>
+		</dict>
+		<dict>
+			<key>category</key>
+			<string>misspelling</string>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>query</key>
+			<string>Moduloon OR Modulun OR ModuLune</string>
+			<key>resultSummary</key>
+			<string>Likely misspellings recorded; unresolved pending direct TMSearch review.</string>
+			<key>sourceURL</key>
+			<string>https://tmsearch.uspto.gov/</string>
+		</dict>
+		<dict>
+			<key>category</key>
+			<string>related-goods</string>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>query</key>
+			<string>Modulune software music radio streaming player</string>
+			<key>resultSummary</key>
+			<string>Related-goods scope recorded for software, music, radio, and streaming; no registration conclusion is claimed.</string>
+			<key>sourceURL</key>
+			<string>https://www.uspto.gov/trademarks/search/federal-trademark-searching</string>
+		</dict>
+		<dict>
+			<key>category</key>
+			<string>common-law</string>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>query</key>
+			<string>"Modulune" music player OR radio app</string>
+			<key>resultSummary</key>
+			<string>Public web search returned no exact indexed product hit in the captured screening pass; common-law use can be unindexed and remains unresolved.</string>
+			<key>sourceURL</key>
+			<string>https://www.google.com/search?q=%22Modulune%22+music+player+OR+radio+app</string>
+		</dict>
+		<dict>
+			<key>category</key>
+			<string>app-listing</string>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>query</key>
+			<string>"Modulune" macOS app</string>
+			<key>resultSummary</key>
+			<string>Public web search returned no exact indexed macOS-app hit in the captured pass; store/listing review remains unresolved.</string>
+			<key>sourceURL</key>
+			<string>https://www.google.com/search?q=%22Modulune%22+macOS+app</string>
+		</dict>
+		<dict>
+			<key>category</key>
+			<string>repository</string>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>query</key>
+			<string>"Modulune" GitHub</string>
+			<key>resultSummary</key>
+			<string>Repository search query recorded; no exact indexed repository conflict was surfaced in the captured pass, but manual review remains required.</string>
+			<key>sourceURL</key>
+			<string>https://github.com/search?q=Modulune&amp;type=repositories</string>
+		</dict>
+		<dict>
+			<key>category</key>
+			<string>domain</string>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>query</key>
+			<string>modulune.com WHOIS and registrar availability</string>
+			<key>resultSummary</key>
+			<string>ICANN lookup route recorded; registration, ownership, and jurisdictional implications are unresolved and must not be inferred from name screening.</string>
+			<key>sourceURL</key>
+			<string>https://lookup.icann.org/en/lookup</string>
+		</dict>
+		<dict>
+			<key>category</key>
+			<string>business-registry</string>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>query</key>
+			<string>Modulune business registry</string>
+			<key>resultSummary</key>
+			<string>Public discovery query recorded; state and local registry review remains unresolved.</string>
+			<key>sourceURL</key>
+			<string>https://www.google.com/search?q=%22Modulune%22+business+registry</string>
+		</dict>
+		<dict>
+			<key>category</key>
+			<string>federal-mark</string>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>query</key>
+			<string>Modulune AND (software OR music OR radio OR streaming)</string>
+			<key>resultSummary</key>
+			<string>Federal related-goods query recorded; live/pending/dead status and related-goods analysis remain attorney-review work.</string>
+			<key>sourceURL</key>
+			<string>https://tmsearch.uspto.gov/</string>
+		</dict>
+		<dict>
+			<key>category</key>
+			<string>international</string>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>query</key>
+			<string>Modulune Global Brand Database / Madrid Monitor / TMview</string>
+			<key>resultSummary</key>
+			<string>International-search route recorded; no international clearance conclusion is claimed.</string>
+			<key>sourceURL</key>
+			<string>https://branddb.wipo.int/</string>
+		</dict>
+		<dict>
+			<key>category</key>
+			<string>icon-design-code</string>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>query</key>
+			<string>Design elements: circular disc, concentric arcs, radiating signal, abstract musical device</string>
+			<key>resultSummary</key>
+			<string>Design-code lookup route recorded for the Orbital Signal composition; counsel must compare actual design marks and commercial impression.</string>
+			<key>sourceURL</key>
+			<string>https://www.uspto.gov/trademarks/search/design-search-codes</string>
+		</dict>
+	</array>
+	<key>recordDate</key>
+	<string>2026-08-27</string>
+	<key>schemaVersion</key>
+	<integer>1</integer>
+	<key>screeningSources</key>
+	<array>
+		<dict>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>resultSummary</key>
+			<string>Defined the required federal, common-law, domain, business-registry, and international scope; it also states that attorney interpretation may be appropriate.</string>
+			<key>source</key>
+			<string>USPTO comprehensive clearance guidance</string>
+			<key>url</key>
+			<string>https://www.uspto.gov/trademarks/search/comprehensive-clearance-search-similar-trademarks</string>
+		</dict>
+		<dict>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>resultSummary</key>
+			<string>Used to assess similar sound, appearance, meaning, commercial impression, and related goods/services; it supplies no availability conclusion.</string>
+			<key>source</key>
+			<string>USPTO likelihood-of-confusion guidance</string>
+			<key>url</key>
+			<string>https://www.uspto.gov/trademarks/search/likelihood-confusion</string>
+		</dict>
+		<dict>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>resultSummary</key>
+			<string>Public search entry point recorded for federal-mark queries. Full result review and live/dead status assessment remain attorney-review work.</string>
+			<key>source</key>
+			<string>USPTO Trademark Search system</string>
+			<key>url</key>
+			<string>https://tmsearch.uspto.gov/</string>
+		</dict>
+		<dict>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>resultSummary</key>
+			<string>Used to frame the Orbital Signal design-element query; no reverse-image or design-mark clearance conclusion is claimed.</string>
+			<key>source</key>
+			<string>USPTO design search codes guidance</string>
+			<key>url</key>
+			<string>https://www.uspto.gov/trademarks/search/design-search-codes</string>
+		</dict>
+		<dict>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>resultSummary</key>
+			<string>Confirms one layered Icon Composer file and 1024×1024 artwork guidance; it is not a trademark source.</string>
+			<key>source</key>
+			<string>Apple Icon Composer documentation</string>
+			<key>url</key>
+			<string>https://developer.apple.com/documentation/xcode/creating-your-app-icon-using-icon-composer</string>
+		</dict>
+		<dict>
+			<key>checkedOn</key>
+			<string>2026-08-27</string>
+			<key>resultSummary</key>
+			<string>Supports the deliberate exclusion of provider marks and the statement that no service or mark authorization follows from this work.</string>
+			<key>source</key>
+			<string>SiriusXM Web Terms of Use</string>
+			<key>url</key>
+			<string>https://www.siriusxm.com/sxm-web-terms-of-use</string>
+		</dict>
+	</array>
+	<key>screeningStatement</key>
+	<string>Independent screening completed for a preliminary product decision only — not legal clearance. A qualified U.S.-licensed trademark attorney must review the selected mark before public launch or registration.</string>
+	<key>selectedIdentity</key>
+	<dict>
+		<key>appBundleIdentifier</key>
+		<string>com.modulune.player</string>
+		<key>appLogSubsystem</key>
+		<string>com.modulune.player</string>
+		<key>appTypeName</key>
+		<string>ModuluneApp</string>
+		<key>applicationSupportDirectoryName</key>
+		<string>Modulune</string>
+		<key>authenticationFrameAutosaveName</key>
+		<string>Modulune.authentication.frame</string>
+		<key>compactFrameAutosaveName</key>
+		<string>Modulune.compact.frame</string>
+		<key>compactSceneID</key>
+		<string>modulune-compact</string>
+		<key>displayName</key>
+		<string>Modulune</string>
+		<key>environmentPrefix</key>
+		<string>MODULUNE</string>
+		<key>executableName</key>
+		<string>Modulune</string>
+		<key>iconBasename</key>
+		<string>ProductIcon</string>
+		<key>iconConcept</key>
+		<string>Orbital Signal: a text-free layered midnight-blue disc, offset warm signal arcs, and a small luminous core. The geometry evokes a compact music device and visualizer without copying a provider mark, hardware silhouette, standard control, or another player's trade dress.</string>
+		<key>libraryFrameAutosaveName</key>
+		<string>Modulune.library.frame</string>
+		<key>librarySceneID</key>
+		<string>modulune-library</string>
+		<key>moduleName</key>
+		<string>Modulune</string>
+		<key>nonAffiliationStatement</key>
+		<string>Modulune is an independent app and is not affiliated with, endorsed by, or sponsored by Sirius XM Radio LLC.</string>
+		<key>schemeFileName</key>
+		<string>Modulune.xcscheme</string>
+		<key>schemeName</key>
+		<string>Modulune</string>
+		<key>scriptPrefix</key>
+		<string>modulune</string>
+		<key>skinPackageExtension</key>
+		<string>moduluneskin</string>
+		<key>skinPackageTypeIdentifier</key>
+		<string>com.modulune.skin-package</string>
+		<key>targetName</key>
+		<string>Modulune</string>
+		<key>uiTestBundleIdentifier</key>
+		<string>com.modulune.player.uitests</string>
+		<key>uiTestTargetName</key>
+		<string>ModuluneUITests</string>
+		<key>uiValidationSchemeFileName</key>
+		<string>ModuluneUIValidation.xcscheme</string>
+		<key>uiValidationSchemeName</key>
+		<string>ModuluneUIValidation</string>
+		<key>unitTestBundleIdentifier</key>
+		<string>com.modulune.player.tests</string>
+		<key>unitTestTargetName</key>
+		<string>ModuluneTests</string>
+	</dict>
+	<key>shortlist</key>
+	<array>
+		<dict>
+			<key>name</key>
+			<string>Modulune</string>
+			<key>rationale</key>
+			<string>An invented, pronounceable name that suggests modular late-night listening without naming the provider or borrowing a known player vocabulary.</string>
+			<key>status</key>
+			<string>preferred-proposed</string>
+			<key>unresolvedSimilarity</key>
+			<string>The components 'module' and 'lune' are individually used by other products; counsel must evaluate sound, appearance, meaning, and related-goods risk.</string>
+		</dict>
+		<dict>
+			<key>name</key>
+			<string>Cadence Relay</string>
+			<key>rationale</key>
+			<string>Rejected because Cadence is a crowded music and software term, creating avoidable related-goods ambiguity.</string>
+			<key>status</key>
+			<string>rejected</string>
+		</dict>
+		<dict>
+			<key>name</key>
+			<string>Neon Cassette</string>
+			<key>rationale</key>
+			<string>Rejected because it is descriptive of a retro aesthetic and risks leaning on established cassette-player trade dress.</string>
+			<key>status</key>
+			<string>rejected</string>
+		</dict>
+		<dict>
+			<key>name</key>
+			<string>Vector Dial</string>
+			<key>rationale</key>
+			<string>Rejected because both words are common in consumer electronics and the compound is insufficiently distinctive for this category.</string>
+			<key>status</key>
+			<string>rejected</string>
+		</dict>
+	</array>
+	<key>status</key>
+	<string>proposed</string>
+	<key>unresolvedSimilarities</key>
+	<array>
+		<string>Modulune has not received a comprehensive federal, state, common-law, international, or design-mark clearance search.</string>
+		<string>The component words and similar pronunciations may collide with marks in software, music, radio, or adjacent consumer-electronics goods.</string>
+		<string>Domain registration status, business names, app listings, repository names, and unindexed common-law use require direct review.</string>
+		<string>The Orbital Signal composition needs design-mark review for circular signal, radio-wave, and visualizer motifs before public use.</string>
+	</array>
+</dict>
+</plist>

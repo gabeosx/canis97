@@ -1,0 +1,16 @@
+{
+  "fill": {
+    "linear-gradient": ["display-p3:0.03137,0.04706,0.14902,1.00000", "display-p3:0.09020,0.03529,0.21176,1.00000"],
+    "orientation": {"start": {"x": 0.0, "y": 0.0}, "stop": {"x": 1.0, "y": 1.0}}
+  },
+  "fill-specializations": [
+    {"appearance": "dark", "value": {"linear-gradient": ["display-p3:0.01176,0.01961,0.06275,1.00000", "display-p3:0.03529,0.01569,0.08627,1.00000"], "orientation": {"start": {"x": 0.0, "y": 0.0}, "stop": {"x": 1.0, "y": 1.0}}}},
+    {"appearance": "tinted", "value": "automatic"}
+  ],
+  "groups": [
+    {"name": "01 Orbital Shadow", "glass": false, "layers": [{"image-name": "01-OrbitalShadow.svg", "name": "Orbital shadow"}]},
+    {"name": "02 Signal Arcs", "lighting": "combined", "specular": true, "translucency": {"enabled": true, "value": 0.32}, "layers": [{"image-name": "02-SignalArcs.svg", "name": "Signal arcs"}]},
+    {"name": "03 Luminous Core", "lighting": "individual", "specular": true, "layers": [{"image-name": "03-LuminousCore.svg", "name": "Luminous core"}]}
+  ],
+  "supported-platforms": {"squares": ["macOS"]}
+}
