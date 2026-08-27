@@ -69,13 +69,13 @@ struct AuthenticationBridgeTelemetry {
     static let disabled = AuthenticationBridgeTelemetry()
     static let live: AuthenticationBridgeTelemetry = {
         let logger = Logger(
-            subsystem: Bundle.main.bundleIdentifier ?? "com.siriusmac.player",
+            subsystem: ProductIdentity.appLogSubsystem,
             category: "authentication"
         )
         return AuthenticationBridgeTelemetry(record: { event in
-                logger.info("Sirius Mac auth bridge event \(event.rawValue, privacy: .public)")
+                logger.info("\(ProductIdentity.displayName) auth bridge event \(event.rawValue, privacy: .public)")
         }, recordFailure: { event, domain, code in
-            logger.error("Sirius Mac auth bridge event \(event.rawValue, privacy: .public) error-domain=\(domain, privacy: .public) error-code=\(code, privacy: .public)")
+            logger.error("\(ProductIdentity.displayName) auth bridge event \(event.rawValue, privacy: .public) error-domain=\(domain, privacy: .public) error-code=\(code, privacy: .public)")
         })
     }()
 

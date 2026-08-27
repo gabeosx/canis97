@@ -14,14 +14,14 @@ struct RestorableAuthenticationCredentialTelemetry {
 
     static let live: RestorableAuthenticationCredentialTelemetry = {
         let logger = Logger(
-            subsystem: Bundle.main.bundleIdentifier ?? "com.siriusmac.player",
+            subsystem: ProductIdentity.appLogSubsystem,
             category: "authentication-lifecycle"
         )
         return RestorableAuthenticationCredentialTelemetry { terminal in
             // Authentication lifecycle events are intentionally restricted to the
             // closed terminal vocabulary. Never include credentials, cookies,
             // provider responses, or Keychain status values here.
-            logger.notice("Authentication lifecycle: \(terminal.rawValue, privacy: .public)")
+            logger.notice("\(ProductIdentity.displayName) authentication lifecycle: \(terminal.rawValue, privacy: .public)")
         }
     }()
 

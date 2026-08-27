@@ -11,13 +11,13 @@ struct Canis97App: App {
     private let skinImportCoordinator: SkinImportCoordinator
     private let terminationObserver: ApplicationTerminationObserver?
 #if DEBUG
-    private let uiTestHarness: UITestHarness?
+    private let offlineReviewHarness: OfflineReviewHarness?
 #endif
 
     init() {
         let environment = ProcessInfo.processInfo.environment
-        let allowsDurableAppearance = !Canis97LaunchMode.isUnitTestHost(environment: environment)
-            && !Canis97LaunchMode.isUITestRequested(environment: environment)
+        let allowsDurableAppearance = !OfflineReviewLaunchMode.isUnitTestHost(environment: environment)
+            && !OfflineReviewLaunchMode.isOfflineReviewRequested(environment: environment)
         let managedStore = ManagedSkinStore()
         let importer = SkinPackageImporter(store: managedStore)
         let appearanceController = SkinAppearanceController(
@@ -36,13 +36,13 @@ struct Canis97App: App {
             Task { await appearanceController.restorePersistedSelection() }
         }
 #if DEBUG
-        if let uiTestHarness = UITestHarness.makeIfRequested() {
-            self.uiTestHarness = uiTestHarness
+        if let offlineReviewHarness = OfflineReviewHarness.makeIfRequested() {
+            self.offlineReviewHarness = offlineReviewHarness
             sessionController = nil
             terminationObserver = nil
             return
         }
-        uiTestHarness = nil
+        offlineReviewHarness = nil
 #endif
         sessionController = Self.makeSessionController()
         sessionController?.startSystemMediaControls()
@@ -55,8 +55,8 @@ struct Canis97App: App {
     static func makeSessionController(
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> ListeningSessionController? {
-        guard !Canis97LaunchMode.isUnitTestHost(environment: environment),
-              !Canis97LaunchMode.isUITestRequested(environment: environment)
+        guard !OfflineReviewLaunchMode.isUnitTestHost(environment: environment),
+              !OfflineReviewLaunchMode.isOfflineReviewRequested(environment: environment)
         else { return nil }
         return ListeningSessionController()
     }
@@ -101,8 +101,8 @@ struct Canis97App: App {
     @ViewBuilder
     private var compactSceneContent: some View {
 #if DEBUG
-        if let uiTestHarness {
-            UITestCompactRoot(harness: uiTestHarness)
+        if let offlineReviewHarness {
+            OfflineReviewCompactRoot(harness: offlineReviewHarness)
         } else if let sessionController {
             CompactAuthenticationRoot(
                 controller: sessionController,
@@ -130,8 +130,8 @@ struct Canis97App: App {
     @ViewBuilder
     private var librarySceneContent: some View {
 #if DEBUG
-        if let uiTestHarness {
-            UITestLibraryRoot(harness: uiTestHarness)
+        if let offlineReviewHarness {
+            OfflineReviewLibraryRoot(harness: offlineReviewHarness)
         } else if let sessionController {
             LibraryRoot(controller: sessionController)
         } else {
@@ -390,11 +390,14 @@ private enum ProductSceneID {
 /// The unit-test bundle uses the app executable as its host. Keep that host
 /// intentionally inert so running tests cannot read, authenticate with, or
 /// erase the production Keychain session.
-enum Canis97LaunchMode {
-    static func isUITestRequested(
+enum OfflineReviewLaunchMode {
+    static let reviewModeEnvironmentKey = "\(ProductIdentity.environmentPrefix)_OFFLINE_REVIEW_MODE"
+    static let reviewSurfaceEnvironmentKey = "\(ProductIdentity.environmentPrefix)_OFFLINE_REVIEW_SURFACE"
+
+    static func isOfflineReviewRequested(
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> Bool {
-        environment["SIRIUS_MAC_UI_TEST_MODE"] == "1"
+        environment[reviewModeEnvironmentKey] == "1"
     }
 
     static func isUnitTestHost(
@@ -403,11 +406,11 @@ enum Canis97LaunchMode {
         environment["XCTestConfigurationFilePath"] != nil
     }
 
-    static func isUITestMode(
+    static func isOfflineReviewMode(
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> Bool {
 #if DEBUG
-        isUITestRequested(environment: environment)
+        isOfflineReviewRequested(environment: environment)
 #else
         false
 #endif

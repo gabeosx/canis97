@@ -68,11 +68,11 @@ struct PlaybackResolutionTelemetry: Sendable {
 
     static let live: PlaybackResolutionTelemetry = {
         let logger = Logger(
-            subsystem: Bundle.main.bundleIdentifier ?? "com.siriusmac.player",
+            subsystem: ProductIdentity.appLogSubsystem,
             category: "playback"
         )
         return PlaybackResolutionTelemetry { label in
-            logger.info("Sirius Mac playback resolution \(label, privacy: .public)")
+            logger.info("\(ProductIdentity.displayName) playback resolution \(label, privacy: .public)")
         }
     }()
 
@@ -166,7 +166,7 @@ protocol WorkspacePowerObserving: AnyObject, Sendable {
 @MainActor
 final class SystemNetworkPathObserver: NetworkPathObserving {
     private let monitor = NWPathMonitor()
-    private let queue = DispatchQueue(label: "com.siriusmac.playback.recovery-path")
+    private let queue = DispatchQueue(label: "\(ProductIdentity.appLogSubsystem).playback.recovery-path")
     private var started = false
 
     func start(_ onAvailabilityChange: @escaping @MainActor @Sendable (Bool) -> Void) {
@@ -328,11 +328,11 @@ struct PlaybackRuntimeTelemetry: Sendable {
 
     static let live: PlaybackRuntimeTelemetry = {
         let logger = Logger(
-            subsystem: Bundle.main.bundleIdentifier ?? "com.siriusmac.player",
+            subsystem: ProductIdentity.appLogSubsystem,
             category: "playback"
         )
         return PlaybackRuntimeTelemetry { label in
-            logger.info("Sirius Mac playback runtime \(label, privacy: .public)")
+            logger.info("\(ProductIdentity.displayName) playback runtime \(label, privacy: .public)")
         }
     }()
 

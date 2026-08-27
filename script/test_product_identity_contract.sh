@@ -19,6 +19,10 @@ readonly LISTENING_VIEW="$ROOT/SiriusMac/Catalog/ListeningView.swift"
 readonly SKIN_MANAGEMENT_VIEW="$ROOT/SiriusMac/Skins/SkinManagementView.swift"
 readonly SKIN_IMPORTER="$ROOT/SiriusMac/Skins/SkinPackageImporter.swift"
 readonly ACCESSIBILITY_TESTS="$ROOT/SiriusMacTests/AccessibilityContractTests.swift"
+readonly WEB_AUTH_BRIDGE="$ROOT/SiriusMac/Authentication/WebAuthenticationBridge.swift"
+readonly RESTORABLE_CREDENTIAL_SOURCE="$ROOT/SiriusMac/Authentication/RestorableAuthenticationCredentialSource.swift"
+readonly PLAYBACK_COORDINATOR="$ROOT/SiriusMac/Listening/PlaybackCoordinator.swift"
+readonly OFFLINE_REVIEW_HARNESS="$ROOT/SiriusMac/Testing/UITestHarness.swift"
 readonly ICON="$ROOT/SiriusMac/Assets/ProductIcon.icon"
 
 fail() { printf 'product-identity contract: %s\n' "$*" >&2; exit 1; }
@@ -120,6 +124,19 @@ check_presentation() {
   rg -Fq 'ProductIdentity.skinPackageExtension' "$SKIN_IMPORTER" || fail 'skin importer must accept the approved extension'
   rg -Fq 'ProductIdentity.Legacy.skinPackageExtension' "$SKIN_IMPORTER" || fail 'skin importer must retain the legacy extension'
   rg -Fq 'testProductOwnedPresentationKeepsAccessibilityAndRecoveryAppOwned' "$ACCESSIBILITY_TESTS" || fail 'structural accessibility coverage is required'
+  require_file "$WEB_AUTH_BRIDGE"; require_file "$RESTORABLE_CREDENTIAL_SOURCE"; require_file "$PLAYBACK_COORDINATOR"; require_file "$OFFLINE_REVIEW_HARNESS"
+  for source in "$WEB_AUTH_BRIDGE" "$RESTORABLE_CREDENTIAL_SOURCE" "$PLAYBACK_COORDINATOR"; do
+    rg -Fq 'ProductIdentity.appLogSubsystem' "$source" || fail 'app telemetry must use the product log subsystem'
+    rg -Fq 'ProductIdentity.displayName' "$source" || fail 'app telemetry must use the product display identity'
+  done
+  rg -Fq 'enum OfflineReviewLaunchMode' "$APP" || fail 'offline review launch mode must be product-neutral'
+  rg -Fq 'ProductIdentity.environmentPrefix' "$APP" || fail 'offline review environment keys must use the approved prefix'
+  rg -Fq 'enum OfflineReviewSurface' "$OFFLINE_REVIEW_HARNESS" || fail 'offline review surface selector is required'
+  rg -Fq 'ClosedAuthenticationTerminal.allCases' "$OFFLINE_REVIEW_HARNESS" || fail 'offline review must cover all authentication outcomes'
+  for surface in compactEmpty compactPopulated compactPending compactError libraryCollections libraryEmpty libraryError appearanceManagement nativeAppearance signalGlowAppearance tapeDeckAppearance; do
+    rg -Fq "case $surface" "$OFFLINE_REVIEW_HARNESS" || fail "offline review surface missing: $surface"
+  done
+  ! rg -Fq 'SIRIUS_MAC_UI_TEST_MODE' "$APP" "$OFFLINE_REVIEW_HARNESS" || fail 'legacy offline-review environment key remains'
   ! rg -Fq 'struct SiriusMacApp: App' "$APP" || fail 'legacy app entry-point type remains'
   printf 'product-identity presentation contract: PASS\n'
 }

@@ -6,18 +6,18 @@ import SiriusXMClient
 final class AuthenticationPresentationModelTests: XCTestCase {
     func testLaunchModeIdentifiesOnlyTheXCTestHostEnvironment() {
         XCTAssertTrue(
-            SiriusMacLaunchMode.isUnitTestHost(
+            OfflineReviewLaunchMode.isUnitTestHost(
                 environment: ["XCTestConfigurationFilePath": "/private/tmp/config.xctest"]
             )
         )
-        XCTAssertFalse(SiriusMacLaunchMode.isUnitTestHost(environment: [:]))
+        XCTAssertFalse(OfflineReviewLaunchMode.isUnitTestHost(environment: [:]))
     }
 
     func testUITestRequestFailsClosedOutsideTheDebugHarness() {
-        let environment = ["SIRIUS_MAC_UI_TEST_MODE": "1"]
+        let environment = ["CANIS97_OFFLINE_REVIEW_MODE": "1"]
 
-        XCTAssertTrue(SiriusMacLaunchMode.isUITestRequested(environment: environment))
-        XCTAssertNil(SiriusMacApp.makeSessionController(environment: environment))
+        XCTAssertTrue(OfflineReviewLaunchMode.isOfflineReviewRequested(environment: environment))
+        XCTAssertNil(Canis97App.makeSessionController(environment: environment))
     }
 
     func testSemanticStatesHaveDistinctFixedPresentationCopy() {
