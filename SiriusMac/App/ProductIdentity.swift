@@ -40,10 +40,25 @@ enum ProductIdentity {
         static let library = ProductIdentity.libraryFrameAutosaveName
     }
 
+    /// App-owned, non-secret storage names. These values deliberately exclude
+    /// Keychain, session, cookie, provider, and network identities.
+    enum NonSecretStorage {
+        static let libraryStoreFileName = "Library.store"
+        static let appearanceSelectionFileName = "appearance-selection.json"
+        static let managedSkinsDirectoryName = "Skins"
+        static let migrationMarkerDirectoryName = "Migrations"
+        static let libraryMigrationMarkerName = "library-v1"
+        static let appearanceSelectionMigrationMarkerName = "appearance-selection-v1"
+        static let managedSkinsMigrationMarkerName = "managed-skins-v1"
+    }
+
     /// Read-only compatibility names for app-owned, non-secret state.
     /// This namespace intentionally exposes no Keychain migration operation.
     enum Legacy {
         static let applicationSupportDirectoryName = "Sirius Mac"
+        static let libraryStoreFileName = "Library.store"
+        static let appearanceSelectionFileName = "appearance-selection.json"
+        static let managedSkinsDirectoryName = "Skins"
         static let skinPackageTypeIdentifier = "com.siriusmac.skin-package"
         static let skinPackageExtension = "siriusskin"
         static let appLogSubsystem = "com.siriusmac.player"
