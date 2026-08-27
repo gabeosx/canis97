@@ -1,10 +1,14 @@
 import Foundation
 import OSLog
 import WebKit
-import SiriusXMClient
+@_spi(AppIntegration) import SiriusXMClient
 
 enum AuthenticationBridgeDiagnostic: String, CaseIterable, Equatable {
     case webSignInStarted = "web-sign-in-started"
+    case cookieStoreChangeObserved = "cookie-store-change-observed"
+    case webPageStateChangeObserved = "web-page-state-change-observed"
+    case automaticCredentialInspectionStarted = "automatic-credential-inspection-started"
+    case automaticCredentialReady = "automatic-credential-ready"
     case credentialSelectionStarted = "credential-selection-started"
     case authCookieNameAbsent = "auth-cookie-name-absent"
     case authCookieIssuerRejected = "auth-cookie-issuer-rejected"
@@ -13,9 +17,32 @@ enum AuthenticationBridgeDiagnostic: String, CaseIterable, Equatable {
     case authCookieMissing = "auth-cookie-missing"
     case ambiguousCredentials = "ambiguous-credentials"
     case malformedCredential = "malformed-credential"
+    case authenticationCookieTooLarge = "authentication-cookie-too-large"
+    case authenticationCookieUnreadable = "authentication-cookie-unreadable"
+    case sessionObjectMissing = "session-object-missing"
+    case sessionObjectInvalid = "session-object-invalid"
+    case accessTokenMissing = "access-token-missing"
+    case accessTokenInvalid = "access-token-invalid"
+    case accessTokenExpiryMissing = "access-token-expiry-missing"
+    case accessTokenExpiryInvalid = "access-token-expiry-invalid"
+    case refreshTokenMissing = "refresh-token-missing"
+    case refreshTokenInvalid = "refresh-token-invalid"
+    case refreshTokenExpiryMissing = "refresh-token-expiry-missing"
+    case refreshTokenExpiryInvalid = "refresh-token-expiry-invalid"
+    case sessionTypeRejected = "session-type-rejected"
+    case credentialEnvelopeEncodingFailed = "credential-envelope-encoding-failed"
+    case credentialEnvelopeTooLarge = "credential-envelope-too-large"
+    case deviceGrantAbsent = "device-grant-absent"
+    case deviceGrantAccepted = "device-grant-accepted"
+    case deviceGrantDiscardedUnrecognized = "device-grant-discarded-unrecognized"
+    case renewalViaRefreshToken = "renewal-via-refresh-token"
+    case renewalViaDeviceGrant = "renewal-via-device-grant"
     case selectionCancelled = "selection-cancelled"
     case credentialAlreadyConsumed = "credential-already-consumed"
     case credentialTransferred = "credential-transferred"
+    case browserSessionRefreshStarted = "browser-session-refresh-started"
+    case browserSessionRefreshCompleted = "browser-session-refresh-completed"
+    case browserSessionRefreshFailed = "browser-session-refresh-failed"
     case websiteSessionResetFailed = "web-session-reset-failed"
     case webNavigationStarted = "web-navigation-started"
     case webNavigationRequested = "web-navigation-requested"
@@ -69,6 +96,13 @@ protocol WebAuthenticationCookieStore: AnyObject {
     func delete(_ cookie: HTTPCookie) async throws
 }
 
+/// Optional capability implemented by the live WebKit adapter and test stores
+/// that can announce state changes without exposing any cookie material.
+@MainActor
+protocol WebAuthenticationCookieChangeObserving: AnyObject {
+    func setChangeHandler(_ handler: (@MainActor @Sendable () -> Void)?)
+}
+
 @MainActor
 final class WebAuthenticationBridge {
     enum Result: Equatable {
@@ -91,21 +125,30 @@ final class WebAuthenticationBridge {
     private let websiteSession: WebAuthenticationWebsiteSession
     private let websiteSessionRetirer: @MainActor @Sendable () async -> Bool
     private let signInRequestLoader: @MainActor (URLRequest) -> Void
+    private let browserSessionRefresher: @MainActor @Sendable (BrowserAuthenticationSessionSnapshot) async -> AuthenticationCredential?
     private let telemetry: AuthenticationBridgeTelemetry
     private let usesLiveCookieStore: Bool
     private var selectionState: CredentialSelectionState = .available
     private var selectionGeneration = 0
     private var pendingSignInRequest: URLRequest?
+    private var automaticCredentialReadyHandler: (@MainActor @Sendable () -> Void)?
+    private var isAutomaticCaptureEnabled = false
+    private var isAutomaticInspectionInFlight = false
+    private var needsAnotherAutomaticInspection = false
+    private var didNotifyAutomaticCredentialReady = false
+    private var emittedAutomaticDiagnostics = Set<AuthenticationBridgeDiagnostic>()
 
     init() {
         let handoff = VolatileWebCredentialHandoff()
         let websiteSession = WebAuthenticationWebsiteSession()
+        let renewalDriver = WebAuthenticationRenewalDriver()
         self.websiteSession = websiteSession
         cookieStore = WebKitAuthenticationCookieStore(cookieStore: websiteSession.configuration.websiteDataStore.httpCookieStore)
         now = Date.init
         self.handoff = handoff
         websiteSessionRetirer = { await websiteSession.removeAllWebsiteData() }
         signInRequestLoader = { request in websiteSession.makeWebView().load(request) }
+        browserSessionRefresher = { snapshot in await renewalDriver.refresh(snapshot) }
         usesLiveCookieStore = true
         telemetry = .live
         handoffDisposer = { await handoff.discard() }
@@ -113,6 +156,12 @@ final class WebAuthenticationBridge {
             await handoff.store(credential)
         }
         websiteSession.installNavigationObserver(WebAuthenticationNavigationObserver(telemetry: telemetry))
+        websiteSession.installPageStateObserver(
+            WebAuthenticationPageStateObserver { [weak self] in
+                self?.webPageStateDidChange()
+            }
+        )
+        installCookieChangeObservation()
     }
 
     init(
@@ -122,7 +171,8 @@ final class WebAuthenticationBridge {
         handoffDisposer: @escaping @MainActor @Sendable () async -> Void = {},
         websiteSessionRetirer: @escaping @MainActor @Sendable () async -> Bool = { true },
         telemetry: AuthenticationBridgeTelemetry = .disabled,
-        signInRequestLoader: @escaping @MainActor (URLRequest) -> Void = { _ in }
+        signInRequestLoader: @escaping @MainActor (URLRequest) -> Void = { _ in },
+        browserSessionRefresher: @escaping @MainActor @Sendable (BrowserAuthenticationSessionSnapshot) async -> AuthenticationCredential? = { _ in nil }
     ) {
         let handoff = VolatileWebCredentialHandoff()
         websiteSession = WebAuthenticationWebsiteSession()
@@ -131,6 +181,7 @@ final class WebAuthenticationBridge {
         self.handoff = handoff
         self.websiteSessionRetirer = websiteSessionRetirer
         self.signInRequestLoader = signInRequestLoader
+        self.browserSessionRefresher = browserSessionRefresher
         self.telemetry = telemetry
         usesLiveCookieStore = false
         self.handoffDisposer = {
@@ -142,6 +193,12 @@ final class WebAuthenticationBridge {
             await credentialConsumer(credential)
         }
         websiteSession.installNavigationObserver(WebAuthenticationNavigationObserver(telemetry: telemetry))
+        websiteSession.installPageStateObserver(
+            WebAuthenticationPageStateObserver { [weak self] in
+                self?.webPageStateDidChange()
+            }
+        )
+        installCookieChangeObservation()
     }
 
     static func makeConfiguration() -> WKWebViewConfiguration {
@@ -154,10 +211,23 @@ final class WebAuthenticationBridge {
         websiteSession.makeWebView()
     }
 
+    /// Installs the app-lifetime presentation callback. The callback carries no
+    /// credential material; it only reports that the allow-listed cookie shape
+    /// is complete and ready for the existing single-consumption transaction.
+    func setAutomaticCredentialReadyHandler(
+        _ handler: @escaping @MainActor @Sendable () -> Void
+    ) {
+        automaticCredentialReadyHandler = handler
+    }
+
     /// Starts the sole owner-operated authentication path without reading browser state.
     /// A new explicit attempt discards any volatile prior handoff before re-arming selection.
     func beginUserOperatedSignIn() async -> Bool {
         telemetry.record(.webSignInStarted)
+        isAutomaticCaptureEnabled = false
+        needsAnotherAutomaticInspection = false
+        didNotifyAutomaticCredentialReady = false
+        emittedAutomaticDiagnostics.removeAll(keepingCapacity: true)
         // Keep selection fail-closed while stale handoff and website state retire.
         let reservation = beginSelection()
         pendingSignInRequest = nil
@@ -169,6 +239,7 @@ final class WebAuthenticationBridge {
         completeUncommittedSelection(reservation)
         guard let url = URL(string: "https://www.siriusxm.com/player") else { return false }
         pendingSignInRequest = URLRequest(url: url)
+        isAutomaticCaptureEnabled = true
         return true
     }
 
@@ -182,7 +253,8 @@ final class WebAuthenticationBridge {
         signInRequestLoader(request)
     }
 
-    /// The only action that reads the WebView-owned cookie store.
+    /// Explicit fallback for checking the same allow-listed browser session that
+    /// the post-consent cookie observer normally detects automatically.
     func useLoggedInSession() async -> Result {
         telemetry.record(.credentialSelectionStarted)
         guard selectionState == .available else {
@@ -207,7 +279,8 @@ final class WebAuthenticationBridge {
         case .ambiguous:
             telemetry.record(.ambiguousCredentials)
             return .ambiguousCredentials
-        case .malformed:
+        case let .malformed(reason):
+            telemetry.record(reason.bridgeDiagnostic)
             telemetry.record(.malformedCredential)
             return .malformedCredential
         case let .credential(credential):
@@ -217,6 +290,11 @@ final class WebAuthenticationBridge {
             }
 
             selectionState = .consumed
+            isAutomaticCaptureEnabled = false
+            if let snapshot = credential.browserSessionSnapshot() {
+                telemetry.record(snapshot.renewalDisposition.bridgeDiagnostic)
+                telemetry.record(snapshot.deviceGrantDisposition.bridgeDiagnostic)
+            }
             await credentialConsumer(credential)
             telemetry.record(.credentialTransferred)
             return .credentialTransferred
@@ -234,9 +312,99 @@ final class WebAuthenticationBridge {
         selectionState = .available
     }
 
+    private func installCookieChangeObservation() {
+        guard let observableStore = cookieStore as? any WebAuthenticationCookieChangeObserving else {
+            return
+        }
+        observableStore.setChangeHandler { [weak self] in
+            self?.cookieStoreDidChange()
+        }
+    }
+
+    private func cookieStoreDidChange() {
+        telemetry.record(.cookieStoreChangeObserved)
+        startAutomaticCredentialInspectionIfNeeded()
+    }
+
+    /// Receives a material-free signal from the first-party page when its Cookie
+    /// Store changes or an XHR/fetch completes. SiriusXM's SPA currently updates
+    /// AUTH_TOKEN without a second WKHTTPCookieStoreObserver callback.
+    func webPageStateDidChange() {
+        telemetry.record(.webPageStateChangeObserved)
+        startAutomaticCredentialInspectionIfNeeded()
+    }
+
+    private func startAutomaticCredentialInspectionIfNeeded() {
+        guard isAutomaticCaptureEnabled,
+              selectionState == .available,
+              !didNotifyAutomaticCredentialReady else {
+            return
+        }
+        if isAutomaticInspectionInFlight {
+            needsAnotherAutomaticInspection = true
+            return
+        }
+        isAutomaticInspectionInFlight = true
+        telemetry.record(.automaticCredentialInspectionStarted)
+        Task { @MainActor [weak self] in
+            await self?.inspectCookiesForAutomaticCapture()
+        }
+    }
+
+    private func inspectCookiesForAutomaticCapture() async {
+        defer {
+            isAutomaticInspectionInFlight = false
+            if needsAnotherAutomaticInspection {
+                needsAnotherAutomaticInspection = false
+                startAutomaticCredentialInspectionIfNeeded()
+            }
+        }
+        guard isAutomaticCaptureEnabled,
+              selectionState == .available,
+              !didNotifyAutomaticCredentialReady else {
+            return
+        }
+
+        let cookies = await cookieStore.allCookies()
+        guard isAutomaticCaptureEnabled,
+              selectionState == .available,
+              !didNotifyAutomaticCredentialReady else {
+            return
+        }
+
+        switch WebCredentialSelectionPolicy.select(from: cookies, now: now()) {
+        case let .missing(reasons):
+            for reason in reasons {
+                recordAutomaticDiagnosticOnce(reason.bridgeDiagnostic)
+            }
+            recordAutomaticDiagnosticOnce(.authCookieMissing)
+        case .ambiguous:
+            recordAutomaticDiagnosticOnce(.ambiguousCredentials)
+        case let .malformed(reason):
+            recordAutomaticDiagnosticOnce(reason.bridgeDiagnostic)
+            recordAutomaticDiagnosticOnce(.malformedCredential)
+        case let .credential(credential):
+            if let snapshot = credential.browserSessionSnapshot() {
+                recordAutomaticDiagnosticOnce(snapshot.renewalDisposition.bridgeDiagnostic)
+                recordAutomaticDiagnosticOnce(snapshot.deviceGrantDisposition.bridgeDiagnostic)
+            }
+            didNotifyAutomaticCredentialReady = true
+            telemetry.record(.automaticCredentialReady)
+            automaticCredentialReadyHandler?()
+        }
+    }
+
+    private func recordAutomaticDiagnosticOnce(_ diagnostic: AuthenticationBridgeDiagnostic) {
+        guard emittedAutomaticDiagnostics.insert(diagnostic).inserted else { return }
+        telemetry.record(diagnostic)
+    }
+
     /// Retires the bridge-owned nonpersistent website session without inspecting its records.
     /// The only observable result is whether its bulk removal completed before rotation.
     func retireAuthenticationWebsiteSession() async -> Bool {
+        isAutomaticCaptureEnabled = false
+        needsAnotherAutomaticInspection = false
+        (cookieStore as? any WebAuthenticationCookieChangeObserving)?.setChangeHandler(nil)
         websiteSession.stopLoading()
         guard await websiteSessionRetirer() else { return false }
         websiteSession.installFreshNonpersistentSession()
@@ -245,6 +413,7 @@ final class WebAuthenticationBridge {
                 cookieStore: websiteSession.configuration.websiteDataStore.httpCookieStore
             )
         }
+        installCookieChangeObservation()
         return true
     }
 }
@@ -260,10 +429,79 @@ private extension FirstPartyTokenCookiePolicy.RejectionReason {
     }
 }
 
+private extension AuthenticationCredentialMaterialError {
+    var bridgeDiagnostic: AuthenticationBridgeDiagnostic {
+        switch self {
+        case .authenticationCookieTooLarge: .authenticationCookieTooLarge
+        case .authenticationCookieUnreadable: .authenticationCookieUnreadable
+        case .sessionObjectMissing: .sessionObjectMissing
+        case .sessionObjectInvalid: .sessionObjectInvalid
+        case .accessTokenMissing: .accessTokenMissing
+        case .accessTokenInvalid: .accessTokenInvalid
+        case .accessTokenExpiryMissing: .accessTokenExpiryMissing
+        case .accessTokenExpiryInvalid: .accessTokenExpiryInvalid
+        case .refreshTokenMissing: .refreshTokenMissing
+        case .refreshTokenInvalid: .refreshTokenInvalid
+        case .refreshTokenExpiryMissing: .refreshTokenExpiryMissing
+        case .refreshTokenExpiryInvalid: .refreshTokenExpiryInvalid
+        case .sessionTypeRejected: .sessionTypeRejected
+        case .envelopeEncodingFailed: .credentialEnvelopeEncodingFailed
+        case .envelopeTooLarge: .credentialEnvelopeTooLarge
+        }
+    }
+}
+
+private extension BrowserDeviceGrantDisposition {
+    var bridgeDiagnostic: AuthenticationBridgeDiagnostic {
+        switch self {
+        case .absent: .deviceGrantAbsent
+        case .accepted: .deviceGrantAccepted
+        case .discardedUnrecognized: .deviceGrantDiscardedUnrecognized
+        }
+    }
+}
+
+private extension BrowserRenewalDisposition {
+    var bridgeDiagnostic: AuthenticationBridgeDiagnostic {
+        switch self {
+        case .refreshToken: .renewalViaRefreshToken
+        case .deviceGrant: .renewalViaDeviceGrant
+        }
+    }
+}
+
 extension WebAuthenticationBridge: CredentialSource {
     /// Provides the bridge's single-consumption handoff without exposing its material.
     func credential() async -> AuthenticationCredential? {
         await handoff.credential()
+    }
+}
+
+extension WebAuthenticationBridge: CredentialRefresher {
+    /// Rehydrates only the two approved first-party cookies into an isolated WebKit
+    /// session and lets SiriusXM's own browser client perform its normal renewal.
+    func refreshedCredential(ifNeeded credential: AuthenticationCredential) async -> AuthenticationCredential? {
+        guard let snapshot = credential.browserSessionSnapshot() else {
+            return nil
+        }
+
+        let currentTime = now()
+        guard snapshot.accessTokenExpiresAt <= currentTime.addingTimeInterval(300) else {
+            return credential
+        }
+        guard snapshot.refreshTokenExpiresAt > currentTime,
+              snapshot.deviceRefreshGrantExpiresAt.map({ $0 > currentTime }) ?? true else {
+            telemetry.record(.browserSessionRefreshFailed)
+            return nil
+        }
+
+        telemetry.record(.browserSessionRefreshStarted)
+        guard let refreshed = await browserSessionRefresher(snapshot) else {
+            telemetry.record(.browserSessionRefreshFailed)
+            return nil
+        }
+        telemetry.record(.browserSessionRefreshCompleted)
+        return refreshed
     }
 }
 
@@ -272,10 +510,9 @@ extension WebAuthenticationBridge: AuthenticationResidueCleaner {
     /// rescans that exact set, then retires the app-owned nonpersistent website session.
     func removeAuthenticationResidue() async -> AuthenticationResidueCleanupOutcome {
         let currentTime = now()
-        let initialMatches = FirstPartyTokenCookiePolicy.matchingCookies(
-            in: await cookieStore.allCookies(),
-            now: currentTime
-        )
+        let initialCookies = await cookieStore.allCookies()
+        let initialMatches = FirstPartyTokenCookiePolicy.matchingCookies(in: initialCookies, now: currentTime) +
+            FirstPartyDeviceGrantCookiePolicy.matchingCookies(in: initialCookies, now: currentTime)
 
         var deletionFailed = false
         for cookie in initialMatches {
@@ -286,10 +523,9 @@ extension WebAuthenticationBridge: AuthenticationResidueCleaner {
             }
         }
 
-        let remainingMatches = FirstPartyTokenCookiePolicy.matchingCookies(
-            in: await cookieStore.allCookies(),
-            now: currentTime
-        )
+        let remainingCookies = await cookieStore.allCookies()
+        let remainingMatches = FirstPartyTokenCookiePolicy.matchingCookies(in: remainingCookies, now: currentTime) +
+            FirstPartyDeviceGrantCookiePolicy.matchingCookies(in: remainingCookies, now: currentTime)
         let didRetireWebsiteSession = await retireAuthenticationWebsiteSession()
         return !deletionFailed && remainingMatches.isEmpty && didRetireWebsiteSession ? .removed : .cleanupFailed
     }
@@ -301,10 +537,19 @@ private final class WebAuthenticationWebsiteSession {
     private(set) var generation = 0
     private var webView: WKWebView?
     private var navigationObserver: WebAuthenticationNavigationObserver?
+    private var pageStateObserver: WebAuthenticationPageStateObserver?
 
     func installNavigationObserver(_ observer: WebAuthenticationNavigationObserver) {
         navigationObserver = observer
         webView?.navigationDelegate = observer
+    }
+
+    func installPageStateObserver(_ observer: WebAuthenticationPageStateObserver) {
+        configuration.userContentController.removeScriptMessageHandler(
+            forName: WebAuthenticationPageStateObserver.messageName
+        )
+        pageStateObserver = observer
+        installPageStateObservation(on: configuration, observer: observer)
     }
 
     func makeWebView() -> WKWebView {
@@ -328,9 +573,76 @@ private final class WebAuthenticationWebsiteSession {
     }
 
     func installFreshNonpersistentSession() {
+        configuration.userContentController.removeScriptMessageHandler(
+            forName: WebAuthenticationPageStateObserver.messageName
+        )
         webView = nil
         configuration = WebAuthenticationBridge.makeConfiguration()
+        if let pageStateObserver {
+            installPageStateObservation(on: configuration, observer: pageStateObserver)
+        }
         generation &+= 1
+    }
+
+    private func installPageStateObservation(
+        on configuration: WKWebViewConfiguration,
+        observer: WebAuthenticationPageStateObserver
+    ) {
+        let controller = configuration.userContentController
+        controller.add(observer, name: WebAuthenticationPageStateObserver.messageName)
+        controller.addUserScript(WebAuthenticationPageStateObserver.userScript)
+    }
+}
+
+@MainActor
+private final class WebAuthenticationPageStateObserver: NSObject, WKScriptMessageHandler {
+    static let messageName = "siriusMacSessionStateMayHaveChanged"
+    static let userScript = WKUserScript(
+        source: """
+        (() => {
+          const notifyNative = () => {
+            try {
+              globalThis.webkit?.messageHandlers?.siriusMacSessionStateMayHaveChanged?.postMessage(null);
+            } catch (_) {}
+          };
+
+          try {
+            globalThis.cookieStore?.addEventListener?.("change", notifyNative);
+            if (typeof globalThis.PerformanceObserver === "function") {
+              const observer = new PerformanceObserver((list) => {
+                for (const entry of list.getEntries()) {
+                  if (entry.initiatorType === "fetch" || entry.initiatorType === "xmlhttprequest") {
+                    notifyNative();
+                    return;
+                  }
+                }
+              });
+              observer.observe({ type: "resource", buffered: false });
+            }
+            globalThis.addEventListener("pageshow", notifyNative);
+          } catch (_) {}
+        })();
+        """,
+        injectionTime: .atDocumentStart,
+        forMainFrameOnly: true
+    )
+
+    private let handler: @MainActor @Sendable () -> Void
+
+    init(handler: @escaping @MainActor @Sendable () -> Void) {
+        self.handler = handler
+    }
+
+    func userContentController(
+        _ userContentController: WKUserContentController,
+        didReceive message: WKScriptMessage
+    ) {
+        guard message.name == Self.messageName,
+              let host = message.frameInfo.request.url?.host,
+              FirstPartyTokenCookiePolicy.isFirstPartyHost(host) else {
+            return
+        }
+        handler()
     }
 }
 
@@ -391,8 +703,162 @@ private actor VolatileWebCredentialHandoff: CredentialSource {
 }
 
 @MainActor
-private final class WebKitAuthenticationCookieStore: WebAuthenticationCookieStore {
+private final class WebAuthenticationRenewalDriver {
+    private var activeAttempt: WebAuthenticationRenewalAttempt?
+
+    func refresh(_ snapshot: BrowserAuthenticationSessionSnapshot) async -> AuthenticationCredential? {
+        guard activeAttempt == nil else { return nil }
+        let attempt = WebAuthenticationRenewalAttempt(snapshot: snapshot)
+        activeAttempt = attempt
+        defer { activeAttempt = nil }
+        return await attempt.run()
+    }
+}
+
+@MainActor
+private final class WebAuthenticationRenewalAttempt: NSObject, WKNavigationDelegate, WKHTTPCookieStoreObserver {
+    private let snapshot: BrowserAuthenticationSessionSnapshot
+    private let configuration = WebAuthenticationBridge.makeConfiguration()
+    private var webView: WKWebView?
+    private var continuation: CheckedContinuation<AuthenticationCredential?, Never>?
+    private var timeoutTask: Task<Void, Never>?
+    private var completed = false
+
+    init(snapshot: BrowserAuthenticationSessionSnapshot) {
+        self.snapshot = snapshot
+    }
+
+    func run() async -> AuthenticationCredential? {
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                self.continuation = continuation
+                Task { @MainActor [weak self] in
+                    await self?.start()
+                }
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in self?.finish(nil) }
+        }
+    }
+
+    private func start() async {
+        guard !completed,
+              let authenticationCookie = makeCookie(
+                name: "AUTH_TOKEN",
+                value: snapshot.authenticationCookieValue,
+                expires: snapshot.refreshTokenExpiresAt
+              ),
+              let playerURL = URL(string: "https://www.siriusxm.com/player") else {
+            finish(nil)
+            return
+        }
+
+        let cookieStore = configuration.websiteDataStore.httpCookieStore
+        cookieStore.add(self)
+        await cookieStore.setCookie(authenticationCookie)
+        if let deviceGrantCookieValue = snapshot.deviceGrantCookieValue,
+           let deviceGrantExpiresAt = snapshot.deviceGrantExpiresAt,
+           let deviceGrantCookie = makeCookie(
+               name: "DEVICE_GRANT",
+               value: deviceGrantCookieValue,
+               expires: deviceGrantExpiresAt
+           ) {
+            await cookieStore.setCookie(deviceGrantCookie)
+        }
+
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.isInspectable = false
+        webView.navigationDelegate = self
+        self.webView = webView
+        webView.load(URLRequest(url: playerURL))
+
+        timeoutTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(20))
+            guard !Task.isCancelled else { return }
+            self?.finish(nil)
+        }
+    }
+
+    nonisolated func cookiesDidChange(in cookieStore: WKHTTPCookieStore) {
+        Task { @MainActor [weak self] in
+            await self?.inspect(cookieStore)
+        }
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        Task { @MainActor [weak self] in
+            await self?.inspect(webView.configuration.websiteDataStore.httpCookieStore)
+        }
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        finish(nil)
+    }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        finish(nil)
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        decidePolicyFor navigationAction: WKNavigationAction,
+        decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
+    ) {
+        guard navigationAction.targetFrame?.isMainFrame == true else {
+            decisionHandler(.allow)
+            return
+        }
+        guard let url = navigationAction.request.url,
+              url.scheme == "https",
+              let host = url.host?.lowercased(),
+              host == "siriusxm.com" || host.hasSuffix(".siriusxm.com") else {
+            decisionHandler(.cancel)
+            return
+        }
+        decisionHandler(.allow)
+    }
+
+    private func inspect(_ cookieStore: WKHTTPCookieStore) async {
+        guard !completed else { return }
+        let cookies = await cookieStore.allCookies()
+        guard case let .credential(credential) = WebCredentialSelectionPolicy.select(from: cookies, now: Date()),
+              let refreshedSnapshot = credential.browserSessionSnapshot(),
+              refreshedSnapshot.accessTokenExpiresAt > snapshot.accessTokenExpiresAt.addingTimeInterval(60),
+              refreshedSnapshot.refreshTokenExpiresAt > Date() else {
+            return
+        }
+        finish(credential)
+    }
+
+    private func finish(_ credential: AuthenticationCredential?) {
+        guard !completed else { return }
+        completed = true
+        timeoutTask?.cancel()
+        timeoutTask = nil
+        configuration.websiteDataStore.httpCookieStore.remove(self)
+        webView?.stopLoading()
+        webView?.navigationDelegate = nil
+        webView = nil
+        continuation?.resume(returning: credential)
+        continuation = nil
+    }
+
+    private func makeCookie(name: String, value: String, expires: Date) -> HTTPCookie? {
+        HTTPCookie(properties: [
+            .name: name,
+            .value: value,
+            .domain: ".siriusxm.com",
+            .path: "/",
+            .expires: expires,
+            .secure: "TRUE",
+        ])
+    }
+}
+
+@MainActor
+private final class WebKitAuthenticationCookieStore: WebAuthenticationCookieStore, WebAuthenticationCookieChangeObserving {
     private let cookieStore: WKHTTPCookieStore
+    private var changeObserver: WebKitAuthenticationCookieChangeObserver?
 
     init(cookieStore: WKHTTPCookieStore) {
         self.cookieStore = cookieStore
@@ -406,5 +872,29 @@ private final class WebKitAuthenticationCookieStore: WebAuthenticationCookieStor
         await withCheckedContinuation { continuation in
             cookieStore.delete(cookie) { continuation.resume() }
         }
+    }
+
+    func setChangeHandler(_ handler: (@MainActor @Sendable () -> Void)?) {
+        if let changeObserver {
+            cookieStore.remove(changeObserver)
+            self.changeObserver = nil
+        }
+        guard let handler else { return }
+        let observer = WebKitAuthenticationCookieChangeObserver(handler: handler)
+        changeObserver = observer
+        cookieStore.add(observer)
+    }
+}
+
+@MainActor
+private final class WebKitAuthenticationCookieChangeObserver: NSObject, WKHTTPCookieStoreObserver {
+    private let handler: @MainActor @Sendable () -> Void
+
+    init(handler: @escaping @MainActor @Sendable () -> Void) {
+        self.handler = handler
+    }
+
+    nonisolated func cookiesDidChange(in cookieStore: WKHTTPCookieStore) {
+        Task { @MainActor [handler] in handler() }
     }
 }

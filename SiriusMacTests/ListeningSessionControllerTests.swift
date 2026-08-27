@@ -6,6 +6,22 @@ import XCTest
 
 @MainActor
 final class WindowLifecyclePolicyTests: XCTestCase {
+    func testPrimarySceneTracksCurrentContentSizeAcrossAuthenticationAndCompactStates() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: root.appending(path: "SiriusMac/SiriusMacApp.swift"),
+            encoding: .utf8
+        )
+        let primaryScene = try XCTUnwrap(
+            source.components(separatedBy: "Window(\"Library\", id: \"sirius-library\")").first
+        )
+
+        XCTAssertTrue(primaryScene.contains(".windowResizability(.contentSize)"))
+        XCTAssertFalse(primaryScene.contains(".windowResizability(.contentMinSize)"))
+    }
+
     func testCompactPolicyUsesFixedSizeAndDistinctAutosaveName() {
         let policy = WindowLifecyclePolicy(role: .compact)
 
@@ -14,6 +30,33 @@ final class WindowLifecyclePolicyTests: XCTestCase {
         XCTAssertFalse(policy.isResizable)
         XCTAssertFalse(policy.allowsFullScreen)
         XCTAssertEqual(policy.frameAutosaveName, "SiriusMac.compact.frame")
+    }
+
+    func testAuthenticationPolicyRestoresAUsableResizablePrimaryWindow() {
+        let policy = WindowLifecyclePolicy(role: .authentication)
+
+        XCTAssertEqual(policy.defaultContentSize, CGSize(width: 760, height: 620))
+        XCTAssertEqual(policy.minimumContentSize, CGSize(width: 760, height: 620))
+        XCTAssertTrue(policy.isResizable)
+        XCTAssertTrue(policy.allowsFullScreen)
+        XCTAssertEqual(policy.frameAutosaveName, "SiriusMac.authentication.frame")
+    }
+
+    func testAuthenticationAttachmentReversesCompactWindowRestrictionsAfterSignOut() {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 400, height: 288),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+
+        CompactWindowController(role: .authentication, restoresPersistedFrame: false)
+            .attach(to: window, alwaysOnTop: false)
+
+        XCTAssertEqual(window.contentView?.frame.size, NSSize(width: 760, height: 620))
+        XCTAssertTrue(window.styleMask.contains(.resizable))
+        XCTAssertTrue(window.collectionBehavior.contains(.fullScreenPrimary))
+        XCTAssertFalse(window.collectionBehavior.contains(.fullScreenNone))
     }
 
     func testCompactAttachmentRetainsSavedOriginButResetsOversizedSavedContentSize() {
@@ -114,16 +157,19 @@ final class WindowLifecyclePolicyTests: XCTestCase {
         XCTAssertNil(WindowFrameRestoration.frameToApply(savedFrame: offscreenFrame, screens: screens))
     }
 
-    func testCompactCloseRequestsTerminationOnlyOnceWhileLibraryCloseDoesNothing() {
+    func testPrimaryWindowCloseRequestsTerminationOnlyOnceWhileLibraryCloseDoesNothing() {
         let terminator = WindowLifecycleTerminatorSpy()
+        let authentication = WindowLifecyclePolicy(role: .authentication, terminator: terminator)
         let compact = WindowLifecyclePolicy(role: .compact, terminator: terminator)
         let library = WindowLifecyclePolicy(role: .library, terminator: terminator)
 
+        authentication.windowWillClose()
+        authentication.windowWillClose()
         compact.windowWillClose()
         compact.windowWillClose()
         library.windowWillClose()
 
-        XCTAssertEqual(terminator.terminationRequestCount, 1)
+        XCTAssertEqual(terminator.terminationRequestCount, 2)
     }
 
     func testAlwaysOnTopDefaultsOffPersistsDesiredStateAndAffectsOnlyCompactPolicy() throws {
@@ -961,6 +1007,17 @@ final class ListeningSessionControllerTests: XCTestCase {
         XCTAssertFalse(controller.requestLibraryOpen())
         XCTAssertTrue(controller.composition.playbackCoordinator === controller.playbackCoordinator)
         XCTAssertEqual(controller.librarySurface.coordinatorIdentity, originalCoordinator)
+    }
+
+    func testLibraryWindowClosesOnSignOutAndReopensForTheNextReadySession() {
+        let controller = makeController()
+
+        XCTAssertEqual(controller.libraryWindowDirective(authenticationIsReady: true), .open)
+        XCTAssertEqual(controller.libraryWindowDirective(authenticationIsReady: true), .none)
+        XCTAssertEqual(controller.libraryWindowDirective(authenticationIsReady: false), .close)
+        XCTAssertFalse(controller.hasRequestedLibraryOpen)
+        XCTAssertEqual(controller.libraryWindowDirective(authenticationIsReady: true), .open)
+        XCTAssertTrue(controller.hasRequestedLibraryOpen)
     }
 
     func testUnitTestHostDoesNotConstructTheProductionSessionController() {

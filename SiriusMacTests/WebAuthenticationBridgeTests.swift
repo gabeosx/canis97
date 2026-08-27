@@ -2,7 +2,7 @@ import Foundation
 import AppKit
 import WebKit
 import XCTest
-import SiriusXMClient
+@_spi(AppIntegration) import SiriusXMClient
 @testable import SiriusMac
 
 @MainActor
@@ -22,6 +22,23 @@ final class WebAuthenticationBridgeTests: XCTestCase {
         XCTAssertNotNil(bridge.makeWebView().navigationDelegate)
     }
 
+    func testAuthenticationWebViewInstallsMaterialFreePageStateSignals() {
+        let bridge = WebAuthenticationBridge(
+            cookieStore: TestCookieStore(cookies: []),
+            credentialConsumer: { _ in }
+        )
+        let sources = bridge.webViewConfiguration.userContentController.userScripts.map(\.source)
+        let combined = sources.joined(separator: "\n")
+
+        XCTAssertTrue(combined.contains("cookieStore"))
+        XCTAssertTrue(combined.contains("PerformanceObserver"))
+        XCTAssertTrue(combined.contains("xmlhttprequest"))
+        XCTAssertTrue(combined.contains("siriusMacSessionStateMayHaveChanged"))
+        XCTAssertFalse(combined.contains("AUTH_TOKEN"))
+        XCTAssertFalse(combined.contains("DEVICE_GRANT"))
+        XCTAssertFalse(combined.contains("document.cookie"))
+    }
+
     func testExplicitConsentAcceptsOneCurrentBoundarySafeSiriusXMSubdomainToken() async throws {
         let recorder = CredentialRecorder()
         let now = Date()
@@ -39,6 +56,7 @@ final class WebAuthenticationBridgeTests: XCTestCase {
         XCTAssertEqual(repeatedResult, .alreadyConsumed)
         XCTAssertEqual(snapshot.count, 1)
         XCTAssertEqual(snapshot.descriptions, ["AuthenticationCredential(redacted)"])
+        XCTAssertEqual(snapshot.browserSessionCount, 1)
     }
 
     func testExplicitConsentAcceptsCurrentTokenWhenWebKitReportsSecureFalse() async throws {
@@ -71,7 +89,7 @@ final class WebAuthenticationBridgeTests: XCTestCase {
             signInRequestLoader: { loadedRequests.append($0) }
         )
 
-        await bridge.beginUserOperatedSignIn()
+        _ = await bridge.beginUserOperatedSignIn()
         XCTAssertTrue(loadedRequests.isEmpty)
 
         let host = WebAuthenticationWebViewHost(frame: .zero)
@@ -135,7 +153,7 @@ final class WebAuthenticationBridgeTests: XCTestCase {
 
         let firstTransfer = await bridge.useLoggedInSession()
         XCTAssertEqual(firstTransfer, .credentialTransferred)
-        await bridge.beginUserOperatedSignIn()
+        _ = await bridge.beginUserOperatedSignIn()
         let discardedCredential = await bridge.credential()
         let secondTransfer = await bridge.useLoggedInSession()
         let repeatedSecondTransfer = await bridge.useLoggedInSession()
@@ -186,6 +204,89 @@ final class WebAuthenticationBridgeTests: XCTestCase {
         XCTAssertEqual(incompleteResult, .malformedCredential)
     }
 
+    func testCookieChangesReportExactRedactedStagesAndAutomaticallyAnnounceACompleteSession() async throws {
+        let now = Date()
+        let store = TestCookieStore(cookies: [])
+        var events: [AuthenticationBridgeDiagnostic] = []
+        var readyCount = 0
+        let bridge = WebAuthenticationBridge(
+            cookieStore: store,
+            now: { now },
+            credentialConsumer: { _ in },
+            telemetry: AuthenticationBridgeTelemetry(record: { events.append($0) })
+        )
+        bridge.setAutomaticCredentialReadyHandler { readyCount += 1 }
+
+        let didBegin = await bridge.beginUserOperatedSignIn()
+        XCTAssertTrue(didBegin)
+        store.replaceCookies(with: [try authCookie(value: #"{"session":{}}"#, expires: now.addingTimeInterval(60))])
+        store.signalChange()
+        await settleMainActorTasks()
+
+        XCTAssertEqual(readyCount, 0)
+        XCTAssertTrue(events.contains(.accessTokenMissing))
+        XCTAssertTrue(events.contains(.malformedCredential))
+
+        store.replaceCookies(with: [try authCookie(expires: now.addingTimeInterval(60))])
+        store.signalChange()
+        await settleMainActorTasks()
+
+        XCTAssertEqual(readyCount, 1)
+        XCTAssertTrue(events.contains(.automaticCredentialReady))
+        let transfer = await bridge.useLoggedInSession()
+        XCTAssertEqual(transfer, .credentialTransferred)
+
+        store.signalChange()
+        await settleMainActorTasks()
+        XCTAssertEqual(readyCount, 1)
+        XCTAssertFalse(events.map(\.rawValue).joined().contains("synthetic-access-token"))
+    }
+
+    func testAuthenticatedCookieWithoutDeviceGrantRemainsRenewable() throws {
+        let now = Date()
+        let authentication = try authCookie(expires: now.addingTimeInterval(60))
+
+        guard case let .credential(credential) = WebCredentialSelectionPolicy.select(from: [authentication], now: now),
+              let snapshot = credential.browserSessionSnapshot() else {
+            XCTFail("Expected the authenticated browser session")
+            return
+        }
+        XCTAssertNil(snapshot.deviceGrantCookieValue)
+    }
+
+    func testBrowserRenewalRunsOnlyForAnExpiringCompleteEnvelope() async throws {
+        let now = Date()
+        let current = try renewableTestCredential(
+            accessToken: "synthetic-current-access",
+            accessExpiresAt: now.addingTimeInterval(3_600)
+        )
+        let expired = try renewableTestCredential(
+            accessToken: "synthetic-expired-access",
+            accessExpiresAt: now.addingTimeInterval(-60)
+        )
+        let replacement = try renewableTestCredential(
+            accessToken: "synthetic-refreshed-access",
+            accessExpiresAt: now.addingTimeInterval(10_800)
+        )
+        var refreshCount = 0
+        let bridge = WebAuthenticationBridge(
+            cookieStore: TestCookieStore(cookies: []),
+            now: { now },
+            credentialConsumer: { _ in },
+            browserSessionRefresher: { _ in
+                refreshCount += 1
+                return replacement
+            }
+        )
+
+        let unchanged = await bridge.refreshedCredential(ifNeeded: current)
+        let refreshed = await bridge.refreshedCredential(ifNeeded: expired)
+
+        XCTAssertEqual(refreshCount, 1)
+        XCTAssertEqual(unchanged?.browserSessionSnapshot()?.accessTokenExpiresAt, current.browserSessionSnapshot()?.accessTokenExpiresAt)
+        XCTAssertEqual(refreshed?.browserSessionSnapshot()?.accessTokenExpiresAt, replacement.browserSessionSnapshot()?.accessTokenExpiresAt)
+    }
+
     func testTelemetryIdentifiesSafeCredentialSelectionOutcomesWithoutPayloads() async throws {
         let now = Date()
         var events: [AuthenticationBridgeDiagnostic] = []
@@ -222,8 +323,11 @@ final class WebAuthenticationBridgeTests: XCTestCase {
             .authCookieNameAbsent,
             .authCookieMissing,
             .credentialSelectionStarted,
+            .authenticationCookieUnreadable,
             .malformedCredential,
             .credentialSelectionStarted,
+            .renewalViaRefreshToken,
+            .deviceGrantAbsent,
             .credentialTransferred,
         ])
         XCTAssertFalse(events.map(\.rawValue).joined().contains("synthetic-access-token"))
@@ -235,7 +339,7 @@ final class WebAuthenticationBridgeTests: XCTestCase {
         let firstPartyToken = try authCookie(expires: now.addingTimeInterval(60))
         let firstPartyDevice = try authCookie(
             name: "DEVICE_GRANT",
-            value: "device-secret-canary",
+            value: deviceGrantCookieValue(secretCanary: "device-secret-canary"),
             domain: "player.siriusxm.com",
             expires: now.addingTimeInterval(60)
         )
@@ -255,8 +359,86 @@ final class WebAuthenticationBridgeTests: XCTestCase {
         let result = await bridge.useLoggedInSession()
 
         XCTAssertEqual(result, .credentialTransferred)
-        XCTAssertEqual(events, [.credentialSelectionStarted, .credentialTransferred])
+        XCTAssertEqual(events, [
+            .credentialSelectionStarted,
+            .renewalViaRefreshToken,
+            .deviceGrantAccepted,
+            .credentialTransferred,
+        ])
         XCTAssertFalse(events.map(\.rawValue).joined().contains("secret-canary"))
+    }
+
+    func testAutomaticCaptureAcceptsCurrentSplitRenewalCookiesWithoutARefreshToken() async throws {
+        let now = Date()
+        let store = TestCookieStore(cookies: [])
+        var events: [AuthenticationBridgeDiagnostic] = []
+        var readyCount = 0
+        let bridge = WebAuthenticationBridge(
+            cookieStore: store,
+            now: { now },
+            credentialConsumer: { _ in },
+            telemetry: AuthenticationBridgeTelemetry(record: { events.append($0) })
+        )
+        bridge.setAutomaticCredentialReadyHandler { readyCount += 1 }
+
+        let didBegin = await bridge.beginUserOperatedSignIn()
+        XCTAssertTrue(didBegin)
+        let authentication = try authCookie(
+            value: currentAuthenticationCookieValue(expires: now.addingTimeInterval(3_600)),
+            expires: now.addingTimeInterval(3_600)
+        )
+        let deviceGrant = try authCookie(
+            name: "DEVICE_GRANT",
+            value: deviceGrantCookieValue(),
+            expires: now.addingTimeInterval(2_592_000)
+        )
+        store.replaceCookies(with: [authentication, deviceGrant])
+        store.signalChange()
+        await settleMainActorTasks()
+
+        XCTAssertEqual(readyCount, 1)
+        XCTAssertTrue(events.contains(.renewalViaDeviceGrant))
+        XCTAssertTrue(events.contains(.deviceGrantAccepted))
+        XCTAssertTrue(events.contains(.automaticCredentialReady))
+        let transfer = await bridge.useLoggedInSession()
+        XCTAssertEqual(transfer, .credentialTransferred)
+    }
+
+    func testPageStateSignalAutomaticallyCapturesWhenNativeCookieObserverDoesNotRepeat() async throws {
+        let now = Date()
+        let store = TestCookieStore(cookies: [])
+        var events: [AuthenticationBridgeDiagnostic] = []
+        var readyCount = 0
+        let bridge = WebAuthenticationBridge(
+            cookieStore: store,
+            now: { now },
+            credentialConsumer: { _ in },
+            telemetry: AuthenticationBridgeTelemetry(record: { events.append($0) })
+        )
+        bridge.setAutomaticCredentialReadyHandler { readyCount += 1 }
+
+        let didBegin = await bridge.beginUserOperatedSignIn()
+        XCTAssertTrue(didBegin)
+        store.replaceCookies(with: [
+            try authCookie(
+                value: currentAuthenticationCookieValue(expires: now.addingTimeInterval(3_600)),
+                expires: now.addingTimeInterval(3_600)
+            ),
+            try authCookie(
+                name: "DEVICE_GRANT",
+                value: deviceGrantCookieValue(),
+                expires: now.addingTimeInterval(2_592_000)
+            ),
+        ])
+
+        bridge.webPageStateDidChange()
+        await settleMainActorTasks()
+
+        XCTAssertEqual(readyCount, 1)
+        XCTAssertTrue(events.contains(.webPageStateChangeObserved))
+        XCTAssertTrue(events.contains(.automaticCredentialInspectionStarted))
+        XCTAssertTrue(events.contains(.renewalViaDeviceGrant))
+        XCTAssertTrue(events.contains(.automaticCredentialReady))
     }
 
     func testMissingTokenTelemetryReportsOnlyClosedPolicyRejectionClasses() async throws {
@@ -425,6 +607,7 @@ final class WebAuthenticationBridgeTests: XCTestCase {
         let blockedSelection = await bridge.useLoggedInSession()
         await disposer.resumeDiscard()
         await disposer.waitUntilDiscardFinishes()
+        _ = await newAttempt.value
         let rearmedSelection = await bridge.useLoggedInSession()
 
         XCTAssertEqual(blockedSelection, .alreadyConsumed)
@@ -595,15 +778,16 @@ final class WebAuthenticationBridgeTests: XCTestCase {
 
     private func authCookie(
         name: String = "AUTH_TOKEN",
-        value: String = #"{"session":{"accessToken":"synthetic-access-token"}}"#,
+        value: String? = nil,
         domain: String = "siriusxm.com",
         path: String = "/",
         expires: Date,
         secure: Bool = true
     ) throws -> HTTPCookie {
+        let resolvedValue = value ?? authenticationCookieValue(expires: expires)
         var properties: [HTTPCookiePropertyKey: Any] = [
             .name: name,
-            .value: value.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? value,
+            .value: resolvedValue.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? resolvedValue,
             .domain: domain,
             .path: path,
             .expires: expires,
@@ -613,10 +797,59 @@ final class WebAuthenticationBridgeTests: XCTestCase {
         }
         return try XCTUnwrap(HTTPCookie(properties: properties))
     }
+
+    private func settleMainActorTasks() async {
+        for _ in 0..<12 { await Task.yield() }
+    }
+}
+
+private func authenticationCookieValue(expires: Date) -> String {
+    let formatter = ISO8601DateFormatter()
+    let object: [String: Any] = [
+        "handle": "synthetic-handle",
+        "identityGrant": ["grant": "synthetic-identity-grant", "identityId": "synthetic-identity"],
+        "session": [
+            "accessToken": "synthetic-access-token",
+            "accessTokenExpiresAt": formatter.string(from: expires),
+            "refreshToken": "synthetic-refresh-token",
+            "refreshTokenExpiresAt": formatter.string(from: Date(timeIntervalSinceNow: 7_776_000)),
+            "sessionType": "authenticated",
+        ],
+    ]
+    let data = try! JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+    return String(data: data, encoding: .utf8)!
+}
+
+private func currentAuthenticationCookieValue(expires: Date) -> String {
+    let formatter = ISO8601DateFormatter()
+    let object: [String: Any] = [
+        "session": [
+            "accessToken": "synthetic-current-access-token",
+            "accessTokenExpiresAt": formatter.string(from: expires),
+            "refreshTokenExpiresAt": formatter.string(from: Date(timeIntervalSinceNow: 7_776_000)),
+            "sessionType": "authenticated",
+        ],
+    ]
+    let data = try! JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+    return String(data: data, encoding: .utf8)!
+}
+
+private func deviceGrantCookieValue(secretCanary: String = "synthetic-device-refresh-grant") -> String {
+    let formatter = ISO8601DateFormatter()
+    let object: [String: Any] = [
+        "deviceId": "synthetic-device",
+        "grant": "synthetic-device-grant",
+        "grantExpiresAt": formatter.string(from: Date(timeIntervalSinceNow: 2_592_000)),
+        "grantVersion": "v2",
+        "refreshGrant": secretCanary,
+        "refreshGrantExpiresAt": formatter.string(from: Date(timeIntervalSinceNow: 15_552_000)),
+    ]
+    let data = try! JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+    return String(data: data, encoding: .utf8)!
 }
 
 @MainActor
-private final class TestCookieStore: WebAuthenticationCookieStore {
+private final class TestCookieStore: WebAuthenticationCookieStore, WebAuthenticationCookieChangeObserving {
     private var cookies: [HTTPCookie]
     private let deleteFailure: Bool
     private let retainDeletedCookies: Bool
@@ -626,6 +859,7 @@ private final class TestCookieStore: WebAuthenticationCookieStore {
     private(set) var deletedCount = 0
     private(set) var retirementCount = 0
     private(set) var eventLog: [String] = []
+    private var changeHandler: (@MainActor @Sendable () -> Void)?
 
     init(
         cookies: [HTTPCookie],
@@ -656,6 +890,18 @@ private final class TestCookieStore: WebAuthenticationCookieStore {
         }
     }
 
+    func setChangeHandler(_ handler: (@MainActor @Sendable () -> Void)?) {
+        changeHandler = handler
+    }
+
+    func replaceCookies(with cookies: [HTTPCookie]) {
+        self.cookies = cookies
+    }
+
+    func signalChange() {
+        changeHandler?()
+    }
+
     func retireAuthenticationWebsiteSession() async -> Bool {
         eventLog.append("retire")
         retirementCount += 1
@@ -672,14 +918,18 @@ private enum TestCookieStoreError: Error {
 private actor CredentialRecorder {
     private(set) var count = 0
     private(set) var descriptions: [String] = []
+    private(set) var browserSessionCount = 0
 
     func record(_ credential: AuthenticationCredential) {
         count += 1
         descriptions.append(credential.description)
+        if credential.browserSessionSnapshot() != nil {
+            browserSessionCount += 1
+        }
     }
 
-    func snapshot() -> (count: Int, descriptions: [String]) {
-        (count, descriptions)
+    func snapshot() -> (count: Int, descriptions: [String], browserSessionCount: Int) {
+        (count, descriptions, browserSessionCount)
     }
 }
 

@@ -100,6 +100,7 @@ struct CompactPlayerPresentation: Sendable, Equatable {
     static func project(
         channel: LiveChannel?,
         metadata: LiveMetadataState,
+        channelArtwork: ArtworkData? = nil,
         primaryMetadata: String?,
         secondaryMetadata: String?,
         playback: LivePlaybackState,
@@ -107,12 +108,16 @@ struct CompactPlayerPresentation: Sendable, Equatable {
         queueAvailability: QueueDirectionAvailability
     ) -> Self {
         guard let channel else {
+            // Idle is the absence of playback work, not a pending tune. The
+            // compact player must stay in its inert empty state until a user
+            // action causes the coordinator to publish an awaiting state.
+            guard playback != .idle, playback != .stopped else { return empty() }
             let projectedStatus = status(playback)
-            return empty(status: projectedStatus == .stopped ? nil : projectedStatus)
+            return empty(status: projectedStatus)
         }
         let artwork: Artwork = switch metadata.artwork {
         case let .current(data), let .stale(data): .data(data)
-        case .unavailable: .placeholder
+        case .unavailable: channelArtwork.map(Artwork.data) ?? .placeholder
         }
         return confirmed(
             channel: ChannelIdentity(number: channel.displayNumber, name: channel.name),
@@ -212,6 +217,7 @@ enum CompactPlayerAction: CaseIterable, Sendable, Equatable {
     case retryPlayback
     case signInAgain
     case refreshLibrary
+    case signOut
 }
 
 enum PlayerSemanticStyleRole: CaseIterable, Sendable, Equatable {

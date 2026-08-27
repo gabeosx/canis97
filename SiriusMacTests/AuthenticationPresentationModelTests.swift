@@ -28,6 +28,9 @@ final class AuthenticationPresentationModelTests: XCTestCase {
             .localCredentialUnavailable,
             .webSessionResetFailed,
             .waitingForWebView,
+            .webCredentialMissing,
+            .webCredentialMalformed,
+            .webCredentialAmbiguous,
             .verifyingAuthentication,
             .verifyingEntitlement,
             .authenticatedButNotEntitled,
@@ -46,7 +49,7 @@ final class AuthenticationPresentationModelTests: XCTestCase {
 
         let copies = states.map { model.presentation(for: $0) }
 
-        XCTAssertEqual(Set(copies.map(\.title)).count, states.count)
+        XCTAssertEqual(Set(copies.map(\.statusLabel)).count, states.count)
         XCTAssertTrue(model.presentation(for: .entitled).isReady)
         XCTAssertTrue(model.presentation(for: .entitled).canSignOut)
         XCTAssertEqual(model.presentation(for: .unsupported).message, "This sign-in flow is unsupported. No workaround was attempted.")
@@ -61,6 +64,9 @@ final class AuthenticationPresentationModelTests: XCTestCase {
             .localCredentialUnavailable,
             .webSessionResetFailed,
             .waitingForWebView,
+            .webCredentialMissing,
+            .webCredentialMalformed,
+            .webCredentialAmbiguous,
             .verifyingAuthentication,
             .verifyingEntitlement,
             .authenticatedButNotEntitled,
@@ -176,6 +182,34 @@ final class AuthenticationPresentationModelTests: XCTestCase {
         XCTAssertEqual(retryCounts.begin, 2)
         XCTAssertEqual(retryCounts.loggedInSession, 0)
         XCTAssertEqual(model.state, .waitingForWebView)
+    }
+
+    func testAutomaticallyDetectedSessionWaitsForWebViewSetupThenRunsExactlyOneTransaction() async {
+        let flow = AuthenticationFlowSpy(
+            beginResult: .waitingForWebView,
+            holdBegin: true,
+            loggedInSessionResult: .entitled
+        )
+        let model = AuthenticationPresentationModel(flow: flow)
+
+        let signIn = model.signIn()
+        await Task.yield()
+        model.useAutomaticallyDetectedSession()
+
+        var counts = await flow.callCounts()
+        XCTAssertEqual(counts.loggedInSession, 0)
+        await flow.finishBegin()
+        await signIn?.value
+        for _ in 0..<12 { await Task.yield() }
+
+        counts = await flow.callCounts()
+        XCTAssertEqual(counts.loggedInSession, 1)
+        XCTAssertEqual(model.state, .entitled)
+
+        model.useAutomaticallyDetectedSession()
+        for _ in 0..<4 { await Task.yield() }
+        counts = await flow.callCounts()
+        XCTAssertEqual(counts.loggedInSession, 1)
     }
 
     func testTerminalFailuresScheduleNoFollowUpWork() async {

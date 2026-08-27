@@ -10,8 +10,9 @@ protocol AccessibilityAnnouncementPosting: AnyObject {
 @MainActor
 final class SystemAccessibilityAnnouncementPoster: AccessibilityAnnouncementPosting {
     func postAnnouncement(_ message: String) {
+        guard let application = NSApp else { return }
         NSAccessibility.post(
-            element: NSApp,
+            element: application,
             notification: .announcementRequested,
             userInfo: [
                 .announcement: message,

@@ -89,10 +89,11 @@ struct CompactPlayerView: View {
                         Spacer(minLength: 4)
                         Button(action: { onAction(.toggleFavorite) }) {
                             Image(systemName: presentation.isFavorite ? "star.fill" : "star")
+                                .frame(width: 28, height: 28)
+                                .contentShape(.rect)
                         }
-                        .buttonStyle(.borderless)
-                        .background(surfaceBackground(.interactiveAccent))
-                        .foregroundStyle(presentation.isFavorite ? Color(hex: style.accentHex) : .primary)
+                        .buttonStyle(.plain)
+                        .foregroundStyle(presentation.isFavorite ? Color(hex: style.accentHex) : .secondary)
                         .help(presentation.isFavorite ? "Remove from Favorites" : "Add to Favorites")
                         .accessibilityIdentifier("compact.favorite")
                         .accessibilityLabel(presentation.isFavorite ? "Remove from Favorites" : "Add to Favorites")
@@ -117,17 +118,17 @@ struct CompactPlayerView: View {
             case let .data(artwork):
                 NativeArtworkImage(artwork: artwork)
             case .placeholder, .none:
-                Image(systemName: "photo")
+                Image(systemName: "music.note")
                     .resizable()
                     .scaledToFit()
-                    .padding(18)
+                    .padding(20)
                     .foregroundStyle(.secondary)
             }
         }
         .frame(width: 72, height: 72)
         .background(surfaceBackground(.metadata))
         .clipShape(.rect(cornerRadius: renderingAppearance.cornerRadius))
-        .accessibilityLabel(presentation.channelIdentity.map { "Artwork for channel \($0.displayText)" } ?? "Channel artwork")
+        .accessibilityLabel(presentation.primaryMetadata.map { "Artwork for \($0)" } ?? presentation.channelIdentity.map { "Artwork for channel \($0.displayText)" } ?? "Artwork")
         .accessibilitySortPriority(60)
     }
 
@@ -135,7 +136,7 @@ struct CompactPlayerView: View {
     private var metadata: some View {
         if let primary = presentation.primaryMetadata {
             Text(primary)
-                .font(.system(size: 14))
+                .font(.system(size: 14, weight: .semibold))
                 .lineLimit(CompactPlayerPresentation.metadataLineLimit)
                 .help(primary)
                 .accessibilityLabel("Current program: \(primary)")
@@ -230,13 +231,15 @@ struct CompactPlayerView: View {
 
     private var footer: some View {
         HStack {
-            Button("Show Library") { onAction(.showLibrary) }
+            Button { onAction(.showLibrary) } label: {
+                Label("Show Library", systemImage: "rectangle.stack")
+            }
                 .help("Show Library")
                 .accessibilityIdentifier("compact.show-library")
                 .accessibilityLabel("Show Library")
                 .accessibilitySortPriority(20)
             Spacer()
-            Menu("More") {
+            Menu {
                 Toggle(
                     "Always on Top",
                     isOn: Binding(
@@ -248,6 +251,11 @@ struct CompactPlayerView: View {
                 .accessibilityLabel("Always on Top")
                 .accessibilityValue(isAlwaysOnTop ? "On" : "Off")
                 .accessibilitySortPriority(10)
+                Divider()
+                Button("Sign Out") { onAction(.signOut) }
+                    .accessibilityIdentifier("compact.sign-out")
+            } label: {
+                Label("More", systemImage: "ellipsis.circle")
             }
         }
         .font(.system(size: 12))
@@ -267,6 +275,7 @@ struct CompactPlayerView: View {
         case .retryPlayback: "retry"
         case .signInAgain: "sign-in-again"
         case .refreshLibrary: "refresh-library"
+        case .signOut: "sign-out"
         }
     }
 

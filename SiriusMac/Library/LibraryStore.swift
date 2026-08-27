@@ -54,7 +54,7 @@ enum LibraryStorePersistence: Equatable {
 
 /// A volatile, stable-ID queue captured from the collection that explicitly
 /// began playback. It deliberately knows nothing about media, sessions, or
-/// catalog records; callers reconcile it with the current entitled IDs.
+/// catalog records; callers reconcile it with the current available guide IDs.
 struct PlaybackQueue: Equatable {
     let capturedIDs: [LiveChannelID]
     private(set) var currentID: LiveChannelID?
@@ -71,11 +71,11 @@ struct PlaybackQueue: Equatable {
 
     mutating func candidate(
         _ direction: QueueDirection,
-        currentEntitledIDs: [LiveChannelID],
+        currentAvailableIDs: [LiveChannelID],
         fullLineup: [LiveChannelID]
     ) -> LiveChannelID? {
-        let entitled = Set(currentEntitledIDs)
-        if capturedIDs.contains(where: { entitled.contains($0) }) {
+        let available = Set(currentAvailableIDs)
+        if capturedIDs.contains(where: { available.contains($0) }) {
             guard let currentIndex else { return nil }
             let indices: [Int] = switch direction {
             case .previous: Array(capturedIDs.indices.prefix(upTo: currentIndex).reversed())
@@ -83,7 +83,7 @@ struct PlaybackQueue: Equatable {
             }
             for index in indices {
                 let candidate = capturedIDs[index]
-                if entitled.contains(candidate) {
+                if available.contains(candidate) {
                     currentID = candidate
                     return candidate
                 }
@@ -91,7 +91,7 @@ struct PlaybackQueue: Equatable {
             return nil
         }
 
-        let usableLineup = fullLineup.filter { entitled.contains($0) }
+        let usableLineup = fullLineup.filter { available.contains($0) }
         guard !usableLineup.isEmpty else { return nil }
         let candidate: LiveChannelID?
         if let currentID, let fullLineupIndex = usableLineup.firstIndex(of: currentID) {
@@ -109,11 +109,11 @@ struct PlaybackQueue: Equatable {
         return candidate
     }
 
-    func availability(currentEntitledIDs: [LiveChannelID], fullLineup: [LiveChannelID]) -> QueueDirectionAvailability {
+    func availability(currentAvailableIDs: [LiveChannelID], fullLineup: [LiveChannelID]) -> QueueDirectionAvailability {
         var previous = self
         var next = self
-        let hasPrevious = previous.candidate(.previous, currentEntitledIDs: currentEntitledIDs, fullLineup: fullLineup) != nil
-        let hasNext = next.candidate(.next, currentEntitledIDs: currentEntitledIDs, fullLineup: fullLineup) != nil
+        let hasPrevious = previous.candidate(.previous, currentAvailableIDs: currentAvailableIDs, fullLineup: fullLineup) != nil
+        let hasNext = next.candidate(.next, currentAvailableIDs: currentAvailableIDs, fullLineup: fullLineup) != nil
         return switch (hasPrevious, hasNext) {
         case (false, false): .none
         case (true, false): .previous
@@ -229,17 +229,21 @@ final class LibraryStore {
     private(set) var recents: [LibraryChannelSnapshot] = []
     private(set) var selectedLibraryTab = "channels"
     private(set) var alwaysOnTop = false
+    private(set) var lastLoadFailed = false
+    private(set) var lastSaveFailed = false
 
     init(
         modelContainer: ModelContainer? = nil,
+        persistence injectedPersistence: LibraryStorePersistence? = nil,
         now: @escaping @Sendable () -> Date = Date.init
     ) {
-        let setup = modelContainer.map { (container: $0, persistence: LibraryStorePersistence.durable) }
+        let setup = modelContainer.map { (container: $0, persistence: injectedPersistence ?? LibraryStorePersistence.durable) }
             ?? Self.makeDefaultContainer()
         modelContext = ModelContext(setup.container)
         persistence = setup.persistence
         self.now = now
         publishFavorites()
+        publishRecents()
         publishPlayerPreferences()
     }
 
@@ -249,7 +253,14 @@ final class LibraryStore {
 
     /// Applies a desired state instead of toggling from a stale read.
     func setFavorite(_ snapshot: LibraryChannelSnapshot, isFavorite: Bool) {
-        let matches = favoriteRecords().filter { $0.channelID == snapshot.id.rawValue }
+        guard persistence == .durable else {
+            // Never present an ephemeral favorite as saved. Listening remains
+            // available, while the library banner explains the storage issue.
+            lastSaveFailed = true
+            return
+        }
+        guard let records = favoriteRecords() else { return }
+        let matches = records.filter { $0.channelID == snapshot.id.rawValue }
         var didMutate = false
 
         if isFavorite {
@@ -274,7 +285,11 @@ final class LibraryStore {
     /// Records only a caller-confirmed playback transition. Catalog selection
     /// and tune intent never reach this API.
     func recordConfirmedPlayback(_ snapshot: LibraryChannelSnapshot) {
-        var ordered = normalizedRecentRecords()
+        guard persistence == .durable else {
+            lastSaveFailed = true
+            return
+        }
+        guard var ordered = normalizedRecentRecords() else { return }
         let matchingIndex = ordered.firstIndex { $0.channelID == snapshot.id.rawValue }
         var didMutate = false
 
@@ -310,15 +325,25 @@ final class LibraryStore {
     }
 
     func clearRecents() {
-        let records = recentRecords()
+        guard persistence == .durable else {
+            lastSaveFailed = true
+            return
+        }
+        guard let records = recentRecords() else { return }
         for record in records { modelContext.delete(record) }
         saveIfNeeded(!records.isEmpty)
         publishRecents()
     }
 
     func setSelectedLibraryTab(_ tab: String) {
-        let record = playerPreferenceRecord() ?? PlayerPreferenceRecord()
-        if playerPreferenceRecord() == nil { modelContext.insert(record) }
+        guard persistence == .durable else {
+            selectedLibraryTab = tab
+            lastSaveFailed = true
+            return
+        }
+        guard let records = playerPreferenceRecords() else { return }
+        let record = records.first ?? PlayerPreferenceRecord()
+        if records.isEmpty { modelContext.insert(record) }
         guard record.selectedTab != tab else { return }
         record.selectedTab = tab
         saveIfNeeded(true)
@@ -328,9 +353,14 @@ final class LibraryStore {
     /// Persists a desired compact-window level without exposing any playback,
     /// session, or resource state to the preference boundary.
     func setAlwaysOnTop(_ desiredState: Bool) {
-        let existingRecord = playerPreferenceRecord()
-        let record = existingRecord ?? PlayerPreferenceRecord()
-        if existingRecord == nil { modelContext.insert(record) }
+        guard persistence == .durable else {
+            alwaysOnTop = desiredState
+            lastSaveFailed = true
+            return
+        }
+        guard let records = playerPreferenceRecords() else { return }
+        let record = records.first ?? PlayerPreferenceRecord()
+        if records.isEmpty { modelContext.insert(record) }
         guard record.compactWindowAlwaysOnTop != desiredState else {
             publishPlayerPreferences()
             return
@@ -354,28 +384,45 @@ final class LibraryStore {
             .count
     }
 
-    private func favoriteRecords() -> [FavoriteRecord] {
-        (try? modelContext.fetch(FetchDescriptor<FavoriteRecord>())) ?? []
+    private func favoriteRecords() -> [FavoriteRecord]? {
+        do {
+            return try modelContext.fetch(FetchDescriptor<FavoriteRecord>())
+        } catch {
+            lastLoadFailed = true
+            return nil
+        }
     }
 
-    private func recentRecords() -> [RecentRecord] {
-        (try? modelContext.fetch(FetchDescriptor<RecentRecord>())) ?? []
+    private func recentRecords() -> [RecentRecord]? {
+        do {
+            return try modelContext.fetch(FetchDescriptor<RecentRecord>())
+        } catch {
+            lastLoadFailed = true
+            return nil
+        }
     }
 
-    private func playerPreferenceRecord() -> PlayerPreferenceRecord? {
-        (try? modelContext.fetch(FetchDescriptor<PlayerPreferenceRecord>()))?.first
+    private func playerPreferenceRecords() -> [PlayerPreferenceRecord]? {
+        do {
+            return try modelContext.fetch(FetchDescriptor<PlayerPreferenceRecord>())
+        } catch {
+            lastLoadFailed = true
+            return nil
+        }
     }
 
     private func publishPlayerPreferences() {
-        let preferences = playerPreferenceRecord()
+        guard let records = playerPreferenceRecords() else { return }
+        let preferences = records.first
         selectedLibraryTab = preferences?.selectedTab ?? "channels"
         alwaysOnTop = preferences?.compactWindowAlwaysOnTop ?? false
     }
 
     /// Invalid and duplicate legacy rows are removed deterministically before
     /// the next mutation; no malformed record reaches the public projection.
-    private func normalizedRecentRecords() -> [RecentRecord] {
-        let sorted = recentRecords().sorted { lhs, rhs in
+    private func normalizedRecentRecords() -> [RecentRecord]? {
+        guard let records = recentRecords() else { return nil }
+        let sorted = records.sorted { lhs, rhs in
             if lhs.rank != rhs.rank { return lhs.rank < rhs.rank }
             if lhs.confirmedAt != rhs.confirmedAt { return lhs.confirmedAt > rhs.confirmedAt }
             return lhs.channelID < rhs.channelID
@@ -391,8 +438,9 @@ final class LibraryStore {
     }
 
     private func publishFavorites() {
+        guard let records = favoriteRecords() else { return }
         let unique = Dictionary(
-            favoriteRecords().compactMap { record in record.snapshot.map { ($0.id, $0) } },
+            records.compactMap { record in record.snapshot.map { ($0.id, $0) } },
             uniquingKeysWith: { first, _ in first }
         )
         let projected = unique.values.sorted { lhs, rhs in
@@ -405,8 +453,9 @@ final class LibraryStore {
     }
 
     private func publishRecents() {
+        guard let records = recentRecords() else { return }
         var seen = Set<LiveChannelID>()
-        recents = recentRecords()
+        recents = records
             .sorted { lhs, rhs in
                 if lhs.rank != rhs.rank { return lhs.rank < rhs.rank }
                 if lhs.confirmedAt != rhs.confirmedAt { return lhs.confirmedAt > rhs.confirmedAt }
@@ -424,15 +473,17 @@ final class LibraryStore {
         guard didMutate || modelContext.hasChanges else { return }
         do {
             try modelContext.save()
+            lastSaveFailed = false
         } catch {
             // Fail closed: do not expose an unsaved mutation or log storage internals.
             modelContext.rollback()
+            lastSaveFailed = true
         }
     }
 
     static func makeDefaultContainer(
         persistentContainer: () throws -> ModelContainer = {
-            try ModelContainer(for: FavoriteRecord.self, RecentRecord.self, PlayerPreferenceRecord.self)
+            try makeAppSpecificPersistentContainer()
         },
         fallbackContainer: () throws -> ModelContainer = {
             let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
@@ -453,4 +504,110 @@ final class LibraryStore {
             return (try! fallbackContainer(), .inMemoryFallback)
         }
     }
+
+    /// Sirius Mac owns an explicit store instead of SwiftData's process-wide
+    /// `Application Support/default.store`, which can collide with another
+    /// model or an earlier development build and force an in-memory fallback.
+    private static func makeAppSpecificPersistentContainer() throws -> ModelContainer {
+        let fileManager = FileManager.default
+        let applicationSupport = try fileManager.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )
+        let directory = applicationSupport.appendingPathComponent("Sirius Mac", isDirectory: true)
+        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        return try makePersistentContainer(
+            at: directory.appendingPathComponent("Library.store"),
+            migratingLegacyStoreAt: applicationSupport.appendingPathComponent("default.store"),
+            fileManager: fileManager
+        )
+    }
+
+    /// Internal for focused persistence tests. Migration is semantic and
+    /// idempotent: opaque SQLite files are never moved, deleted, or adopted.
+    static func makePersistentContainer(
+        at storeURL: URL,
+        migratingLegacyStoreAt legacyStoreURL: URL? = nil,
+        fileManager: FileManager = .default
+    ) throws -> ModelContainer {
+        try fileManager.createDirectory(
+            at: storeURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let container = try modelContainer(at: storeURL, name: "SiriusMacLibrary")
+        let markerURL = storeURL.appendingPathExtension("legacy-migration-complete")
+
+        guard !fileManager.fileExists(atPath: markerURL.path) else { return container }
+        if let legacyStoreURL,
+           legacyStoreURL.standardizedFileURL != storeURL.standardizedFileURL,
+           fileManager.fileExists(atPath: legacyStoreURL.path) {
+            try migrateLegacyRecords(from: legacyStoreURL, into: container)
+        }
+        try Data().write(to: markerURL, options: .atomic)
+        return container
+    }
+
+    private static func modelContainer(at url: URL, name: String) throws -> ModelContainer {
+        let configuration = ModelConfiguration(
+            name,
+            url: url,
+            cloudKitDatabase: .none
+        )
+        return try ModelContainer(
+            for: FavoriteRecord.self,
+            RecentRecord.self,
+            PlayerPreferenceRecord.self,
+            configurations: configuration
+        )
+    }
+
+    private static func migrateLegacyRecords(
+        from legacyStoreURL: URL,
+        into destinationContainer: ModelContainer
+    ) throws {
+        let sourceContainer = try modelContainer(at: legacyStoreURL, name: "SiriusMacLegacyLibrary")
+        let source = ModelContext(sourceContainer)
+        let destination = ModelContext(destinationContainer)
+
+        let existingFavoriteIDs = Set(
+            try destination.fetch(FetchDescriptor<FavoriteRecord>()).map(\.channelID)
+        )
+        for record in try source.fetch(FetchDescriptor<FavoriteRecord>()) {
+            guard let snapshot = record.snapshot,
+                  !existingFavoriteIDs.contains(snapshot.id.rawValue)
+            else { continue }
+            destination.insert(FavoriteRecord(snapshot: snapshot))
+        }
+
+        let existingRecentIDs = Set(
+            try destination.fetch(FetchDescriptor<RecentRecord>()).map(\.channelID)
+        )
+        for record in try source.fetch(FetchDescriptor<RecentRecord>()) {
+            guard let snapshot = record.snapshot,
+                  !existingRecentIDs.contains(snapshot.id.rawValue)
+            else { continue }
+            destination.insert(RecentRecord(
+                snapshot: snapshot,
+                rank: record.rank,
+                confirmedAt: record.confirmedAt
+            ))
+        }
+
+        if try destination.fetch(FetchDescriptor<PlayerPreferenceRecord>()).isEmpty,
+           let preferences = try source.fetch(FetchDescriptor<PlayerPreferenceRecord>()).first {
+            destination.insert(PlayerPreferenceRecord(
+                selectedTab: preferences.selectedTab,
+                compactWindowAlwaysOnTop: preferences.compactWindowAlwaysOnTop,
+                compactFrameAutosaveName: preferences.compactFrameAutosaveName,
+                libraryFrameAutosaveName: preferences.libraryFrameAutosaveName
+            ))
+        }
+
+        if destination.hasChanges {
+            try destination.save()
+        }
+    }
+
 }

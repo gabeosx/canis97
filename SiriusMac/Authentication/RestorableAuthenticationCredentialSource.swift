@@ -1,3 +1,5 @@
+import Foundation
+import OSLog
 import SiriusXMClient
 
 @MainActor
@@ -9,6 +11,19 @@ struct RestorableAuthenticationCredentialTelemetry {
     }
 
     static let disabled = RestorableAuthenticationCredentialTelemetry()
+
+    static let live: RestorableAuthenticationCredentialTelemetry = {
+        let logger = Logger(
+            subsystem: Bundle.main.bundleIdentifier ?? "com.siriusmac.player",
+            category: "authentication-lifecycle"
+        )
+        return RestorableAuthenticationCredentialTelemetry { terminal in
+            // Authentication lifecycle events are intentionally restricted to the
+            // closed terminal vocabulary. Never include credentials, cookies,
+            // provider responses, or Keychain status values here.
+            logger.notice("Authentication lifecycle: \(terminal.rawValue, privacy: .public)")
+        }
+    }()
 
     func record(_ terminal: ClosedAuthenticationTerminal) {
         recorder(terminal)
@@ -79,9 +94,14 @@ final class RestorableAuthenticationCredentialSource: CredentialSource {
             attemptOrigin = .webViewRequired
             return .webViewRequired
         case .invalid:
-            return .invalidCredential
+            // Automatic restore fails closed, but an explicit owner action must
+            // remain capable of replacing unusable material through SiriusXM's
+            // browser sign-in. The existing item is not deleted here.
+            attemptOrigin = .webViewRequired
+            return .webViewRequired
         case .unavailable:
-            return .unavailable
+            attemptOrigin = .webViewRequired
+            return .webViewRequired
         }
     }
 
@@ -130,10 +150,11 @@ final class RestorableAuthenticationCredentialSource: CredentialSource {
     }
 
     /// Retires a rejected restored attempt without changing persistent storage.
-    func finishRejectedRestore() {
+    func finishRejectedRestore(_ terminal: ClosedAuthenticationTerminal) {
         guard isRestoredAttempt else { return }
         attemptOrigin = .none
         isStoredCredentialQuarantined = true
+        telemetry.record(terminal)
     }
 
     func finishWebViewAttempt() {

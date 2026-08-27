@@ -119,7 +119,7 @@ enum ClosedAuthenticationOracle {
         case .localCredentialInvalid:
             AuthenticationPresentationCopy(
                 title: "Saved sign-in unavailable",
-                message: "The saved sign-in cannot be used.",
+                message: "The Keychain item is still on this Mac, but it cannot be used. Open SiriusXM's sign-in page to replace it.",
                 iconName: "exclamationmark.triangle",
                 statusLabel: "local-credential-invalid",
                 isReady: false,
@@ -128,7 +128,7 @@ enum ClosedAuthenticationOracle {
         case .localCredentialUnavailable:
             AuthenticationPresentationCopy(
                 title: "Saved sign-in cannot be accessed",
-                message: "Sirius Mac cannot access the saved sign-in.",
+                message: "Sirius Mac could not access Keychain and did not delete anything. Open SiriusXM's sign-in page to continue.",
                 iconName: "exclamationmark.triangle",
                 statusLabel: "local-credential-unavailable",
                 isReady: false,
@@ -182,7 +182,7 @@ enum ClosedAuthenticationOracle {
         case .waitingForWebView:
             AuthenticationPresentationCopy(
                 title: "Sign in to SiriusXM",
-                message: "Sign in in the native window to continue.",
+                message: "Sign in below. Sirius Mac will continue automatically when the session is ready.",
                 iconName: "lock",
                 statusLabel: "web-sign-in-required",
                 isReady: false,
@@ -236,7 +236,7 @@ enum ClosedAuthenticationOracle {
         case .profileUnauthorized, .profileForbidden:
             AuthenticationPresentationCopy(
                 title: "Sign-in verification was rejected",
-                message: "SiriusXM did not accept this sign-in at the profile check.",
+                message: "SiriusXM did not accept this browser-issued sign-in at the profile check. Open its sign-in page to try again.",
                 iconName: "xmark.circle",
                 statusLabel: "profile-authorization-rejected",
                 isReady: false,
@@ -245,7 +245,7 @@ enum ClosedAuthenticationOracle {
         case .entitlementUnauthorized, .entitlementForbidden:
             AuthenticationPresentationCopy(
                 title: "Subscription verification was rejected",
-                message: "SiriusXM did not accept this sign-in at the subscription check.",
+                message: "SiriusXM did not accept this browser-issued sign-in at the subscription check. Open its sign-in page to try again.",
                 iconName: "xmark.circle",
                 statusLabel: "entitlement-authorization-rejected",
                 isReady: false,

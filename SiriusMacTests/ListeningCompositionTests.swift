@@ -538,7 +538,7 @@ final class ListeningCompositionTests: XCTestCase {
     func testCatalogContractAllowsOnlyTheCurrentBrowserPageRequest() throws {
         let request = try XCTUnwrap(
             ClosedCatalogRequestContract.makeRequest(
-                credential: AuthenticationCredential(volatileMaterial: Data("synthetic-credential".utf8))
+                credential: try! renewableTestCredential(accessToken: "synthetic-credential")
             )
         )
 
@@ -564,7 +564,7 @@ final class ListeningCompositionTests: XCTestCase {
             )
         )
         let adapter = ClosedLiveObservationAdapter(
-            credentialLoader: { .available(AuthenticationCredential(volatileMaterial: Data("synthetic-credential".utf8))) },
+            credentialLoader: { .available(try! renewableTestCredential(accessToken: "synthetic-credential")) },
             transport: transport
         )
 
@@ -598,7 +598,7 @@ final class ListeningCompositionTests: XCTestCase {
             result: .response(statusCode: 200, contentType: "application/json", body: body)
         )
         let adapter = ClosedLiveObservationAdapter(
-            credentialLoader: { .available(AuthenticationCredential(volatileMaterial: Data("synthetic-credential".utf8))) },
+            credentialLoader: { .available(try! renewableTestCredential(accessToken: "synthetic-credential")) },
             transport: transport
         )
 
@@ -631,7 +631,7 @@ final class ListeningCompositionTests: XCTestCase {
             result: .response(statusCode: 200, contentType: "application/json", body: body)
         )
         let adapter = ClosedLiveObservationAdapter(
-            credentialLoader: { .available(AuthenticationCredential(volatileMaterial: Data("synthetic-credential".utf8))) },
+            credentialLoader: { .available(try! renewableTestCredential(accessToken: "synthetic-credential")) },
             transport: transport
         )
 
@@ -660,7 +660,7 @@ final class ListeningCompositionTests: XCTestCase {
 
         for (transportResult, failure) in cases {
             let adapter = ClosedLiveObservationAdapter(
-                credentialLoader: { .available(AuthenticationCredential(volatileMaterial: Data("synthetic-credential".utf8))) },
+                credentialLoader: { .available(try! renewableTestCredential(accessToken: "synthetic-credential")) },
                 transport: RecordingCatalogTransport(result: transportResult)
             )
 
@@ -680,7 +680,7 @@ final class ListeningCompositionTests: XCTestCase {
         }
         let body = try JSONSerialization.data(withJSONObject: nested)
         let adapter = ClosedLiveObservationAdapter(
-            credentialLoader: { .available(AuthenticationCredential(volatileMaterial: Data("synthetic-credential".utf8))) },
+            credentialLoader: { .available(try! renewableTestCredential(accessToken: "synthetic-credential")) },
             transport: RecordingCatalogTransport(
                 result: .response(statusCode: 200, contentType: "application/json", body: body)
             )
@@ -702,7 +702,7 @@ final class ListeningCompositionTests: XCTestCase {
         }
         let body = try JSONSerialization.data(withJSONObject: nested)
         let adapter = ClosedLiveObservationAdapter(
-            credentialLoader: { .available(AuthenticationCredential(volatileMaterial: Data("synthetic-credential".utf8))) },
+            credentialLoader: { .available(try! renewableTestCredential(accessToken: "synthetic-credential")) },
             transport: RecordingCatalogTransport(
                 result: .response(statusCode: 200, contentType: "application/json", body: body)
             )
@@ -740,7 +740,7 @@ final class ListeningCompositionTests: XCTestCase {
             (.response(statusCode: 403, contentType: "text/plain", body: Data()), .forbidden),
         ] {
             let adapter = ClosedLiveObservationAdapter(
-                credentialLoader: { .available(AuthenticationCredential(volatileMaterial: Data("synthetic-credential".utf8))) },
+                credentialLoader: { .available(try! renewableTestCredential(accessToken: "synthetic-credential")) },
                 transport: RecordingCatalogTransport(result: transportResult)
             )
 
@@ -756,7 +756,7 @@ final class ListeningCompositionTests: XCTestCase {
     func testTuneContractUsesOnlyTheApprovedSelectedChannelAndExactRequestSemantics() throws {
         let request = try XCTUnwrap(
             ClosedTuneRequestContract.makeRequest(
-                credential: AuthenticationCredential(volatileMaterial: Data("synthetic-credential".utf8))
+                credential: try! renewableTestCredential(accessToken: "synthetic-credential")
             )
         )
         let body = try XCTUnwrap(request.httpBody)
@@ -785,7 +785,7 @@ final class ListeningCompositionTests: XCTestCase {
     func testTuneContractRejectsMutatedBrowserProvenBodyAndClockThenAcceptsTheOriginal() throws {
         let request = try XCTUnwrap(
             ClosedTuneRequestContract.makeRequest(
-                credential: AuthenticationCredential(volatileMaterial: Data("synthetic-credential".utf8))
+                credential: try! renewableTestCredential(accessToken: "synthetic-credential")
             )
         )
         let originalBody = try XCTUnwrap(request.httpBody)
@@ -818,7 +818,7 @@ final class ListeningCompositionTests: XCTestCase {
 
     func testTuneRunNeedsAResourceAllowlistDecisionWithoutExposingTheResource() async {
         let adapter = ClosedTuneObservationAdapter(
-            credentialLoader: { .available(AuthenticationCredential(volatileMaterial: Data("synthetic-credential".utf8))) },
+            credentialLoader: { .available(try! renewableTestCredential(accessToken: "synthetic-credential")) },
             transport: RecordingTuneTransport(
                 result: .response(
                     statusCode: 200,
@@ -846,7 +846,7 @@ final class ListeningCompositionTests: XCTestCase {
     func testTuneRunClosesOnCancellationAndProtectedOrUnknownResponses() async {
         let cancelledTransport = RecordingTuneTransport(result: .transportFailure)
         let cancelled = ClosedTuneObservationAdapter(
-            credentialLoader: { .available(AuthenticationCredential(volatileMaterial: Data("synthetic-credential".utf8))) },
+            credentialLoader: { .available(try! renewableTestCredential(accessToken: "synthetic-credential")) },
             transport: cancelledTransport
         )
         XCTAssertEqual(cancelled.begin(entitlement: .entitled), .started)
@@ -863,7 +863,7 @@ final class ListeningCompositionTests: XCTestCase {
             (.response(statusCode: 200, contentType: "application/json", body: Data(#"{}"#.utf8)), .malformedContract),
         ] {
             let adapter = ClosedTuneObservationAdapter(
-                credentialLoader: { .available(AuthenticationCredential(volatileMaterial: Data("synthetic-credential".utf8))) },
+                credentialLoader: { .available(try! renewableTestCredential(accessToken: "synthetic-credential")) },
                 transport: RecordingTuneTransport(result: response)
             )
             XCTAssertEqual(adapter.begin(entitlement: .entitled), .started)
@@ -884,7 +884,7 @@ final class ListeningCompositionTests: XCTestCase {
 
         for (statusCode, failure) in cases {
             let adapter = ClosedTuneObservationAdapter(
-                credentialLoader: { .available(AuthenticationCredential(volatileMaterial: Data("synthetic-credential".utf8))) },
+                credentialLoader: { .available(try! renewableTestCredential(accessToken: "synthetic-credential")) },
                 transport: RecordingTuneTransport(
                     result: .response(
                         statusCode: statusCode,

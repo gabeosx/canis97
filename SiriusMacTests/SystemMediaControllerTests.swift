@@ -1,3 +1,4 @@
+import MediaPlayer
 import XCTest
 @_spi(Playback) import SiriusXMClient
 @testable import SiriusMac
@@ -112,6 +113,29 @@ final class SystemMediaControllerTests: XCTestCase {
         controller.publish(nil)
         XCTAssertNil(publisher.lastPublished)
     }
+
+    func testNowPlayingArtworkRequestIsSafeOnMediaPlayersBackgroundQueue() async throws {
+        let png = try XCTUnwrap(Data(base64Encoded:
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+        ))
+        let artwork = try XCTUnwrap(SystemNowPlayingArtworkFactory.make(
+            from: ArtworkData(bytes: png, mediaType: .png)
+        ))
+        let sendableArtwork = UncheckedSendableArtwork(artwork)
+
+        let rendered = await withCheckedContinuation { continuation in
+            DispatchQueue(label: "fixture.media-player.accessQueue").async {
+                continuation.resume(returning: sendableArtwork.value.image(at: CGSize(width: 64, height: 64)) != nil)
+            }
+        }
+
+        XCTAssertTrue(rendered)
+    }
+}
+
+private final class UncheckedSendableArtwork: @unchecked Sendable {
+    let value: MPMediaItemArtwork
+    init(_ value: MPMediaItemArtwork) { self.value = value }
 }
 
 @MainActor

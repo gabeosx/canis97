@@ -105,7 +105,7 @@ final class CompactPlayerPresentationTests: XCTestCase {
     func testViewActionsStayOutsideThePresentationValue() {
         XCTAssertEqual(
             CompactPlayerAction.allCases,
-            [.previous, .playPause, .next, .toggleFavorite, .showLibrary, .toggleAlwaysOnTop, .retryPlayback, .signInAgain, .refreshLibrary]
+            [.previous, .playPause, .next, .toggleFavorite, .showLibrary, .toggleAlwaysOnTop, .retryPlayback, .signInAgain, .refreshLibrary, .signOut]
         )
         let storedValues = Array(Mirror(reflecting: CompactPlayerPresentation.empty()).children)
 
@@ -146,6 +146,23 @@ final class CompactPlayerPresentationTests: XCTestCase {
         XCTAssertTrue(presentation.showsNativeProgress)
         XCTAssertNil(presentation.channelIdentity)
         XCTAssertNil(presentation.primaryMetadata)
+    }
+
+    func testIdleWithoutAConfirmedChannelShowsEmptyStateWithoutProgress() {
+        let presentation = CompactPlayerPresentation.project(
+            channel: nil,
+            metadata: unavailableMetadata(),
+            primaryMetadata: nil,
+            secondaryMetadata: nil,
+            playback: .idle,
+            isFavorite: false,
+            queueAvailability: .none
+        )
+
+        XCTAssertNil(presentation.status)
+        XCTAssertFalse(presentation.showsNativeProgress)
+        XCTAssertEqual(presentation.emptyTitle, "Nothing Playing")
+        XCTAssertEqual(presentation.emptyLibraryButtonTitle, "Open Library")
     }
 
     func testFailuresExposeOnlyTheirApprovedRecoveryAction() {
@@ -207,6 +224,22 @@ final class CompactPlayerPresentationTests: XCTestCase {
         XCTAssertEqual(presentation.primaryMetadata, "Current program unavailable")
         XCTAssertEqual(presentation.secondaryMetadata, "7 · Fallback Channel")
         XCTAssertEqual(presentation.status, .paused)
+    }
+
+    func testChannelArtworkBacksUpUnavailableProgramArtwork() {
+        let channelArtwork = ArtworkData(bytes: Data([0x89, 0x50, 0x4E, 0x47]), mediaType: .png)
+        let presentation = CompactPlayerPresentation.project(
+            channel: LiveChannel(id: LiveChannelID("fixture-channel"), name: "Fallback Channel", displayNumber: 7),
+            metadata: unavailableMetadata(),
+            channelArtwork: channelArtwork,
+            primaryMetadata: "Current program unavailable",
+            secondaryMetadata: "7 · Fallback Channel",
+            playback: .paused,
+            isFavorite: false,
+            queueAvailability: .none
+        )
+
+        XCTAssertEqual(presentation.artwork, .data(channelArtwork))
     }
 
     func testLongMetadataKeepsCompleteSemanticValuesAndFixedLayoutMetrics() {

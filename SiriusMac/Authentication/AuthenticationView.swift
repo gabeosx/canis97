@@ -9,22 +9,14 @@ struct AuthenticationView: View {
     var body: some View {
         SwiftUI.Group {
             if model.isReady {
-                VStack(alignment: .leading, spacing: 12) {
-                    ListeningView(controller: controller)
-                    HStack {
-                        Button("Sign Out") {
-                            controller.resetListeningBeforeAuthenticationCleanup()
-                            _ = model.signOut()
-                        }
-                        clearLocalSessionButton
-                    }
-                    .padding(.horizontal, 24)
-                }
+                ProgressView("Opening player")
+                    .accessibilityLabel("Opening Sirius Mac player")
             } else {
                 authenticationContent
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(WindowAttachmentView(role: .authentication, alwaysOnTop: false))
         .disabled(model.isAttemptInFlight)
         .task { @MainActor in
             let attempt = model.restoreStoredCredentialOnLaunch()
@@ -38,7 +30,7 @@ struct AuthenticationView: View {
             if case .unsupported = model.state {
                 UnsupportedAuthenticationView(copy: copy)
                 HStack {
-                    Button("Retry Sign In") { _ = model.retry() }
+                    Button("Open SiriusXM Sign-In") { _ = model.retry() }
                     clearLocalSessionButton
                 }
             } else {
@@ -53,7 +45,7 @@ struct AuthenticationView: View {
                     ProgressView()
                         .accessibilityLabel("Authentication in progress")
                 } else {
-                    if model.state == .waitingForWebView {
+                    if usesCurrentWebViewSession {
                         WebViewAuthenticationContainer(bridge: bridge)
                     }
                     authenticationActions
@@ -71,12 +63,24 @@ struct AuthenticationView: View {
         }
     }
 
+    private var usesCurrentWebViewSession: Bool {
+        switch model.state {
+        case .waitingForWebView, .webCredentialMissing, .webCredentialMalformed, .webCredentialAmbiguous:
+            true
+        default:
+            false
+        }
+    }
+
     @ViewBuilder
     private var authenticationActions: some View {
         switch model.state {
-        case .waitingForWebView:
+        case .waitingForWebView,
+             .webCredentialMissing,
+            .webCredentialMalformed,
+             .webCredentialAmbiguous:
             HStack {
-                Button("Use This Window’s Session") { _ = model.useLoggedInSession() }
+                Button("Check Session Now") { _ = model.useLoggedInSession() }
                 clearLocalSessionButton
             }
         case .localCredentialInvalid,
@@ -90,12 +94,12 @@ struct AuthenticationView: View {
              .challengeRequired,
              .cleanupFailed:
             HStack {
-                Button("Retry Sign In") { _ = model.retry() }
+                Button("Open SiriusXM Sign-In") { _ = model.retry() }
                 clearLocalSessionButton
             }
         case .localCredentialMissing, .signedOut:
             HStack {
-                Button("Sign In") { _ = model.signIn() }
+                Button("Sign In with SiriusXM") { _ = model.signIn() }
                 clearLocalSessionButton
             }
         case .verifyingAuthentication,
@@ -137,7 +141,11 @@ struct AuthenticationComposition {
         client: (any ClientAuthenticationFlow)? = nil,
         playbackCoordinator injectedPlaybackCoordinator: PlaybackCoordinator? = nil
     ) {
-        let credentialSource = RestorableAuthenticationCredentialSource(keychain: keychain, webViewSource: bridge)
+        let credentialSource = RestorableAuthenticationCredentialSource(
+            keychain: keychain,
+            webViewSource: bridge,
+            telemetry: .live
+        )
 
         self.bridge = bridge
         self.keychain = keychain
@@ -157,7 +165,8 @@ struct AuthenticationComposition {
             let composedClient = SiriusXMClient(
                 credentialSource: credentialSource,
                 credentialStore: keychain,
-                residueCleaner: bridge
+                residueCleaner: bridge,
+                credentialRefresher: bridge
             )
             self.flow = ComposedAuthenticationPresentationFlow(
                 bridge: bridge,
@@ -190,7 +199,7 @@ private struct WebViewAuthenticationContainer: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Native sign-in")
+            Text("Sign in below. Sirius Mac will continue automatically when the session is ready.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 4)

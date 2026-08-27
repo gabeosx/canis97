@@ -5,7 +5,7 @@ import XCTest
 
 @MainActor
 final class MetadataPresentationTests: XCTestCase {
-    func testListeningControlsDeclareDistinctAccessibilityContractsOnTheirButtons() throws {
+    func testLibraryNavigationAndSearchLiveInTheNativeToolbar() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -13,51 +13,24 @@ final class MetadataPresentationTests: XCTestCase {
             contentsOf: root.appending(path: "SiriusMac/Catalog/ListeningView.swift"),
             encoding: .utf8
         )
-        let controls = [
-            (title: "Refresh", identifier: "listening.refresh", label: "Refresh Channels"),
-            (title: "Tune", identifier: "listening.tune", label: "Tune selected channel"),
-            (title: "Pause", identifier: "listening.pause", label: "Pause playback"),
-            (title: "Resume Live", identifier: "listening.resume-live", label: "Resume at live edge"),
-            (title: "Stop", identifier: "listening.stop", label: "Stop playback"),
-        ]
-
-        XCTAssertEqual(Set(controls.map(\.identifier)).count, controls.count)
-
-        for control in controls {
-            let buttonPrefix = "Button(\"\(control.title)\")"
-            let start = try XCTUnwrap(source.range(of: buttonPrefix)?.lowerBound)
-            let remaining = String(source[start...])
-            let nextButton = remaining.dropFirst(buttonPrefix.count).range(of: "Button(")?.lowerBound
-            let buttonDefinition = nextButton.map { String(remaining[..<$0]) } ?? remaining
-
-            XCTAssertTrue(
-                buttonDefinition.contains(".accessibilityIdentifier(\"\(control.identifier)\")"),
-                "\(control.title) must expose its stable identifier on the Button"
-            )
-            XCTAssertTrue(
-                buttonDefinition.contains(".accessibilityLabel(\"\(control.label)\")"),
-                "\(control.title) must expose its human-readable label on the Button"
-            )
-        }
+        XCTAssertTrue(source.contains(".toolbar {"))
+        XCTAssertTrue(source.contains("ToolbarItem(placement: .principal)"))
+        XCTAssertTrue(source.contains("Picker(\"Library\", selection: $tab)"))
+        XCTAssertTrue(source.contains("TextField(\"Search Channels\", text: $query)"))
+        XCTAssertTrue(source.contains(".accessibilityIdentifier(\"library.tabs\")"))
+        XCTAssertTrue(source.contains(".accessibilityIdentifier(\"library.search\")"))
+        XCTAssertTrue(source.contains("Label(\"Refresh\", systemImage: \"arrow.clockwise\")"))
     }
 
-    func testLibraryAndPlayerMenuBindTransportControlsToSharedCommandAvailability() throws {
+    func testPlayerMenuBindsTransportControlsToSharedCommandAvailability() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-        let librarySource = try String(
-            contentsOf: root.appending(path: "SiriusMac/Catalog/ListeningView.swift"),
-            encoding: .utf8
-        )
         let appSource = try String(
             contentsOf: root.appending(path: "SiriusMac/SiriusMacApp.swift"),
             encoding: .utf8
         )
 
-        XCTAssertTrue(librarySource.contains("controller?.commandAvailability ?? model.commandAvailability"))
-        XCTAssertTrue(librarySource.contains(".disabled(!commandAvailability.pause)"))
-        XCTAssertTrue(librarySource.contains(".disabled(!commandAvailability.resumeLive)"))
-        XCTAssertTrue(librarySource.contains(".disabled(!commandAvailability.stop)"))
         XCTAssertTrue(appSource.contains("Button(controller.commandAvailability.playPauseTitle)"))
         XCTAssertTrue(appSource.contains(".disabled(!controller.commandAvailability.previous)"))
         XCTAssertTrue(appSource.contains(".disabled(!controller.commandAvailability.playPause)"))
@@ -73,17 +46,16 @@ final class MetadataPresentationTests: XCTestCase {
             encoding: .utf8
         )
 
-        XCTAssertTrue(source.contains("guard !model.isTunePending else { return }\n                            tune(channel)"))
-        XCTAssertTrue(source.contains("Button(\"Tune\") { tune(channel) }\n                .disabled(model.isTunePending)"))
+        XCTAssertTrue(source.contains("guard !model.isTunePending, item.availability.canTune else { return false }"))
+        XCTAssertTrue(source.contains(".disabled(model.isTunePending || !item.availability.canTune)"))
     }
 
-    func testViewSelectionBindingDoesNotStartMetadataUntilPlaybackIsConfirmed() async {
+    func testBrowseSelectionDoesNotStartMetadataUntilPlaybackIsConfirmed() async {
         let flow = ListeningMetadataFlowSpy()
         let model = ListeningPresentationModel(flow: flow)
-        let view = ListeningView(model: model)
         let channel = LiveChannelID("fixture-channel")
 
-        view.channelSelection.wrappedValue = channel
+        model.select(channel)
         await Task.yield()
 
         let metadataRequestCount = await flow.metadataRequestCount()
@@ -207,6 +179,33 @@ final class MetadataPresentationTests: XCTestCase {
 
         XCTAssertNotNil(NativeArtworkImage.decode(valid))
         XCTAssertNil(NativeArtworkImage.decode(invalid))
+    }
+
+    func testArtworkStoreLoadsOnceAndReusesValidatedBytesAcrossSurfaces() async {
+        let artwork = ArtworkData(bytes: Data([0xFF, 0xD8, 0xFF, 0xD9]), mediaType: .jpeg)
+        let reference = ChannelArtworkReference()
+        let flow = MetadataFlowSpy(artwork: .current(artwork))
+        let store = ArtworkStore(flow: flow)
+
+        XCTAssertEqual(store.loadState(for: nil), .noReference)
+        XCTAssertEqual(store.loadState(for: reference), .idle)
+        await store.load(reference)
+        await store.load(reference)
+
+        XCTAssertEqual(store.artwork(for: reference), artwork)
+        XCTAssertEqual(store.loadState(for: reference), .available)
+        let artworkRequestCount = await flow.artworkRequestCount()
+        XCTAssertEqual(artworkRequestCount, 1)
+    }
+
+    func testArtworkStoreDistinguishesACompletedUnavailableRequest() async {
+        let reference = ChannelArtworkReference()
+        let store = ArtworkStore(flow: MetadataFlowSpy(artwork: .unavailable))
+
+        await store.load(reference)
+
+        XCTAssertNil(store.artwork(for: reference))
+        XCTAssertEqual(store.loadState(for: reference), .unavailable)
     }
 
     func testBlockedRefreshExpiresCurrentMetadataIndependently() async {

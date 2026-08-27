@@ -22,25 +22,25 @@ final class PlaybackQueueTests: XCTestCase {
         let ids = channelIDs("one", "two", "three", "four")
         var queue = PlaybackQueue(originIDs: ids, currentID: ids[1])
         let entitled = [ids[0], ids[1], ids[3]]
-        XCTAssertEqual(queue.candidate(.next, currentEntitledIDs: entitled, fullLineup: ids), ids[3])
-        XCTAssertNil(queue.candidate(.next, currentEntitledIDs: entitled, fullLineup: ids))
-        XCTAssertEqual(queue.candidate(.previous, currentEntitledIDs: entitled, fullLineup: ids), ids[1])
-        XCTAssertEqual(queue.candidate(.previous, currentEntitledIDs: entitled, fullLineup: ids), ids[0])
-        XCTAssertNil(queue.candidate(.previous, currentEntitledIDs: entitled, fullLineup: ids))
+        XCTAssertEqual(queue.candidate(.next, currentAvailableIDs: entitled, fullLineup: ids), ids[3])
+        XCTAssertNil(queue.candidate(.next, currentAvailableIDs: entitled, fullLineup: ids))
+        XCTAssertEqual(queue.candidate(.previous, currentAvailableIDs: entitled, fullLineup: ids), ids[1])
+        XCTAssertEqual(queue.candidate(.previous, currentAvailableIDs: entitled, fullLineup: ids), ids[0])
+        XCTAssertNil(queue.candidate(.previous, currentAvailableIDs: entitled, fullLineup: ids))
     }
 
     func testZeroAndOneItemQueuesDisableUnavailableDirections() {
         let id = LiveChannelID("only")
-        XCTAssertEqual(PlaybackQueue(originIDs: [], currentID: nil).availability(currentEntitledIDs: [], fullLineup: []), .none)
-        XCTAssertEqual(PlaybackQueue(originIDs: [id], currentID: id).availability(currentEntitledIDs: [id], fullLineup: [id]), .none)
+        XCTAssertEqual(PlaybackQueue(originIDs: [], currentID: nil).availability(currentAvailableIDs: [], fullLineup: []), .none)
+        XCTAssertEqual(PlaybackQueue(originIDs: [id], currentID: id).availability(currentAvailableIDs: [id], fullLineup: [id]), .none)
     }
 
     func testFallsBackToCurrentFullLineupOnlyWhenCapturedQueueHasNoUsableID() {
         let captured = channelIDs("removed-one", "removed-two")
         let lineup = channelIDs("alpha", "beta", "gamma")
         var queue = PlaybackQueue(originIDs: captured, currentID: captured[0])
-        XCTAssertEqual(queue.candidate(.next, currentEntitledIDs: lineup, fullLineup: lineup), lineup[0])
-        XCTAssertEqual(queue.candidate(.next, currentEntitledIDs: lineup, fullLineup: lineup), lineup[1])
+        XCTAssertEqual(queue.candidate(.next, currentAvailableIDs: lineup, fullLineup: lineup), lineup[0])
+        XCTAssertEqual(queue.candidate(.next, currentAvailableIDs: lineup, fullLineup: lineup), lineup[1])
     }
 
     func testRevealRequestCarriesOnlyStableIdentityAndGeneration() {

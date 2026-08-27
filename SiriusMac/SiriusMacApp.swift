@@ -2,6 +2,7 @@ import Foundation
 import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
+import SiriusXMClient
 
 @main
 struct SiriusMacApp: App {
@@ -65,7 +66,11 @@ struct SiriusMacApp: App {
             compactSceneContent
         }
         .defaultSize(width: 760, height: 620)
-        .windowResizability(.contentMinSize)
+        // The primary scene changes from a resizable authentication surface to
+        // a fixed 400 x 288 player. Tracking the complete content size lets the
+        // window shed the authentication frame instead of leaving the compact
+        // player surrounded by unused window background after restoration.
+        .windowResizability(.contentSize)
         .commands {
             ListeningCommands(
                 controller: sessionController,
@@ -144,6 +149,7 @@ private struct CompactAuthenticationRoot: View {
     let controller: ListeningSessionController
     let appearanceController: SkinAppearanceController
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.dismissWindow) private var dismissWindow
 
     var body: some View {
         Group {
@@ -158,8 +164,14 @@ private struct CompactAuthenticationRoot: View {
             }
         }
         .onChange(of: controller.authenticationModel.isReady, initial: true) { _, isReady in
-            guard isReady, controller.requestLibraryOpen() else { return }
-            openWindow(id: "sirius-library")
+            switch controller.libraryWindowDirective(authenticationIsReady: isReady) {
+            case .open:
+                openWindow(id: "sirius-library")
+            case .close:
+                dismissWindow(id: "sirius-library")
+            case .none:
+                break
+            }
         }
     }
 }
@@ -192,16 +204,29 @@ private struct CompactListeningSlice: View {
             guard next.channelIdentity != nil else { return }
             lastConfirmedPresentation = next
         }
+        .task(id: confirmedChannelArtworkReference) {
+            await controller.listeningModel.artworkStore.load(confirmedChannelArtworkReference)
+        }
+    }
+
+    private var confirmedChannel: LiveChannel? {
+        let model = controller.listeningModel
+        return model.confirmedChannelID.flatMap { id in
+            model.state.snapshot?.channels.first(where: { $0.id == id })
+        }
+    }
+
+    private var confirmedChannelArtworkReference: ChannelArtworkReference? {
+        confirmedChannel?.artwork
     }
 
     private var presentation: CompactPlayerPresentation {
         let model = controller.listeningModel
-        let channel = model.confirmedChannelID.flatMap { id in
-            model.state.snapshot?.channels.first(where: { $0.id == id })
-        }
+        let channel = confirmedChannel
         return CompactPlayerPresentation.project(
             channel: channel,
             metadata: model.metadataPresentation.state,
+            channelArtwork: model.artworkStore.artwork(for: channel?.artwork),
             primaryMetadata: controller.compactSurface.metadataPrimaryText,
             secondaryMetadata: controller.compactSurface.metadataSecondaryText,
             playback: model.playbackState,
@@ -235,6 +260,9 @@ private struct CompactListeningSlice: View {
             _ = controller.authenticationModel.retry()
         case .refreshLibrary:
             _ = controller.listeningModel.refresh()
+        case .signOut:
+            controller.resetListeningBeforeAuthenticationCleanup()
+            _ = controller.authenticationModel.signOut()
         }
     }
 }
@@ -305,11 +333,6 @@ private struct ListeningCommands: Commands {
                 }
                 .keyboardShortcut("f", modifiers: .command)
 
-                Button("Clear Recents") {
-                    controller.libraryStore.clearRecents()
-                }
-                .disabled(controller.libraryStore.recents.isEmpty)
-
                 if let channel = controller.listeningModel.confirmedChannelID.flatMap({ id in
                     controller.listeningModel.state.snapshot?.channels.first(where: { $0.id == id })
                 }) {
@@ -325,6 +348,14 @@ private struct ListeningCommands: Commands {
                         set: { controller.libraryStore.setAlwaysOnTop($0) }
                     )
                 )
+
+                Divider()
+
+                Button("Sign Out") {
+                    controller.resetListeningBeforeAuthenticationCleanup()
+                    _ = controller.authenticationModel.signOut()
+                }
+                .disabled(controller.authenticationModel.isAttemptInFlight)
             }
         }
     }

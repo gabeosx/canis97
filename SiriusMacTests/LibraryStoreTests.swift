@@ -5,7 +5,7 @@ import SiriusXMClient
 
 @MainActor
 final class LibraryStoreTests: XCTestCase {
-    func testPersistentContainerFailureFallsBackToAnInMemoryLibrary() throws {
+    func testPersistentContainerFailureDoesNotPretendEphemeralFavoritesAreSaved() throws {
         enum PersistentContainerError: Error { case unavailable }
         let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
         let fallback = try ModelContainer(
@@ -19,12 +19,46 @@ final class LibraryStoreTests: XCTestCase {
             persistentContainer: { throw PersistentContainerError.unavailable },
             fallbackContainer: { fallback }
         )
-        let store = LibraryStore(modelContainer: setup.container)
+        let store = LibraryStore(modelContainer: setup.container, persistence: setup.persistence)
         let snapshot = channel("fixture-fallback")
 
         XCTAssertEqual(setup.persistence, .inMemoryFallback)
         store.setFavorite(snapshot, isFavorite: true)
-        XCTAssertEqual(store.favorites, [snapshot])
+        XCTAssertTrue(store.favorites.isEmpty)
+        XCTAssertTrue(store.lastSaveFailed)
+
+        store.setSelectedLibraryTab("favorites")
+        store.setAlwaysOnTop(true)
+        XCTAssertEqual(store.selectedLibraryTab, "favorites")
+        XCTAssertTrue(store.alwaysOnTop)
+    }
+
+    func testAppSpecificStoreMigratesLegacyRowsExactlyOnce() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SiriusMacLibraryStoreTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let legacyURL = directory.appendingPathComponent("default.store")
+        let destinationURL = directory.appendingPathComponent("Sirius Mac/Library.store")
+
+        let legacyContainer = try LibraryStore.makePersistentContainer(at: legacyURL)
+        let legacyStore = LibraryStore(modelContainer: legacyContainer)
+        let snapshot = channel("fixture-legacy-favorite")
+        legacyStore.setFavorite(snapshot, isFavorite: true)
+
+        let migratedContainer = try LibraryStore.makePersistentContainer(
+            at: destinationURL,
+            migratingLegacyStoreAt: legacyURL
+        )
+        let migratedStore = LibraryStore(modelContainer: migratedContainer)
+        XCTAssertEqual(migratedStore.favorites, [snapshot])
+
+        migratedStore.setFavorite(snapshot, isFavorite: false)
+        let reopenedContainer = try LibraryStore.makePersistentContainer(
+            at: destinationURL,
+            migratingLegacyStoreAt: legacyURL
+        )
+        let reopenedStore = LibraryStore(modelContainer: reopenedContainer)
+        XCTAssertTrue(reopenedStore.favorites.isEmpty)
     }
 
     func testSettingFavoriteTrueTwiceKeepsOneStableRecord() throws {
@@ -74,6 +108,25 @@ final class LibraryStoreTests: XCTestCase {
         store.recordConfirmedPlayback(channel("fixture-confirmed"))
 
         XCTAssertEqual(store.recents.map(\.id), [LiveChannelID("fixture-confirmed")])
+    }
+
+    func testPersistedRecentsAreProjectedImmediatelyWhenStoreReopens() throws {
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(
+            for: FavoriteRecord.self,
+            RecentRecord.self,
+            PlayerPreferenceRecord.self,
+            configurations: configuration
+        )
+        let firstStore = LibraryStore(modelContainer: container, now: { Date(timeIntervalSince1970: 1) })
+        firstStore.recordConfirmedPlayback(channel("fixture-persisted-recent"))
+
+        let reopenedStore = LibraryStore(modelContainer: container)
+
+        XCTAssertEqual(
+            reopenedStore.recents.map(\.id),
+            [LiveChannelID("fixture-persisted-recent")]
+        )
     }
 
     func testReplayingAnExistingRecentMovesOnlyThatItemToRankZero() throws {
@@ -152,20 +205,20 @@ final class PlaybackQueueContractTests: XCTestCase {
 
         XCTAssertEqual(queue.capturedIDs, ids)
         XCTAssertEqual(queue.currentIndex, 1)
-        XCTAssertEqual(queue.candidate(.next, currentEntitledIDs: entitled, fullLineup: ids), ids[3])
-        XCTAssertNil(queue.candidate(.next, currentEntitledIDs: entitled, fullLineup: ids))
-        XCTAssertEqual(queue.candidate(.previous, currentEntitledIDs: entitled, fullLineup: ids), ids[1])
+        XCTAssertEqual(queue.candidate(.next, currentAvailableIDs: entitled, fullLineup: ids), ids[3])
+        XCTAssertNil(queue.candidate(.next, currentAvailableIDs: entitled, fullLineup: ids))
+        XCTAssertEqual(queue.candidate(.previous, currentAvailableIDs: entitled, fullLineup: ids), ids[1])
     }
 
     func testEmptyAndOneItemQueuesDisableDirectionsAndUseFullLineupFallback() {
         let only = LiveChannelID("only")
-        XCTAssertEqual(PlaybackQueue(originIDs: [], currentID: nil).availability(currentEntitledIDs: [], fullLineup: []), .none)
-        XCTAssertEqual(PlaybackQueue(originIDs: [only], currentID: only).availability(currentEntitledIDs: [only], fullLineup: [only]), .none)
+        XCTAssertEqual(PlaybackQueue(originIDs: [], currentID: nil).availability(currentAvailableIDs: [], fullLineup: []), .none)
+        XCTAssertEqual(PlaybackQueue(originIDs: [only], currentID: only).availability(currentAvailableIDs: [only], fullLineup: [only]), .none)
 
         let captured = values("removed-one", "removed-two")
         let lineup = values("alpha", "beta")
         var queue = PlaybackQueue(originIDs: captured, currentID: captured[0])
-        XCTAssertEqual(queue.candidate(.next, currentEntitledIDs: lineup, fullLineup: lineup), lineup[0])
+        XCTAssertEqual(queue.candidate(.next, currentAvailableIDs: lineup, fullLineup: lineup), lineup[0])
     }
 
     private func values(_ rawValues: String...) -> [LiveChannelID] {
@@ -185,5 +238,139 @@ final class LibraryViewStateContractTests: XCTestCase {
     func testEmptySearchKeepsTheCurrentTabCollection() {
         XCTAssertFalse(LibrarySearchQuery("").filtersVisibleCollection)
         XCTAssertTrue(LibrarySearchQuery("rock").filtersVisibleCollection)
+    }
+
+    func testRevealKeepsFavoritesWhenSkippedChannelBelongsToFavorites() {
+        let first = LiveChannelID("favorite-one")
+        let second = LiveChannelID("favorite-two")
+
+        let disposition = LibraryRevealPolicy.disposition(
+            currentTab: .favorites,
+            currentCollectionIDs: [first, second],
+            visibleIDs: [first, second],
+            targetID: second
+        )
+
+        XCTAssertEqual(disposition, LibraryRevealDisposition(tab: .favorites, clearsSearch: false))
+    }
+
+    func testRevealClearsSearchWithoutLeavingFavoritesWhenSearchHidesSkippedChannel() {
+        let first = LiveChannelID("favorite-one")
+        let second = LiveChannelID("favorite-two")
+
+        let disposition = LibraryRevealPolicy.disposition(
+            currentTab: .favorites,
+            currentCollectionIDs: [first, second],
+            visibleIDs: [first],
+            targetID: second
+        )
+
+        XCTAssertEqual(disposition, LibraryRevealDisposition(tab: .favorites, clearsSearch: true))
+    }
+
+    func testRevealFallsBackToChannelsWhenCurrentCollectionCannotShowSkippedChannel() {
+        let target = LiveChannelID("not-in-current-collection")
+
+        let disposition = LibraryRevealPolicy.disposition(
+            currentTab: .recents,
+            currentCollectionIDs: [LiveChannelID("recent")],
+            visibleIDs: [LiveChannelID("recent")],
+            targetID: target
+        )
+
+        XCTAssertEqual(disposition, LibraryRevealDisposition(tab: .channels, clearsSearch: true))
+    }
+
+    func testSavedFavoriteRemainsVisibleWhenTheCurrentCatalogIsUnavailable() {
+        let snapshot = LibraryChannelSnapshot(
+            id: LiveChannelID("saved-favorite"),
+            name: "Saved Favorite",
+            displayNumber: 42,
+            category: "Music"
+        )
+
+        let unknown = LibraryChannelItem.saved(
+            [snapshot],
+            currentChannels: [],
+            catalogIsResolved: false
+        )
+        let unavailable = LibraryChannelItem.saved(
+            [snapshot],
+            currentChannels: [],
+            catalogIsResolved: true
+        )
+
+        XCTAssertEqual(unknown.map(\.id), [snapshot.id])
+        XCTAssertEqual(unknown.first?.channel.name, "Saved Favorite")
+        XCTAssertEqual(unknown.first?.availability, .unknown)
+        XCTAssertEqual(unavailable.first?.availability, .unavailable)
+        XCTAssertFalse(unavailable.first?.availability.canTune ?? true)
+    }
+
+    func testSavedFavoriteUsesCurrentCatalogDetailsWhenAvailable() {
+        let snapshot = LibraryChannelSnapshot(
+            id: LiveChannelID("saved-favorite"),
+            name: "Old Name",
+            displayNumber: 42,
+            category: "Music"
+        )
+        let current = liveChannel("saved-favorite", name: "Current Name", number: 43, category: "Pop")
+
+        let projected = LibraryChannelItem.saved(
+            [snapshot],
+            currentChannels: [current],
+            catalogIsResolved: true
+        )
+
+        XCTAssertEqual(projected.first?.channel, current)
+        XCTAssertEqual(projected.first?.availability, .available)
+        XCTAssertTrue(projected.first?.availability.canTune ?? false)
+    }
+
+    func testCategoriesCreateDistinctBrowseGroupsWithCountsAndChannelOrder() {
+        let channels = [
+            liveChannel("talk-late", name: "Later", number: 110, category: " Talk "),
+            liveChannel("music", name: "Music", number: 2, category: "Music"),
+            liveChannel("talk-early", name: "Earlier", number: 100, category: "Talk"),
+            liveChannel("other", name: "Other", number: 900, category: "   "),
+        ]
+
+        let groups = LibraryCategoryGroup.groups(from: channels)
+
+        XCTAssertEqual(groups.map(\.name), ["Music", "Talk", "Other"])
+        XCTAssertEqual(groups.map(\.channels.count), [1, 2, 1])
+        XCTAssertEqual(
+            groups.first(where: { $0.name == "Talk" })?.channels.map(\.id),
+            [LiveChannelID("talk-early"), LiveChannelID("talk-late")]
+        )
+    }
+
+    func testCategoriesUseOneGroupedCollectionInsteadOfASecondSelectionPane() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: root.appending(path: "SiriusMac/Catalog/ListeningView.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(source.contains("Section {"))
+        XCTAssertTrue(source.contains("Channels grouped by category"))
+        XCTAssertFalse(source.contains("HSplitView"))
+        XCTAssertFalse(source.contains("Choose a Category"))
+    }
+
+    private func liveChannel(
+        _ id: String,
+        name: String,
+        number: Int,
+        category: String?
+    ) -> LiveChannel {
+        LiveChannel(
+            id: LiveChannelID(id),
+            name: name,
+            displayNumber: number,
+            category: category
+        )
     }
 }

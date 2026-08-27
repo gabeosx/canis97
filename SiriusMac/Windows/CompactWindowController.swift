@@ -1,9 +1,10 @@
 @preconcurrency import AppKit
 import SwiftUI
 
-/// The only two native window policies available to the listening shell.
+/// The native window policies available to the authentication and listening shell.
 /// Renderers and user data cannot select another role or change close semantics.
 enum WindowRole: CaseIterable {
+    case authentication
     case compact
     case library
 }
@@ -40,6 +41,7 @@ final class WindowLifecyclePolicy {
 
     var defaultContentSize: CGSize {
         switch role {
+        case .authentication: CGSize(width: 760, height: 620)
         case .compact: CGSize(width: 400, height: 288)
         case .library: CGSize(width: 980, height: 700)
         }
@@ -47,16 +49,18 @@ final class WindowLifecyclePolicy {
 
     var minimumContentSize: CGSize {
         switch role {
+        case .authentication: CGSize(width: 760, height: 620)
         case .compact: CGSize(width: 400, height: 288)
         case .library: CGSize(width: 760, height: 540)
         }
     }
 
-    var isResizable: Bool { role == .library }
-    var allowsFullScreen: Bool { role == .library }
+    var isResizable: Bool { role != .compact }
+    var allowsFullScreen: Bool { role != .compact }
 
     var frameAutosaveName: String {
         switch role {
+        case .authentication: "SiriusMac.authentication.frame"
         case .compact: "SiriusMac.compact.frame"
         case .library: "SiriusMac.library.frame"
         }
@@ -67,7 +71,7 @@ final class WindowLifecyclePolicy {
     }
 
     func windowWillClose() {
-        guard role == .compact, !hasRequestedTermination else { return }
+        guard role != .library, !hasRequestedTermination else { return }
         hasRequestedTermination = true
         terminator.requestTermination()
     }
@@ -136,11 +140,19 @@ final class CompactWindowController {
         window.contentMinSize = policy.minimumContentSize
 
         if policy.isResizable {
+            window.styleMask.insert(.resizable)
             window.contentMaxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         } else {
             window.contentMaxSize = policy.defaultContentSize
             window.styleMask.remove(.resizable)
             window.styleMask.remove(.fullScreen)
+        }
+        if policy.allowsFullScreen {
+            window.collectionBehavior.remove(.fullScreenNone)
+            window.collectionBehavior.insert(.fullScreenPrimary)
+        } else {
+            window.collectionBehavior.remove(.fullScreenPrimary)
+            window.collectionBehavior.insert(.fullScreenNone)
         }
 
         restoreFrameOrCenter(window)

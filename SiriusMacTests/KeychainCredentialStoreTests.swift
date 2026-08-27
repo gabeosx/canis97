@@ -2,18 +2,22 @@ import Foundation
 import Security
 import XCTest
 @testable import SiriusMac
-import SiriusXMClient
+@_spi(AppIntegration) import SiriusXMClient
 
 final class KeychainCredentialStoreTests: XCTestCase {
     func testAppScopedEntryCanAddReadUpdateAndDeleteSyntheticBytes() async throws {
         let store = makeStore()
         defer { try? store.removeStoredCredential() }
 
-        try await store.save(AuthenticationCredential(volatileMaterial: Data("first-secret".utf8)))
-        XCTAssertEqual(try store.readStoredCredential(), Data("first-secret".utf8))
+        let first = try renewableTestCredential(accessToken: "first-secret")
+        let firstMaterial = first.withVolatileMaterial { $0 }
+        try await store.save(first)
+        XCTAssertEqual(try store.readStoredCredential(), firstMaterial)
 
-        try await store.save(AuthenticationCredential(volatileMaterial: Data("second-secret".utf8)))
-        XCTAssertEqual(try store.readStoredCredential(), Data("second-secret".utf8))
+        let second = try renewableTestCredential(accessToken: "second-secret")
+        let secondMaterial = second.withVolatileMaterial { $0 }
+        try await store.save(second)
+        XCTAssertEqual(try store.readStoredCredential(), secondMaterial)
 
         try store.removeStoredCredential()
         XCTAssertNil(try store.readStoredCredential())
@@ -23,10 +27,12 @@ final class KeychainCredentialStoreTests: XCTestCase {
         let store = makeStore()
         defer { try? store.removeStoredCredential() }
 
-        try await store.save(AuthenticationCredential(volatileMaterial: Data("original".utf8)))
-        try await store.save(AuthenticationCredential(volatileMaterial: Data("replacement".utf8)))
+        let original = try renewableTestCredential(accessToken: "original")
+        let replacement = try renewableTestCredential(accessToken: "replacement")
+        try await store.save(original)
+        try await store.save(replacement)
 
-        XCTAssertEqual(try store.readStoredCredential(), Data("replacement".utf8))
+        XCTAssertEqual(try store.readStoredCredential(), replacement.withVolatileMaterial { $0 })
     }
 
     func testMissingAndFailureStatusesUseSafeClassifications() {
@@ -39,7 +45,7 @@ final class KeychainCredentialStoreTests: XCTestCase {
         let store = makeStore()
         defer { try? store.removeStoredCredential() }
 
-        try await store.save(AuthenticationCredential(volatileMaterial: Data("approved-material".utf8)))
+        try await store.save(renewableTestCredential(accessToken: "approved-material"))
 
         switch store.loadStoredCredentialForAuthentication() {
         case .credential:
@@ -103,4 +109,35 @@ final class KeychainCredentialStoreTests: XCTestCase {
             account: UUID().uuidString
         )
     }
+}
+
+func renewableTestCredential(
+    accessToken: String = "synthetic-access-token",
+    accessExpiresAt: Date = Date(timeIntervalSinceNow: 10_800)
+) throws -> AuthenticationCredential {
+    let formatter = ISO8601DateFormatter()
+    let authentication = try JSONSerialization.data(withJSONObject: [
+        "handle": "synthetic-handle",
+        "identityGrant": ["grant": "synthetic-identity-grant", "identityId": "synthetic-identity"],
+        "session": [
+            "accessToken": accessToken,
+            "accessTokenExpiresAt": formatter.string(from: accessExpiresAt),
+            "refreshToken": "synthetic-refresh-token",
+            "refreshTokenExpiresAt": formatter.string(from: Date(timeIntervalSinceNow: 7_776_000)),
+            "sessionType": "authenticated",
+        ],
+    ], options: [.sortedKeys])
+    let device = try JSONSerialization.data(withJSONObject: [
+        "deviceId": "synthetic-device",
+        "grant": "synthetic-device-grant",
+        "grantExpiresAt": formatter.string(from: Date(timeIntervalSinceNow: 2_592_000)),
+        "grantVersion": "v2",
+        "refreshGrant": "synthetic-device-refresh-grant",
+        "refreshGrantExpiresAt": formatter.string(from: Date(timeIntervalSinceNow: 15_552_000)),
+    ], options: [.sortedKeys])
+    let allowed = CharacterSet.alphanumerics
+    return try AuthenticationCredential(
+        browserAuthenticationCookieValue: String(data: authentication, encoding: .utf8)!.addingPercentEncoding(withAllowedCharacters: allowed)!,
+        browserDeviceGrantCookieValue: String(data: device, encoding: .utf8)!.addingPercentEncoding(withAllowedCharacters: allowed)!
+    )
 }
