@@ -18,7 +18,12 @@ require_key() {
 check_tracer() {
   require_file "$ARTIFACT"; require_file "$IDENTITY"; require_file "$AUTH_VIEW"; require_file "$ICON/icon.json"
   /usr/bin/plutil -lint "$ARTIFACT" >/dev/null
-  [[ "$(/usr/bin/plutil -extract status raw "$ARTIFACT")" == "proposed" ]] || fail "tracer requires proposed artifact status"
+  local artifact_status
+  artifact_status="$(/usr/bin/plutil -extract status raw "$ARTIFACT")"
+  [[ "$artifact_status" == "proposed" || "$artifact_status" == "rescreen-required" ]] || fail "tracer requires proposed or rescreen-required artifact status"
+  if [[ "$artifact_status" == "rescreen-required" ]]; then
+    [[ "$(/usr/bin/plutil -extract selectedIdentityDisposition raw "$ARTIFACT")" == "withdrawn-after-bitdeck-rescreen" ]] || fail "rescreen-required artifact must quarantine the withdrawn identity"
+  fi
   [[ "$(/usr/bin/plutil -extract legalClearanceClaim raw "$ARTIFACT")" == "false" ]] || fail "legalClearanceClaim must remain false"
   [[ "$(/usr/bin/plutil -extract attorneyReviewRequired raw "$ARTIFACT")" == "true" ]] || fail "attorneyReviewRequired must remain true"
   local required_keys=(displayName appTypeName targetName moduleName executableName appBundleIdentifier unitTestTargetName unitTestBundleIdentifier uiTestTargetName uiTestBundleIdentifier schemeName uiValidationSchemeName skinPackageTypeIdentifier skinPackageExtension applicationSupportDirectoryName appLogSubsystem environmentPrefix scriptPrefix compactSceneID librarySceneID authenticationFrameAutosaveName compactFrameAutosaveName libraryFrameAutosaveName iconBasename iconConcept nonAffiliationStatement)
