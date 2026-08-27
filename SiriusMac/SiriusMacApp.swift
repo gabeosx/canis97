@@ -5,7 +5,7 @@ import UniformTypeIdentifiers
 import SiriusXMClient
 
 @main
-struct SiriusMacApp: App {
+struct Canis97App: App {
     private let sessionController: ListeningSessionController?
     private let appearanceController: SkinAppearanceController
     private let skinImportCoordinator: SkinImportCoordinator
@@ -16,8 +16,8 @@ struct SiriusMacApp: App {
 
     init() {
         let environment = ProcessInfo.processInfo.environment
-        let allowsDurableAppearance = !SiriusMacLaunchMode.isUnitTestHost(environment: environment)
-            && !SiriusMacLaunchMode.isUITestRequested(environment: environment)
+        let allowsDurableAppearance = !Canis97LaunchMode.isUnitTestHost(environment: environment)
+            && !Canis97LaunchMode.isUITestRequested(environment: environment)
         let managedStore = ManagedSkinStore()
         let importer = SkinPackageImporter(store: managedStore)
         let appearanceController = SkinAppearanceController(
@@ -55,14 +55,14 @@ struct SiriusMacApp: App {
     static func makeSessionController(
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> ListeningSessionController? {
-        guard !SiriusMacLaunchMode.isUnitTestHost(environment: environment),
-              !SiriusMacLaunchMode.isUITestRequested(environment: environment)
+        guard !Canis97LaunchMode.isUnitTestHost(environment: environment),
+              !Canis97LaunchMode.isUITestRequested(environment: environment)
         else { return nil }
         return ListeningSessionController()
     }
 
     var body: some Scene {
-        WindowGroup("Sirius Mac", id: "sirius-compact") {
+        WindowGroup(ProductIdentity.displayName, id: ProductIdentity.SceneID.compact) {
             compactSceneContent
         }
         .defaultSize(width: 760, height: 620)
@@ -78,7 +78,7 @@ struct SiriusMacApp: App {
             )
         }
 
-        Window("Library", id: "sirius-library") {
+        Window("\(ProductIdentity.displayName) Library", id: ProductIdentity.SceneID.library) {
             librarySceneContent
         }
         .defaultSize(width: 980, height: 700)
@@ -90,6 +90,12 @@ struct SiriusMacApp: App {
                 skinImportCoordinator: skinImportCoordinator
             )
         }
+
+        Window("About \(ProductIdentity.displayName)", id: ProductSceneID.about) {
+            AboutProductView()
+        }
+        .defaultSize(width: 520, height: 420)
+        .windowResizability(.contentSize)
     }
 
     @ViewBuilder
@@ -166,9 +172,9 @@ private struct CompactAuthenticationRoot: View {
         .onChange(of: controller.authenticationModel.isReady, initial: true) { _, isReady in
             switch controller.libraryWindowDirective(authenticationIsReady: isReady) {
             case .open:
-                openWindow(id: "sirius-library")
+                openWindow(id: ProductIdentity.SceneID.library)
             case .close:
-                dismissWindow(id: "sirius-library")
+                dismissWindow(id: ProductIdentity.SceneID.library)
             case .none:
                 break
             }
@@ -251,7 +257,7 @@ private struct CompactListeningSlice: View {
             controller.setFavorite(snapshot, isFavorite: !controller.libraryStore.isFavorite(channel.id))
         case .showLibrary:
             _ = controller.requestLibraryOpen()
-            openWindow(id: "sirius-library")
+            openWindow(id: ProductIdentity.SceneID.library)
         case .toggleAlwaysOnTop:
             controller.libraryStore.setAlwaysOnTop(!controller.libraryStore.alwaysOnTop)
         case .retryPlayback:
@@ -323,13 +329,13 @@ private struct ListeningCommands: Commands {
 
                 Button("Show Library") {
                     _ = controller.requestLibraryOpen()
-                    openWindow(id: "sirius-library")
+                    openWindow(id: ProductIdentity.SceneID.library)
                 }
                 .keyboardShortcut("l", modifiers: .command)
 
                 Button("Focus Search") {
                     controller.requestLibrarySearchFocus()
-                    openWindow(id: "sirius-library")
+                    openWindow(id: ProductIdentity.SceneID.library)
                 }
                 .keyboardShortcut("f", modifiers: .command)
 
@@ -357,10 +363,15 @@ private struct ListeningCommands: Commands {
                 }
                 .disabled(controller.authenticationModel.isAttemptInFlight)
             }
-        }
-    }
+            }
 
-}
+        CommandGroup(replacing: .appInfo) {
+            Button("About \(ProductIdentity.displayName)") {
+                openWindow(id: ProductSceneID.about)
+            }
+        }
+
+    }
 
 private struct LibraryRoot: View {
     let controller: ListeningSessionController
@@ -372,10 +383,14 @@ private struct LibraryRoot: View {
     }
 }
 
+private enum ProductSceneID {
+    static let about = "\(ProductIdentity.appBundleIdentifier).about"
+}
+
 /// The unit-test bundle uses the app executable as its host. Keep that host
 /// intentionally inert so running tests cannot read, authenticate with, or
 /// erase the production Keychain session.
-enum SiriusMacLaunchMode {
+enum Canis97LaunchMode {
     static func isUITestRequested(
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> Bool {

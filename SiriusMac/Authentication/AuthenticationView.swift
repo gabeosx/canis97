@@ -10,7 +10,7 @@ struct AuthenticationView: View {
         SwiftUI.Group {
             if model.isReady {
                 ProgressView("Opening player")
-                    .accessibilityLabel("Opening Sirius Mac player")
+                    .accessibilityLabel("Opening \(ProductIdentity.displayName) player")
             } else {
                 authenticationContent
             }
@@ -199,7 +199,7 @@ private struct WebViewAuthenticationContainer: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Sign in below. Sirius Mac will continue automatically when the session is ready.")
+            Text("Sign in below. \(ProductIdentity.displayName) will continue automatically when the session is ready.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 4)

@@ -18,7 +18,7 @@ final class UITestHarness {
     static func makeIfRequested(
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> UITestHarness? {
-        guard SiriusMacLaunchMode.isUITestMode(environment: environment) else { return nil }
+        guard Canis97LaunchMode.isUITestMode(environment: environment) else { return nil }
         return UITestHarness()
     }
 
@@ -81,7 +81,7 @@ struct UITestCompactRoot: View {
             restoresPersistedFrame: false,
             contentRegionAccessibilityIdentifier: "compact.content-region"
         ))
-        .onAppear { openWindow(id: "sirius-library") }
+        .onAppear { openWindow(id: ProductIdentity.SceneID.library) }
     }
 }
 

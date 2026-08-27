@@ -12,6 +12,9 @@ readonly WINDOW_CONTROLLER="$ROOT/SiriusMac/Windows/CompactWindowController.swif
 readonly KEYCHAIN_STORE="$ROOT/SiriusMac/Security/KeychainCredentialStore.swift"
 readonly CLIENT_PACKAGE="$ROOT/Packages/SiriusXMClient/Package.swift"
 readonly AUTH_VIEW="$ROOT/SiriusMac/Authentication/AuthenticationView.swift"
+readonly APP="$ROOT/SiriusMac/SiriusMacApp.swift"
+readonly ABOUT_VIEW="$ROOT/SiriusMac/App/AboutProductView.swift"
+readonly AUTH_ORACLE="$ROOT/SiriusMac/Authentication/ClosedAuthenticationOracle.swift"
 readonly ICON="$ROOT/SiriusMac/Assets/ProductIcon.icon"
 
 fail() { printf 'product-identity contract: %s\n' "$*" >&2; exit 1; }
@@ -94,9 +97,26 @@ check_migration() {
   printf 'product-identity migration contract: PASS\n'
 }
 
+check_presentation() {
+  check_migration
+  require_file "$APP"; require_file "$ABOUT_VIEW"; require_file "$AUTH_ORACLE"
+  rg -Fq 'struct Canis97App: App' "$APP" || fail 'app entry point must use approved app type name'
+  rg -Fq 'WindowGroup(ProductIdentity.displayName, id: ProductIdentity.SceneID.compact)' "$APP" || fail 'compact scene must use approved product identity'
+  rg -Fq 'Window("\(ProductIdentity.displayName) Library", id: ProductIdentity.SceneID.library)' "$APP" || fail 'library scene must use approved product identity'
+  rg -Fq 'CommandGroup(replacing: .appInfo)' "$APP" || fail 'app-owned About command is required'
+  rg -Fq 'AboutProductView()' "$APP" || fail 'About window must compose AboutProductView'
+  rg -Fq 'ProductIdentity.nonAffiliationStatement' "$ABOUT_VIEW" || fail 'About view must show the non-affiliation statement'
+  rg -Fq 'connects subscribers to SiriusXM using their own subscriber account' "$ABOUT_VIEW" || fail 'About view must keep the factual subscriber-service boundary'
+  rg -Fq 'ProductIdentity.displayName' "$AUTH_ORACLE" || fail 'authentication outcomes must lead with the product identity'
+  rg -Fq 'SiriusXM did not accept' "$AUTH_ORACLE" || fail 'provider rejection copy must remain factual'
+  ! rg -Fq 'struct SiriusMacApp: App' "$APP" || fail 'legacy app entry-point type remains'
+  printf 'product-identity presentation contract: PASS\n'
+}
+
 case "${1:-}" in
   --tracer) check_tracer ;;
   --migration) check_migration ;;
-  --presentation|--appearance|--cutover|--final-source|--built-product) fail "${1} contract is staged for its downstream plan and is not green during the proposed-identity tracer" ;;
+  --presentation) check_presentation ;;
+  --appearance|--cutover|--final-source|--built-product) fail "${1} contract is staged for its downstream plan" ;;
   *) printf 'usage: %s --tracer|--migration|--presentation|--appearance|--cutover|--final-source|--built-product\n' "$0" >&2; exit 64 ;;
 esac

@@ -128,7 +128,7 @@ enum ClosedAuthenticationOracle {
         case .localCredentialUnavailable:
             AuthenticationPresentationCopy(
                 title: "Saved sign-in cannot be accessed",
-                message: "Sirius Mac could not access Keychain and did not delete anything. Open SiriusXM's sign-in page to continue.",
+                message: "\(ProductIdentity.displayName) could not access Keychain and did not delete anything. Open SiriusXM's sign-in page to continue.",
                 iconName: "exclamationmark.triangle",
                 statusLabel: "local-credential-unavailable",
                 isReady: false,
@@ -137,7 +137,7 @@ enum ClosedAuthenticationOracle {
         case .webCredentialMissing:
             AuthenticationPresentationCopy(
                 title: "Sign-in is incomplete",
-                message: "Sirius Mac could not find a usable sign-in.",
+                message: "\(ProductIdentity.displayName) could not find a usable sign-in.",
                 iconName: "exclamationmark.triangle",
                 statusLabel: "web-credential-missing",
                 isReady: false,
@@ -146,7 +146,7 @@ enum ClosedAuthenticationOracle {
         case .webCredentialMalformed:
             AuthenticationPresentationCopy(
                 title: "Sign-in is incomplete",
-                message: "Sirius Mac could not use this sign-in.",
+                message: "\(ProductIdentity.displayName) could not use this sign-in.",
                 iconName: "exclamationmark.triangle",
                 statusLabel: "web-credential-malformed",
                 isReady: false,
@@ -155,7 +155,7 @@ enum ClosedAuthenticationOracle {
         case .webCredentialAmbiguous:
             AuthenticationPresentationCopy(
                 title: "Sign-in needs attention",
-                message: "Sirius Mac could not choose one sign-in.",
+                message: "\(ProductIdentity.displayName) could not choose one sign-in.",
                 iconName: "exclamationmark.triangle",
                 statusLabel: "web-credential-ambiguous",
                 isReady: false,
@@ -173,7 +173,7 @@ enum ClosedAuthenticationOracle {
         case .webSessionResetFailed:
             AuthenticationPresentationCopy(
                 title: "Sign-in could not start",
-                message: "Sirius Mac could not start a fresh sign-in session.",
+                message: "\(ProductIdentity.displayName) could not start a fresh sign-in session.",
                 iconName: "exclamationmark.triangle",
                 statusLabel: "web-session-reset-failed",
                 isReady: false,
@@ -181,8 +181,8 @@ enum ClosedAuthenticationOracle {
             )
         case .waitingForWebView:
             AuthenticationPresentationCopy(
-                title: "Sign in to SiriusXM",
-                message: "Sign in below. Sirius Mac will continue automatically when the session is ready.",
+                title: "\(ProductIdentity.displayName) needs a SiriusXM sign-in",
+                message: "Sign in below. \(ProductIdentity.displayName) will continue automatically when the session is ready.",
                 iconName: "lock",
                 statusLabel: "web-sign-in-required",
                 isReady: false,
@@ -254,7 +254,7 @@ enum ClosedAuthenticationOracle {
         case .persistenceFailed:
             AuthenticationPresentationCopy(
                 title: "Sign-in could not be saved",
-                message: "Sirius Mac could not safely save this sign-in.",
+                message: "\(ProductIdentity.displayName) could not safely save this sign-in.",
                 iconName: "exclamationmark.triangle",
                 statusLabel: "credential-not-durable",
                 isReady: false,
@@ -272,7 +272,7 @@ enum ClosedAuthenticationOracle {
         case .challengeRequired:
             AuthenticationPresentationCopy(
                 title: "Additional verification is required",
-                message: "This sign-in needs a challenge that Sirius Mac does not handle.",
+                message: "This sign-in needs a challenge that \(ProductIdentity.displayName) does not handle.",
                 iconName: "exclamationmark.shield",
                 statusLabel: "challenge-required",
                 isReady: false,
@@ -290,7 +290,7 @@ enum ClosedAuthenticationOracle {
         case .signedOut:
             AuthenticationPresentationCopy(
                 title: "Signed out",
-                message: "You are signed out of Sirius Mac.",
+                message: "You are signed out of \(ProductIdentity.displayName).",
                 iconName: "rectangle.portrait.and.arrow.right",
                 statusLabel: "signed-out",
                 isReady: false,
@@ -308,7 +308,7 @@ enum ClosedAuthenticationOracle {
         case .finishingCleanup:
             AuthenticationPresentationCopy(
                 title: "Finishing local cleanup",
-                message: "Sirius Mac is finishing local sign-out cleanup.",
+                message: "\(ProductIdentity.displayName) is finishing local sign-out cleanup.",
                 iconName: "hourglass",
                 statusLabel: "cleanup-in-progress",
                 isReady: false,
