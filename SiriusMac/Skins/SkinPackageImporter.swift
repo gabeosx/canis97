@@ -474,7 +474,7 @@ struct SkinPackageImporter: @unchecked Sendable {
 
     func loadManagedAppearances() -> [ValidatedSkinAppearance] {
         store.migrateLegacyPackagesIfNeeded()
-        store.managedPackageURLs().compactMap { try? validateManagedCandidate(at: $0) }
+        return store.managedPackageURLs().compactMap { try? validateManagedCandidate(at: $0) }
     }
 
     private func validateCandidate(

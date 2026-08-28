@@ -68,13 +68,13 @@ actor SkinSelectionStore {
     nonisolated let migrationMarkerURL: URL
 
     private let fileOperations: SkinSelectionFileOperations
-    private let validatedImportedPackageExists: (String) -> Bool
+    private let validatedImportedPackageExists: @Sendable (String) -> Bool
     private let encoder: JSONEncoder
 
     init(
         applicationSupportDirectory: URL? = nil,
         fileOperations: SkinSelectionFileOperations = .live,
-        validatedImportedPackageExists: ((String) -> Bool)? = nil
+        validatedImportedPackageExists: (@Sendable (String) -> Bool)? = nil
     ) {
         let supportDirectory = applicationSupportDirectory
             ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first

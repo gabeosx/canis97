@@ -60,15 +60,17 @@ final class SkinPackageImporterTests: XCTestCase {
             applicationSupportDirectory: support,
             validatedImportedPackageExists: { _ in false }
         )
-        XCTAssertEqual(await rejectedStore.restoredSelectionOrNative(), .native)
+        let rejectedSelection = await rejectedStore.restoredSelectionOrNative()
+        XCTAssertEqual(rejectedSelection, .native)
         XCTAssertFalse(FileManager.default.fileExists(atPath: rejectedStore.selectionFileURL.path))
 
         let acceptedStore = SkinSelectionStore(
             applicationSupportDirectory: support,
             validatedImportedPackageExists: { $0 == "creator.legacy" }
         )
+        let acceptedSelection = try await acceptedStore.load()
         XCTAssertEqual(
-            try await acceptedStore.load(),
+            acceptedSelection,
             PersistedSkinSelection(identifier: "creator.legacy", classification: .imported)
         )
         XCTAssertTrue(FileManager.default.fileExists(atPath: legacyURL.path))

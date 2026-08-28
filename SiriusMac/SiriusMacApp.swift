@@ -372,6 +372,7 @@ private struct ListeningCommands: Commands {
         }
 
     }
+}
 
 private struct LibraryRoot: View {
     let controller: ListeningSessionController
