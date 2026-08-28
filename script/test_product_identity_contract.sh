@@ -24,6 +24,9 @@ readonly RESTORABLE_CREDENTIAL_SOURCE="$ROOT/SiriusMac/Authentication/Restorable
 readonly PLAYBACK_COORDINATOR="$ROOT/SiriusMac/Listening/PlaybackCoordinator.swift"
 readonly OFFLINE_REVIEW_HARNESS="$ROOT/SiriusMac/Testing/UITestHarness.swift"
 readonly ICON="$ROOT/SiriusMac/Assets/ProductIcon.icon"
+readonly PROJECT_FILE="$ROOT/SiriusMac.xcodeproj/project.pbxproj"
+readonly APP_SCHEME="$ROOT/SiriusMac.xcodeproj/xcshareddata/xcschemes/Canis97.xcscheme"
+readonly UI_VALIDATION_SCHEME="$ROOT/SiriusMac.xcodeproj/xcshareddata/xcschemes/Canis97UIValidation.xcscheme"
 
 fail() { printf 'product-identity contract: %s\n' "$*" >&2; exit 1; }
 require_file() { [[ -f "$1" ]] || fail "missing required file: ${1#$ROOT/}"; }
@@ -179,11 +182,63 @@ check_appearance() {
   printf 'product-identity appearance contract: PASS\n'
 }
 
+check_cutover() {
+  check_appearance
+  local test_product_suffix="xc""test"
+  require_file "$PROJECT_FILE"; require_file "$APP_SCHEME"; require_file "$UI_VALIDATION_SCHEME"
+  /usr/bin/plutil -lint "$PROJECT_FILE" >/dev/null
+  /usr/bin/xmllint --noout "$APP_SCHEME" "$UI_VALIDATION_SCHEME"
+  [[ ! -e "$ROOT/SiriusMac.xcodeproj/xcshareddata/xcschemes/SiriusMac.xcscheme" ]] || fail 'legacy app scheme file remains'
+  [[ ! -e "$ROOT/SiriusMac.xcodeproj/xcshareddata/xcschemes/SiriusMacUIValidation.xcscheme" ]] || fail 'legacy UI-validation scheme file remains'
+
+  rg -Fq 'A00100050000000000000001 /* Canis97 */' "$PROJECT_FILE" || fail 'approved app target is not connected to the stable blueprint ID'
+  rg -Fq 'E1E1E1E1E1E1E1E1E1E1E1E1 /* Canis97Tests */' "$PROJECT_FILE" || fail 'approved unit-test target is not connected to the stable blueprint ID'
+  rg -Fq '030900050000000000000001 /* Canis97UITests */' "$PROJECT_FILE" || fail 'approved UI-test target is not connected to the stable blueprint ID'
+  rg -Fq 'path = Canis97.app' "$PROJECT_FILE" || fail 'approved app product is missing'
+  rg -Fq "path = Canis97Tests.$test_product_suffix" "$PROJECT_FILE" || fail 'approved unit-test product is missing'
+  rg -Fq "path = Canis97UITests.$test_product_suffix" "$PROJECT_FILE" || fail 'approved UI-test product is missing'
+  [[ "$(rg -c 'PRODUCT_BUNDLE_IDENTIFIER = com\.canis97\.player;' "$PROJECT_FILE")" == '2' ]] || fail 'app bundle ID must match in Debug and Release'
+  [[ "$(rg -c 'PRODUCT_BUNDLE_IDENTIFIER = com\.canis97\.player\.tests;' "$PROJECT_FILE")" == '2' ]] || fail 'unit-test bundle ID must match in Debug and Release'
+  [[ "$(rg -c 'PRODUCT_BUNDLE_IDENTIFIER = com\.canis97\.player\.uitests;' "$PROJECT_FILE")" == '2' ]] || fail 'UI-test bundle ID must match in Debug and Release'
+  [[ "$(rg -c 'PRODUCT_MODULE_NAME = Canis97;' "$PROJECT_FILE")" == '2' ]] || fail 'app module must match in Debug and Release'
+  [[ "$(rg -c 'TEST_HOST = "\$\(BUILT_PRODUCTS_DIR\)/Canis97\.app/Contents/MacOS/Canis97";' "$PROJECT_FILE")" == '2' ]] || fail 'unit-test host must use the approved app executable'
+  [[ "$(rg -c 'TEST_TARGET_NAME = Canis97;' "$PROJECT_FILE")" == '2' ]] || fail 'UI-test target must use the approved app target'
+
+  for source in ProductIdentity.swift ProductIdentityMigration.swift AboutProductView.swift PlaybackQueue.swift; do
+    rg -Fq "$source in Sources" "$PROJECT_FILE" || fail "app source membership missing: $source"
+  done
+  while IFS= read -r test_source; do
+    local test_basename
+    test_basename="${test_source##*/}"
+    rg -Fq "$test_basename in Sources" "$PROJECT_FILE" || fail "unit-test source membership missing: $test_basename"
+  done < <(find "$ROOT/SiriusMacTests" -type f -name '*.swift' | sort)
+
+  rg -Fq 'ProductIcon.icon in Resources' "$PROJECT_FILE" || fail 'ProductIcon resource membership is missing'
+  [[ "$(rg -c 'ASSETCATALOG_COMPILER_APPICON_NAME = ProductIcon;' "$PROJECT_FILE")" == '2' ]] || fail 'ProductIcon must be the sole Debug and Release app-icon association'
+  ! rg -Fq 'ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon' "$PROJECT_FILE" || fail 'competing AppIcon authority remains'
+  [[ "$(find "$ROOT/SiriusMac" -type d -name '*.icon' | wc -l | tr -d ' ')" == '1' ]] || fail 'exactly one Icon Composer source is required after cutover'
+  rg -Fq 'UTTypeIdentifier = "com.canis97.skin-package"' "$PROJECT_FILE" || fail 'primary skin UTType declaration is missing'
+  rg -Fq '"public.filename-extension" = (canis97skin)' "$PROJECT_FILE" || fail 'primary skin extension declaration is missing'
+  rg -Fq 'UTTypeIdentifier = "com.siriusmac.skin-package"' "$PROJECT_FILE" || fail 'legacy skin UTType declaration is missing'
+  rg -Fq '"public.filename-extension" = (siriusskin)' "$PROJECT_FILE" || fail 'legacy skin extension declaration is missing'
+
+  for scheme in "$APP_SCHEME" "$UI_VALIDATION_SCHEME"; do
+    rg -Fq 'BlueprintIdentifier="A00100050000000000000001" BuildableName="Canis97.app" BlueprintName="Canis97"' "$scheme" || fail 'scheme app reference does not match the approved tuple'
+    ! rg -Fq 'BlueprintName="SiriusMac"' "$scheme" || fail 'legacy app blueprint name remains in an approved scheme'
+  done
+  rg -Fq "BuildableName=\"Canis97Tests.$test_product_suffix\" BlueprintName=\"Canis97Tests\"" "$APP_SCHEME" || fail 'approved unit-test scheme reference is missing'
+  rg -Fq "BuildableName=\"Canis97UITests.$test_product_suffix\" BlueprintName=\"Canis97UITests\"" "$APP_SCHEME" "$UI_VALIDATION_SCHEME" || fail 'approved UI-test scheme reference is missing'
+  rg -Fq 'name: "SiriusXMClient"' "$CLIENT_PACKAGE" || fail 'provider client package identity changed during cutover'
+  rg -Fq 'Bundle.main.bundleIdentifier ?? "com.siriusmac.player"' "$KEYCHAIN_STORE" || fail 'legacy Keychain service fallback changed during cutover'
+  printf 'product-identity cutover contract: PASS\n'
+}
+
 case "${1:-}" in
   --tracer) check_tracer ;;
   --migration) check_migration ;;
   --presentation) check_presentation ;;
   --appearance) check_appearance ;;
-  --cutover|--final-source|--built-product) fail "${1} contract is staged for its downstream plan" ;;
+  --cutover) check_cutover ;;
+  --final-source|--built-product) fail "${1} contract is staged for its downstream plan" ;;
   *) printf 'usage: %s --tracer|--migration|--presentation|--appearance|--cutover|--final-source|--built-product\n' "$0" >&2; exit 64 ;;
 esac
