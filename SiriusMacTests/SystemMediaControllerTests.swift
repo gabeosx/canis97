@@ -1,7 +1,7 @@
 import MediaPlayer
 import XCTest
 @_spi(Playback) import SiriusXMClient
-@testable import SiriusMac
+@testable import Canis97
 
 @MainActor
 final class SystemMediaControllerTests: XCTestCase {

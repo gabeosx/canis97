@@ -3,7 +3,7 @@ import AppKit
 import WebKit
 import XCTest
 @_spi(AppIntegration) import SiriusXMClient
-@testable import SiriusMac
+@testable import Canis97
 
 @MainActor
 final class WebAuthenticationBridgeTests: XCTestCase {

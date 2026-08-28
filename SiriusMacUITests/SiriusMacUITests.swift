@@ -1,8 +1,8 @@
 import AppKit
 import XCTest
 
-final class SiriusMacUITests: XCTestCase, @unchecked Sendable {
-    private let expectedBundleIdentifier = "com.siriusmac.player"
+final class Canis97UITests: XCTestCase, @unchecked Sendable {
+    private let expectedBundleIdentifier = "com.canis97.player"
     private var app: XCUIApplication!
     private var launchedProcessIdentifier: pid_t?
     private var expectedExecutableURL: URL!
@@ -14,32 +14,32 @@ final class SiriusMacUITests: XCTestCase, @unchecked Sendable {
                 withBundleIdentifier: expectedBundleIdentifier
             )
             guard existingApplications.isEmpty else {
-                throw LaunchSafetyError("Refusing to launch while another SiriusMac application is running")
+                throw LaunchSafetyError("Refusing to launch while another Canis97 application is running")
             }
 
             expectedExecutableURL = try makeExpectedExecutableURL()
             app = XCUIApplication()
-            app.launchEnvironment["SIRIUS_MAC_UI_TEST_MODE"] = "1"
+            app.launchEnvironment["CANIS97_UI_TEST_MODE"] = "1"
             app.launch()
 
             let launchedApplications = NSRunningApplication.runningApplications(
                 withBundleIdentifier: expectedBundleIdentifier
             )
             guard launchedApplications.count == 1 else {
-                throw LaunchSafetyError("Expected exactly one launched SiriusMac application")
+                throw LaunchSafetyError("Expected exactly one launched Canis97 application")
             }
             let processIdentifier = launchedApplications[0].processIdentifier
             guard processIdentifier > 1 else {
-                throw LaunchSafetyError("SiriusMac did not report a safe process identifier")
+                throw LaunchSafetyError("Canis97 did not report a safe process identifier")
             }
             launchedProcessIdentifier = processIdentifier
             guard app.wait(for: .runningForeground, timeout: 5) else {
-                throw LaunchSafetyError("SiriusMac did not reach the foreground")
+                throw LaunchSafetyError("Canis97 did not reach the foreground")
             }
             guard launchedApplications[0].processIdentifier == processIdentifier,
                   isExpectedApplication(processIdentifier: processIdentifier)
             else {
-                throw LaunchSafetyError("Launched application identity did not match the build-only SiriusMac product")
+                throw LaunchSafetyError("Launched application identity did not match the build-only Canis97 product")
             }
         }
     }
@@ -84,7 +84,7 @@ final class SiriusMacUITests: XCTestCase, @unchecked Sendable {
     func testCompactCanvasFillsFixedWindow() {
         let compactCanvas = app.groups["compact.canvas"]
         let compactContentRegion = app.groups["compact.content-region"]
-        let compactWindow = app.windows["Sirius Mac"].firstMatch
+        let compactWindow = app.windows["Canis97"].firstMatch
         XCTAssertTrue(compactCanvas.waitForExistence(timeout: 5), app.debugDescription)
         XCTAssertTrue(compactContentRegion.waitForExistence(timeout: 5), app.debugDescription)
         XCTAssertTrue(compactWindow.waitForExistence(timeout: 5), app.debugDescription)
@@ -148,13 +148,13 @@ final class SiriusMacUITests: XCTestCase, @unchecked Sendable {
         let fileManager = FileManager.default
         for productsPath in productsPaths.split(separator: ":") {
             let executableURL = URL(fileURLWithPath: String(productsPath), isDirectory: true)
-                .appendingPathComponent("SiriusMac.app/Contents/MacOS/SiriusMac")
+                .appendingPathComponent("Canis97.app/Contents/MacOS/Canis97")
                 .resolvingSymlinksInPath()
             if fileManager.isExecutableFile(atPath: executableURL.path) {
                 return executableURL
             }
         }
-        throw LaunchSafetyError("The build-only SiriusMac executable was not found")
+        throw LaunchSafetyError("The build-only Canis97 executable was not found")
     }
 
     @MainActor

@@ -1,6 +1,6 @@
 import Foundation
 import XCTest
-@testable import SiriusMac
+@testable import Canis97
 
 @MainActor
 final class SkinPackageImporterTests: XCTestCase {
