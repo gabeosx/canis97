@@ -25,14 +25,14 @@ final class OfflineReviewHarness {
         return OfflineReviewHarness(environment: environment)
     }
 
-    private init(environment: [String: String]) {
+    private init?(environment: [String: String]) {
         reviewSurface = OfflineReviewSurface(environment: environment)
-        let container = try! ModelContainer(
+        guard let container = try? ModelContainer(
             for: FavoriteRecord.self,
             RecentRecord.self,
             PlayerPreferenceRecord.self,
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
-        )
+        ) else { return nil }
         libraryStore = LibraryStore(modelContainer: container)
         listeningModel = ListeningPresentationModel(flow: UITestCatalogFlow())
         let importer = SkinPackageImporter()
@@ -328,6 +328,17 @@ struct OfflineReviewLibraryRoot: View {
             alwaysOnTop: false,
             restoresPersistedFrame: false
         ))
+    }
+}
+
+struct OfflineReviewUnavailableView: View {
+    var body: some View {
+        ContentUnavailableView {
+            Label("Offline review unavailable", systemImage: "exclamationmark.triangle")
+        } description: {
+            Text("The synthetic review fixture could not start. No production session was created.")
+        }
+        .accessibilityIdentifier("offline-review.unavailable")
     }
 }
 

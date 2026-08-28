@@ -16,6 +16,24 @@ struct Canis97App: App {
 
     init() {
         let environment = ProcessInfo.processInfo.environment
+#if DEBUG
+        if OfflineReviewLaunchMode.isOfflineReviewMode(environment: environment) {
+            let offlineAppearanceController = SkinAppearanceController(
+                catalog: .phaseOne,
+                selectionStore: nil
+            )
+            appearanceController = offlineAppearanceController
+            skinImportCoordinator = SkinImportCoordinator(
+                importer: SkinPackageImporter(),
+                appearanceController: offlineAppearanceController
+            )
+            offlineReviewHarness = OfflineReviewHarness.makeIfRequested(environment: environment)
+            sessionController = nil
+            terminationObserver = nil
+            return
+        }
+        offlineReviewHarness = nil
+#endif
         let allowsDurableAppearance = !OfflineReviewLaunchMode.isUnitTestHost(environment: environment)
             && !OfflineReviewLaunchMode.isOfflineReviewRequested(environment: environment)
         let managedStore = ManagedSkinStore()
@@ -35,15 +53,6 @@ struct Canis97App: App {
         if allowsDurableAppearance {
             Task { await appearanceController.restorePersistedSelection() }
         }
-#if DEBUG
-        if let offlineReviewHarness = OfflineReviewHarness.makeIfRequested() {
-            self.offlineReviewHarness = offlineReviewHarness
-            sessionController = nil
-            terminationObserver = nil
-            return
-        }
-        offlineReviewHarness = nil
-#endif
         sessionController = Self.makeSessionController()
         sessionController?.startSystemMediaControls()
         terminationObserver = sessionController.map { controller in
@@ -103,6 +112,8 @@ struct Canis97App: App {
 #if DEBUG
         if let offlineReviewHarness {
             OfflineReviewCompactRoot(harness: offlineReviewHarness)
+        } else if OfflineReviewLaunchMode.isOfflineReviewMode() {
+            OfflineReviewUnavailableView()
         } else if let sessionController {
             CompactAuthenticationRoot(
                 controller: sessionController,
@@ -132,6 +143,8 @@ struct Canis97App: App {
 #if DEBUG
         if let offlineReviewHarness {
             OfflineReviewLibraryRoot(harness: offlineReviewHarness)
+        } else if OfflineReviewLaunchMode.isOfflineReviewMode() {
+            OfflineReviewUnavailableView()
         } else if let sessionController {
             LibraryRoot(controller: sessionController)
         } else {

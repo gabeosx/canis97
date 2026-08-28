@@ -209,6 +209,13 @@ final class CompactPlayerPresentationTests: XCTestCase {
         XCTAssertTrue(source.contains("OfflineReviewAppearanceFixture"))
         XCTAssertTrue(source.contains("SkinManifestValidator.validate"))
         XCTAssertTrue(source.contains("isStoredInMemoryOnly: true"))
+        XCTAssertTrue(source.contains("private init?(environment:"))
+        XCTAssertFalse(source.contains("try! ModelContainer"))
+
+        let appSource = try repositorySource("SiriusMac/SiriusMacApp.swift")
+        XCTAssertTrue(appSource.contains("if OfflineReviewLaunchMode.isOfflineReviewMode(environment: environment)"))
+        XCTAssertTrue(appSource.contains("OfflineReviewUnavailableView()"))
+        XCTAssertTrue(appSource.contains("sessionController = nil"))
     }
 
     func testPendingWithoutAConfirmedChannelShowsNativeProgressWithoutMetadata() {
