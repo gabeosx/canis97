@@ -29,26 +29,7 @@ enum SkinManagementErrorPresentation: String, Identifiable, Equatable {
     }
 
     var detail: String {
-        switch self {
-        case .invalidPackage:
-            "Choose a valid .\(ProductIdentity.skinPackageExtension) package and try again. Your current appearance was not changed."
-        case .unsupportedSchema:
-            "This package uses an appearance version \(ProductIdentity.displayName) doesn’t support. Your current appearance was not changed."
-        case .unsafeContent:
-            "This package contains content that safe appearances don’t allow. Your current appearance was not changed."
-        case .overBudget:
-            "This package exceeds the safe appearance limits. Choose a smaller package and try again."
-        case .cancelled:
-            "The import stopped before making any appearance change."
-        case .storageFailure:
-            "\(ProductIdentity.displayName) couldn’t save this appearance. Your current appearance was not changed. Try again."
-        case .selectionFailure:
-            "The validated appearance was saved, but your previous appearance remains selected. Select it again when ready."
-        case .removalFailure:
-            "\(ProductIdentity.displayName) couldn’t remove the saved appearance. Native remains active if recovery already completed. Try again."
-        case .nativeRecoveryFailure:
-            "\(ProductIdentity.displayName) couldn’t durably select Native, so the imported appearance was not removed. Try again."
-        }
+        "This appearance couldn’t be used. Choose another package or select Native."
     }
 
     static func importFailure(_ rejection: SkinPackageRejection) -> Self {
@@ -111,7 +92,7 @@ struct SkinManagementView: View {
             }
 
             HStack(spacing: 8) {
-                Button("Import Appearance…") {
+                Button("Select Appearance") {
                     statusMessage = nil
                     errorPresentation = nil
                     presentsImporter = true
@@ -122,7 +103,7 @@ struct SkinManagementView: View {
                 .accessibilityHint("Choose one local .\(ProductIdentity.skinPackageExtension) package")
 
                 if isImporting {
-                    ProgressView()
+                    ProgressView("Importing appearance")
                         .controlSize(.small)
                         .accessibilityLabel("Importing appearance")
                     Button("Cancel Import") {
@@ -163,7 +144,7 @@ struct SkinManagementView: View {
             Button("Remove \(confirmation.displayName)", role: .destructive) {
                 beginRemoval(confirmation)
             }
-            Button("Cancel", role: .cancel) {}
+            Button("Keep \(confirmation.displayName)", role: .cancel) {}
         } message: { confirmation in
             Text("Remove \(confirmation.displayName) from this Mac? Native and bundled appearances cannot be removed.")
         }
@@ -180,8 +161,17 @@ struct SkinManagementView: View {
     ) -> some View {
         Section(title) {
             if appearances.isEmpty {
-                Text("No \(title.lowercased()) appearances")
+                if title == "Imported" {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("No imported appearances yet.")
+                        Text("Import a local .siriusskin package to add one.")
+                    }
                     .foregroundStyle(.secondary)
+                    .accessibilityElement(children: .combine)
+                } else {
+                    Text("No \(title.lowercased()) appearances")
+                        .foregroundStyle(.secondary)
+                }
             } else {
                 ForEach(appearances) { appearance in
                     SkinManagementRow(
@@ -189,6 +179,7 @@ struct SkinManagementView: View {
                         displayName: appearance.displayName,
                         classification: appearance.reference.classification,
                         isSelected: appearance.reference == appearanceController.selectedReference,
+                        isBusy: isBusy,
                         onSelect: {
                             select(appearance.reference)
                         },
@@ -207,6 +198,7 @@ struct SkinManagementView: View {
     }
 
     private func select(_ reference: SkinSelectionReference) {
+        guard !isBusy else { return }
         statusMessage = nil
         errorPresentation = nil
         Task { @MainActor in
@@ -316,6 +308,7 @@ struct SkinManagementRow: View {
     let displayName: String
     let classification: SkinClassification
     let isSelected: Bool
+    let isBusy: Bool
     let onSelect: @MainActor () -> Void
     let onRemove: (@MainActor () -> Void)?
 
@@ -324,6 +317,9 @@ struct SkinManagementRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(displayName)
                     .font(.body.weight(.medium))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .help(displayName)
                 Text(classificationLabel)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -335,13 +331,14 @@ struct SkinManagementRow: View {
                     .accessibilityHidden(true)
             }
             Button(isSelected ? "Selected" : "Select", action: onSelect)
-                .disabled(isSelected)
+                .disabled(isSelected || isBusy)
                 .frame(minWidth: 80, minHeight: 32)
                 .accessibilityLabel("Select \(displayName)")
                 .accessibilityValue(isSelected ? "Selected" : "Not selected")
                 .accessibilityIdentifier("appearance.management.select.\(reference.identifier.rawValue)")
             if let onRemove {
                 Button("Remove", role: .destructive, action: onRemove)
+                    .disabled(isBusy)
                     .frame(minHeight: 32)
                     .accessibilityLabel("Remove \(displayName)")
                     .accessibilityHint("Asks for confirmation before removing this imported appearance")

@@ -36,7 +36,7 @@ enum ExpressiveSkinPhaseContract {
         for slot in ["artwork", "channelIdentity", "metadata", "favorite", "status", "transport", "library", "overflowMenu"] {
             try require(player.contains("expressiveSlot(.\(slot))"), "missing semantic slot: \(slot)")
         }
-        for identifier in ["compact.favorite", "compact.status", "compact.transport.previous", "compact.transport.play-pause", "compact.transport.next", "compact.show-library", "compact.always-on-top", "compact.sign-out"] {
+        for identifier in ["compact.favorite", "compact.status", "previous", "play-pause", "next", "compact.show-library", "compact.always-on-top", "compact.sign-out"] {
             try require(player.contains(identifier), "missing control identifier: \(identifier)")
         }
         for copy in [
