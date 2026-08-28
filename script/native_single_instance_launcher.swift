@@ -208,8 +208,8 @@ private final class FakeApplicationWorkspace: ApplicationWorkspace {
 
 @MainActor
 private func runSelfTests() async throws {
-    let bundleURL = URL(fileURLWithPath: "/tmp/SiriusMac.app")
-    let executableURL = bundleURL.appending(path: "Contents/MacOS/SiriusMac")
+    let bundleURL = URL(fileURLWithPath: "/tmp/Canis97.app")
+    let executableURL = bundleURL.appending(path: "Contents/MacOS/Canis97")
 
     func launcher(_ workspace: FakeApplicationWorkspace) -> SingleInstanceLauncher {
         SingleInstanceLauncher(
@@ -233,7 +233,7 @@ private func runSelfTests() async throws {
     )
     let pid = try await launcher(exact).launch(
         bundleURL: bundleURL,
-        bundleIdentifier: "com.siriusmac.player",
+        bundleIdentifier: "com.canis97.player",
         executableURL: executableURL
     )
     precondition(pid == 401 && exact.openCount == 1 && exact.terminationCount == 2)
@@ -248,7 +248,7 @@ private func runSelfTests() async throws {
     do {
         _ = try await launcher(sticky).launch(
             bundleURL: bundleURL,
-            bundleIdentifier: "com.siriusmac.player",
+            bundleIdentifier: "com.canis97.player",
             executableURL: executableURL
         )
         preconditionFailure("sticky applications must prevent opening")
@@ -265,7 +265,7 @@ private func runSelfTests() async throws {
         do {
             _ = try await launcher(workspace).launch(
                 bundleURL: bundleURL,
-                bundleIdentifier: "com.siriusmac.player",
+                bundleIdentifier: "com.canis97.player",
                 executableURL: executableURL
             )
             preconditionFailure("failure behavior must not succeed")

@@ -43,13 +43,13 @@ HOOK
 chmod +x "$HOOKS/xcodebuild" "$HOOKS/xcrun"
 
 export PATH="$HOOKS:$PATH"
-export SIL_XCODEBUILD="$HOOKS/xcodebuild"
-export SIL_LOCK_PATH="$LOCK_PATH"
-export SIL_DERIVED_DATA_PATH="$TEST_ROOT/derived-data"
-export SIL_CLANG_CACHE_PATH="$TEST_ROOT/clang-cache"
-export SIL_SWIFTPM_CACHE_PATH="$TEST_ROOT/swiftpm-cache"
-export SIL_NATIVE_LAUNCHER_BINARY="$TEST_ROOT/native-launcher"
-export SIL_TEST_APP_BINARY="$SIL_DERIVED_DATA_PATH/Build/Products/Debug/SiriusMac.app/Contents/MacOS/SiriusMac"
+export CANIS97_XCODEBUILD="$HOOKS/xcodebuild"
+export CANIS97_LOCK_PATH="$LOCK_PATH"
+export CANIS97_DERIVED_DATA_PATH="$TEST_ROOT/derived-data"
+export CANIS97_CLANG_CACHE_PATH="$TEST_ROOT/clang-cache"
+export CANIS97_SWIFTPM_CACHE_PATH="$TEST_ROOT/swiftpm-cache"
+export CANIS97_NATIVE_LAUNCHER_BINARY="$TEST_ROOT/native-launcher"
+export SIL_TEST_APP_BINARY="$CANIS97_DERIVED_DATA_PATH/Build/Products/Debug/Canis97.app/Contents/MacOS/Canis97"
 
 mkdir "$LOCK_PATH"
 if "$SCRIPT" run >/dev/null 2>&1; then

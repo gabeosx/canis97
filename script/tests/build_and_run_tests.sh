@@ -189,7 +189,7 @@ HOOK
 chmod +x "$HOOKS"/*
 
 reset_state() {
-  rm -rf "$TEST_ROOT/SiriusMac.app"
+  rm -rf "$TEST_ROOT/Canis97.app"
   : > "$STATE/pids"
   : > "$STATE/events"
   : > "$STATE/opens"
@@ -227,11 +227,11 @@ assert_file_empty() {
 
 configure_fake_hooks() {
   export SIL_TEST_STATE="$STATE"
-  export SIL_TEST_EXACT_BINARY="$TEST_ROOT/SiriusMac.app/Contents/MacOS/SiriusMac"
-  export SIL_TEST_WRONG_BINARY="$TEST_ROOT/SiriusMac.app/Contents/MacOS/NotSiriusMac"
+  export SIL_TEST_EXACT_BINARY="$TEST_ROOT/Canis97.app/Contents/MacOS/Canis97"
+  export SIL_TEST_WRONG_BINARY="$TEST_ROOT/Canis97.app/Contents/MacOS/NotCanis97"
   export SIL_TEST_HELPER="$HELPER"
-  export SIL_APP_NAME="SiriusMac"
-  export SIL_APP_BUNDLE="$TEST_ROOT/SiriusMac.app"
+  export SIL_APP_NAME="Canis97"
+  export SIL_APP_BUNDLE="$TEST_ROOT/Canis97.app"
   export SIL_APP_BINARY="$SIL_TEST_EXACT_BINARY"
   export SIL_LOCK_PATH="$TEST_ROOT/launcher.lock"
   export SIL_DRAIN_ATTEMPTS=2
@@ -465,7 +465,7 @@ fi
 # build path deliberately uses /tmp, while lsof reports the mapped physical
 # executable. Exercise the actual lsof query and parser against a harmless
 # system executable reached through a temporary alias; this never starts or
-# inspects SiriusMac.
+# inspects Canis97.
 reset_state
 (
   synthetic_alias_root="$(mktemp -d "${TMPDIR:-/tmp}/sirius-resolver-alias.XXXXXX")"

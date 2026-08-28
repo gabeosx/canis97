@@ -16,9 +16,9 @@ cd "$ROOT_DIR"
 DEVELOPER_DIR="$DEVELOPER_DIR_PATH" swift test --package-path Packages/SiriusXMClient
 DEVELOPER_DIR="$DEVELOPER_DIR_PATH" xcodebuild test \
   -project SiriusMac.xcodeproj \
-  -scheme SiriusMac \
+  -scheme Canis97 \
   -destination 'platform=macOS' \
-  -only-testing:SiriusMacTests \
+  -only-testing:Canis97Tests \
   -parallel-testing-enabled NO
 
 # `exec` replaces this shell, so one confirmed invocation can launch telemetry once only.
