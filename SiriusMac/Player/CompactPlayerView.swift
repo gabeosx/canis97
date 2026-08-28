@@ -54,7 +54,7 @@ struct CompactPlayerView: View {
         .environment(\.colorScheme, contentColorScheme)
         .foregroundStyle(.primary)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Sirius Mac compact player")
+        .accessibilityLabel("\(ProductIdentity.displayName) compact player")
         .accessibilityIdentifier("compact.canvas")
         .onChange(of: needsNativeAppearanceRecovery, initial: true) { _, needsRecovery in
             guard needsRecovery else { return }

@@ -123,6 +123,8 @@ check_presentation() {
   rg -Fq 'SiriusXM did not accept' "$AUTH_ORACLE" || fail 'provider rejection copy must remain factual'
   require_file "$LISTENING_VIEW"; require_file "$SKIN_MANAGEMENT_VIEW"; require_file "$SKIN_IMPORTER"; require_file "$ACCESSIBILITY_TESTS"
   rg -Fq 'ProductIdentity.displayName) library' "$LISTENING_VIEW" || fail 'library accessibility label must use the product identity'
+  rg -Fq '.accessibilityLabel("\(ProductIdentity.displayName) compact player")' "$ROOT/SiriusMac/Player/CompactPlayerView.swift" || fail 'compact-player accessibility label must use the product identity'
+  ! rg -Fq 'Sirius Mac compact player' "$ROOT/SiriusMac/Player/CompactPlayerView.swift" || fail 'legacy compact-player accessibility label remains'
   rg -Fq 'ProductIdentity.skinPackageTypeIdentifier' "$SKIN_MANAGEMENT_VIEW" || fail 'appearance importer must accept the approved skin type'
   rg -Fq 'ProductIdentity.Legacy.skinPackageTypeIdentifier' "$SKIN_MANAGEMENT_VIEW" || fail 'appearance importer must retain the legacy skin type'
   rg -Fq 'ProductIdentity.skinPackageExtension' "$SKIN_IMPORTER" || fail 'skin importer must accept the approved extension'
