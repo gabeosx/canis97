@@ -27,6 +27,10 @@ enum ExpressiveSkinContractOfflineTests {
         let importer = try String(contentsOf: root.appendingPathComponent("SiriusMac/Skins/SkinPackageImporter.swift"), encoding: .utf8)
         try require(importer.contains("SkinManifestValidator.referencedAssetPaths"), "importer must use the compiler-owned asset accessor")
         try require(!importer.contains("JSONDecoder().decode(SkinManifest.self"), "importer must not decode schema-v1 assets directly")
+        let window = try String(contentsOf: root.appendingPathComponent("SiriusMac/Windows/CompactWindowController.swift"), encoding: .utf8)
+        try require(window.contains("struct CompactWindowPositionRecord"), "window restoration must use a versioned record")
+        try require(window.contains("enum CompactWindowGeometry"), "window transitions must use pure finite geometry")
+        try require(window.contains("restoreNativeAppearance"), "invalid restoration must route to Native recovery")
     }
 }
 

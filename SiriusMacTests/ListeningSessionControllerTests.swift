@@ -255,6 +255,13 @@ private final class WindowLifecycleTerminatorSpy: ApplicationTerminating {
 
 @MainActor
 final class ListeningSessionControllerTests: XCTestCase {
+    func testCompactWindowControllerKeepsFiniteAppearancePolicyAtTheBridge() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        let source = try String(contentsOf: root.appendingPathComponent("SiriusMac/Windows/CompactWindowController.swift"), encoding: .utf8)
+        XCTAssertTrue(source.contains("CompactWindowPositionRecord"))
+        XCTAssertTrue(source.contains("CompactWindowGeometry"))
+        XCTAssertTrue(source.contains("restoreNativeAppearance"))
+    }
     func testCommandAvailabilityRequiresConfirmedPlaybackAndPreservesPendingCancellation() {
         func availability(
             _ playbackState: LivePlaybackState,
