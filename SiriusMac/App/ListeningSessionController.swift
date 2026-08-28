@@ -291,7 +291,14 @@ final class ListeningSessionController {
     @discardableResult
     func setFavoriteCurrentSong(isFavorite: Bool) -> FavoriteSongMutationResult {
         guard let candidate = favoriteCurrentSongCandidate else { return .failed }
-        let result = libraryStore.setSongFavorite(candidate, isFavorite: isFavorite)
+        return setSongFavorite(candidate, isFavorite: isFavorite)
+    }
+
+    /// Favorite-song rows use the same desired-state route as the current-song
+    /// action. This intentionally has no playback, queue, or system-media work.
+    @discardableResult
+    func setSongFavorite(_ snapshot: FavoriteSongSnapshot, isFavorite: Bool) -> FavoriteSongMutationResult {
+        let result = libraryStore.setSongFavorite(snapshot, isFavorite: isFavorite)
         switch result {
         case .saved:
             accessibilityAnnouncer.announce(.songFavoriteSaved(generation: nextAnnouncementGeneration()))

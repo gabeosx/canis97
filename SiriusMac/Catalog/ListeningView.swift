@@ -59,10 +59,19 @@ enum LibraryTab: String, CaseIterable, Identifiable {
     case channels
     case categories
     case favorites
+    case favoriteSongs
     case recents
 
     var id: String { rawValue }
-    var title: String { rawValue.capitalized }
+    var title: String {
+        switch self {
+        case .channels: "Channels"
+        case .categories: "Categories"
+        case .favorites: "Favorites"
+        case .favoriteSongs: "Favorite Songs"
+        case .recents: "Recents"
+        }
+    }
 }
 
 struct LibrarySearchQuery: Equatable {
@@ -72,6 +81,39 @@ struct LibrarySearchQuery: Equatable {
 
     var filtersVisibleCollection: Bool {
         !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+}
+
+struct FavoriteSongSearch: Equatable {
+    private let query: LibrarySearchQuery
+
+    init(_ value: String) {
+        query = LibrarySearchQuery(value)
+    }
+
+    func matches(_ snapshot: FavoriteSongSnapshot) -> Bool {
+        guard query.filtersVisibleCollection else { return true }
+        let matches = { (value: String) in
+            value.localizedCaseInsensitiveContains(query.value)
+        }
+        return matches(snapshot.title)
+            || matches(snapshot.artist)
+            || snapshot.albumName.map(matches) == true
+            || matches(FavoriteSongRow.sourcePresentation(for: snapshot))
+    }
+}
+
+@MainActor
+protocol SongFavoriteClipboardWriting {
+    func copy(_ text: String)
+}
+
+@MainActor
+final class SystemSongFavoriteClipboardWriter: SongFavoriteClipboardWriting {
+    func copy(_ text: String) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
     }
 }
 
@@ -213,6 +255,7 @@ struct LibraryView: View {
     let libraryStore: LibraryStore
     let controller: ListeningSessionController?
     let onTune: (@MainActor (LiveChannelID, [LiveChannelID]) -> Bool)?
+    let songFavoriteClipboardWriter: any SongFavoriteClipboardWriting
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var tab: LibraryTab
     @State private var query = ""
@@ -224,18 +267,21 @@ struct LibraryView: View {
         libraryStore = controller.libraryStore
         self.controller = controller
         onTune = nil
+        songFavoriteClipboardWriter = SystemSongFavoriteClipboardWriter()
         _tab = State(initialValue: LibraryTab(rawValue: controller.libraryStore.selectedLibraryTab) ?? .channels)
     }
 
     init(
         model: ListeningPresentationModel,
         libraryStore: LibraryStore,
-        onTune: (@MainActor (LiveChannelID, [LiveChannelID]) -> Bool)? = nil
+        onTune: (@MainActor (LiveChannelID, [LiveChannelID]) -> Bool)? = nil,
+        songFavoriteClipboardWriter: any SongFavoriteClipboardWriting = SystemSongFavoriteClipboardWriter()
     ) {
         self.model = model
         self.libraryStore = libraryStore
         controller = nil
         self.onTune = onTune
+        self.songFavoriteClipboardWriter = songFavoriteClipboardWriter
         _tab = State(initialValue: LibraryTab(rawValue: libraryStore.selectedLibraryTab) ?? .channels)
     }
 
@@ -294,6 +340,7 @@ struct LibraryView: View {
                 focusTarget = .search
             }
             .onChange(of: filteredChannels.map(\.id)) { previousIDs, currentIDs in
+                guard tab != .favoriteSongs else { return }
                 restoreSelectionAfterRefresh(previousIDs: previousIDs, currentIDs: currentIDs)
             }
             .confirmationDialog(
@@ -320,7 +367,7 @@ struct LibraryView: View {
             }
         }
         .pickerStyle(.segmented)
-        .frame(width: 360)
+        .frame(width: 480)
         .onChange(of: tab) { _, value in
             libraryStore.setSelectedLibraryTab(value.rawValue)
         }
@@ -329,7 +376,7 @@ struct LibraryView: View {
     }
 
     private var librarySearchField: some View {
-        TextField("Search Channels", text: $query)
+        TextField("Search \(tab.title)", text: $query)
             .textFieldStyle(.roundedBorder)
             .frame(width: 200)
             .accessibilityLabel("Search visible library collection")
@@ -354,7 +401,9 @@ struct LibraryView: View {
 
     @ViewBuilder
     private var libraryContent: some View {
-        if tab == .favorites || tab == .recents {
+        if tab == .favoriteSongs {
+            favoriteSongContent
+        } else if tab == .favorites || tab == .recents {
             collectionContent
         } else {
             switch model.state {
@@ -382,6 +431,25 @@ struct LibraryView: View {
             default:
                 collectionContent
             }
+        }
+    }
+
+    @ViewBuilder
+    private var favoriteSongContent: some View {
+        if filteredFavoriteSongs.isEmpty {
+            ContentUnavailableView {
+                Label(favoriteSongEmptyTitle, systemImage: LibrarySearchQuery(query).filtersVisibleCollection ? "magnifyingglass" : "music.note")
+            } description: {
+                Text(favoriteSongEmptyDescription)
+            } actions: {
+                if LibrarySearchQuery(query).filtersVisibleCollection {
+                    Button("Clear Search") { query = "" }
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .accessibilityLabel("\(favoriteSongEmptyTitle). \(favoriteSongEmptyDescription)")
+        } else {
+            favoriteSongList
         }
     }
 
@@ -425,6 +493,23 @@ struct LibraryView: View {
             _ = controller?.toggleConfirmedPlayback()
             return .handled
         }
+    }
+
+    private var favoriteSongList: some View {
+        List(filteredFavoriteSongs, id: \.identity) { snapshot in
+            FavoriteSongRow(
+                snapshot: snapshot,
+                onCopy: { songFavoriteClipboardWriter.copy(snapshot.copyText) },
+                onRemove: { setSongFavorite(snapshot, isFavorite: false) }
+            )
+        }
+        .listStyle(.inset)
+        .scrollContentBackground(.hidden)
+        .background(LibraryPalette.dominant)
+        .focused($focusTarget, equals: .collection)
+        .accessibilityLabel("Favorite Songs")
+        .accessibilityIdentifier("library.favorite-songs")
+        .accessibilitySortPriority(27)
     }
 
     private var categoryList: some View {
@@ -502,6 +587,8 @@ struct LibraryView: View {
                 currentChannels: currentChannels,
                 catalogIsResolved: catalogIsResolved
             )
+        case .favoriteSongs:
+            []
         }
     }
 
@@ -518,6 +605,11 @@ struct LibraryView: View {
 
     private var filteredCategoryGroups: [LibraryCategoryGroup] {
         LibraryCategoryGroup.groups(from: filteredChannels.map(\.channel))
+    }
+
+    private var filteredFavoriteSongs: [FavoriteSongSnapshot] {
+        let search = FavoriteSongSearch(query)
+        return libraryStore.favoriteSongs.filter(search.matches)
     }
 
     private func libraryRow(_ item: LibraryChannelItem) -> some View {
@@ -613,6 +705,14 @@ struct LibraryView: View {
         }
     }
 
+    private func setSongFavorite(_ snapshot: FavoriteSongSnapshot, isFavorite: Bool) {
+        if let controller {
+            _ = controller.setSongFavorite(snapshot, isFavorite: isFavorite)
+        } else {
+            _ = libraryStore.setSongFavorite(snapshot, isFavorite: isFavorite)
+        }
+    }
+
     private func restoreSelectionAfterRefresh(previousIDs: [LiveChannelID], currentIDs: [LiveChannelID]) {
         guard let selected = model.selectedChannelID, !currentIDs.contains(selected) else { return }
         guard !currentIDs.isEmpty else {
@@ -648,6 +748,7 @@ struct LibraryView: View {
         if hasNoAvailableChannels { return "No Channels Available" }
         return switch tab {
         case .favorites: "No Favorites Yet"
+        case .favoriteSongs: "No Favorite Songs Yet"
         case .recents: "No Recent Channels"
         case .channels, .categories: "No Matching Channels"
         }
@@ -662,6 +763,7 @@ struct LibraryView: View {
         }
         return switch tab {
         case .favorites: "Select the star beside a channel to keep it here."
+        case .favoriteSongs: "Use Favorite Current Song in the Player menu to save a confirmed song."
         case .recents: "Channels you play will appear here."
         case .channels: "Change your search or refresh the library."
         case .categories: "Channels are grouped by their SiriusXM category."
@@ -672,6 +774,7 @@ struct LibraryView: View {
         if LibrarySearchQuery(query).filtersVisibleCollection { return "magnifyingglass" }
         return switch tab {
         case .favorites: "star"
+        case .favoriteSongs: "music.note"
         case .recents: "clock"
         case .channels, .categories: "music.note.list"
         }
@@ -694,6 +797,17 @@ struct LibraryView: View {
 
     private var hasNoAvailableChannels: Bool {
         currentChannels.isEmpty && (tab == .channels || tab == .categories)
+    }
+
+    private var favoriteSongEmptyTitle: String {
+        LibrarySearchQuery(query).filtersVisibleCollection ? "No Matching Favorite Songs" : "No Favorite Songs Yet"
+    }
+
+    private var favoriteSongEmptyDescription: String {
+        if LibrarySearchQuery(query).filtersVisibleCollection {
+            return "No saved songs in Favorite Songs match your search."
+        }
+        return "Use Favorite Current Song in the Player menu to save a confirmed song."
     }
 
     private func channelDetail(_ item: LibraryChannelItem) -> String {
@@ -750,6 +864,61 @@ struct LibraryView: View {
              .conflictingIdentity, .unsupportedResponse, .cancelled:
             _ = model.refresh()
         }
+    }
+}
+
+struct FavoriteSongRow: View {
+    let snapshot: FavoriteSongSnapshot
+    let onCopy: () -> Void
+    let onRemove: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(snapshot.title)
+                    .font(.system(size: 14, weight: .semibold))
+                    .lineLimit(1)
+                Text(snapshot.artist)
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                if let albumName = snapshot.albumName {
+                    Text(albumName)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Text("\(Self.sourcePresentation(for: snapshot)) · Saved \(snapshot.savedAt.formatted(date: .abbreviated, time: .shortened))")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 12)
+            Button("Copy", action: onCopy)
+                .frame(minWidth: 32, minHeight: 32)
+                .help("Copy \(snapshot.copyText)")
+                .accessibilityIdentifier("library.favorite-song.copy.\(snapshot.identity.storageKey)")
+                .accessibilityLabel("Copy \(snapshot.copyText)")
+                .accessibilityHint("Copies the saved artist and title")
+            Button("Remove", role: .destructive, action: onRemove)
+                .frame(minWidth: 32, minHeight: 32)
+                .help("Remove from Favorite Songs")
+                .accessibilityIdentifier("library.favorite-song.remove.\(snapshot.identity.storageKey)")
+                .accessibilityLabel("Remove \(snapshot.copyText) from Favorite Songs")
+                .accessibilityHint("Removes this saved song after local storage confirms the change")
+        }
+        .frame(minHeight: 48)
+        .listRowBackground(LibraryPalette.secondary)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("library.favorite-song.row.\(snapshot.identity.storageKey)")
+    }
+
+    static func sourcePresentation(for snapshot: FavoriteSongSnapshot) -> String {
+        let source = snapshot.sourceChannel
+        let channelNumber = source.displayNumber.map { "Channel \($0)" }
+        return [channelNumber, source.name, source.rawIdentity]
+            .compactMap { $0 }
+            .joined(separator: " · ")
     }
 }
 

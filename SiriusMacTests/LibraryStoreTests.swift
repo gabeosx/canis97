@@ -393,6 +393,19 @@ final class LibraryViewStateContractTests: XCTestCase {
         XCTAssertFalse(FavoriteSongSearch("missing").matches(snapshot))
     }
 
+    func testFavoriteSongRowKeepsSavedContextOutOfChannelProjection() {
+        let snapshot = FavoriteSongSnapshot(
+            title: "Saved Title",
+            artist: "Saved Artist",
+            albumName: "Verified Album",
+            sourceChannel: FavoriteSongSourceChannel(rawIdentity: "source-id", name: "Saved Source", displayNumber: 42),
+            savedAt: Date(timeIntervalSince1970: 1)
+        )!
+
+        XCTAssertEqual(snapshot.copyText, "Saved Artist — Saved Title")
+        XCTAssertEqual(FavoriteSongRow.sourcePresentation(for: snapshot), "Channel 42 · Saved Source · source-id")
+    }
+
     func testEmptySearchKeepsTheCurrentTabCollection() {
         XCTAssertFalse(LibrarySearchQuery("").filtersVisibleCollection)
         XCTAssertTrue(LibrarySearchQuery("rock").filtersVisibleCollection)

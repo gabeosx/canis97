@@ -69,6 +69,11 @@ check_collection() {
   require_text "$LIBRARY_VIEW_SOURCE" 'No Favorite Songs Yet'
   require_text "$STORE_TESTS" 'testFiveLockedTabsExposeNativeTitlesAndPersistenceValues'
   require_text "$STORE_TESTS" 'testFavoriteSongSearchUsesOnlySavedSongPresentation'
+  require_text "$STORE_TESTS" 'testFavoriteSongRowKeepsSavedContextOutOfChannelProjection'
+  local row_source
+  row_source="$(sed -n '/^struct FavoriteSongRow:/,$p' "$LIBRARY_VIEW_SOURCE")"
+  ! printf '%s' "$row_source" | rg -n 'LibraryChannelItem|NativeListDoubleActionBridge|PlaybackQueue|tune\(|Now Playing|isFavorite\(' >/dev/null \
+    || fail 'favorite-song row acquired channel, queue, or playback authority'
   printf 'song favorites collection contract: PASS\n'
 }
 
