@@ -13,8 +13,9 @@
     {
       "identifier": "pocket-disc",
       "displayName": "Pocket Disc",
-      "source": "original-app-drawn",
-      "rendererLayers": ["disc-molded-plane", "disc-screw-set", "disc-segment-bars"],
+      "source": "original-generated-faceplate",
+      "rendererLayers": ["faceplate-backdrop", "disc-molded-plane", "disc-screw-set", "disc-segment-bars"],
+      "assetFiles": ["PocketDiscFaceplate@2x.png"],
       "fontTokens": ["systemMonospaced", "systemDefault"],
       "fontFiles": [],
       "externalAssetURLs": []
@@ -22,8 +23,9 @@
     {
       "identifier": "aqua-vista",
       "displayName": "Aqua Vista",
-      "source": "original-app-drawn",
-      "rendererLayers": ["aqua-color-planes", "aqua-bubble-set", "aqua-glass-highlights"],
+      "source": "original-generated-faceplate",
+      "rendererLayers": ["faceplate-backdrop", "aqua-color-planes", "aqua-bubble-set", "aqua-glass-highlights"],
+      "assetFiles": ["AquaVistaFaceplate@2x.png"],
       "fontTokens": ["systemRounded", "systemDefault"],
       "fontFiles": [],
       "externalAssetURLs": []

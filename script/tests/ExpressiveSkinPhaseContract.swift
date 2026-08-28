@@ -30,6 +30,10 @@ enum ExpressiveSkinPhaseContract {
         for resource in ["SignalGlow", "TapeDeck", "PixelDesk", "PocketDisc", "AquaVista"] {
             try require(FileManager.default.fileExists(atPath: root.appendingPathComponent("SiriusMac/Skins/Bundled/\(resource).json").path), "missing bundled appearance: \(resource)")
         }
+        for asset in ["PocketDiscFaceplate@2x.png", "AquaVistaFaceplate@2x.png"] {
+            try require(FileManager.default.fileExists(atPath: root.appendingPathComponent("SiriusMac/Skins/Bundled/Assets/\(asset)").path), "missing bundled faceplate: \(asset)")
+            try require(player.contains(asset) == false, "faceplate identity must stay declarative in its manifest: \(asset)")
+        }
         for marker in ["case 1:", "case 2:", "case 3:", "CompactSkinSemanticSlot", "transportControlSize", "focusClearance"] {
             try require(appearance.contains(marker) || presentation.contains(marker), "missing compatibility or interaction marker: \(marker)")
         }
@@ -52,6 +56,7 @@ enum ExpressiveSkinPhaseContract {
             try require(player.contains(copy) || presentation.contains(copy) || management.contains(copy), "missing app-owned copy: \(copy)")
         }
         try require(player.contains("duration: 0.15") && player.contains("reduceMotion ? nil"), "motion policy must remain a 150ms optional app-owned treatment")
+        try require(player.contains("expressiveFaceplateLayer") && player.contains("hasExpressiveFaceplate"), "validated faceplates must render behind semantic slots")
         try require(player.contains("compact.overflow.use-native-appearance"), "compact Native recovery route is missing")
         try require(app.contains("Button(\"Use Native Appearance\")") && app.contains("restoreNativeAppearance()"), "Player-menu Native recovery route is missing")
         try require(importer.contains("SkinManifestValidator.referencedAssetPaths"), "importer must use the closed asset accessor")

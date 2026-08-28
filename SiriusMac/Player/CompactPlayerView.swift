@@ -18,6 +18,12 @@ struct CompactPlayerView: View {
     private var needsNativeAppearanceRecovery: Bool {
         appearance.reference != .native && renderingAppearance.reference == .native
     }
+    /// A schema-v3 backdrop is already a complete, validated faceplate. Keeping
+    /// it outside the silhouette mask preserves its authored outer edge while
+    /// all interactive content remains in the fixed semantic-slot registry.
+    private var hasExpressiveFaceplate: Bool {
+        !renderingAppearance.layoutPlan.isLegacy && !renderingAppearance.decorationAssetURLs.isEmpty
+    }
 
     init(
         presentation: CompactPlayerPresentation,
@@ -38,7 +44,10 @@ struct CompactPlayerView: View {
     var body: some View {
         ZStack(alignment: .topLeading) {
             decorativeImage(at: renderingAppearance.backgroundAssetURL)
-            appOwnedDecorativeSurfaces
+            expressiveFaceplateLayer
+            if !hasExpressiveFaceplate {
+                appOwnedDecorativeSurfaces
+            }
             if renderingAppearance.layoutPlan.isLegacy {
                 VStack(alignment: .leading, spacing: style.sectionSpacing) {
                     if let channel = presentation.channelIdentity {
@@ -55,7 +64,16 @@ struct CompactPlayerView: View {
         .frame(width: style.contentSize.width, height: style.contentSize.height, alignment: .topLeading)
         .background(surfaceBackground(.canvas))
         .tint(surfaceTint(.interactiveAccent))
-        .clipShape(CompactSkinSilhouetteShape(variant: renderingAppearance.layoutPlan.silhouette, cornerRadius: renderingAppearance.cornerRadius))
+        .mask {
+            if hasExpressiveFaceplate {
+                Rectangle()
+            } else {
+                CompactSkinSilhouetteShape(
+                    variant: renderingAppearance.layoutPlan.silhouette,
+                    cornerRadius: renderingAppearance.cornerRadius
+                )
+            }
+        }
         .environment(\.colorScheme, contentColorScheme)
         .foregroundStyle(.primary)
         .accessibilityElement(children: .contain)
@@ -88,7 +106,9 @@ struct CompactPlayerView: View {
     private var expressiveContent: some View {
         let plan = renderingAppearance.layoutPlan
         return ZStack(alignment: .topLeading) {
-            expressiveMaterialLayer
+            if !hasExpressiveFaceplate {
+                expressiveMaterialLayer
+            }
             expressiveSlot(.artwork) { artwork }
             expressiveSlot(.channelIdentity) {
                 let channelText = presentation.channelIdentity?.displayText ?? "Nothing Playing"
@@ -127,7 +147,11 @@ struct CompactPlayerView: View {
         guard let frame = renderingAppearance.layoutPlan.slotFrames[slot] else { return AnyView(EmptyView()) }
         return AnyView(
             content()
-                .frame(width: CGFloat(frame.width), height: CGFloat(frame.height), alignment: .topLeading)
+                .frame(
+                    width: CGFloat(frame.width),
+                    height: CGFloat(frame.height),
+                    alignment: slot == .artwork ? .center : .topLeading
+                )
                 .offset(x: CGFloat(frame.x), y: CGFloat(frame.y))
         )
     }
@@ -193,7 +217,7 @@ struct CompactPlayerView: View {
             }
         }
         .frame(width: 72, height: 72)
-        .background(surfaceBackground(.metadata))
+        .background(surfaceBackground(.metadata).opacity(hasExpressiveFaceplate ? 0 : 1))
         .clipShape(.rect(cornerRadius: renderingAppearance.cornerRadius))
         .accessibilityLabel(presentation.primaryMetadata.map { "Artwork for \($0)" } ?? presentation.channelIdentity.map { "Artwork for channel \($0.displayText)" } ?? "Artwork")
         .accessibilitySortPriority(60)
@@ -267,7 +291,7 @@ struct CompactPlayerView: View {
             .padding(.horizontal, 6)
             .padding(.vertical, 4)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(surfaceBackground(surface))
+            .background(surfaceBackground(surface).opacity(hasExpressiveFaceplate ? 0 : 1))
             .tint(surfaceTint(surface))
             .accessibilityValue(status.accessibilityValue)
             .accessibilityIdentifier("compact.status")
@@ -310,7 +334,7 @@ struct CompactPlayerView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(CompactPlayerPresentation.focusClearance)
-        .background(surfaceBackground(.transport))
+        .background(surfaceBackground(.transport).opacity(hasExpressiveFaceplate ? 0 : 1))
         .tint(surfaceTint(.interactiveAccent))
     }
 
@@ -341,7 +365,16 @@ struct CompactPlayerView: View {
     }
 
     private var libraryButton: some View {
-        Button { onAction(.showLibrary) } label: { Label("Show Library", systemImage: "rectangle.stack") }
+        Button {
+            onAction(.showLibrary)
+        } label: {
+            if hasExpressiveFaceplate {
+                Image(systemName: "rectangle.stack")
+                    .frame(minWidth: CompactPlayerPresentation.transportControlSize, minHeight: CompactPlayerPresentation.transportControlSize)
+            } else {
+                Label("Show Library", systemImage: "rectangle.stack")
+            }
+        }
             .help("Show Library")
             .accessibilityIdentifier("compact.show-library")
             .accessibilityLabel("Show Library")
@@ -447,6 +480,22 @@ struct CompactPlayerView: View {
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+    }
+
+    /// Decorations are validated local assets and are always inert. Faceplates
+    /// deliberately sit behind, rather than replace, the app-owned controls.
+    @ViewBuilder
+    private var expressiveFaceplateLayer: some View {
+        if hasExpressiveFaceplate {
+            ZStack {
+                ForEach(renderingAppearance.decorationAssetURLs, id: \.self) { url in
+                    decorativeImage(at: url)
+                }
+            }
+            .frame(width: style.contentSize.width, height: style.contentSize.height)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
     }
 
     @ViewBuilder

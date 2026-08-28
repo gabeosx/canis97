@@ -16,20 +16,20 @@
     "label": "systemMonospaced"
   },
   "slots": [
-    { "semantic": "artwork", "frame": { "x": 20, "y": 56, "width": 88, "height": 88 } },
-    { "semantic": "channelIdentity", "frame": { "x": 124, "y": 48, "width": 176, "height": 24 } },
-    { "semantic": "metadata", "frame": { "x": 124, "y": 80, "width": 208, "height": 56 } },
-    { "semantic": "favorite", "frame": { "x": 336, "y": 48, "width": 32, "height": 32 } },
-    { "semantic": "status", "frame": { "x": 20, "y": 160, "width": 176, "height": 24 } },
-    { "semantic": "transport", "frame": { "x": 232, "y": 148, "width": 120, "height": 48 } },
-    { "semantic": "library", "frame": { "x": 20, "y": 268, "width": 112, "height": 32 } },
-    { "semantic": "overflowMenu", "frame": { "x": 328, "y": 268, "width": 40, "height": 32 } }
+    { "semantic": "artwork", "frame": { "x": 32, "y": 36, "width": 88, "height": 88 } },
+    { "semantic": "channelIdentity", "frame": { "x": 140, "y": 32, "width": 160, "height": 32 } },
+    { "semantic": "metadata", "frame": { "x": 136, "y": 64, "width": 168, "height": 48 } },
+    { "semantic": "favorite", "frame": { "x": 312, "y": 28, "width": 40, "height": 40 } },
+    { "semantic": "status", "frame": { "x": 32, "y": 124, "width": 88, "height": 32 } },
+    { "semantic": "transport", "frame": { "x": 200, "y": 112, "width": 136, "height": 56 } },
+    { "semantic": "library", "frame": { "x": 32, "y": 256, "width": 88, "height": 40 } },
+    { "semantic": "overflowMenu", "frame": { "x": 320, "y": 256, "width": 40, "height": 40 } }
   ],
   "dragRegions": [
-    { "x": 16, "y": 8, "width": 224, "height": 20 }
+    { "x": 16, "y": 4, "width": 224, "height": 20 }
   ],
   "decorations": {
-    "backdrop": null,
+    "backdrop": "PocketDiscFaceplate@2x.png",
     "chromeFrame": null,
     "displayPlate": null,
     "ornaments": []
