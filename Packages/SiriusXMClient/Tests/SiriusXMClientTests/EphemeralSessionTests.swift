@@ -79,7 +79,10 @@ struct EphemeralSessionTests {
         let configuration = EphemeralURLSessionTransport.makeConfiguration()
         configuration.protocolClasses = [BlockingURLProtocol.self]
         let transport = EphemeralURLSessionTransport(configuration: configuration)
-        let credential = AuthenticationCredential(volatileMaterial: Data("synthetic-token".utf8))
+        let credential = try! browserCredential(
+            accessToken: "synthetic-token",
+            accessExpiresAt: Date(timeIntervalSince1970: 10_800)
+        )
 
         let sendTask = Task {
             do {

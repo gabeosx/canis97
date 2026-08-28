@@ -14,6 +14,7 @@ enum SiriusXMRequestContract: CaseIterable, Sendable {
     case streamEnforcement
 
     static let host = "api.edge-gateway.siriusxm.com"
+    static let publicChannelGuideHost = "www.siriusxm.com"
     static let opaqueMediaDeliveryHost = "live-akc-prod-device.streaming.siriusxm.com"
 
     static func isOpaqueMediaDeliveryHost(_ host: String?) -> Bool {
@@ -51,7 +52,12 @@ enum SiriusXMRequestContract: CaseIterable, Sendable {
         }
     }
 
-    var host: String { Self.host }
+    var host: String {
+        switch self {
+        case .catalog: Self.publicChannelGuideHost
+        default: Self.host
+        }
+    }
 
     var method: String {
         switch self {
@@ -67,7 +73,7 @@ enum SiriusXMRequestContract: CaseIterable, Sendable {
         case .entitlement:
             "/subscription/v1/subscriptions"
         case .catalog:
-            "/browse/v1/pages/curated-grouping/403ab6a5-d3c9-4c2a-a722-a94a6a5fd056"
+            "/v2/channelfeed/SXM_SIR_AUD_TOTAL_ACCESS"
         case .tune:
             "/playback/play/v1/tuneSource"
         case .playbackKey:
@@ -109,7 +115,7 @@ enum SiriusXMRequestContract: CaseIterable, Sendable {
     var accept: String { "application/json" }
 
     var url: URL {
-        URL(string: "https://\(Self.host)\(pathTemplate)")!
+        URL(string: "https://\(host)\(pathTemplate)")!
     }
 
     static func makeRequest(for operation: Self, authorization: String) throws -> URLRequest {
@@ -134,12 +140,10 @@ enum SiriusXMRequestContract: CaseIterable, Sendable {
         for operation: Self,
         using credential: AuthenticationCredential
     ) throws -> URLRequest {
-        try credential.withVolatileMaterial { material in
-            guard let authorization = String(data: material, encoding: .utf8) else {
-                throw SiriusXMRequestContractError.invalidAuthorizationMaterial
-            }
-            return try makeRequest(for: operation, authorization: authorization)
+        guard let authorization = credential.accessToken() else {
+            throw SiriusXMRequestContractError.invalidAuthorizationMaterial
         }
+        return try makeRequest(for: operation, authorization: authorization)
     }
 }
 

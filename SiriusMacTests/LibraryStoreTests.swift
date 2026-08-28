@@ -403,7 +403,24 @@ final class LibraryViewStateContractTests: XCTestCase {
         )!
 
         XCTAssertEqual(snapshot.copyText, "Saved Artist — Saved Title")
-        XCTAssertEqual(FavoriteSongRow.sourcePresentation(for: snapshot), "Channel 42 · Saved Source · source-id")
+        XCTAssertEqual(FavoriteSongRow.sourcePresentation(for: snapshot), "Channel 42 · Saved Source")
+    }
+
+    func testFavoriteSongRowHidesRawChannelIdentity() {
+        let snapshot = FavoriteSongSnapshot(
+            title: "Saved Title",
+            artist: "Saved Artist",
+            albumName: nil,
+            sourceChannel: FavoriteSongSourceChannel(
+                rawIdentity: "64B8976D-6A7D-4A26-A8AF-8257E8740C9A",
+                name: nil,
+                displayNumber: nil
+            )!,
+            savedAt: Date(timeIntervalSince1970: 1)
+        )!
+
+        XCTAssertEqual(FavoriteSongRow.sourcePresentation(for: snapshot), "Saved channel")
+        XCTAssertFalse(FavoriteSongRow.sourcePresentation(for: snapshot).contains(snapshot.sourceChannel.rawIdentity))
     }
 
     func testEmptySearchKeepsTheCurrentTabCollection() {

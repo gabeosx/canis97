@@ -125,10 +125,8 @@ final class KeychainCredentialStore: CredentialStore, @unchecked Sendable {
             return .unavailable
         }
 
-        guard storedMaterial.count <= 8_192,
-              let text = String(data: storedMaterial, encoding: .utf8),
-              !text.isEmpty,
-              !text.contains(where: { $0.isWhitespace }) else {
+        guard storedMaterial.count <= 40_960,
+              AuthenticationCredential.isSupportedPersistentMaterial(storedMaterial) else {
             return .invalid
         }
 
@@ -155,6 +153,9 @@ final class KeychainCredentialStore: CredentialStore, @unchecked Sendable {
     }
 
     private func save(material: Data) throws {
+        guard AuthenticationCredential.isSupportedPersistentMaterial(material) else {
+            throw StorageError.unavailable
+        }
         var newItem = itemQuery
         newItem[kSecValueData as String] = material
         newItem[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly

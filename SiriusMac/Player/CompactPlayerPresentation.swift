@@ -6,6 +6,7 @@ import SiriusXMClient
 struct CompactPlayerPresentation: Sendable, Equatable {
     static let metadataLineLimit = 2
     static let transportControlSize: CGFloat = 32
+    static let metadataActionSize: CGFloat = 24
     static let focusClearance: CGFloat = 4
     struct ChannelIdentity: Sendable, Equatable {
         let number: Int?
@@ -217,6 +218,7 @@ enum CompactPlayerAction: CaseIterable, Sendable, Equatable {
     case playPause
     case next
     case toggleFavorite
+    case toggleSongFavorite
     case showLibrary
     case toggleAlwaysOnTop
     case retryPlayback

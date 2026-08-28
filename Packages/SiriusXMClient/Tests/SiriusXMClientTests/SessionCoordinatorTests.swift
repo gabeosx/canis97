@@ -34,6 +34,85 @@ struct SessionCoordinatorTests {
         ])
     }
 
+    @Test("an expiring browser credential is renewed and durably replaced before verification")
+    func renewsBeforeAuthentication() async throws {
+        let initial = try browserCredential(
+            accessToken: "synthetic-expired-access",
+            accessExpiresAt: Date(timeIntervalSince1970: 0)
+        )
+        let refreshed = try browserCredential(
+            accessToken: "synthetic-refreshed-access",
+            accessExpiresAt: Date(timeIntervalSince1970: 20_000)
+        )
+        let refresher = RecordingCredentialRefresher(result: refreshed)
+        let authentication = CredentialRecordingAuthenticationVerifier(
+            response: response(body: SanitizedNativeResponseFixtures.profileV4Authenticated)
+        )
+        let store = RecordingCredentialStore()
+        let coordinator = SessionCoordinator(
+            credentialSource: RecordingCredentialSource(credential: initial),
+            authenticationVerifier: authentication,
+            entitlementVerifier: RecordingEntitlementVerifier(response: response(body: SanitizedNativeResponseFixtures.subscriptionV1Active)),
+            credentialStore: store,
+            credentialRefresher: refresher,
+            clock: FixedSessionClock(),
+            diagnostics: RecordingDiagnostics()
+        )
+
+        #expect(await coordinator.attemptSession() == .active)
+        #expect(await refresher.refreshCount == 1)
+        #expect(await authentication.lastAccessToken == "synthetic-refreshed-access")
+        // One atomic renewal save precedes the ordinary post-entitlement durability save.
+        #expect(await store.saveCount == 2)
+    }
+
+    @Test("overlapping active operations share one browser renewal")
+    func activeOperationsSingleFlightRenewal() async throws {
+        let initial = try browserCredential(
+            accessToken: "synthetic-current-access",
+            accessExpiresAt: Date(timeIntervalSince1970: 10_000)
+        )
+        let refreshed = try browserCredential(
+            accessToken: "synthetic-single-flight-access",
+            accessExpiresAt: Date(timeIntervalSince1970: 30_000)
+        )
+        let clock = MutableSessionClock(Date(timeIntervalSince1970: 1))
+        let refresher = BlockingCredentialRefresher(result: refreshed)
+        let entitlement = SequencedEntitlementVerifier([
+            response(body: SanitizedNativeResponseFixtures.subscriptionV1Active),
+            response(body: SanitizedNativeResponseFixtures.subscriptionV1Active),
+            response(body: SanitizedNativeResponseFixtures.subscriptionV1Active),
+        ])
+        let store = RecordingCredentialStore()
+        let coordinator = SessionCoordinator(
+            credentialSource: RecordingCredentialSource(credential: initial),
+            authenticationVerifier: RecordingAuthenticationVerifier(response: response(body: SanitizedNativeResponseFixtures.profileV4Authenticated)),
+            entitlementVerifier: entitlement,
+            credentialStore: store,
+            credentialRefresher: refresher,
+            clock: clock,
+            diagnostics: RecordingDiagnostics()
+        )
+
+        #expect(await coordinator.attemptSession() == .active)
+        clock.set(Date(timeIntervalSince1970: 10_000))
+
+        let first = Task { await coordinator.withCurrentEntitledCredential { _ in "first" } }
+        await refresher.waitUntilStarted()
+        let second = Task { await coordinator.withCurrentEntitledCredential { _ in "second" } }
+        await Task.yield()
+        await refresher.release()
+
+        guard case let .completed(firstValue) = await first.value,
+              case let .completed(secondValue) = await second.value else {
+            Issue.record("Expected both operations to share and survive one renewal")
+            return
+        }
+        #expect(Set([firstValue, secondValue]) == Set(["first", "second"]))
+        #expect(await refresher.refreshCount == 1)
+        #expect(await store.saveCount == 2)
+    }
+
     @Test("authentication success does not publish a session before entitlement")
     func holdsActiveSessionUntilEntitlementSucceeds() async {
         let entitlement = BlockingEntitlementVerifier()
@@ -272,12 +351,75 @@ struct SessionCoordinatorTests {
 }
 
 private actor RecordingCredentialSource: CredentialSource {
-    private let supplied = AuthenticationCredential(volatileMaterial: Data("credential".utf8))
+    private let supplied: AuthenticationCredential
     private(set) var requestCount = 0
+
+    init(credential: AuthenticationCredential = AuthenticationCredential(volatileMaterial: Data("credential".utf8))) {
+        supplied = credential
+    }
 
     func credential() async -> AuthenticationCredential? {
         requestCount += 1
         return supplied
+    }
+}
+
+private actor CredentialRecordingAuthenticationVerifier: NativeAuthenticationVerifying {
+    private let response: NativeTransportResponse
+    private(set) var lastAccessToken: String?
+
+    init(response: NativeTransportResponse) {
+        self.response = response
+    }
+
+    func verifyAuthentication(using credential: AuthenticationCredential) async -> NativeTransportResponse {
+        lastAccessToken = credential.accessToken()
+        return response
+    }
+}
+
+private actor RecordingCredentialRefresher: CredentialRefresher {
+    private let result: AuthenticationCredential?
+    private(set) var refreshCount = 0
+
+    init(result: AuthenticationCredential?) {
+        self.result = result
+    }
+
+    func refreshedCredential(ifNeeded credential: AuthenticationCredential) async -> AuthenticationCredential? {
+        refreshCount += 1
+        return result
+    }
+}
+
+private actor BlockingCredentialRefresher: CredentialRefresher {
+    private let result: AuthenticationCredential
+    private var started = false
+    private var startWaiter: CheckedContinuation<Void, Never>?
+    private var releaseWaiter: CheckedContinuation<Void, Never>?
+    private(set) var refreshCount = 0
+
+    init(result: AuthenticationCredential) {
+        self.result = result
+    }
+
+    func refreshedCredential(ifNeeded credential: AuthenticationCredential) async -> AuthenticationCredential? {
+        refreshCount += 1
+        started = true
+        startWaiter?.resume()
+        startWaiter = nil
+        await withCheckedContinuation { releaseWaiter = $0 }
+        return result
+    }
+
+    func waitUntilStarted() async {
+        if started { return }
+        await withCheckedContinuation { startWaiter = $0 }
+    }
+
+    func release() {
+        releaseWaiter?.resume()
+        releaseWaiter = nil
     }
 }
 
@@ -427,6 +569,23 @@ private enum FixtureStoreError: Error {
 
 private struct FixedSessionClock: SessionClock {
     func now() -> Date { Date(timeIntervalSince1970: 1) }
+}
+
+private final class MutableSessionClock: SessionClock, @unchecked Sendable {
+    private let lock = NSLock()
+    private var date: Date
+
+    init(_ date: Date) {
+        self.date = date
+    }
+
+    func now() -> Date {
+        lock.withLock { date }
+    }
+
+    func set(_ date: Date) {
+        lock.withLock { self.date = date }
+    }
 }
 
 private actor RecordingDiagnostics: SessionDiagnostics {

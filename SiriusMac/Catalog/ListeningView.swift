@@ -293,6 +293,10 @@ struct LibraryView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .background(LibraryPalette.dominant)
+            // The custom library canvas is deliberately dark. Keep that
+            // appearance local so native toolbar controls continue matching
+            // the actual system-drawn toolbar material.
+            .environment(\.colorScheme, .dark)
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     libraryTabPicker
@@ -355,8 +359,6 @@ struct LibraryView: View {
             }
         }
         .frame(minWidth: 760, minHeight: 540, alignment: .top)
-        .tint(LibraryPalette.accent)
-        .environment(\.colorScheme, .dark)
         .accessibilityLabel("\(ProductIdentity.displayName) library")
     }
 
@@ -367,6 +369,7 @@ struct LibraryView: View {
             }
         }
         .pickerStyle(.segmented)
+        .tint(Color(nsColor: .controlAccentColor))
         .frame(width: 480)
         .onChange(of: tab) { _, value in
             libraryStore.setSelectedLibraryTab(value.rawValue)
@@ -913,12 +916,13 @@ struct FavoriteSongRow: View {
         .accessibilityIdentifier("library.favorite-song.row.\(snapshot.identity.storageKey)")
     }
 
-    static func sourcePresentation(for snapshot: FavoriteSongSnapshot) -> String {
+    nonisolated static func sourcePresentation(for snapshot: FavoriteSongSnapshot) -> String {
         let source = snapshot.sourceChannel
         let channelNumber = source.displayNumber.map { "Channel \($0)" }
-        return [channelNumber, source.name, source.rawIdentity]
+        let presentation = [channelNumber, source.name]
             .compactMap { $0 }
             .joined(separator: " · ")
+        return presentation.isEmpty ? "Saved channel" : presentation
     }
 }
 

@@ -20,6 +20,8 @@ final class MetadataPresentationTests: XCTestCase {
         XCTAssertTrue(source.contains(".accessibilityIdentifier(\"library.tabs\")"))
         XCTAssertTrue(source.contains(".accessibilityIdentifier(\"library.search\")"))
         XCTAssertTrue(source.contains("Label(\"Refresh\", systemImage: \"arrow.clockwise\")"))
+        XCTAssertTrue(source.contains(".tint(Color(nsColor: .controlAccentColor))"))
+        XCTAssertFalse(source.contains(".tint(LibraryPalette.accent)"))
     }
 
     func testPlayerMenuBindsTransportControlsToSharedCommandAvailability() throws {

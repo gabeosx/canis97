@@ -76,6 +76,11 @@ public struct LiveChannelID: Sendable, Equatable, Hashable, Codable, CustomStrin
 public enum ChannelEntitlement: Sendable, Equatable {
     case entitledStandard
     case entitledAppOnly
+    /// The public package guide says the channel is delivered over this path,
+    /// but does not prove that the current account owns it. Playback remains
+    /// independently authorized for every tune.
+    case guideStandard
+    case guideAppOnly
     case notEntitled
     case unknown
 }
@@ -95,11 +100,23 @@ enum CatalogEntityKind: Sendable, Equatable {
 /// It intentionally retains no URL, resource, token, or provider field. Artwork
 /// loading and precedence remain a later presentation concern.
 public struct ChannelArtworkReference: Sendable, Equatable, Hashable, CustomStringConvertible, CustomDebugStringConvertible {
+    enum FixedOrigin: Sendable, Equatable, Hashable {
+        case mediaImage
+        case publicWebsite
+    }
+
     let relativeReference: String?
+    let fixedOrigin: FixedOrigin?
 
-    public init() { self.relativeReference = nil }
+    public init() {
+        relativeReference = nil
+        fixedOrigin = nil
+    }
 
-    init(relativeReference: String) { self.relativeReference = relativeReference }
+    init(relativeReference: String, fixedOrigin: FixedOrigin = .mediaImage) {
+        self.relativeReference = relativeReference
+        self.fixedOrigin = fixedOrigin
+    }
 
     public var description: String { "ChannelArtworkReference(redacted)" }
     public var debugDescription: String { "ChannelArtworkReference(redacted)" }
@@ -142,7 +159,7 @@ public enum MetadataAvailability: Sendable, Equatable {
     case failed(MetadataFailure)
 }
 
-public enum ArtworkMediaType: Sendable, Equatable { case jpeg, png }
+public enum ArtworkMediaType: Sendable, Equatable { case jpeg, png, svg }
 
 /// Bounded image bytes suitable for native rendering. It deliberately carries
 /// neither a provider URL nor request/response metadata.
@@ -377,8 +394,11 @@ struct LiveCatalogAdapter: Sendable {
                 return LiveCatalogSnapshotResult(snapshot: nil, failure: .malformedCandidate)
             }
 
-            guard candidate.entity == .channelLinear,
-                  candidate.entitlement == .entitledStandard || candidate.entitlement == .entitledAppOnly
+            let isBrowsable = switch candidate.entitlement {
+            case .entitledStandard, .entitledAppOnly, .guideStandard, .guideAppOnly: true
+            case .notEntitled, .unknown: false
+            }
+            guard candidate.entity == .channelLinear, isBrowsable
             else {
                 continue
             }
@@ -449,14 +469,15 @@ struct LiveCatalogAdapter: Sendable {
     }
 
     private static func isOrderedBefore(_ lhs: LiveChannel, _ rhs: LiveChannel) -> Bool {
-        let leftCategory = lhs.category ?? ""
-        let rightCategory = rhs.category ?? ""
-        if leftCategory != rightCategory { return leftCategory < rightCategory }
-
         let leftNumber = lhs.displayNumber ?? .max
         let rightNumber = rhs.displayNumber ?? .max
         if leftNumber != rightNumber { return leftNumber < rightNumber }
         if lhs.name != rhs.name { return (lhs.name ?? "") < (rhs.name ?? "") }
+
+        let leftCategory = lhs.category ?? ""
+        let rightCategory = rhs.category ?? ""
+        if leftCategory != rightCategory { return leftCategory < rightCategory }
+
         return lhs.id.rawValue.utf8.lexicographicallyPrecedes(rhs.id.rawValue.utf8)
     }
 }

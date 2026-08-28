@@ -210,6 +210,7 @@ private struct CompactListeningSlice: View {
         CompactPlayerView(
             presentation: current.retainingConfirmedContent(from: lastConfirmedPresentation),
             appearance: appearanceController.selectedAppearance,
+            favoriteSongActionState: controller.favoriteCurrentSongActionState,
             onAction: perform,
             isAlwaysOnTop: controller.libraryStore.alwaysOnTop,
             onAlwaysOnTopChanged: controller.libraryStore.setAlwaysOnTop,
@@ -276,6 +277,9 @@ private struct CompactListeningSlice: View {
             }) else { return }
             let snapshot = LibraryChannelSnapshot(channel)
             controller.setFavorite(snapshot, isFavorite: !controller.libraryStore.isFavorite(channel.id))
+        case .toggleSongFavorite:
+            guard case let .enabled(isFavorite) = controller.favoriteCurrentSongActionState else { return }
+            _ = controller.setFavoriteCurrentSong(isFavorite: !isFavorite)
         case .showLibrary:
             _ = controller.requestLibraryOpen()
             openWindow(id: ProductIdentity.SceneID.library)

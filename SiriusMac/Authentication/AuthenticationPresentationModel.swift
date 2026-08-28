@@ -8,6 +8,7 @@ final class AuthenticationPresentationModel {
     private let flow: any AuthenticationPresentationFlow
     private var attemptID: UUID?
     private var hasAttemptedLaunchRestore = false
+    private var hasPendingAutomaticallyDetectedSession = false
 
     private(set) var state: AuthenticationPresentationState = .signedOut
     private(set) var isAttemptInFlight = false
@@ -69,7 +70,7 @@ final class AuthenticationPresentationModel {
 
     @discardableResult
     func useLoggedInSession() -> Task<Void, Never>? {
-        guard state == .waitingForWebView, !isAttemptInFlight else { return nil }
+        guard isUsingCurrentWebViewSession, !isAttemptInFlight else { return nil }
 
         let identifier = startAttempt(at: .verifyingAuthentication)
         let flow = flow
@@ -79,6 +80,16 @@ final class AuthenticationPresentationModel {
             }
             self?.finishAttempt(identifier, with: result)
         }
+    }
+
+    /// Receives a material-free readiness signal from the app-owned WebView bridge.
+    /// If the signal races the short sign-in setup task, it is retained until the
+    /// visible WebView state is published and then consumed exactly once.
+    func useAutomaticallyDetectedSession() {
+        guard state != .entitled, state != .restoreCompleted else { return }
+        guard isUsingCurrentWebViewSession || isAttemptInFlight else { return }
+        hasPendingAutomaticallyDetectedSession = true
+        consumeAutomaticallyDetectedSessionIfPossible()
     }
 
     @discardableResult
@@ -116,6 +127,15 @@ final class AuthenticationPresentationModel {
         return state == .waitingForWebView || isRetryableTerminalState
     }
 
+    private var isUsingCurrentWebViewSession: Bool {
+        switch state {
+        case .waitingForWebView, .webCredentialMissing, .webCredentialMalformed, .webCredentialAmbiguous:
+            true
+        default:
+            false
+        }
+    }
+
     private var isRetryableTerminalState: Bool {
         switch state {
         case .localCredentialMissing,
@@ -133,6 +153,9 @@ final class AuthenticationPresentationModel {
              .cleanupFailed:
             true
         case .waitingForWebView,
+             .webCredentialMissing,
+             .webCredentialMalformed,
+             .webCredentialAmbiguous,
              .verifyingAuthentication,
              .verifyingEntitlement,
              .entitled,
@@ -157,6 +180,21 @@ final class AuthenticationPresentationModel {
         attemptID = nil
         isAttemptInFlight = false
         self.state = state
+        guard isUsingCurrentWebViewSession else {
+            hasPendingAutomaticallyDetectedSession = false
+            return
+        }
+        consumeAutomaticallyDetectedSessionIfPossible()
+    }
+
+    private func consumeAutomaticallyDetectedSessionIfPossible() {
+        guard hasPendingAutomaticallyDetectedSession,
+              isUsingCurrentWebViewSession,
+              !isAttemptInFlight else {
+            return
+        }
+        hasPendingAutomaticallyDetectedSession = false
+        _ = useLoggedInSession()
     }
 
     func presentation(for state: AuthenticationPresentationState) -> AuthenticationPresentationCopy {
@@ -170,6 +208,9 @@ enum AuthenticationPresentationState: Equatable {
     case localCredentialUnavailable
     case webSessionResetFailed
     case waitingForWebView
+    case webCredentialMissing
+    case webCredentialMalformed
+    case webCredentialAmbiguous
     case verifyingAuthentication
     case verifyingEntitlement
     case authenticatedButNotEntitled
@@ -194,6 +235,9 @@ private extension AuthenticationPresentationState {
         case .localCredentialUnavailable: .localCredentialUnavailable
         case .webSessionResetFailed: .webSessionResetFailed
         case .waitingForWebView: .waitingForWebView
+        case .webCredentialMissing: .webCredentialMissing
+        case .webCredentialMalformed: .webCredentialMalformed
+        case .webCredentialAmbiguous: .webCredentialAmbiguous
         case .verifyingAuthentication: .verifyingAuthentication
         case .verifyingEntitlement: .verifyingEntitlement
         case .authenticatedButNotEntitled: .authenticatedButNotEntitled
@@ -325,9 +369,17 @@ struct ComposedAuthenticationPresentationFlow: AuthenticationPresentationFlow {
     func useLoggedInSession(
         onEntitlementVerification: @MainActor @escaping @Sendable () -> Void
     ) async -> AuthenticationPresentationState {
-        guard await bridge.useLoggedInSession() == .credentialTransferred else {
-            credentialSource?.finishWebViewAttempt()
-            return .unsupported
+        switch await bridge.useLoggedInSession() {
+        case .credentialTransferred:
+            break
+        case .authCookieMissing:
+            return .webCredentialMissing
+        case .malformedCredential:
+            return .webCredentialMalformed
+        case .ambiguousCredentials:
+            return .webCredentialAmbiguous
+        case .cancelled, .alreadyConsumed:
+            return .waitingForWebView
         }
         return await completeClientTransaction(
             credentialSource: credentialSource,
@@ -376,7 +428,7 @@ struct ComposedAuthenticationPresentationFlow: AuthenticationPresentationFlow {
         }
 
         guard state == .entitled else {
-            credentialSource?.finishRejectedRestore()
+            credentialSource?.finishRejectedRestore(state.closedTerminal)
             credentialSource?.finishWebViewAttempt()
             return state
         }

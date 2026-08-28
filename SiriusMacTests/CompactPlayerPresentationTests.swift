@@ -151,7 +151,7 @@ final class CompactPlayerPresentationTests: XCTestCase {
     func testViewActionsStayOutsideThePresentationValue() {
         XCTAssertEqual(
             CompactPlayerAction.allCases,
-            [.previous, .playPause, .next, .toggleFavorite, .showLibrary, .toggleAlwaysOnTop, .retryPlayback, .signInAgain, .refreshLibrary, .signOut]
+            [.previous, .playPause, .next, .toggleFavorite, .toggleSongFavorite, .showLibrary, .toggleAlwaysOnTop, .retryPlayback, .signInAgain, .refreshLibrary, .signOut]
         )
         let storedValues = Array(Mirror(reflecting: CompactPlayerPresentation.empty()).children)
 
@@ -345,6 +345,7 @@ final class CompactPlayerPresentationTests: XCTestCase {
         XCTAssertEqual(presentation.secondaryMetadata, longTitle)
         XCTAssertEqual(CompactPlayerPresentation.metadataLineLimit, 2)
         XCTAssertEqual(CompactPlayerPresentation.transportControlSize, 32)
+        XCTAssertEqual(CompactPlayerPresentation.metadataActionSize, 24)
         XCTAssertEqual(NativeCompactPlayerStyle.fallback.contentSize, .init(width: 400, height: 288))
     }
 
@@ -409,6 +410,7 @@ final class CompactPlayerPresentationTests: XCTestCase {
             ("contentWidth", 400),
             ("contentHeight", 287),
             ("transportControlSize", 32),
+            ("metadataActionSize", 24),
             ("transportHitRegion", 31)
         ] {
             object[key] = value
@@ -512,13 +514,14 @@ final class CompactPlayerPresentationTests: XCTestCase {
             XCTAssertTrue(source.contains(".\(surface.rawValue)"))
         }
         XCTAssertTrue(source.contains("CompactPlayerPresentation.transportControlSize"))
+        XCTAssertTrue(source.contains("CompactPlayerPresentation.metadataActionSize"))
         XCTAssertTrue(source.contains(".frame(width: style.contentSize.width, height: style.contentSize.height"))
         XCTAssertTrue(source.contains(".allowsHitTesting(false)"))
         XCTAssertTrue(source.contains(".accessibilityHidden(true)"))
         for forbiddenKey in [
             "accessibilityLabel", "accessibilityValue", "accessibilityHint",
             "accessibilitySortPriority", "actionName", "focusPriority",
-            "reduceMotion", "contentWidth", "contentHeight", "transportControlSize"
+            "reduceMotion", "contentWidth", "contentHeight", "transportControlSize", "metadataActionSize"
         ] {
             XCTAssertFalse(manifestSource.contains("\"\(forbiddenKey)\""))
         }
@@ -537,6 +540,7 @@ final class CompactPlayerPresentationTests: XCTestCase {
         }
         XCTAssertEqual(NativeCompactPlayerStyle.fallback.contentSize, .init(width: 400, height: 288))
         XCTAssertEqual(CompactPlayerPresentation.transportControlSize, 32)
+        XCTAssertEqual(CompactPlayerPresentation.metadataActionSize, 24)
     }
 
     func testAppearanceFamilyKeepsOneActionAndAccessibilityContractForLongEmptyAndErrorContent() throws {
@@ -561,7 +565,7 @@ final class CompactPlayerPresentationTests: XCTestCase {
         ]
         let source = try repositorySource("SiriusMac/Player/CompactPlayerView.swift")
         let expectedActions: [CompactPlayerAction] = [
-            .previous, .playPause, .next, .toggleFavorite, .showLibrary,
+            .previous, .playPause, .next, .toggleFavorite, .toggleSongFavorite, .showLibrary,
             .toggleAlwaysOnTop, .retryPlayback, .signInAgain, .refreshLibrary, .signOut
         ]
 
@@ -569,6 +573,7 @@ final class CompactPlayerPresentationTests: XCTestCase {
         XCTAssertFalse(source.contains("switch appearance.reference.classification"))
         for (identifier, expectedOccurrences) in [
             ("compact.favorite", 1),
+            ("compact.song-favorite", 1),
             ("compact.status", 1),
             ("compact.show-library", 2), // populated and empty semantic states
             ("compact.sign-out", 1)

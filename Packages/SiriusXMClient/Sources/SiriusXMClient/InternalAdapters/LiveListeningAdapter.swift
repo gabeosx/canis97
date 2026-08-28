@@ -87,7 +87,7 @@ enum LiveListeningAdapter {
               let artist = nonEmptyString(first["artistName"]),
               parseObservedLookaroundTimestamp(first["validFrom"]) != nil
         else { return .failed(.unsupportedResponse) }
-        let artwork = artworkReference(from: first["image"])
+        let artwork = currentProgramArtworkReference(from: first)
         return .current(MetadataSnapshot(channelID: channelID, program: LiveProgramMetadata(title: title, artist: artist, artwork: artwork)))
     }
 
@@ -118,8 +118,15 @@ enum LiveListeningAdapter {
               response.redirectLocation == nil,
               (200 ... 299).contains(response.statusCode),
               response.body.count <= 5 * 1_024 * 1_024,
-              let contentType = response.contentType?.lowercased(),
-              let mediaType: ArtworkMediaType = contentType.hasPrefix("image/jpeg") ? .jpeg : contentType.hasPrefix("image/png") ? .png : nil,
+              let contentType = response.contentType?.lowercased()
+        else { return .unavailable }
+
+        if contentType.hasPrefix("image/svg+xml") {
+            guard BoundedSVGArtworkValidator.isSafe(response.body) else { return .unavailable }
+            return .current(ArtworkData(bytes: response.body, mediaType: .svg))
+        }
+
+        guard let mediaType: ArtworkMediaType = contentType.hasPrefix("image/jpeg") ? .jpeg : contentType.hasPrefix("image/png") ? .png : nil,
               let source = CGImageSourceCreateWithData(response.body as CFData, nil),
               let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
               let width = properties[kCGImagePropertyPixelWidth] as? NSNumber,
@@ -130,19 +137,124 @@ enum LiveListeningAdapter {
         return .current(ArtworkData(bytes: response.body, mediaType: mediaType))
     }
 
-    private static func artworkReference(from value: Any?) -> ChannelArtworkReference? {
-        guard let image = value as? [String: Any],
-              let reference = image["url"] as? String,
-              reference.hasPrefix("/"),
-              !reference.contains(".."),
-              URL(string: reference)?.scheme == nil,
-              let width = image["width"] as? NSNumber,
-              let height = image["height"] as? NSNumber,
-              width.intValue > 0, height.intValue > 0,
-              width.intValue <= 4096, height.intValue <= 4096,
-              ["jpeg", "jpg", "png"].contains(reference.split(separator: ".").last?.lowercased())
+    /// The observed current-song image URL is an opaque image-service key, not
+    /// a fetchable URL. SiriusXM's current player Base64-encodes that key and a
+    /// bounded resize edit into the fixed image-service path.
+    private static func currentProgramArtworkReference(from cut: [String: Any]) -> ChannelArtworkReference? {
+        guard let image = cut["image"] as? [String: Any],
+              let key = image["url"] as? String,
+              imageServiceKeyIsSafe(key),
+              let resize = imageServiceResize(for: image),
+              let payload = try? JSONSerialization.data(
+                  withJSONObject: [
+                      "key": key,
+                      "edits": [["resize": ["width": resize.width, "height": resize.height]]],
+                  ],
+                  options: [.sortedKeys]
+              )
         else { return nil }
-        return ChannelArtworkReference(relativeReference: reference)
+
+        return ChannelArtworkReference(
+            relativeReference: "/\(payload.base64EncodedString())",
+            fixedOrigin: .mediaImage
+        )
+    }
+
+    private static func imageServiceKeyIsSafe(_ key: String) -> Bool {
+        guard !key.isEmpty,
+              key.utf8.count <= 4_096,
+              !key.hasPrefix("/"),
+              !key.contains(".."),
+              !key.contains("\\"),
+              key.unicodeScalars.allSatisfy({ 0x21 ... 0x7E ~= $0.value }),
+              let components = URLComponents(string: key),
+              components.scheme == nil,
+              components.host == nil,
+              components.user == nil,
+              components.password == nil,
+              components.query == nil,
+              components.fragment == nil,
+              !components.percentEncodedPath.isEmpty
+        else { return false }
+        return true
+    }
+
+    private static func imageServiceResize(for image: [String: Any]) -> (width: Int, height: Int)? {
+        let width = image["width"] as? NSNumber
+        let height = image["height"] as? NSNumber
+        guard width != nil || height != nil else { return (1_080, 1_080) }
+        guard let width, let height,
+              width.intValue > 0, height.intValue > 0,
+              width.intValue <= 4_096, height.intValue <= 4_096
+        else { return nil }
+
+        let maximum = 1_920.0
+        let scale = min(1, maximum / Double(width.intValue), maximum / Double(height.intValue))
+        return (
+            max(1, Int((Double(width.intValue) * scale).rounded())),
+            max(1, Int((Double(height.intValue) * scale).rounded()))
+        )
+    }
+
+    static func publicChannelArtworkReference(from value: Any?) -> ChannelArtworkReference? {
+        guard let reference = value as? String else { return nil }
+        return fixedArtworkReference(
+            reference,
+            origin: .publicWebsite,
+            allowedExtensions: ["jpeg", "jpg", "png", "svg"]
+        )
+    }
+
+    private static func fixedArtworkReference(
+        _ value: String,
+        origin: ChannelArtworkReference.FixedOrigin,
+        allowedExtensions: Set<String>?
+    ) -> ChannelArtworkReference? {
+        let relativeValue: String
+        if value.hasPrefix("/") {
+            relativeValue = value
+        } else if value.hasPrefix("\(fixedHost(for: origin))/") {
+            relativeValue = String(value.dropFirst(fixedHost(for: origin).count))
+        } else if let components = URLComponents(string: value),
+                  components.scheme == "https",
+                  components.user == nil,
+                  components.password == nil,
+                  components.port == nil,
+                  components.fragment == nil,
+                  components.host == fixedHost(for: origin) {
+            var relative = components.percentEncodedPath
+            if let query = components.percentEncodedQuery, !query.isEmpty {
+                relative += "?\(query)"
+            }
+            relativeValue = relative
+        } else {
+            return nil
+        }
+
+        guard relativeValue.hasPrefix("/"),
+              !relativeValue.hasPrefix("//"),
+              !relativeValue.contains(".."),
+              let components = URLComponents(string: relativeValue),
+              components.scheme == nil,
+              components.host == nil,
+              components.user == nil,
+              components.password == nil,
+              components.fragment == nil
+        else { return nil }
+
+        if let allowedExtensions,
+           !allowedExtensions.contains((components.path as NSString).pathExtension.lowercased()) {
+            return nil
+        }
+
+        return ChannelArtworkReference(relativeReference: relativeValue, fixedOrigin: origin)
+    }
+
+    private static func fixedHost(for origin: ChannelArtworkReference.FixedOrigin) -> String {
+        switch origin {
+        case .mediaImage: "imgsrv-sxm-prod-device.streaming.siriusxm.com"
+        case .publicWebsite: SiriusXMRequestContract.publicChannelGuideHost
+        }
     }
 
     private static func preflightFailure(for response: NativeTransportResponse) -> SafeDiagnosticOutcome? {
@@ -181,6 +293,169 @@ enum LiveListeningAdapter {
     }
 }
 
+/// Admits only bounded, inert SVG artwork from the fixed SiriusXM website.
+/// AppKit performs final native decoding, but active content and external
+/// references are rejected before bytes cross the client boundary.
+private final class BoundedSVGArtworkValidator: NSObject, XMLParserDelegate {
+    private static let maximumElements = 20_000
+    private static let maximumDepth = 128
+    private static let forbiddenElements: Set<String> = [
+        "audio", "embed", "foreignobject", "iframe", "image", "object", "script", "video",
+    ]
+
+    private var elementCount = 0
+    private var depth = 0
+    private var styleDepth = 0
+    private var styleText = ""
+    private var rootDimensionsAreValid = false
+    private var rejected = false
+
+    static func isSafe(_ data: Data) -> Bool {
+        guard let source = String(data: data, encoding: .utf8) else { return false }
+        let normalizedSource = source.lowercased()
+        guard !normalizedSource.contains("<!doctype"),
+              !normalizedSource.contains("<!entity")
+        else { return false }
+
+        let validator = BoundedSVGArtworkValidator()
+        let parser = XMLParser(data: data)
+        parser.shouldProcessNamespaces = false
+        parser.shouldReportNamespacePrefixes = false
+        parser.shouldResolveExternalEntities = false
+        parser.delegate = validator
+        return parser.parse() && validator.rootDimensionsAreValid && !validator.rejected
+    }
+
+    func parser(
+        _ parser: XMLParser,
+        didStartElement elementName: String,
+        namespaceURI _: String?,
+        qualifiedName _: String?,
+        attributes attributeDict: [String: String] = [:]
+    ) {
+        depth += 1
+        elementCount += 1
+        let normalizedElement = elementName.lowercased()
+        guard depth <= Self.maximumDepth,
+              elementCount <= Self.maximumElements,
+              !Self.forbiddenElements.contains(normalizedElement)
+        else {
+            rejected = true
+            parser.abortParsing()
+            return
+        }
+
+        if elementCount == 1 {
+            guard normalizedElement == "svg", Self.validDimensions(attributeDict) else {
+                rejected = true
+                parser.abortParsing()
+                return
+            }
+            rootDimensionsAreValid = true
+        }
+        if normalizedElement == "style" {
+            if styleDepth == 0 { styleText = "" }
+            styleDepth += 1
+        }
+
+        for (name, value) in attributeDict {
+            let normalizedName = name.lowercased()
+            let normalizedValue = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if normalizedName.hasPrefix("on") || normalizedValue.contains("javascript:") || normalizedValue.contains("data:") {
+                rejected = true
+                parser.abortParsing()
+                return
+            }
+            if !normalizedName.hasPrefix("xmlns"),
+               normalizedValue.contains("http:") || normalizedValue.contains("https:") || normalizedValue.hasPrefix("//") {
+                rejected = true
+                parser.abortParsing()
+                return
+            }
+            if normalizedName == "href" || normalizedName == "xlink:href" {
+                guard normalizedValue.hasPrefix("#") else {
+                    rejected = true
+                    parser.abortParsing()
+                    return
+                }
+            }
+            if normalizedName == "style",
+               normalizedValue.contains("url("),
+               !normalizedValue.contains("url(#") {
+                rejected = true
+                parser.abortParsing()
+                return
+            }
+        }
+    }
+
+    func parser(
+        _: XMLParser,
+        didEndElement elementName: String,
+        namespaceURI _: String?,
+        qualifiedName _: String?
+    ) {
+        if elementName.lowercased() == "style" {
+            styleDepth -= 1
+            if styleDepth == 0, Self.containsExternalStyleReference(styleText) {
+                rejected = true
+            }
+        }
+        depth -= 1
+    }
+
+    func parser(_ parser: XMLParser, foundCharacters string: String) {
+        guard styleDepth > 0 else { return }
+        styleText += string
+        if styleText.utf8.count > 1_048_576 {
+            rejected = true
+            parser.abortParsing()
+        }
+    }
+
+    func parser(
+        _ parser: XMLParser,
+        foundExternalEntityDeclarationWithName _: String,
+        publicID _: String?,
+        systemID _: String?
+    ) {
+        rejected = true
+        parser.abortParsing()
+    }
+
+    private static func validDimensions(_ attributes: [String: String]) -> Bool {
+        if let width = boundedDimension(attributes["width"]),
+           let height = boundedDimension(attributes["height"]) {
+            return width > 0 && height > 0
+        }
+
+        guard let viewBox = attributes.first(where: { $0.key.lowercased() == "viewbox" })?.value else {
+            return false
+        }
+        let values = viewBox
+            .split(whereSeparator: { $0.isWhitespace || $0 == "," })
+            .compactMap { Double($0) }
+        guard values.count == 4 else { return false }
+        return values[2].isFinite && values[3].isFinite &&
+            values[2] > 0 && values[3] > 0 &&
+            values[2] <= 4096 && values[3] <= 4096
+    }
+
+    private static func boundedDimension(_ value: String?) -> Double? {
+        guard let value else { return nil }
+        let numeric = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "px", with: "", options: [.caseInsensitive, .anchored], range: nil)
+        guard let dimension = Double(numeric), dimension.isFinite, dimension <= 4096 else { return nil }
+        return dimension
+    }
+
+    private static func containsExternalStyleReference(_ value: String) -> Bool {
+        let normalized = value.lowercased()
+        return normalized.contains("@import") || normalized.contains("javascript:") ||
+            normalized.contains("data:") || normalized.contains("http:") || normalized.contains("https:")
+    }
+}
+
 /// Emits a deliberately closed, value-free shape summary for the three
 /// authorized content boundaries. These summaries exist to repair volatile
 /// provider adapters without retaining a response, an identity, or any
@@ -201,6 +476,13 @@ enum CompatibilitySchemaDiagnostics {
         record(tuneEvidence(body: body))
     }
 
+    static func recordArtwork(
+        _ response: NativeTransportResponse,
+        origin: ChannelArtworkReference.FixedOrigin?
+    ) {
+        record(artworkEvidence(response, origin: origin))
+    }
+
     static func catalogEvidence(body: Data) -> String {
         CatalogSchemaEvidence(body: body).rendered
     }
@@ -211,6 +493,46 @@ enum CompatibilitySchemaDiagnostics {
 
     static func tuneEvidence(body: Data) -> String {
         TuneSchemaEvidence(body: body).rendered
+    }
+
+    static func artworkEvidence(
+        _ response: NativeTransportResponse,
+        origin: ChannelArtworkReference.FixedOrigin?
+    ) -> String {
+        let originClass = switch origin {
+        case .mediaImage: "media-image"
+        case .publicWebsite: "public-website"
+        case nil: "absent"
+        }
+        let statusClass = switch response.statusCode {
+        case 200 ... 299: "success"
+        case 400 ... 499: "client-error"
+        case 500 ... 599: "server-error"
+        default: "other"
+        }
+        let normalizedContentType = response.contentType?.lowercased()
+        let contentTypeClass: String
+        if normalizedContentType?.hasPrefix("image/jpeg") == true {
+            contentTypeClass = "jpeg"
+        } else if normalizedContentType?.hasPrefix("image/png") == true {
+            contentTypeClass = "png"
+        } else if normalizedContentType?.hasPrefix("image/svg+xml") == true {
+            contentTypeClass = "svg"
+        } else if normalizedContentType?.hasPrefix("application/json") == true {
+            contentTypeClass = "json"
+        } else if normalizedContentType?.hasPrefix("text/html") == true {
+            contentTypeClass = "html"
+        } else {
+            contentTypeClass = normalizedContentType == nil ? "absent" : "other"
+        }
+        let sizeClass = switch response.body.count {
+        case 0: "empty"
+        case 1 ... 65_536: "small"
+        case 65_537 ... 1_048_576: "medium"
+        case 1_048_577 ... 5_242_880: "large"
+        default: "over-limit"
+        }
+        return "stage=artwork origin=\(originClass) transport=\(response.transportFailure == nil ? "ok" : "failed") redirect=\(response.redirectLocation == nil ? "none" : "blocked") status=\(statusClass) content-type=\(contentTypeClass) bytes=\(sizeClass)"
     }
 
     private static func record(_ evidence: String) {
@@ -275,6 +597,86 @@ private enum LookaroundTimestampParseClass: String {
     }
 }
 
+/// Value-free classification for artwork references at the compatibility
+/// boundary. It is detailed enough to repair a fixed allow-list without ever
+/// logging the provider path, query, host, or user/session material.
+private enum ArtworkReferenceShape: String {
+    case absent
+    case relative
+    case rootlessPath = "rootless-path"
+    case fixedMediaSchemelessAbsolute = "fixed-media-schemeless-absolute"
+    case publicWebsiteSchemelessAbsolute = "public-website-schemeless-absolute"
+    case fixedMediaAbsolute = "fixed-media-absolute"
+    case publicWebsiteAbsolute = "public-website-absolute"
+    case fixedMediaProtocolRelative = "fixed-media-protocol-relative"
+    case publicWebsiteProtocolRelative = "public-website-protocol-relative"
+    case otherProtocolRelative = "other-protocol-relative"
+    case insecureAbsolute = "insecure-absolute"
+    case otherAbsolute = "other-absolute"
+    case invalid
+
+    init(_ value: Any?) {
+        guard let value = value as? String, !value.isEmpty else {
+            self = value == nil ? .absent : .invalid
+            return
+        }
+        if value.hasPrefix("//") {
+            guard let components = URLComponents(string: "https:\(value)"),
+                  let host = components.host
+            else {
+                self = .invalid
+                return
+            }
+            switch host {
+            case "imgsrv-sxm-prod-device.streaming.siriusxm.com":
+                self = .fixedMediaProtocolRelative
+            case SiriusXMRequestContract.publicChannelGuideHost:
+                self = .publicWebsiteProtocolRelative
+            default:
+                self = .otherProtocolRelative
+            }
+            return
+        }
+        if value.hasPrefix("/") {
+            self = .relative
+            return
+        }
+        if value.hasPrefix("imgsrv-sxm-prod-device.streaming.siriusxm.com/") {
+            self = .fixedMediaSchemelessAbsolute
+            return
+        }
+        if value.hasPrefix("\(SiriusXMRequestContract.publicChannelGuideHost)/") {
+            self = .publicWebsiteSchemelessAbsolute
+            return
+        }
+        guard let components = URLComponents(string: value) else {
+            self = .invalid
+            return
+        }
+        if components.scheme == nil, components.host == nil,
+           !components.percentEncodedPath.isEmpty {
+            self = .rootlessPath
+            return
+        }
+        guard let host = components.host else {
+            self = .invalid
+            return
+        }
+        guard components.scheme == "https" else {
+            self = components.scheme == "http" ? .insecureAbsolute : .invalid
+            return
+        }
+        switch host {
+        case "imgsrv-sxm-prod-device.streaming.siriusxm.com":
+            self = .fixedMediaAbsolute
+        case SiriusXMRequestContract.publicChannelGuideHost:
+            self = .publicWebsiteAbsolute
+        default:
+            self = .otherAbsolute
+        }
+    }
+}
+
 private enum CompatibilitySchemaCardinality: String {
     case absent
     case empty
@@ -303,8 +705,26 @@ private struct CatalogSchemaEvidence {
     let rendered: String
 
     init(body: Data) {
-        guard let root = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
-              let page = root["page"] as? [String: Any],
+        guard let root = try? JSONSerialization.jsonObject(with: body) as? [String: Any] else {
+            rendered = "stage=catalog root=non-catalog-object"
+            return
+        }
+
+        if let channels = root["channels"] as? [[String: Any]] {
+            rendered = [
+                "stage=catalog",
+                "root=object",
+                "channels=\(CompatibilitySchemaCardinality(channels).rawValue)",
+                "item-count=\(boundedCount(channels.count))",
+                "channel_type=\(aggregateKind(channels.map { $0["channel_type"] }))",
+                "uuid=\(aggregateKind(channels.map { $0["uuid"] }))",
+                "streamingChannelNumber=\(aggregateKind(channels.map { $0["streamingChannelNumber"] }))",
+                "deliveryTypes=\(aggregateKind(channels.map { $0["deliveryTypes"] }))"
+            ].joined(separator: " ")
+            return
+        }
+
+        guard let page = root["page"] as? [String: Any],
               let containers = page["containers"] as? [[String: Any]]
         else {
             rendered = "stage=catalog root=non-catalog-object"
@@ -361,6 +781,16 @@ private struct LookaroundSchemaEvidence {
         let artist = CompatibilitySchemaValueKind(firstCut?["artist"]).rawValue
         let validFrom = CompatibilitySchemaValueKind(firstCut?["validFrom"]).rawValue
         let timestampParse = LookaroundTimestampParseClass(firstCut?["validFrom"]).rawValue
+        let image = firstCut?["image"] as? [String: Any]
+        let imageKind = CompatibilitySchemaValueKind(firstCut?["image"]).rawValue
+        let imageURL = CompatibilitySchemaValueKind(image?["url"]).rawValue
+        let imageURLShape = ArtworkReferenceShape(image?["url"]).rawValue
+        let imageWidth = CompatibilitySchemaValueKind(image?["width"]).rawValue
+        let imageHeight = CompatibilitySchemaValueKind(image?["height"]).rawValue
+        let album = firstCut?["album"] as? [String: Any]
+        let creativeArts = album?["creativeArts"]
+        let firstCreativeArt = (creativeArts as? [[String: Any]])?.first
+        let topLevelCreativeArts = firstCut?["creativeArts"]
         let delta = CompatibilitySchemaValueKind(root["delta"]).rawValue
         let shows = CompatibilitySchemaCardinality(selected?["shows"]).rawValue
         rendered = [
@@ -375,6 +805,17 @@ private struct LookaroundSchemaEvidence {
             "selected.cuts[0].artist=\(artist)",
             "selected.cuts[0].validFrom=\(validFrom)",
             "selected.cuts[0].validFrom.parse=\(timestampParse)",
+            "selected.cuts[0].image=\(imageKind)",
+            "selected.cuts[0].image.url=\(imageURL)",
+            "selected.cuts[0].image.url.shape=\(imageURLShape)",
+            "selected.cuts[0].image.width=\(imageWidth)",
+            "selected.cuts[0].image.height=\(imageHeight)",
+            "selected.cuts[0].album=\(CompatibilitySchemaValueKind(firstCut?["album"]).rawValue)",
+            "selected.cuts[0].album.creativeArts=\(CompatibilitySchemaCardinality(creativeArts).rawValue)",
+            "selected.cuts[0].album.creativeArts[0].type=\(CompatibilitySchemaValueKind(firstCreativeArt?["type"]).rawValue)",
+            "selected.cuts[0].album.creativeArts[0].url=\(CompatibilitySchemaValueKind(firstCreativeArt?["url"]).rawValue)",
+            "selected.cuts[0].album.creativeArts[0].url.shape=\(ArtworkReferenceShape(firstCreativeArt?["url"]).rawValue)",
+            "selected.cuts[0].creativeArts=\(CompatibilitySchemaCardinality(topLevelCreativeArts).rawValue)",
             "delta=\(delta)",
             "selected.shows=\(shows)"
         ].joined(separator: " ")
@@ -442,26 +883,21 @@ protocol FixedCatalogTransporting: Sendable {
     func catalog(using credential: AuthenticationCredential) async -> NativeTransportResponse
 }
 
-/// Concrete fixed catalog request. The test-only exactness predicate verifies
-/// shape without retaining authorization material or a request object.
+/// Concrete fixed request for SiriusXM's public, comprehensive channel guide.
+/// The current-session gate is enforced by `CurrentSessionCatalogRefresher`,
+/// but subscriber authorization is deliberately not sent to this public host.
 enum FixedCatalogRequestFactory {
     private static let scheme = "https"
-    private static let path = "/browse/v1/pages/curated-grouping/403ab6a5-d3c9-4c2a-a722-a94a6a5fd056"
+    private static let host = SiriusXMRequestContract.publicChannelGuideHost
+    private static let path = "/v2/channelfeed/SXM_SIR_AUD_TOTAL_ACCESS"
 
-    static func makeRequest(using credential: AuthenticationCredential) -> URLRequest? {
-        guard let url = URL(string: "\(scheme)://\(SiriusXMRequestContract.host)\(path)") else { return nil }
-        return credential.withVolatileMaterial { material in
-            guard let authorization = String(data: material, encoding: .utf8),
-                  !authorization.isEmpty,
-                  !authorization.contains(where: { $0.isWhitespace || $0.isNewline })
-            else { return nil }
-            var request = URLRequest(url: url)
-            request.httpMethod = "GET"
-            request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
-            request.setValue("application/json", forHTTPHeaderField: "Accept")
-            request.setValue("Bearer \(authorization)", forHTTPHeaderField: "Authorization")
-            return isExact(request) ? request : nil
-        }
+    static func makeRequest(using _: AuthenticationCredential) -> URLRequest? {
+        guard let url = URL(string: "\(scheme)://\(host)\(path)") else { return nil }
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        return isExact(request) ? request : nil
     }
 
     static func isExact(credential: AuthenticationCredential) -> Bool {
@@ -471,14 +907,14 @@ enum FixedCatalogRequestFactory {
 
     private static func isExact(_ request: URLRequest) -> Bool {
         request.url?.scheme == scheme &&
-            request.url?.host == SiriusXMRequestContract.host &&
+            request.url?.host == host &&
             request.url?.path == path &&
             request.url?.query == nil &&
             request.url?.fragment == nil &&
             request.httpMethod == "GET" &&
             request.httpBody == nil &&
             request.value(forHTTPHeaderField: "Accept") == "application/json" &&
-            request.value(forHTTPHeaderField: "Authorization")?.hasPrefix("Bearer ") == true
+            request.value(forHTTPHeaderField: "Authorization") == nil
     }
 }
 
@@ -529,45 +965,152 @@ final class FixedCatalogURLSessionTransport: FixedCatalogTransporting, @unchecke
     }
 }
 
-/// Decodes only the observed initial-page envelope. Pagination is deliberately
-/// absent: one explicit refresh makes one fixed request and never invents a
-/// query parameter or follow-up operation.
+/// Decodes SiriusXM's bounded public channel feed. The prior authenticated page
+/// graph remains accepted for compatibility fixtures, but production uses the
+/// comprehensive guide because the old page represents only one content rail.
 enum FixedCatalogResponseDecoder {
-    private static let maximumBodyBytes = 1_048_576
+    private static let maximumBodyBytes = 8 * 1_024 * 1_024
+    private static let maximumTraversalDepth = 12
+    private static let maximumCandidateItems = 2_000
 
     static func decode(_ response: NativeTransportResponse) -> LiveCatalogSnapshotResult {
-        CompatibilitySchemaDiagnostics.recordCatalog(body: response.body)
         guard response.transportFailure == nil,
               response.redirectLocation == nil,
               (200 ... 299).contains(response.statusCode),
               response.body.count <= maximumBodyBytes,
-              response.contentType?.lowercased().hasPrefix("application/json") == true,
-              !containsProtectedControl(response.body),
-              let root = try? JSONSerialization.jsonObject(with: response.body) as? [String: Any],
-              let page = root["page"] as? [String: Any],
-              let containers = page["containers"] as? [[String: Any]]
+              response.contentType?.lowercased().hasPrefix("application/json") == true
         else {
             return LiveCatalogSnapshotResult(snapshot: nil, failure: .unsupportedResponse)
         }
 
+        CompatibilitySchemaDiagnostics.recordCatalog(body: response.body)
+        guard !containsProtectedControl(response.body),
+              let root = try? JSONSerialization.jsonObject(with: response.body) as? [String: Any]
+        else {
+            return LiveCatalogSnapshotResult(snapshot: nil, failure: .unsupportedResponse)
+        }
+
+        if root["channels"] != nil {
+            return decodePublicChannelFeed(root)
+        }
+        guard let page = root["page"] as? [String: Any] else {
+            return LiveCatalogSnapshotResult(snapshot: nil, failure: .unsupportedResponse)
+        }
+
+        let search = catalogItems(in: page)
+        guard search.sawItemsCollection, !search.exceededBounds else {
+            return LiveCatalogSnapshotResult(snapshot: nil, failure: .collectionUnavailable)
+        }
+
         var candidates: [LiveCatalogCandidate] = []
-        for container in containers {
-            guard let sets = container["sets"] as? [[String: Any]] else {
-                return LiveCatalogSnapshotResult(snapshot: nil, failure: .collectionUnavailable)
+        for item in search.candidateItems {
+            guard let candidate = candidate(from: item) else {
+                return LiveCatalogSnapshotResult(snapshot: nil, failure: .malformedCandidate)
             }
-            for set in sets {
-                guard let items = set["items"] as? [[String: Any]] else {
-                    return LiveCatalogSnapshotResult(snapshot: nil, failure: .collectionUnavailable)
-                }
-                for item in items {
-                    guard let candidate = candidate(from: item) else {
-                        return LiveCatalogSnapshotResult(snapshot: nil, failure: .malformedCandidate)
+            candidates.append(candidate)
+        }
+        return LiveCatalogAdapter.snapshot(from: candidates)
+    }
+
+    private static func decodePublicChannelFeed(_ root: [String: Any]) -> LiveCatalogSnapshotResult {
+        guard let channels = root["channels"] as? [[String: Any]],
+              channels.count <= maximumCandidateItems
+        else {
+            return LiveCatalogSnapshotResult(snapshot: nil, failure: .collectionUnavailable)
+        }
+
+        var candidates: [LiveCatalogCandidate] = []
+        candidates.reserveCapacity(channels.count)
+        for channel in channels {
+            guard let type = channel["channel_type"] as? String else {
+                return LiveCatalogSnapshotResult(snapshot: nil, failure: .malformedCandidate)
+            }
+            if type == "Xtra" { continue }
+            guard type == "Linear" else {
+                return LiveCatalogSnapshotResult(snapshot: nil, failure: .malformedCandidate)
+            }
+
+            guard let deliveryTypes = channel["deliveryTypes"] as? [String] else {
+                return LiveCatalogSnapshotResult(snapshot: nil, failure: .malformedCandidate)
+            }
+            guard deliveryTypes.contains("ip") else { continue }
+            guard channel["availableToPackage"] as? Bool == true,
+                  let identity = channel["uuid"] as? String,
+                  UUID(uuidString: identity) != nil,
+                  let number = number(from: channel["streamingChannelNumber"]),
+                  let name = channel["displayName"] as? String,
+                  !name.isEmpty
+            else {
+                return LiveCatalogSnapshotResult(snapshot: nil, failure: .malformedCandidate)
+            }
+
+            candidates.append(LiveCatalogCandidate(
+                identity: identity,
+                displayNumber: number,
+                name: name,
+                description: channel["shortDescription"] as? String,
+                category: channel["genreTitle"] as? String,
+                artwork: LiveListeningAdapter.publicChannelArtworkReference(from: channel["colorLogo"]),
+                entity: .channelLinear,
+                entitlement: deliveryTypes.contains("satellite") ? .guideStandard : .guideAppOnly
+            ))
+        }
+        return LiveCatalogAdapter.snapshot(from: candidates)
+    }
+
+    private struct CatalogItemSearch {
+        var candidateItems: [[String: Any]] = []
+        var sawItemsCollection = false
+        var exceededBounds = false
+    }
+
+    /// Walks only bounded JSON containers and collects item dictionaries that
+    /// explicitly identify a supported or deliberately excluded channel type.
+    /// Other browse tiles are scaffolding, not malformed channel candidates.
+    private static func catalogItems(in page: [String: Any]) -> CatalogItemSearch {
+        var search = CatalogItemSearch()
+
+        func visit(_ value: Any, depth: Int) {
+            guard !search.exceededBounds else { return }
+            guard depth <= maximumTraversalDepth else {
+                if let object = value as? [String: Any] {
+                    let entityType = (object["entity"] as? [String: Any])?["type"] as? String
+                    if object["items"] != nil || entityType == "channel-linear" || entityType == "channel-xtra" {
+                        search.exceededBounds = true
                     }
-                    candidates.append(candidate)
+                }
+                return
+            }
+
+            if let object = value as? [String: Any] {
+                if let rawItems = object["items"] {
+                    guard let items = rawItems as? [Any] else {
+                        search.exceededBounds = true
+                        return
+                    }
+                    search.sawItemsCollection = true
+                    for case let item as [String: Any] in items {
+                        let type = (item["entity"] as? [String: Any])?["type"] as? String
+                        guard type == "channel-linear" || type == "channel-xtra" else { continue }
+                        guard search.candidateItems.count < maximumCandidateItems else {
+                            search.exceededBounds = true
+                            return
+                        }
+                        search.candidateItems.append(item)
+                    }
+                }
+                for child in object.values {
+                    visit(child, depth: depth + 1)
+                }
+            } else if let values = value as? [Any] {
+                for child in values {
+                    visit(child, depth: depth + 1)
                 }
             }
         }
-        return LiveCatalogAdapter.snapshot(from: candidates)
+
+        visit(page, depth: 0)
+        return search
     }
 
     private static func candidate(from item: [String: Any]) -> LiveCatalogCandidate? {
@@ -693,28 +1236,48 @@ final class FixedMetadataURLSessionTransport: FixedMetadataTransporting, @unchec
 
     func lookaround(using credential: AuthenticationCredential) async -> NativeTransportResponse {
         guard let url = URL(string: "https://lookaround-cache-prod.streaming.siriusxm.com/playbackservices/v1/live/lookAround?delta=") else { return Self.failed }
-        guard let request = credential.withVolatileMaterial({ material -> URLRequest? in
-            guard let authorization = String(data: material, encoding: .utf8), !authorization.isEmpty, !authorization.contains(where: { $0.isWhitespace || $0.isNewline }) else { return nil }
-            var request = URLRequest(url: url)
-            request.httpMethod = "GET"
-            request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
-            request.setValue("application/json", forHTTPHeaderField: "Accept")
-            request.setValue("Bearer \(authorization)", forHTTPHeaderField: "Authorization")
-            request.setValue(clock.next(), forHTTPHeaderField: "x-sxm-clock")
-            return request
-        }) else { return Self.failed }
+        guard let authorization = credential.accessToken() else { return Self.failed }
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("Bearer \(authorization)", forHTTPHeaderField: "Authorization")
+        request.setValue(clock.next(), forHTTPHeaderField: "x-sxm-clock")
         return await send(request)
     }
 
     func artwork(for reference: ChannelArtworkReference) async -> NativeTransportResponse {
+        guard let request = Self.artworkRequest(for: reference) else { return Self.failed }
+        return await send(request)
+    }
+
+    static func artworkRequest(for reference: ChannelArtworkReference) -> URLRequest? {
         guard let path = reference.relativeReference,
-              path.hasPrefix("/"), !path.contains(".."), URL(string: path)?.scheme == nil,
-              let url = URL(string: "https://imgsrv-sxm-prod-device.streaming.siriusxm.com\(path)")
-        else { return Self.failed }
+              path.hasPrefix("/"),
+              !path.hasPrefix("//"),
+              !path.contains(".."),
+              URLComponents(string: path)?.scheme == nil,
+              let origin = reference.fixedOrigin
+        else { return nil }
+
+        let host = switch origin {
+        case .mediaImage: "imgsrv-sxm-prod-device.streaming.siriusxm.com"
+        case .publicWebsite: SiriusXMRequestContract.publicChannelGuideHost
+        }
+        guard let url = URL(string: "https://\(host)\(path)"),
+              url.scheme == "https",
+              url.host == host,
+              url.user == nil,
+              url.password == nil,
+              url.port == nil,
+              url.fragment == nil
+        else { return nil }
+
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
-        return await send(request)
+        request.setValue("image/svg+xml,image/png,image/jpeg", forHTTPHeaderField: "Accept")
+        return request
     }
 
     private func send(_ request: URLRequest) async -> NativeTransportResponse {
@@ -763,6 +1326,7 @@ actor CurrentSessionMetadataFetcher: LiveMetadataFetching {
     func artwork(for reference: ChannelArtworkReference) async -> ArtworkAvailability {
         let expected = generation
         let response = await transport.artwork(for: reference)
+        CompatibilitySchemaDiagnostics.recordArtwork(response, origin: reference.fixedOrigin)
         guard generation == expected else { return .unavailable }
         return LiveListeningAdapter.decodeArtwork(response)
     }
@@ -1183,27 +1747,25 @@ enum FixedLiveRequestFactory {
 
     static func tune(for channelID: LiveChannelID, using credential: AuthenticationCredential) -> URLRequest? {
         guard let url = URL(string: "\(scheme)://\(host)/playback/play/v1/tuneSource") else { return nil }
-        return credential.withVolatileMaterial { material in
-            guard let authorization = validAuthorization(material) else { return nil }
-            let source: [String: Any] = [
-                "id": channelID.rawValue,
-                "type": "channel-linear",
-                "hlsVersion": "V3",
-                "manifestVariant": "WEB",
-                "mtcVersion": "V2",
-                "trackResumeSupported": false,
-            ]
-            guard let body = try? JSONSerialization.data(withJSONObject: source) else { return nil }
-            var request = URLRequest(url: url)
-            request.httpMethod = "POST"
-            request.httpBody = body
-            request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
-            request.setValue("application/json", forHTTPHeaderField: "Accept")
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.setValue("Bearer \(authorization)", forHTTPHeaderField: "Authorization")
-            request.setValue(logicalClock.next(), forHTTPHeaderField: "x-sxm-clock")
-            return request
-        }
+        guard let authorization = credential.accessToken() else { return nil }
+        let source: [String: Any] = [
+            "id": channelID.rawValue,
+            "type": "channel-linear",
+            "hlsVersion": "V3",
+            "manifestVariant": "WEB",
+            "mtcVersion": "V2",
+            "trackResumeSupported": false,
+        ]
+        guard let body = try? JSONSerialization.data(withJSONObject: source) else { return nil }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.httpBody = body
+        request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(authorization)", forHTTPHeaderField: "Authorization")
+        request.setValue(logicalClock.next(), forHTTPHeaderField: "x-sxm-clock")
+        return request
     }
 
     static func playbackKey(for keyID: FixedLivePlaybackKeyID, using credential: AuthenticationCredential) -> URLRequest? {
@@ -1211,23 +1773,13 @@ enum FixedLiveRequestFactory {
         guard let encodedKeyID = keyID.value.addingPercentEncoding(withAllowedCharacters: allowedPathCharacters),
               let url = URL(string: "\(scheme)://\(host)/playback/key/v1/\(encodedKeyID)")
         else { return nil }
-        return credential.withVolatileMaterial { material in
-            guard let authorization = validAuthorization(material) else { return nil }
-            var request = URLRequest(url: url)
-            request.httpMethod = "GET"
-            request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
-            request.setValue("application/json", forHTTPHeaderField: "Accept")
-            request.setValue("Bearer \(authorization)", forHTTPHeaderField: "Authorization")
-            return request
-        }
-    }
-
-    private static func validAuthorization(_ material: Data) -> String? {
-        guard let authorization = String(data: material, encoding: .utf8),
-              !authorization.isEmpty,
-              !authorization.contains(where: { $0.isWhitespace || $0.isNewline })
-        else { return nil }
-        return authorization
+        guard let authorization = credential.accessToken() else { return nil }
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("Bearer \(authorization)", forHTTPHeaderField: "Authorization")
+        return request
     }
 }
 

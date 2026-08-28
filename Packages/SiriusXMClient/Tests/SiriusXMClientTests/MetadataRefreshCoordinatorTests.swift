@@ -11,7 +11,7 @@ struct MetadataRefreshCoordinatorTests {
             "name": "  Synthetic Program  ",
             "artistName": "  Synthetic Artist  ",
             "validFrom": "2026-08-19T00:00:00Z",
-            "image": ["url": "/image.jpeg", "width": 450, "height": 450],
+            "image": ["url": "if/song-specific-image", "width": 450, "height": 450],
         ])
         let result = LiveListeningAdapter.decodeMetadata(NativeTransportResponse(statusCode: 200, contentType: "application/json", body: payload), channelID: channel)
         guard case let .current(snapshot) = result else { Issue.record("expected current metadata"); return }
@@ -19,6 +19,105 @@ struct MetadataRefreshCoordinatorTests {
         #expect(snapshot.program?.title == "Synthetic Program")
         #expect(snapshot.program?.artist == "Synthetic Artist")
         #expect(snapshot.program?.artwork?.description == "ChannelArtworkReference(redacted)")
+    }
+
+    @Test("lookaround artwork keys use SiriusXM's bounded fixed image-service request")
+    func observedArtworkKeysUseFixedImageServiceRequest() throws {
+        let channel = LiveChannelID("fixture-channel")
+        let payload = try observedLookaroundPayload(cut: [
+            "name": "Synthetic Program",
+            "artistName": "Synthetic Artist",
+            "validFrom": "2026-08-19T00:00:00Z",
+            "image": ["url": "if/song-specific-image", "width": 450, "height": 450],
+        ])
+        let result = LiveListeningAdapter.decodeMetadata(
+            NativeTransportResponse(statusCode: 200, contentType: "application/json", body: payload),
+            channelID: channel
+        )
+        guard case let .current(snapshot) = result else {
+            Issue.record("expected current metadata")
+            return
+        }
+        let reference = try #require(snapshot.program?.artwork)
+        let request = try #require(FixedMetadataURLSessionTransport.artworkRequest(for: reference))
+        #expect(request.url?.host == "imgsrv-sxm-prod-device.streaming.siriusxm.com")
+        #expect(request.value(forHTTPHeaderField: "Authorization") == nil)
+
+        let encodedPayload = String(try #require(request.url?.path.dropFirst()))
+        let decodedPayload = try #require(Data(base64Encoded: encodedPayload))
+        let object = try #require(JSONSerialization.jsonObject(with: decodedPayload) as? [String: Any])
+        #expect(object["key"] as? String == "if/song-specific-image")
+        let edits = try #require(object["edits"] as? [[String: Any]])
+        let resize = try #require(edits.first?["resize"] as? [String: Any])
+        #expect((resize["width"] as? NSNumber)?.intValue == 450)
+        #expect((resize["height"] as? NSNumber)?.intValue == 450)
+
+        for unsafeKey in [
+            "/relative-path",
+            "../traversal",
+            "https://attacker.invalid/fixture.png",
+            "if/key?query=unsafe",
+        ] {
+            let rejected = try observedLookaroundPayload(cut: [
+                "name": "Synthetic Program",
+                "artistName": "Synthetic Artist",
+                "validFrom": "2026-08-19T00:00:00Z",
+                "image": ["url": unsafeKey, "width": 450, "height": 450],
+            ])
+            let rejectedResult = LiveListeningAdapter.decodeMetadata(
+                NativeTransportResponse(statusCode: 200, contentType: "application/json", body: rejected),
+                channelID: channel
+            )
+            guard case let .current(rejectedSnapshot) = rejectedResult else {
+                Issue.record("expected current metadata")
+                continue
+            }
+            #expect(rejectedSnapshot.program?.artwork == nil)
+        }
+    }
+
+    @Test("image-service resize defaults and caps match the current player bounds")
+    func imageServiceResizeIsBounded() throws {
+        let channel = LiveChannelID("fixture-channel")
+        let payload = try observedLookaroundPayload(cut: [
+            "name": "Synthetic Program",
+            "artistName": "Synthetic Artist",
+            "validFrom": "2026-08-19T00:00:00Z",
+            "image": ["url": "if/large-image", "width": 4096, "height": 2048],
+        ])
+        let result = LiveListeningAdapter.decodeMetadata(
+            NativeTransportResponse(statusCode: 200, contentType: "application/json", body: payload),
+            channelID: channel
+        )
+        guard case let .current(snapshot) = result else {
+            Issue.record("expected current metadata")
+            return
+        }
+        let reference = try #require(snapshot.program?.artwork)
+        let request = try #require(FixedMetadataURLSessionTransport.artworkRequest(for: reference))
+        let encodedPayload = String(try #require(request.url?.path.dropFirst()))
+        let decodedPayload = try #require(Data(base64Encoded: encodedPayload))
+        let object = try #require(JSONSerialization.jsonObject(with: decodedPayload) as? [String: Any])
+        let edits = try #require(object["edits"] as? [[String: Any]])
+        let resize = try #require(edits.first?["resize"] as? [String: Any])
+        #expect((resize["width"] as? NSNumber)?.intValue == 1_920)
+        #expect((resize["height"] as? NSNumber)?.intValue == 960)
+    }
+
+    @Test("bounded inert SVG artwork is admitted while active or external SVG is rejected")
+    func svgArtworkValidationIsClosed() {
+        let safe = Data(#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 400"><path d="M0 0h1v1z"/></svg>"#.utf8)
+        let active = Data(#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 400"><script>alert(1)</script></svg>"#.utf8)
+        let external = Data(#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 400"><use href="https://attacker.invalid/a.svg#x"/></svg>"#.utf8)
+        let externalStyle = Data(#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 400"><style>@import url(https://attacker.invalid/a.css);</style></svg>"#.utf8)
+
+        let response: (Data) -> NativeTransportResponse = {
+            NativeTransportResponse(statusCode: 200, contentType: "image/svg+xml", body: $0)
+        }
+        #expect(LiveListeningAdapter.decodeArtwork(response(safe)) == .current(ArtworkData(bytes: safe, mediaType: .svg)))
+        #expect(LiveListeningAdapter.decodeArtwork(response(active)) == .unavailable)
+        #expect(LiveListeningAdapter.decodeArtwork(response(external)) == .unavailable)
+        #expect(LiveListeningAdapter.decodeArtwork(response(externalStyle)) == .unavailable)
     }
 
     @Test("observed fractional-second lookaround timestamps map into current metadata")
@@ -80,11 +179,20 @@ struct MetadataRefreshCoordinatorTests {
             selectedChannelID: LiveChannelID("fixture-channel")
         )
         let tuneEvidence = CompatibilitySchemaDiagnostics.tuneEvidence(body: tune)
+        let artworkEvidence = CompatibilitySchemaDiagnostics.artworkEvidence(
+            NativeTransportResponse(
+                statusCode: 200,
+                contentType: "image/jpeg",
+                body: Data(repeating: 0, count: 128)
+            ),
+            origin: .mediaImage
+        )
 
         #expect(catalogEvidence == "stage=catalog root=object page=object page.containers=one item-count=one entity.texts.title.default=string-nonempty metadata=object metadata.live=object metadata.live.items=one cuts=absent")
-        #expect(lookaroundEvidence == "stage=lookaround root=object channels=object selected-channel=object selected.cuts=one selected.cuts[0].name=string-nonempty selected.cuts[0].title=absent selected.cuts[0].artistName=string-nonempty selected.cuts[0].artist=absent selected.cuts[0].validFrom=string-nonempty selected.cuts[0].validFrom.parse=default-ISO8601 delta=string-empty selected.shows=empty")
+        #expect(lookaroundEvidence == "stage=lookaround root=object channels=object selected-channel=object selected.cuts=one selected.cuts[0].name=string-nonempty selected.cuts[0].title=absent selected.cuts[0].artistName=string-nonempty selected.cuts[0].artist=absent selected.cuts[0].validFrom=string-nonempty selected.cuts[0].validFrom.parse=default-ISO8601 selected.cuts[0].image=absent selected.cuts[0].image.url=absent selected.cuts[0].image.url.shape=absent selected.cuts[0].image.width=absent selected.cuts[0].image.height=absent selected.cuts[0].album=absent selected.cuts[0].album.creativeArts=absent selected.cuts[0].album.creativeArts[0].type=absent selected.cuts[0].album.creativeArts[0].url=absent selected.cuts[0].album.creativeArts[0].url.shape=absent selected.cuts[0].creativeArts=absent delta=string-empty selected.shows=empty")
         #expect(tuneEvidence == "stage=tune root=object streams=one metadata=object metadata.live=object metadata.live.items=one metadata.live.items[0].name=absent metadata.live.items[0].title=string-nonempty metadata.live.items[0].artistName=absent metadata.live.items[0].artist=string-nonempty metadata.live.episodes=empty")
-        #expect(![catalogEvidence, lookaroundEvidence, tuneEvidence].joined().contains("fixture"))
+        #expect(artworkEvidence == "stage=artwork origin=media-image transport=ok redirect=none status=success content-type=jpeg bytes=small")
+        #expect(![catalogEvidence, lookaroundEvidence, tuneEvidence, artworkEvidence].joined().contains("fixture"))
     }
 
     @Test("empty first-cut collection is unavailable and malformed input fails closed")

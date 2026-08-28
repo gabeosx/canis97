@@ -31,6 +31,7 @@ final class WindowLifecyclePolicyTests: XCTestCase {
         XCTAssertEqual(policy.minimumContentSize, CGSize(width: 400, height: 288))
         XCTAssertFalse(policy.isResizable)
         XCTAssertFalse(policy.allowsFullScreen)
+        XCTAssertTrue(policy.usesCompactChrome)
         XCTAssertEqual(policy.frameAutosaveName, ProductIdentity.FrameAutosaveName.compact)
         XCTAssertEqual(policy.legacyFrameAutosaveName, ProductIdentity.Legacy.compactFrameAutosaveName)
     }
@@ -42,6 +43,7 @@ final class WindowLifecyclePolicyTests: XCTestCase {
         XCTAssertEqual(policy.minimumContentSize, CGSize(width: 760, height: 760))
         XCTAssertTrue(policy.isResizable)
         XCTAssertTrue(policy.allowsFullScreen)
+        XCTAssertFalse(policy.usesCompactChrome)
         XCTAssertEqual(policy.frameAutosaveName, ProductIdentity.FrameAutosaveName.authentication)
         XCTAssertEqual(
             policy.legacyFrameAutosaveName,
@@ -92,6 +94,46 @@ final class WindowLifecyclePolicyTests: XCTestCase {
 
         XCTAssertEqual(window.contentView?.frame.size, NSSize(width: 400, height: 288))
         XCTAssertEqual(window.frame.origin, savedFrame.origin)
+    }
+
+    func testCompactAttachmentRemovesTitleBarGeometry() {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 400, height: 288),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        let controller = CompactWindowController(role: .compact, restoresPersistedFrame: false)
+
+        controller.attach(to: window, alwaysOnTop: false)
+
+        XCTAssertFalse(window.styleMask.contains(.titled))
+        XCTAssertFalse(window.styleMask.contains(.fullSizeContentView))
+        XCTAssertTrue(window.styleMask.contains(.closable))
+        XCTAssertEqual(window.titleVisibility, .hidden)
+        XCTAssertFalse(window.titlebarAppearsTransparent)
+    }
+
+    func testAuthenticationAttachmentRestoresStandardChromeAfterCompactPlayback() {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 400, height: 288),
+            styleMask: [.titled, .closable, .miniaturizable],
+            backing: .buffered,
+            defer: false
+        )
+        let compactController = CompactWindowController(role: .compact, restoresPersistedFrame: false)
+        let authenticationController = CompactWindowController(role: .authentication, restoresPersistedFrame: false)
+        compactController.attach(to: window, alwaysOnTop: false)
+
+        authenticationController.attach(to: window, alwaysOnTop: false)
+
+        XCTAssertTrue(window.styleMask.contains(.titled))
+        XCTAssertFalse(window.styleMask.contains(.fullSizeContentView))
+        XCTAssertEqual(window.titleVisibility, .visible)
+        XCTAssertFalse(window.titlebarAppearsTransparent)
+        XCTAssertTrue(window.standardWindowButton(.closeButton)?.isHidden == false)
+        XCTAssertTrue(window.standardWindowButton(.miniaturizeButton)?.isHidden == false)
+        XCTAssertTrue(window.standardWindowButton(.zoomButton)?.isHidden == false)
     }
 
     func testCompactAttachmentCanIgnoreProductionFramePersistence() {

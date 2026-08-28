@@ -19,14 +19,15 @@ struct LiveCatalogAdapterTests {
         ])
         #expect(operations.map(\.method) == ["GET", "POST", "GET", "POST", "GET", "GET"])
         #expect(operations.map(\.pathTemplate) == [
-            "/browse/v1/pages/curated-grouping/403ab6a5-d3c9-4c2a-a722-a94a6a5fd056",
+            "/v2/channelfeed/SXM_SIR_AUD_TOTAL_ACCESS",
             "/playback/play/v1/tuneSource",
             "/playback/key/v1/{keyId}",
             "/playback/play/v1/liveUpdate",
             "/channel-guide/v1/channel/{channelId}/peek",
             "/playback/stream-enforcement/v1/status",
         ])
-        #expect(operations.allSatisfy { $0.host == "api.edge-gateway.siriusxm.com" })
+        #expect(operations.first?.host == "www.siriusxm.com")
+        #expect(operations.dropFirst().allSatisfy { $0.host == "api.edge-gateway.siriusxm.com" })
         #expect(SiriusXMRequestContract.opaqueMediaDeliveryHost == "live-akc-prod-device.streaming.siriusxm.com")
         #expect(SiriusXMRequestContract.isOpaqueMediaDeliveryHost("live-secondary.streaming.siriusxm.com"))
         #expect(!SiriusXMRequestContract.isOpaqueMediaDeliveryHost("lookaround-cache-prod.streaming.siriusxm.com"))
@@ -100,8 +101,9 @@ struct LiveCatalogAdapterTests {
 
     @Test("production tune request serializes one source directly")
     func productionTuneRequestUsesCurrentDirectSourceBody() throws {
-        let credential = AuthenticationCredential(
-            volatileMaterial: Data("fixture-credential".utf8)
+        let credential = try browserCredential(
+            accessToken: "fixture-credential",
+            accessExpiresAt: Date(timeIntervalSince1970: 10_800)
         )
         let request = try #require(
             FixedLiveRequestFactory.tune(
@@ -148,8 +150,8 @@ struct LiveCatalogAdapterTests {
             freshness: .fresh
         )
 
-        #expect(catalog.channels.map(\.id) == [LiveChannelID("fixture-echo"), LiveChannelID("fixture-bravo")])
-        #expect(catalog.channels.map(\.category) == ["Music", "News"])
+        #expect(catalog.channels.map(\.id) == [LiveChannelID("fixture-bravo"), LiveChannelID("fixture-echo")])
+        #expect(catalog.channels.map(\.category) == ["News", "Music"])
     }
 
     @Test("a retained catalog becomes stale browsing data and never authorizes playback")
@@ -245,7 +247,7 @@ struct EntitledLiveCatalogSnapshotTests {
         #expect(conflicting.failure == .conflictingIdentity)
     }
 
-    @Test("category number name and opaque identity establish the stable order")
+    @Test("channel number name category and opaque identity establish tuner order")
     func ordersCandidatesWithoutLossyUnicodeHandling() {
         let decomposed = "Cafe\u{301}"
         let composed = "Café"
@@ -257,10 +259,10 @@ struct EntitledLiveCatalogSnapshotTests {
         ])
 
         #expect(result.snapshot?.channels.map(\.id) == [
+            LiveChannelID("fixture-news"),
             LiveChannelID("fixture-a"),
             LiveChannelID("fixture-b"),
             LiveChannelID("fixture-z"),
-            LiveChannelID("fixture-news"),
         ])
         #expect(result.snapshot?.channels.map(\.name).contains(composed) == true)
         #expect(result.snapshot?.channels.map(\.name).contains(decomposed) == true)
@@ -302,7 +304,66 @@ struct EntitledLiveCatalogSnapshotTests {
 
 @Suite("Fixed current-session catalog refresh")
 struct FixedCatalogRefreshTests {
-    @Test("the fixed initial-page decoder admits only matching standard and app-only linear play capabilities")
+    @Test("the comprehensive channel-guide request is fixed and never receives subscriber authorization")
+    func publicChannelGuideRequestIsExactAndCredentialFree() throws {
+        let request = try #require(FixedCatalogRequestFactory.makeRequest(
+            using: AuthenticationCredential(volatileMaterial: Data("fixture-credential".utf8))
+        ))
+
+        #expect(request.url?.scheme == "https")
+        #expect(request.url?.host == "www.siriusxm.com")
+        #expect(request.url?.path == "/v2/channelfeed/SXM_SIR_AUD_TOTAL_ACCESS")
+        #expect(request.url?.query == nil)
+        #expect(request.httpMethod == "GET")
+        #expect(request.httpBody == nil)
+        #expect(request.value(forHTTPHeaderField: "Accept") == "application/json")
+        #expect(request.value(forHTTPHeaderField: "Authorization") == nil)
+    }
+
+    @Test("the comprehensive public feed includes numbered and app-only linear channels")
+    func decodesComprehensivePublicFeed() {
+        let result = FixedCatalogResponseDecoder.decode(NativeTransportResponse(
+            statusCode: 200,
+            contentType: "application/json; charset=utf-8",
+            body: fixtureFeed(channels: [
+                feedChannel(id: "194adbca-34d6-cb94-b153-3488ee563308", number: 2, name: "SiriusXM Hits 1"),
+                feedChannel(id: "123f7d39-c99f-2f01-7900-0d4b8b010cb7", number: 100, name: "Howard 100"),
+                feedChannel(id: "c6af979e-5be1-4f61-82e0-374090b755ea", number: 101, name: "Howard 101"),
+                feedChannel(id: "2bdd53be-c342-485c-a439-907d163c6e28", number: 103, name: "Faction Talk"),
+                feedChannel(id: "3a784562-f8c0-45bb-86b9-02b98c1fd76d", number: 700, name: "App Only", deliveryTypes: ["ip", "mobile"]),
+                feedChannel(id: "0754b635-72e9-497c-82d7-241bc1ecb922", number: 701, name: "Xtra", type: "Xtra"),
+                feedChannel(id: "a7581300-7f69-4d31-8c5c-1bcc8e73d133", number: 1, name: "Satellite Preview", deliveryTypes: ["satellite"]),
+            ])
+        ))
+
+        #expect(result.snapshot?.channels.map(\.displayNumber) == [2, 100, 101, 103, 700])
+        #expect(result.snapshot?.channels.map(\.name) == [
+            "SiriusXM Hits 1", "Howard 100", "Howard 101", "Faction Talk", "App Only",
+        ])
+        #expect(result.snapshot?.channels.allSatisfy { $0.artwork != nil } == true)
+        #expect(result.failure == nil)
+    }
+
+    @Test("public channel artwork remains fixed to the SiriusXM website without authorization")
+    func publicChannelArtworkRequestIsFixedAndCredentialFree() throws {
+        let result = FixedCatalogResponseDecoder.decode(NativeTransportResponse(
+            statusCode: 200,
+            contentType: "application/json",
+            body: fixtureFeed(channels: [
+                feedChannel(id: "194adbca-34d6-cb94-b153-3488ee563308", number: 2, name: "SiriusXM Hits 1"),
+            ])
+        ))
+        let reference = try #require(result.snapshot?.channels.first?.artwork)
+        let request = try #require(FixedMetadataURLSessionTransport.artworkRequest(for: reference))
+
+        #expect(request.url?.scheme == "https")
+        #expect(request.url?.host == "www.siriusxm.com")
+        #expect(request.url?.pathExtension == "svg")
+        #expect(request.httpMethod == "GET")
+        #expect(request.value(forHTTPHeaderField: "Authorization") == nil)
+    }
+
+    @Test("the fixed page-graph decoder admits only matching standard and app-only linear play capabilities")
     func decodesOnlyExplicitCurrentPlayCapabilities() {
         let result = FixedCatalogResponseDecoder.decode(
             NativeTransportResponse(
@@ -321,6 +382,85 @@ struct FixedCatalogRefreshTests {
             LiveChannelID("fixture-standard"),
         ])
         #expect(result.failure == nil)
+    }
+
+    @Test("all bounded channel rails are decoded instead of only the first presentation path")
+    func decodesEveryBoundedChannelRail() {
+        let body = try! JSONSerialization.data(withJSONObject: [
+            "page": [
+                "containers": [
+                    ["sets": [["items": [item(id: "fixture-100", channelNumber: 100)]]]],
+                ],
+                "secondaryRails": [
+                    ["content": ["items": [
+                        ["entity": ["type": "show", "id": "fixture-show"]],
+                        item(id: "fixture-101", connectivity: "ip", channelNumber: 101),
+                    ]]],
+                ],
+            ],
+        ])
+
+        let result = FixedCatalogResponseDecoder.decode(
+            NativeTransportResponse(statusCode: 200, contentType: "application/json", body: body)
+        )
+
+        #expect(result.snapshot?.channels.map(\.displayNumber) == [100, 101])
+        #expect(result.snapshot?.channels.map(\.id) == [
+            LiveChannelID("fixture-100"),
+            LiveChannelID("fixture-101"),
+        ])
+        #expect(result.failure == nil)
+    }
+
+    @Test("a complete catalog page may exceed the former one-megabyte ceiling")
+    func acceptsBoundedCompletePageGraph() {
+        let body = try! JSONSerialization.data(withJSONObject: [
+            "page": [
+                "containers": [["sets": [["items": [item(id: "fixture-large")]]]]],
+                "presentationPadding": String(repeating: "x", count: 1_100_000),
+            ],
+        ])
+
+        let result = FixedCatalogResponseDecoder.decode(
+            NativeTransportResponse(statusCode: 200, contentType: "application/json", body: body)
+        )
+
+        #expect(body.count > 1_048_576)
+        #expect(result.snapshot?.channels.map(\.id) == [LiveChannelID("fixture-large")])
+        #expect(result.failure == nil)
+    }
+
+    @Test("catalog page size traversal depth and candidate count remain bounded")
+    func rejectsCatalogResourceBoundaryViolations() {
+        let oversized = FixedCatalogResponseDecoder.decode(
+            NativeTransportResponse(
+                statusCode: 200,
+                contentType: "application/json",
+                body: Data(repeating: 0x20, count: 8 * 1_024 * 1_024 + 1)
+            )
+        )
+
+        var tooDeep: [String: Any] = ["items": [item(id: "fixture-too-deep")]]
+        for _ in 0 ... 12 {
+            tooDeep = ["nested": tooDeep]
+        }
+        let deepBody = try! JSONSerialization.data(withJSONObject: ["page": tooDeep])
+        let nested = FixedCatalogResponseDecoder.decode(
+            NativeTransportResponse(statusCode: 200, contentType: "application/json", body: deepBody)
+        )
+
+        let excessiveItems = (0 ... 2_000).map { item(id: "fixture-\($0)", channelNumber: $0) }
+        let excessiveBody = fixturePage(items: excessiveItems)
+        let excessive = FixedCatalogResponseDecoder.decode(
+            NativeTransportResponse(statusCode: 200, contentType: "application/json", body: excessiveBody)
+        )
+
+        #expect(oversized.snapshot == nil)
+        #expect(oversized.failure == .unsupportedResponse)
+        #expect(nested.snapshot == nil)
+        #expect(nested.failure == .collectionUnavailable)
+        #expect(excessive.snapshot == nil)
+        #expect(excessive.failure == .collectionUnavailable)
     }
 
     @Test("missing, malformed, or mismatched capability evidence fails closed while Xtra remains excluded")
@@ -487,6 +627,31 @@ struct FixedCatalogRefreshTests {
                 ],
             ],
         ])
+    }
+
+    private func fixtureFeed(channels: [[String: Any]]) -> Data {
+        try! JSONSerialization.data(withJSONObject: ["channels": channels])
+    }
+
+    private func feedChannel(
+        id: String,
+        number: Any,
+        name: String,
+        type: String = "Linear",
+        deliveryTypes: [String] = ["satellite", "ip", "mobile"],
+        available: Bool = true
+    ) -> [String: Any] {
+        [
+            "uuid": id,
+            "streamingChannelNumber": number,
+            "displayName": name,
+            "shortDescription": "Fixture description",
+            "genreTitle": "Fixture",
+            "colorLogo": "/content/dam/sxm-com/channel-logos/Fixture/Fixture-color.svg",
+            "channel_type": type,
+            "deliveryTypes": deliveryTypes,
+            "availableToPackage": available,
+        ]
     }
 
     private func item(

@@ -66,7 +66,8 @@ final class ListeningTuneRequest {
     }
 }
 
-/// Main-actor state for browsing an already semantic, entitled channel lineup.
+/// Main-actor state for browsing a semantic channel guide reached only after
+/// session entitlement succeeds. Each tune still performs its own authorization.
 @MainActor
 @Observable
 final class ListeningPresentationModel {
@@ -93,8 +94,9 @@ final class ListeningPresentationModel {
     private let beforeCoordinatorTune: (@MainActor @Sendable () async -> Void)?
 
     private(set) var state: ListeningPresentationState = .idle
-    private(set) var playbackState: LivePlaybackState = .awaitingLiveContract
+    private(set) var playbackState: LivePlaybackState = .idle
     let metadataPresentation: MetadataPresentationModel
+    let artworkStore: ArtworkStore
     private(set) var selectedChannelID: LiveChannelID?
     private(set) var confirmedChannelID: LiveChannelID?
     /// This changes before the task that reaches PlaybackCoordinator is
@@ -140,7 +142,13 @@ final class ListeningPresentationModel {
         self.flow = flow
         self.playbackCoordinator = playbackCoordinator
         self.beforeCoordinatorTune = beforeCoordinatorTune
-        self.metadataPresentation = (flow as? any MetadataFlow).map { MetadataPresentationModel(flow: $0) } ?? MetadataPresentationModel()
+        if let metadataFlow = flow as? any MetadataFlow {
+            metadataPresentation = MetadataPresentationModel(flow: metadataFlow)
+            artworkStore = ArtworkStore(flow: metadataFlow)
+        } else {
+            metadataPresentation = MetadataPresentationModel()
+            artworkStore = ArtworkStore()
+        }
         observePlaybackState()
     }
 
@@ -272,12 +280,14 @@ final class ListeningPresentationModel {
         isTunePending = false
         selectedChannelID = nil
         state = .idle
-        playbackState = .awaitingLiveContract
+        playbackState = .idle
         confirmedChannelID = nil
         metadataPresentation.clear()
+        artworkStore.clear()
     }
 
     private func apply(_ availability: CatalogAvailability) {
+        artworkStore.retryUnavailable()
         switch availability {
         case let .snapshot(snapshot):
             state = snapshot.channels.isEmpty ? .empty(freshness: snapshot.freshness) : .available(snapshot)

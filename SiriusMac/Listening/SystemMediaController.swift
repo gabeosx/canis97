@@ -176,10 +176,27 @@ final class SystemNowPlayingInfoAdapter: NowPlayingInfoPublishing {
         ]
         if let artist = info.artist { values[MPMediaItemPropertyArtist] = artist }
         if let channelName = info.channelName { values[MPMediaItemPropertyAlbumTitle] = channelName }
-        if let artwork = info.artwork, let image = NSImage(data: artwork.bytes) {
-            values[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+        if let artwork = info.artwork,
+           let mediaArtwork = SystemNowPlayingArtworkFactory.make(from: artwork) {
+            values[MPMediaItemPropertyArtwork] = mediaArtwork
         }
         infoCenter.nowPlayingInfo = values
         infoCenter.playbackState = info.playbackState == .playing ? .playing : .paused
+    }
+}
+
+/// MediaPlayer evaluates its artwork request handler on an internal access
+/// queue. Keeping construction outside the main-actor adapter prevents the
+/// escaping closure from inheriting main-actor isolation and trapping when
+/// MediaPlayer asks for the image off the main thread.
+enum SystemNowPlayingArtworkFactory {
+    static func make(from artwork: ArtworkData) -> MPMediaItemArtwork? {
+        let bytes = artwork.bytes
+        guard let sourceImage = NSImage(data: bytes) else { return nil }
+        let boundsSize = sourceImage.size
+
+        return MPMediaItemArtwork(boundsSize: boundsSize) { _ in
+            NSImage(data: bytes) ?? NSImage(size: boundsSize)
+        }
     }
 }

@@ -71,8 +71,13 @@ check_collection() {
   require_text "$STORE_TESTS" 'testFiveLockedTabsExposeNativeTitlesAndPersistenceValues'
   require_text "$STORE_TESTS" 'testFavoriteSongSearchUsesOnlySavedSongPresentation'
   require_text "$STORE_TESTS" 'testFavoriteSongRowKeepsSavedContextOutOfChannelProjection'
+  require_text "$STORE_TESTS" 'testFavoriteSongRowHidesRawChannelIdentity'
   local row_source
   row_source="$(sed -n '/^struct FavoriteSongRow:/,$p' "$LIBRARY_VIEW_SOURCE")"
+  local source_presentation
+  source_presentation="$(sed -n '/static func sourcePresentation(for snapshot:/,/^    }/p' "$LIBRARY_VIEW_SOURCE")"
+  ! printf '%s' "$source_presentation" | rg -F 'rawIdentity' >/dev/null \
+    || fail 'favorite-song row exposes the raw source-channel identity'
   ! printf '%s' "$row_source" | rg -n 'LibraryChannelItem|NativeListDoubleActionBridge|PlaybackQueue|tune\(|Now Playing|isFavorite\(' >/dev/null \
     || fail 'favorite-song row acquired channel, queue, or playback authority'
   printf 'song favorites collection contract: PASS\n'
@@ -93,7 +98,11 @@ check_action() {
   require_text "$CONTROLLER_TESTS" 'testSongMutationRouteStaysOutsideListeningAndSystemMediaAuthority'
   require_text "$APP_SOURCE" 'case .toggleFavorite:'
   require_text "$COMPACT_PLAYER_SOURCE" 'compact.favorite'
-  require_text "$APP_SOURCE" 'case .toggleFavorite:'
+  require_text "$APP_SOURCE" 'case .toggleSongFavorite:'
+  require_text "$COMPACT_PLAYER_SOURCE" 'compact.song-favorite'
+  require_text "$COMPACT_PLAYER_SOURCE" '.toggleSongFavorite'
+  require_text "$COMPACT_PLAYER_SOURCE" 'currentSongMetadataRow'
+  ! rg -Fq 'favoriteControls' "$COMPACT_PLAYER_SOURCE" || fail 'song favorite must not share the channel-favorite slot'
   printf 'song favorites action contract: PASS\n'
 }
 

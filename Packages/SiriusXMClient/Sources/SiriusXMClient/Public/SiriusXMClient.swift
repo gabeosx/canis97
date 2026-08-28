@@ -57,7 +57,8 @@ public actor SiriusXMClient {
     public init(
         credentialSource: any CredentialSource,
         credentialStore: any CredentialStore,
-        residueCleaner: any AuthenticationResidueCleaner
+        residueCleaner: any AuthenticationResidueCleaner,
+        credentialRefresher: (any CredentialRefresher)? = nil
     ) {
         let diagnostics = OSLogSessionDiagnostics()
         let verifier = NativeRequestVerifier(transport: EphemeralURLSessionTransport())
@@ -66,6 +67,7 @@ public actor SiriusXMClient {
             authenticationVerifier: verifier,
             entitlementVerifier: verifier,
             credentialStore: credentialStore,
+            credentialRefresher: credentialRefresher ?? PassThroughPublicCredentialRefresher(),
             residueCleaner: residueCleaner,
             clock: SystemSessionClock(),
             diagnostics: diagnostics
@@ -217,6 +219,12 @@ public actor SiriusXMClient {
     /// semantic selection; it cannot authorize a request.
     public func resolveLiveStream() -> LiveStreamResolutionAvailability {
         .failed(.selectionUnavailable)
+    }
+}
+
+private struct PassThroughPublicCredentialRefresher: CredentialRefresher {
+    func refreshedCredential(ifNeeded credential: AuthenticationCredential) async -> AuthenticationCredential? {
+        credential
     }
 }
 

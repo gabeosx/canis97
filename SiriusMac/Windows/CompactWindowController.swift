@@ -57,6 +57,7 @@ final class WindowLifecyclePolicy {
 
     var isResizable: Bool { role != .compact }
     var allowsFullScreen: Bool { role != .compact }
+    var usesCompactChrome: Bool { role == .compact }
 
     var frameAutosaveName: String {
         switch role {
@@ -257,7 +258,6 @@ final class CompactWindowController {
         let size = appearance.layoutPlan.size.contentSize
         window.isOpaque = false
         window.backgroundColor = .clear
-        window.titlebarAppearsTransparent = true
         window.contentMinSize = size
         window.contentMaxSize = size
         if !applyCompactFrame(window, contentSize: size) {
@@ -305,6 +305,7 @@ final class CompactWindowController {
     }
 
     private func configure(_ window: NSWindow) {
+        configureChrome(in: window)
         if restoresPersistedFrame {
             migrateLegacyFrameIfNeeded()
             window.setFrameAutosaveName(policy.frameAutosaveName)
@@ -328,6 +329,34 @@ final class CompactWindowController {
         }
 
         restoreFrameOrCenter(window)
+    }
+
+    /// The primary scene is also the authentication window, so its chrome must
+    /// transition with the app state instead of being fixed at the Scene level.
+    /// Compact playback remains closable through Command-W while removing the
+    /// titled style that otherwise reserves visible title-bar geometry.
+    private func configureChrome(in window: NSWindow) {
+        if policy.usesCompactChrome {
+            window.styleMask.insert(.closable)
+            window.styleMask.remove([.titled, .fullSizeContentView])
+            window.titleVisibility = .hidden
+            window.titlebarAppearsTransparent = false
+            window.titlebarSeparatorStyle = .none
+            setStandardWindowButtons(hidden: true, in: window)
+        } else {
+            window.styleMask.insert([.titled, .closable, .miniaturizable])
+            window.styleMask.remove(.fullSizeContentView)
+            window.titleVisibility = .visible
+            window.titlebarAppearsTransparent = false
+            window.titlebarSeparatorStyle = .automatic
+            setStandardWindowButtons(hidden: false, in: window)
+        }
+    }
+
+    private func setStandardWindowButtons(hidden: Bool, in window: NSWindow) {
+        for button in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
+            window.standardWindowButton(button)?.isHidden = hidden
+        }
     }
 
     private func migrateLegacyFrameIfNeeded() {

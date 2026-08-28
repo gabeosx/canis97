@@ -31,6 +31,11 @@ enum ExpressiveSkinContractOfflineTests {
         try require(window.contains("struct CompactWindowPositionRecord"), "window restoration must use a versioned record")
         try require(window.contains("enum CompactWindowGeometry"), "window transitions must use pure finite geometry")
         try require(window.contains("restoreNativeAppearance"), "invalid restoration must route to Native recovery")
+        try require(window.contains("window.styleMask.remove([.titled, .fullSizeContentView])"), "compact playback must remove title-bar geometry")
+        try require(window.contains("window.styleMask.insert([.titled, .closable, .miniaturizable])"), "authentication must restore standard window chrome")
+        let player = try String(contentsOf: root.appendingPathComponent("SiriusMac/Player/CompactPlayerView.swift"), encoding: .utf8)
+        try require(player.contains(".gesture(WindowDragGesture())"), "the player surface must provide an app-owned window drag gesture")
+        try require(player.contains(".allowsWindowActivationEvents(true)"), "player dragging must activate a background window")
     }
 }
 

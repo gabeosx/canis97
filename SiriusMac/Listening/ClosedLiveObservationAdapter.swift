@@ -66,19 +66,15 @@ enum ClosedCatalogRequestContract {
 
     static func makeRequest(credential: AuthenticationCredential) -> URLRequest? {
         guard let url = URL(string: "\(scheme)://\(host)\(path)") else { return nil }
-        return credential.withVolatileMaterial { material in
-            guard let authorization = String(data: material, encoding: .utf8),
-                  !authorization.isEmpty,
-                  !authorization.contains(where: { $0.isWhitespace || $0.isNewline })
-            else { return nil }
-
+        guard let request = credential.withAccessToken({ authorization in
             var request = URLRequest(url: url)
             request.httpMethod = "GET"
             request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
             request.setValue("application/json", forHTTPHeaderField: "Accept")
             request.setValue("Bearer \(authorization)", forHTTPHeaderField: "Authorization")
-            return isExact(request) ? request : nil
-        }
+            return request
+        }) else { return nil }
+        return isExact(request) ? request : nil
     }
 
     static func isExact(_ request: URLRequest) -> Bool {
@@ -224,24 +220,18 @@ enum ClosedTuneRequestContract {
 
     static func makeRequest(credential: AuthenticationCredential) -> URLRequest? {
         guard let url = URL(string: "\(scheme)://\(host)\(path)") else { return nil }
-        return credential.withVolatileMaterial { material in
-            guard let authorization = String(data: material, encoding: .utf8),
-                  !authorization.isEmpty,
-                  !authorization.contains(where: { $0.isWhitespace || $0.isNewline })
-            else { return nil }
-
-            let source: [String: Any] = [
-                "id": ClosedTuneSelection.approved.id,
-                "type": ClosedTuneSelection.sourceType,
-                "hlsVersion": "V3",
-                "manifestVariant": "WEB",
-                "mtcVersion": "V2",
-                "trackResumeSupported": false,
-            ]
-            guard let body = try? JSONSerialization.data(withJSONObject: ["sources": [source]]) else {
-                return nil
-            }
-
+        let source: [String: Any] = [
+            "id": ClosedTuneSelection.approved.id,
+            "type": ClosedTuneSelection.sourceType,
+            "hlsVersion": "V3",
+            "manifestVariant": "WEB",
+            "mtcVersion": "V2",
+            "trackResumeSupported": false,
+        ]
+        guard let body = try? JSONSerialization.data(withJSONObject: ["sources": [source]]) else {
+            return nil
+        }
+        guard let request = credential.withAccessToken({ authorization in
             var request = URLRequest(url: url)
             request.httpMethod = "POST"
             request.httpBody = body
@@ -253,8 +243,9 @@ enum ClosedTuneRequestContract {
                 ClosedTuneLogicalClock.shared.nextHeaderValue(),
                 forHTTPHeaderField: clockHeader
             )
-            return isExact(request) ? request : nil
-        }
+            return request
+        }) else { return nil }
+        return isExact(request) ? request : nil
     }
 
     static func isExact(_ request: URLRequest) -> Bool {

@@ -1,5 +1,5 @@
 import Foundation
-import SiriusXMClient
+@_spi(AppIntegration) import SiriusXMClient
 
 /// Pure reduction of one injected cookie snapshot into a closed outcome.  The
 /// only material-bearing result is an opaque credential for the one exact match.
@@ -8,7 +8,7 @@ enum WebCredentialSelectionPolicy {
         case credential(AuthenticationCredential)
         case missing([FirstPartyTokenCookiePolicy.RejectionReason])
         case ambiguous
-        case malformed
+        case malformed(AuthenticationCredentialMaterialError)
     }
 
     static func select(from cookies: [HTTPCookie], now: Date) -> Result {
@@ -17,40 +17,40 @@ enum WebCredentialSelectionPolicy {
         case 0:
             return .missing(FirstPartyTokenCookiePolicy.rejectionReasons(in: cookies, now: now))
         case 1:
-            return credential(from: candidates[0])
+            let deviceGrantCandidates = FirstPartyDeviceGrantCookiePolicy.matchingCookies(in: cookies, now: now)
+            switch deviceGrantCandidates.count {
+            case 0:
+                return browserCredential(
+                    authenticationCookie: candidates[0],
+                    deviceGrantCookie: nil
+                )
+            case 1:
+                return browserCredential(
+                    authenticationCookie: candidates[0],
+                    deviceGrantCookie: deviceGrantCandidates[0]
+                )
+            default:
+                return .ambiguous
+            }
         default:
             return .ambiguous
         }
     }
 
-    private static func credential(from cookie: HTTPCookie) -> Result {
-        var encodedCookieValue = cookie.value
-        defer { encodedCookieValue = "" }
-        guard encodedCookieValue.utf8.count <= 16_384,
-              var decodedCookieValue = encodedCookieValue.removingPercentEncoding,
-              decodedCookieValue.utf8.count <= 8_192 else {
-            return .malformed
+    private static func browserCredential(
+        authenticationCookie: HTTPCookie,
+        deviceGrantCookie: HTTPCookie?
+    ) -> Result {
+        do {
+            return .credential(try AuthenticationCredential(
+                browserAuthenticationCookieValue: authenticationCookie.value,
+                browserDeviceGrantCookieValue: deviceGrantCookie?.value
+            ))
+        } catch let error as AuthenticationCredentialMaterialError {
+            return .malformed(error)
+        } catch {
+            return .malformed(.envelopeEncodingFailed)
         }
-        defer { decodedCookieValue = "" }
-
-        var payloadData: Data? = Data(decodedCookieValue.utf8)
-        defer { payloadData = nil }
-        guard let payloadData,
-              let payload = try? JSONDecoder().decode(TokenCookiePayload.self, from: payloadData),
-              payload.session.accessToken.utf8.count <= 8_192,
-              !payload.session.accessToken.isEmpty,
-              !payload.session.accessToken.contains(where: { $0.isWhitespace }) else {
-            return .malformed
-        }
-
-        return .credential(AuthenticationCredential(volatileMaterial: Data(payload.session.accessToken.utf8)))
     }
-}
 
-private struct TokenCookiePayload: Decodable {
-    let session: TokenSession
-
-    struct TokenSession: Decodable {
-        let accessToken: String
-    }
 }

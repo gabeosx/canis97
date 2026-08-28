@@ -31,6 +31,15 @@ enum FirstPartyTokenCookiePolicy {
         isFirstPartyDomain(normalizedDomain(of: cookie))
     }
 
+    static func isFirstPartyHost(_ host: String) -> Bool {
+        isFirstPartyDomain(
+            String(host
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+                .drop(while: { $0 == "." }))
+        )
+    }
+
     /// Describes only closed policy failures and never returns cookie values or metadata.
     static func rejectionReasons(in cookies: [HTTPCookie], now: Date) -> [RejectionReason] {
         let namedCookies = cookies.filter { $0.name == "AUTH_TOKEN" }
@@ -70,5 +79,17 @@ enum FirstPartyTokenCookiePolicy {
 
     private static func isFirstPartyDomain(_ domain: String) -> Bool {
         domain == "siriusxm.com" || domain.hasSuffix(".siriusxm.com")
+    }
+}
+
+/// Exact first-party selection for the browser-issued device renewal envelope.
+enum FirstPartyDeviceGrantCookiePolicy {
+    static func matchingCookies(in cookies: [HTTPCookie], now: Date) -> [HTTPCookie] {
+        cookies.filter { cookie in
+            cookie.name == "DEVICE_GRANT" &&
+                cookie.path == "/" &&
+                cookie.expiresDate.map { $0 > now } ?? true &&
+                FirstPartyTokenCookiePolicy.isFirstParty(cookie)
+        }
     }
 }

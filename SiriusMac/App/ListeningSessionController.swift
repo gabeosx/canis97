@@ -127,6 +127,11 @@ enum FavoriteCurrentSongActionState: Equatable {
         return false
     }
 
+    var isFavorite: Bool {
+        if case let .enabled(isFavorite) = self { return isFavorite }
+        return false
+    }
+
     var title: String {
         switch self {
         case let .enabled(isFavorite):

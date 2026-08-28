@@ -15,10 +15,23 @@ actor SessionCoordinator {
         case entitlement
     }
 
+    private enum CredentialPreparation: Sendable {
+        case ready(AuthenticationCredential)
+        case unavailable
+        case persistenceFailed
+    }
+
+    private struct CredentialRefreshLease: Sendable {
+        let id = UUID()
+        let generation: Int
+        let task: Task<CredentialPreparation, Never>
+    }
+
     private let credentialSource: any CredentialSource
     private let authenticationVerifier: any NativeAuthenticationVerifying
     private let entitlementVerifier: any NativeEntitlementVerifying
     private let credentialStore: any CredentialStore
+    private let credentialRefresher: any CredentialRefresher
     private let residueCleaner: any AuthenticationResidueCleaner
     private let clock: any SessionClock
     private let diagnostics: any SessionDiagnostics
@@ -29,12 +42,15 @@ actor SessionCoordinator {
     private var state: SessionState = .signedOut
     private var lastEntitlement: EntitlementAvailability = .unavailable
     private var cleanupTask: Task<SignOutOutcome, Never>?
+    private var credentialGeneration = 0
+    private var credentialRefreshLease: CredentialRefreshLease?
 
     init(
         credentialSource: any CredentialSource,
         authenticationVerifier: any NativeAuthenticationVerifying,
         entitlementVerifier: any NativeEntitlementVerifying,
         credentialStore: any CredentialStore,
+        credentialRefresher: any CredentialRefresher = PassThroughCredentialRefresher(),
         residueCleaner: any AuthenticationResidueCleaner = NoopResidueCleaner(),
         clock: any SessionClock,
         diagnostics: any SessionDiagnostics
@@ -43,6 +59,7 @@ actor SessionCoordinator {
         self.authenticationVerifier = authenticationVerifier
         self.entitlementVerifier = entitlementVerifier
         self.credentialStore = credentialStore
+        self.credentialRefresher = credentialRefresher
         self.residueCleaner = residueCleaner
         self.clock = clock
         self.diagnostics = diagnostics
@@ -86,11 +103,24 @@ actor SessionCoordinator {
             }
         }
 
-        guard let credential = await credentialSource.credential(), isCurrent(lease) else {
+        guard var credential = await credentialSource.credential(), isCurrent(lease) else {
             await diagnostics.record(.authentication(.credentialUnavailable))
             return .authentication(.cancelled)
         }
         transientCredential = credential
+        credentialGeneration &+= 1
+
+        switch await prepareCurrentCredentialIfNeeded() {
+        case let .ready(preparedCredential):
+            credential = preparedCredential
+            transientCredential = preparedCredential
+        case .unavailable:
+            await diagnostics.record(.authentication(.credentialUnavailable))
+            return .authentication(.cancelled)
+        case .persistenceFailed:
+            await diagnostics.record(.credentialPersistenceFailed)
+            return .credentialPersistenceFailed
+        }
 
         guard isCurrent(lease), !Task.isCancelled else {
             await diagnostics.record(.authentication(.cancelled))
@@ -160,8 +190,12 @@ actor SessionCoordinator {
     ) async -> CurrentEntitledOperationResult<Value> {
         guard case let .active(activeSession) = state,
               lastEntitlement == .entitled,
-              let credential = transientCredential
+              transientCredential != nil
         else {
+            return .failed(.authenticationUnavailable)
+        }
+
+        guard case let .ready(credential) = await prepareCurrentCredentialIfNeeded() else {
             return .failed(.authenticationUnavailable)
         }
 
@@ -216,9 +250,13 @@ actor SessionCoordinator {
     ) async -> CurrentCatalogOperationResult<Value> {
         guard case let .active(activeSession) = state,
               lastEntitlement == .entitled,
-              let credential = transientCredential
+              transientCredential != nil
         else {
             return state == .signedOut ? .authenticationUnavailable : .notEntitled
+        }
+
+        guard case let .ready(credential) = await prepareCurrentCredentialIfNeeded() else {
+            return .authenticationUnavailable
         }
 
         let value = await work(credential)
@@ -240,7 +278,10 @@ actor SessionCoordinator {
         }
 
         attemptLease = nil
+        credentialRefreshLease?.task.cancel()
+        credentialRefreshLease = nil
         transientCredential = nil
+        credentialGeneration &+= 1
         pendingVerification = nil
         state = .signedOut
         lastEntitlement = .unavailable
@@ -277,10 +318,64 @@ actor SessionCoordinator {
     private func isCurrent(_ lease: AttemptLease) -> Bool {
         attemptLease?.id == lease.id
     }
+
+    private func prepareCurrentCredentialIfNeeded() async -> CredentialPreparation {
+        guard let credential = transientCredential else { return .unavailable }
+        guard credential.requiresBrowserRefresh(at: clock.now()) else { return .ready(credential) }
+
+        let generation = credentialGeneration
+        let refreshLease: CredentialRefreshLease
+        if let existing = credentialRefreshLease, existing.generation == generation {
+            refreshLease = existing
+        } else {
+            let refresher = credentialRefresher
+            let store = credentialStore
+            let refreshReferenceDate = clock.now()
+            let task = Task<CredentialPreparation, Never> {
+                guard !Task.isCancelled,
+                      let refreshed = await refresher.refreshedCredential(ifNeeded: credential),
+                      !refreshed.requiresBrowserRefresh(at: refreshReferenceDate),
+                      !Task.isCancelled else {
+                    return .unavailable
+                }
+                do {
+                    try await store.save(refreshed)
+                    return .ready(refreshed)
+                } catch {
+                    return .persistenceFailed
+                }
+            }
+            refreshLease = CredentialRefreshLease(generation: generation, task: task)
+            credentialRefreshLease = refreshLease
+        }
+
+        let result = await refreshLease.task.value
+        guard !Task.isCancelled else { return .unavailable }
+
+        if credentialGeneration != generation {
+            return transientCredential.map(CredentialPreparation.ready) ?? .unavailable
+        }
+        guard credentialRefreshLease?.id == refreshLease.id else {
+            return transientCredential.map(CredentialPreparation.ready) ?? .unavailable
+        }
+
+        credentialRefreshLease = nil
+        if case let .ready(refreshed) = result {
+            transientCredential = refreshed
+            credentialGeneration &+= 1
+        }
+        return result
+    }
 }
 
 private struct NoopResidueCleaner: AuthenticationResidueCleaner {
     func removeAuthenticationResidue() async -> AuthenticationResidueCleanupOutcome {
         .removed
+    }
+}
+
+private struct PassThroughCredentialRefresher: CredentialRefresher {
+    func refreshedCredential(ifNeeded credential: AuthenticationCredential) async -> AuthenticationCredential? {
+        credential
     }
 }

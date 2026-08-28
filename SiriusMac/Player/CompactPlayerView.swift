@@ -4,6 +4,7 @@ import SwiftUI
 struct CompactPlayerView: View {
     let presentation: CompactPlayerPresentation
     let appearance: ValidatedSkinAppearance
+    let favoriteSongActionState: FavoriteCurrentSongActionState
     let onAction: @MainActor (CompactPlayerAction) -> Void
     let isAlwaysOnTop: Bool
     let onAlwaysOnTopChanged: @MainActor (Bool) -> Void
@@ -29,6 +30,7 @@ struct CompactPlayerView: View {
     init(
         presentation: CompactPlayerPresentation,
         appearance: ValidatedSkinAppearance = .native,
+        favoriteSongActionState: FavoriteCurrentSongActionState = .disabled(.noConfirmedPlayback),
         onAction: @escaping @MainActor (CompactPlayerAction) -> Void,
         isAlwaysOnTop: Bool = false,
         onAlwaysOnTopChanged: @escaping @MainActor (Bool) -> Void = { _ in },
@@ -36,6 +38,7 @@ struct CompactPlayerView: View {
     ) {
         self.presentation = presentation
         self.appearance = appearance
+        self.favoriteSongActionState = favoriteSongActionState
         self.onAction = onAction
         self.isAlwaysOnTop = isAlwaysOnTop
         self.onAlwaysOnTopChanged = onAlwaysOnTopChanged
@@ -65,7 +68,16 @@ struct CompactPlayerView: View {
             }
         }
         .frame(width: style.contentSize.width, height: style.contentSize.height, alignment: .topLeading)
-        .background(surfaceBackground(.canvas))
+        .background {
+            ZStack {
+                surfaceBackground(.canvas)
+                Color.clear
+                    .contentShape(.rect)
+                    .gesture(WindowDragGesture())
+                    .allowsWindowActivationEvents(true)
+                    .accessibilityHidden(true)
+            }
+        }
         .tint(surfaceTint(.interactiveAccent))
         .mask {
             if hasExpressiveFaceplate {
@@ -157,7 +169,10 @@ struct CompactPlayerView: View {
                     .accessibilityValue(channelText)
             }
             expressiveSlot(.metadata) { metadata(at: marqueeDate) }
-            expressiveSlot(.favorite) { favoriteButton }
+            expressiveSlot(.favorite) {
+                channelFavoriteButton
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            }
             expressiveSlot(.status) { statusAndRecovery(at: marqueeDate) }
             expressiveSlot(.transport) { transport }
             expressiveSlot(.library) { libraryButton }
@@ -170,6 +185,7 @@ struct CompactPlayerView: View {
                     .frame(width: CGFloat(drag.width), height: CGFloat(drag.height))
                     .offset(x: CGFloat(drag.x), y: CGFloat(drag.y))
                     .gesture(WindowDragGesture())
+                    .allowsWindowActivationEvents(true)
                     .allowsHitTesting(true)
                     .accessibilityHidden(true)
             }
@@ -224,18 +240,7 @@ struct CompactPlayerView: View {
                             .help(channel.displayText)
                             .accessibilityLabel("Channel \(channel.displayText)")
                         Spacer(minLength: 4)
-                        Button(action: { onAction(.toggleFavorite) }) {
-                            Image(systemName: presentation.isFavorite ? "star.fill" : "star")
-                                .frame(width: 28, height: 28)
-                                .contentShape(.rect)
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(presentation.isFavorite ? Color(hex: style.accentHex) : .secondary)
-                        .help(presentation.isFavorite ? "Remove from Favorites" : "Add to Favorites")
-                        .accessibilityIdentifier("compact.favorite")
-                        .accessibilityLabel(presentation.isFavorite ? "Remove from Favorites" : "Add to Favorites")
-                        .accessibilityValue(presentation.isFavorite ? "Favorite" : "Not favorite")
-                        .accessibilitySortPriority(40)
+                        channelFavoriteButton
                     }
                     metadata(at: marqueeDate)
                 }
@@ -270,7 +275,7 @@ struct CompactPlayerView: View {
         .padding(CompactPlayerPresentation.focusClearance)
     }
 
-    private var favoriteButton: some View {
+    private var channelFavoriteButton: some View {
         Button(action: { onAction(.toggleFavorite) }) {
             if hasExpressiveFaceplate {
                 FaceplateGlyphView(glyph: .favorite, isFilled: presentation.isFavorite)
@@ -290,25 +295,40 @@ struct CompactPlayerView: View {
         .accessibilityLabel(presentation.isFavorite ? "Remove from Favorites" : "Add to Favorites")
         .accessibilityValue(presentation.isFavorite ? "Favorite" : "Not favorite")
         .accessibilitySortPriority(40)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         .disabled(presentation.channelIdentity == nil)
+    }
+
+    private var songFavoriteButton: some View {
+        let isFavorite = favoriteSongActionState.isFavorite
+        return Button(action: { onAction(.toggleSongFavorite) }) {
+            if hasExpressiveFaceplate {
+                FaceplateGlyphView(glyph: .songFavorite, isFilled: isFavorite)
+                    .frame(width: 13, height: 13)
+                    .frame(width: CompactPlayerPresentation.metadataActionSize, height: CompactPlayerPresentation.metadataActionSize)
+                    .contentShape(.rect)
+            } else {
+                Image(systemName: isFavorite ? "heart.fill" : "heart")
+                    .font(.system(size: 13, weight: .medium))
+                    .frame(width: CompactPlayerPresentation.metadataActionSize, height: CompactPlayerPresentation.metadataActionSize)
+                    .contentShape(.rect)
+            }
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(isFavorite ? Color(hex: style.accentHex) : .secondary)
+        .help(favoriteSongActionState.title)
+        .accessibilityIdentifier("compact.song-favorite")
+        .accessibilityLabel(favoriteSongActionState.accessibilityLabel)
+        .accessibilityValue(favoriteSongActionState.accessibilityValue)
+        .accessibilityHint(favoriteSongActionState.accessibilityHint)
+        .accessibilitySortPriority(53)
+        .disabled(!favoriteSongActionState.isEnabled)
     }
 
     @ViewBuilder
     private func metadata(at marqueeDate: Date) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             if let primary = presentation.primaryMetadata {
-                BoundedMarqueeText(
-                    primary,
-                    font: skinFont(renderingAppearance.layoutPlan.typography.body, size: 14, weight: .semibold),
-                    timestamp: marqueeDate,
-                    cycleOrigin: marqueeCycleOrigin
-                )
-                    .frame(height: 17)
-                    .help(primary)
-                    .accessibilityLabel("Current program: \(primary)")
-                    .accessibilityValue(primary)
-                    .accessibilitySortPriority(55)
+                currentSongMetadataRow(primary, at: marqueeDate)
             }
             if let secondary = presentation.secondaryMetadata {
                 BoundedMarqueeText(
@@ -326,9 +346,29 @@ struct CompactPlayerView: View {
             }
         }
         .padding(.horizontal, 8)
-        .padding(.vertical, 4)
+        .padding(.vertical, hasExpressiveFaceplate ? 2 : 4)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .clipped()
+    }
+
+    private func currentSongMetadataRow(_ primary: String, at marqueeDate: Date) -> some View {
+        HStack(spacing: 4) {
+            BoundedMarqueeText(
+                primary,
+                font: skinFont(renderingAppearance.layoutPlan.typography.body, size: 14, weight: .semibold),
+                timestamp: marqueeDate,
+                cycleOrigin: marqueeCycleOrigin
+            )
+            .frame(height: 17)
+            .help(primary)
+            .accessibilityLabel("Current program: \(primary)")
+            .accessibilityValue(primary)
+            .accessibilitySortPriority(55)
+
+            songFavoriteButton
+                .fixedSize()
+        }
+        .frame(height: CompactPlayerPresentation.metadataActionSize)
     }
 
     @ViewBuilder
@@ -594,6 +634,7 @@ struct CompactPlayerView: View {
         case .playPause: "play-pause"
         case .next: "next"
         case .toggleFavorite: "favorite"
+        case .toggleSongFavorite: "song-favorite"
         case .showLibrary: "show-library"
         case .toggleAlwaysOnTop: "always-on-top"
         case .retryPlayback: "retry"
@@ -760,6 +801,7 @@ private enum FaceplateGlyph {
     case library
     case overflow
     case favorite
+    case songFavorite
 }
 
 private struct FaceplateGlyphView: View {
@@ -826,6 +868,35 @@ private struct FaceplateGlyphView: View {
                     context.fill(star, with: .foreground)
                 } else {
                     context.stroke(star, with: .foreground, lineWidth: strokeWidth)
+                }
+            case .songFavorite:
+                var heart = Path()
+                heart.move(to: point(0, 0.44))
+                heart.addCurve(
+                    to: point(-0.44, -0.08),
+                    control1: point(-0.12, 0.30),
+                    control2: point(-0.44, 0.18)
+                )
+                heart.addCurve(
+                    to: point(0, -0.22),
+                    control1: point(-0.44, -0.44),
+                    control2: point(-0.12, -0.48)
+                )
+                heart.addCurve(
+                    to: point(0.44, -0.08),
+                    control1: point(0.12, -0.48),
+                    control2: point(0.44, -0.44)
+                )
+                heart.addCurve(
+                    to: point(0, 0.44),
+                    control1: point(0.44, 0.18),
+                    control2: point(0.12, 0.30)
+                )
+                heart.closeSubpath()
+                if isFilled {
+                    context.fill(heart, with: .foreground)
+                } else {
+                    context.stroke(heart, with: .foreground, lineWidth: strokeWidth)
                 }
             }
         }
