@@ -367,12 +367,30 @@ final class PlaybackQueueContractTests: XCTestCase {
 }
 
 final class LibraryViewStateContractTests: XCTestCase {
-    func testFourLockedTabsExposeNativeTitlesAndPersistenceValues() {
-        XCTAssertEqual(LibraryTab.allCases, [.channels, .categories, .favorites, .recents])
+    func testFiveLockedTabsExposeNativeTitlesAndPersistenceValues() {
+        XCTAssertEqual(LibraryTab.allCases, [.channels, .categories, .favorites, .favoriteSongs, .recents])
         XCTAssertEqual(LibraryTab.channels.title, "Channels")
         XCTAssertEqual(LibraryTab.categories.title, "Categories")
         XCTAssertEqual(LibraryTab.favorites.title, "Favorites")
+        XCTAssertEqual(LibraryTab.favoriteSongs.title, "Favorite Songs")
+        XCTAssertEqual(LibraryTab.favoriteSongs.rawValue, "favoriteSongs")
         XCTAssertEqual(LibraryTab.recents.title, "Recents")
+    }
+
+    func testFavoriteSongSearchUsesOnlySavedSongPresentation() {
+        let snapshot = FavoriteSongSnapshot(
+            title: "Title Match",
+            artist: "Artist Match",
+            albumName: "Album Match",
+            sourceChannel: FavoriteSongSourceChannel(rawIdentity: "source", name: "Source Match", displayNumber: 42),
+            savedAt: Date(timeIntervalSince1970: 1)
+        )!
+
+        XCTAssertTrue(FavoriteSongSearch("title").matches(snapshot))
+        XCTAssertTrue(FavoriteSongSearch("artist").matches(snapshot))
+        XCTAssertTrue(FavoriteSongSearch("album").matches(snapshot))
+        XCTAssertTrue(FavoriteSongSearch("source").matches(snapshot))
+        XCTAssertFalse(FavoriteSongSearch("missing").matches(snapshot))
     }
 
     func testEmptySearchKeepsTheCurrentTabCollection() {

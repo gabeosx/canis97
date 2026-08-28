@@ -7,6 +7,8 @@ readonly MODEL_TEST="$ROOT_DIR/script/tests/SongFavoriteModelContractTests.swift
 readonly STORE_SOURCE="$ROOT_DIR/SiriusMac/Library/LibraryStore.swift"
 readonly CONTROLLER_SOURCE="$ROOT_DIR/SiriusMac/App/ListeningSessionController.swift"
 readonly APP_SOURCE="$ROOT_DIR/SiriusMac/SiriusMacApp.swift"
+readonly LIBRARY_VIEW_SOURCE="$ROOT_DIR/SiriusMac/Catalog/ListeningView.swift"
+readonly ANNOUNCER_SOURCE="$ROOT_DIR/SiriusMac/Accessibility/AccessibilityAnnouncer.swift"
 readonly PROJECT_FILE="$ROOT_DIR/SiriusMac.xcodeproj/project.pbxproj"
 readonly HARNESS_SOURCE="$ROOT_DIR/SiriusMac/Testing/UITestHarness.swift"
 readonly STORE_TESTS="$ROOT_DIR/SiriusMacTests/LibraryStoreTests.swift"
@@ -56,8 +58,23 @@ check_persistence() {
   printf 'song favorites persistence contract: PASS\n'
 }
 
+check_collection() {
+  require_file "$LIBRARY_VIEW_SOURCE"; require_file "$STORE_TESTS"
+  require_text "$LIBRARY_VIEW_SOURCE" 'case favoriteSongs'
+  require_text "$LIBRARY_VIEW_SOURCE" '"Favorite Songs"'
+  require_text "$LIBRARY_VIEW_SOURCE" 'struct FavoriteSongRow'
+  require_text "$LIBRARY_VIEW_SOURCE" 'protocol SongFavoriteClipboardWriting'
+  require_text "$LIBRARY_VIEW_SOURCE" 'SystemSongFavoriteClipboardWriter'
+  require_text "$LIBRARY_VIEW_SOURCE" 'snapshot.copyText'
+  require_text "$LIBRARY_VIEW_SOURCE" 'No Favorite Songs Yet'
+  require_text "$STORE_TESTS" 'testFiveLockedTabsExposeNativeTitlesAndPersistenceValues'
+  require_text "$STORE_TESTS" 'testFavoriteSongSearchUsesOnlySavedSongPresentation'
+  printf 'song favorites collection contract: PASS\n'
+}
+
 case "${1:-}" in
   model) check_model ;;
   persistence) check_persistence ;;
-  *) printf 'usage: %s model|persistence\n' "$0" >&2; exit 64 ;;
+  collection) check_collection ;;
+  *) printf 'usage: %s model|persistence|collection|action|final\n' "$0" >&2; exit 64 ;;
 esac
