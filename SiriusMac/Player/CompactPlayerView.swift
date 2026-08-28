@@ -127,7 +127,13 @@ struct CompactPlayerView: View {
                 Text(channelText)
                     .font(skinFont(plan.typography.display, size: 18, weight: .semibold))
                     .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+                    .allowsTightening(true)
                     .truncationMode(.tail)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 2)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                    .clipped()
                     .help(channelText)
                     .accessibilityLabel("Channel \(channelText)")
                     .accessibilityValue(channelText)
@@ -162,10 +168,17 @@ struct CompactPlayerView: View {
                 .frame(
                     width: CGFloat(frame.width),
                     height: CGFloat(frame.height),
-                    alignment: slot == .artwork ? .center : .topLeading
+                    alignment: expressiveSlotAlignment(slot)
                 )
                 .offset(x: CGFloat(frame.x), y: CGFloat(frame.y))
         )
+    }
+
+    private func expressiveSlotAlignment(_ slot: CompactSkinSemanticSlot) -> Alignment {
+        switch slot {
+        case .channelIdentity, .metadata, .status: .topLeading
+        case .artwork, .favorite, .transport, .library, .overflowMenu: .center
+        }
     }
 
     private func skinFont(_ token: CompactSkinTypographyToken, size: CGFloat, weight: Font.Weight = .regular) -> Font {
@@ -259,7 +272,9 @@ struct CompactPlayerView: View {
             if let primary = presentation.primaryMetadata {
                 Text(primary)
                     .font(skinFont(renderingAppearance.layoutPlan.typography.body, size: 14, weight: .semibold))
-                    .lineLimit(CompactPlayerPresentation.metadataLineLimit)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+                    .allowsTightening(true)
                     .truncationMode(.tail)
                     .help(primary)
                     .accessibilityLabel("Current program: \(primary)")
@@ -270,7 +285,9 @@ struct CompactPlayerView: View {
                 Text(secondary)
                     .font(skinFont(renderingAppearance.layoutPlan.typography.body, size: 13))
                     .foregroundStyle(.secondary)
-                    .lineLimit(CompactPlayerPresentation.metadataLineLimit)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+                    .allowsTightening(true)
                     .truncationMode(.tail)
                     .help(secondary)
                     .accessibilityLabel("Artist: \(secondary)")
@@ -278,6 +295,10 @@ struct CompactPlayerView: View {
                     .accessibilitySortPriority(54)
             }
         }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .clipped()
     }
 
     @ViewBuilder
@@ -302,9 +323,12 @@ struct CompactPlayerView: View {
             }
             .font(skinFont(renderingAppearance.layoutPlan.typography.label, size: 12, weight: .medium))
             .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .allowsTightening(true)
             .padding(.horizontal, 6)
-            .padding(.vertical, 4)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 3)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             .background(surfaceBackground(surface).opacity(hasExpressiveFaceplate ? 0 : 1))
             .tint(surfaceTint(surface))
             .accessibilityValue(status.accessibilityValue)
@@ -346,8 +370,8 @@ struct CompactPlayerView: View {
             transportButton(playPause == .pause ? "Pause" : "Play Live", systemImage: playPause == .pause ? "pause.fill" : "play.fill", enabled: availability != nil, action: .playPause)
             transportButton("Next", systemImage: "forward.fill", enabled: availability?.nextEnabled == true, action: .next)
         }
-        .frame(maxWidth: .infinity)
         .padding(CompactPlayerPresentation.focusClearance)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         .background(surfaceBackground(.transport).opacity(hasExpressiveFaceplate ? 0 : 1))
         .tint(surfaceTint(.interactiveAccent))
     }
@@ -384,7 +408,8 @@ struct CompactPlayerView: View {
         } label: {
             if hasExpressiveFaceplate {
                 Image(systemName: "rectangle.stack")
-                    .frame(minWidth: CompactPlayerPresentation.transportControlSize, minHeight: CompactPlayerPresentation.transportControlSize)
+                    .frame(width: CompactPlayerPresentation.transportControlSize, height: CompactPlayerPresentation.transportControlSize)
+                    .contentShape(.rect)
             } else {
                 Label("Show Library", systemImage: "rectangle.stack")
             }
@@ -409,7 +434,16 @@ struct CompactPlayerView: View {
                 .accessibilitySortPriority(9)
             Divider()
             Button("Sign Out") { onAction(.signOut) }.accessibilityIdentifier("compact.sign-out")
-        } label: { Label("More", systemImage: "ellipsis.circle") }
+        } label: {
+            if hasExpressiveFaceplate {
+                Image(systemName: "ellipsis")
+                    .frame(width: CompactPlayerPresentation.transportControlSize, height: CompactPlayerPresentation.transportControlSize)
+                    .contentShape(.rect)
+                    .accessibilityLabel("More")
+            } else {
+                Label("More", systemImage: "ellipsis.circle")
+            }
+        }
     }
 
     private func accessibilityIdentifier(for action: CompactPlayerAction) -> String {

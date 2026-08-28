@@ -42,6 +42,9 @@ final class BundledThemeContractTests: XCTestCase {
         XCTAssertTrue(source.contains("expressiveMaterialLayer"))
         XCTAssertTrue(source.contains("expressiveFaceplateLayer"))
         XCTAssertTrue(source.contains("hasExpressiveFaceplate"))
+        XCTAssertTrue(source.contains("expressiveSlotAlignment"))
+        XCTAssertTrue(source.contains("minimumScaleFactor(0.72)"))
+        XCTAssertTrue(source.contains("minimumScaleFactor(0.78)"))
         XCTAssertFalse(source.contains("switch appearance.reference.classification"))
         for identifier in ["compact.favorite", "compact.transport.previous", "compact.transport.play-pause", "compact.transport.next", "compact.show-library", "compact.always-on-top", "compact.sign-out"] {
             XCTAssertTrue(source.contains(identifier))
