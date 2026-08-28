@@ -77,9 +77,40 @@ check_collection() {
   printf 'song favorites collection contract: PASS\n'
 }
 
+check_action() {
+  require_file "$CONTROLLER_SOURCE"; require_file "$APP_SOURCE"; require_file "$ANNOUNCER_SOURCE"
+  require_file "$CONTROLLER_TESTS"
+  require_text "$CONTROLLER_SOURCE" 'var title: String'
+  require_text "$CONTROLLER_SOURCE" 'var accessibilityHint: String'
+  require_text "$CONTROLLER_SOURCE" 'func setSongFavorite'
+  require_text "$APP_SOURCE" 'favoriteCurrentSongState.title'
+  require_text "$APP_SOURCE" 'favoriteCurrentSongState.accessibilityHint'
+  require_text "$ANNOUNCER_SOURCE" 'case songFavoriteAdded'
+  require_text "$ANNOUNCER_SOURCE" 'Added song to Favorite Songs'
+  require_text "$ANNOUNCER_SOURCE" 'Removed song from Favorite Songs'
+  require_text "$CONTROLLER_TESTS" 'testEveryIneligibleReasonHasClosedAccessibleCopy'
+  require_text "$CONTROLLER_TESTS" 'testSongMutationRouteStaysOutsideListeningAndSystemMediaAuthority'
+  require_text "$APP_SOURCE" 'CompactPlayerAction.toggleFavorite'
+  require_text "$APP_SOURCE" 'case .toggleFavorite:'
+  printf 'song favorites action contract: PASS\n'
+}
+
+check_final() {
+  check_model
+  check_persistence
+  check_collection
+  check_action
+  ! rg -n 'URLSession|OAuth|playlist|deepLink|Spotify|AppleMusic|MusicKit' \
+    "$LIBRARY_VIEW_SOURCE" "$CONTROLLER_SOURCE" "$APP_SOURCE" >/dev/null \
+    || fail 'song favorite surfaces acquired external-service authority'
+  printf 'song favorites final contract: PASS\n'
+}
+
 case "${1:-}" in
   model) check_model ;;
   persistence) check_persistence ;;
   collection) check_collection ;;
+  action) check_action ;;
+  final) check_final ;;
   *) printf 'usage: %s model|persistence|collection|action|final\n' "$0" >&2; exit 64 ;;
 esac

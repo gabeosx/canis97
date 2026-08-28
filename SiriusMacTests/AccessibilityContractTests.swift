@@ -41,6 +41,27 @@ final class AccessibilityContractTests: XCTestCase {
         XCTAssertTrue(poster.messages.allSatisfy { !$0.localizedCaseInsensitiveContains("http") })
     }
 
+    func testSongFavoriteAnnouncementsUseClosedValueFreeOutcomes() {
+        let poster = AccessibilityAnnouncementPosterSpy()
+        let announcer = AccessibilityAnnouncer(poster: poster)
+
+        announcer.announce(.songFavoriteAdded(generation: 1))
+        announcer.announce(.songFavoriteRemoved(generation: 2))
+        announcer.announce(.songFavoriteMutationFailed(generation: 3))
+
+        XCTAssertEqual(
+            poster.messages,
+            [
+                "Added song to Favorite Songs",
+                "Removed song from Favorite Songs",
+                "Favorite Songs could not be updated",
+            ]
+        )
+        XCTAssertTrue(poster.messages.allSatisfy { !$0.localizedCaseInsensitiveContains("artist") })
+        XCTAssertTrue(poster.messages.allSatisfy { !$0.localizedCaseInsensitiveContains("token") })
+        XCTAssertTrue(poster.messages.allSatisfy { !$0.localizedCaseInsensitiveContains("http") })
+    }
+
     func testShutdownSuppressesRetainedAnnouncementObservation() {
         let poster = AccessibilityAnnouncementPosterSpy()
         let announcer = AccessibilityAnnouncer(poster: poster)

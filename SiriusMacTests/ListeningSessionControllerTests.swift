@@ -1111,6 +1111,52 @@ final class ListeningSessionControllerTests: XCTestCase {
     }
 }
 
+final class FavoriteCurrentSongActionStateTests: XCTestCase {
+    func testEligibleStateOwnsItsSavedAndRemovalPresentation() {
+        XCTAssertEqual(FavoriteCurrentSongActionState.enabled(isFavorite: false).title, "Favorite Current Song")
+        XCTAssertEqual(FavoriteCurrentSongActionState.enabled(isFavorite: true).title, "Remove Current Song from Favorite Songs")
+        XCTAssertEqual(FavoriteCurrentSongActionState.enabled(isFavorite: false).accessibilityValue, "Not saved to Favorite Songs")
+        XCTAssertEqual(FavoriteCurrentSongActionState.enabled(isFavorite: true).accessibilityValue, "Saved to Favorite Songs")
+        XCTAssertTrue(FavoriteCurrentSongActionState.enabled(isFavorite: false).isEnabled)
+    }
+
+    func testEveryIneligibleReasonHasClosedAccessibleCopy() {
+        let reasons: [(FavoriteCurrentSongDisabledReason, String)] = [
+            (.tunePending, "Wait for the current channel to finish tuning"),
+            (.noConfirmedPlayback, "Play a confirmed channel before saving its current song"),
+            (.confirmedChannelUnavailable, "The confirmed channel is unavailable"),
+            (.metadataForAnotherChannel, "Current song metadata belongs to another channel"),
+            (.metadataNotCurrent, "Current song metadata is not current"),
+            (.missingTitle, "Current song title is unavailable"),
+            (.missingArtist, "Current song artist is unavailable"),
+        ]
+
+        for (reason, expectedHint) in reasons {
+            let state = FavoriteCurrentSongActionState.disabled(reason)
+            XCTAssertFalse(state.isEnabled)
+            XCTAssertEqual(state.title, "Favorite Current Song")
+            XCTAssertEqual(state.accessibilityHint, expectedHint)
+        }
+    }
+
+    func testSongMutationRouteStaysOutsideListeningAndSystemMediaAuthority() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: root.appending(path: "SiriusMac/App/ListeningSessionController.swift"),
+            encoding: .utf8
+        )
+        let route = try XCTUnwrap(source.components(separatedBy: "func setSongFavorite").dropFirst().first)
+            .components(separatedBy: "func startSystemMediaControls").first ?? ""
+
+        XCTAssertFalse(route.contains("tune("))
+        XCTAssertFalse(route.contains("playbackQueue"))
+        XCTAssertFalse(route.contains("nowPlayingPublisher"))
+        XCTAssertFalse(route.contains("authenticationModel"))
+    }
+}
+
 private actor SessionClient: ClientAuthenticationFlow, ListeningFlow {
     func authenticate() async -> AuthenticationOutcome { .unsupported }
     func entitlementAvailability() async -> EntitlementAvailability { .unavailable }
