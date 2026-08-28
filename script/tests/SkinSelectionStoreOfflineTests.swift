@@ -1,5 +1,13 @@
 import Foundation
 
+/// Standalone substitute for the managed-package lookup owned by the full app.
+/// These persistence probes inject no managed packages and never touch app state.
+struct ManagedSkinStore: Sendable {
+    init(applicationSupportDirectory: URL) {}
+
+    func validatedManagedPackageExists(identifier: String) -> Bool { false }
+}
+
 @main
 struct SkinSelectionStoreOfflineTests {
     enum FixtureError: Error {

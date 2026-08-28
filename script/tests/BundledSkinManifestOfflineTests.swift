@@ -25,7 +25,7 @@ struct BundledSkinManifestOfflineTests {
         "schemaVersion", "identifier", "displayName", "playerBackground",
         "metadataPanel", "accent", "destructive", "foregroundScheme",
         "contentPadding", "sectionSpacing", "cornerRadius", "backgroundAsset",
-        "metadataPanelAsset"
+        "metadataPanelAsset", "chromeHighlight", "displayGlow"
     ]
     private static let nativePalette: [PaletteRole: RGB] = [
         .canvas: .init(hex: "#111111"),
@@ -89,13 +89,15 @@ struct BundledSkinManifestOfflineTests {
         let signalGlow = try requiredManifest(named: "Signal Glow", in: byName)
         let tapeDeck = try requiredManifest(named: "Tape Deck", in: byName)
         try require(
-            [signalGlow.playerBackground, signalGlow.metadataPanel, signalGlow.accent, signalGlow.destructive]
-                == ["#063F2C", "#0B684B", "#62FFAB", "#FF5C75"],
+            [signalGlow.playerBackground, signalGlow.metadataPanel, signalGlow.accent, signalGlow.destructive,
+             signalGlow.chromeHighlight, signalGlow.displayGlow]
+                == ["#082F35", "#105A53", "#A8FF7A", "#FF6D7A", "#D8FF8F", "#1E8578"],
             "Signal Glow must retain its complete green luminous palette"
         )
         try require(
-            [tapeDeck.playerBackground, tapeDeck.metadataPanel, tapeDeck.accent, tapeDeck.destructive]
-                == ["#4A2D18", "#74482B", "#FFC166", "#FF685B"],
+            [tapeDeck.playerBackground, tapeDeck.metadataPanel, tapeDeck.accent, tapeDeck.destructive,
+             tapeDeck.chromeHighlight, tapeDeck.displayGlow]
+                == ["#35241B", "#5B3B2B", "#F4BA6B", "#FF7667", "#FFD98E", "#7C5134"],
             "Tape Deck must retain its complete warm analog palette"
         )
     }
@@ -147,11 +149,12 @@ struct BundledSkinManifestOfflineTests {
         let dictionary = try object(from: data)
         try require(Set(dictionary.keys) == completeKeys, "manifest keys are not exact")
         let manifest = try JSONDecoder().decode(AuditManifest.self, from: data)
-        try require(manifest.schemaVersion == 1, "schemaVersion must equal 1")
+        try require(manifest.schemaVersion == 2, "schemaVersion must equal 2")
         try require(isIdentifier(manifest.identifier), "identifier is not stable ASCII")
         try require((1...64).contains(manifest.displayName.count), "displayName is outside its boundary")
         try require(
-            [manifest.playerBackground, manifest.metadataPanel, manifest.accent, manifest.destructive]
+            [manifest.playerBackground, manifest.metadataPanel, manifest.accent, manifest.destructive,
+             manifest.chromeHighlight, manifest.displayGlow]
                 .allSatisfy(isSixDigitRGB),
             "palette values must be exact six-digit RGB"
         )
@@ -222,6 +225,8 @@ private struct AuditManifest: Decodable {
     let cornerRadius: Int
     let backgroundAsset: String?
     let metadataPanelAsset: String?
+    let chromeHighlight: String
+    let displayGlow: String
 }
 
 private struct AuditFailure: Error, CustomStringConvertible {
