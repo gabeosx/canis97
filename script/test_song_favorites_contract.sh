@@ -8,6 +8,9 @@ readonly STORE_SOURCE="$ROOT_DIR/SiriusMac/Library/LibraryStore.swift"
 readonly CONTROLLER_SOURCE="$ROOT_DIR/SiriusMac/App/ListeningSessionController.swift"
 readonly APP_SOURCE="$ROOT_DIR/SiriusMac/SiriusMacApp.swift"
 readonly PROJECT_FILE="$ROOT_DIR/SiriusMac.xcodeproj/project.pbxproj"
+readonly HARNESS_SOURCE="$ROOT_DIR/SiriusMac/Testing/UITestHarness.swift"
+readonly STORE_TESTS="$ROOT_DIR/SiriusMacTests/LibraryStoreTests.swift"
+readonly CONTROLLER_TESTS="$ROOT_DIR/SiriusMacTests/ListeningSessionControllerTests.swift"
 
 fail() { printf 'song favorites contract: %s\n' "$*" >&2; exit 1; }
 require_file() { [[ -f "$1" ]] || fail "missing required file: ${1#$ROOT_DIR/}"; }
@@ -30,14 +33,22 @@ check_model() {
 
 check_persistence() {
   require_file "$STORE_SOURCE"; require_file "$CONTROLLER_SOURCE"; require_file "$APP_SOURCE"; require_file "$PROJECT_FILE"
+  require_file "$HARNESS_SOURCE"; require_file "$STORE_TESTS"; require_file "$CONTROLLER_TESTS"
   require_text "$STORE_SOURCE" 'final class FavoriteRecord'
   require_text "$STORE_SOURCE" 'final class FavoriteSongRecord'
   require_text "$STORE_SOURCE" 'func setSongFavorite'
-  require_text "$STORE_SOURCE" 'FavoriteSongRecord.persistedPropertyNames'
+  require_text "$STORE_SOURCE" 'static let persistedPropertyNames'
   require_text "$CONTROLLER_SOURCE" 'func setFavoriteCurrentSong'
   require_text "$CONTROLLER_SOURCE" 'favoriteCurrentSongCandidate'
   require_text "$APP_SOURCE" 'Favorite Current Song'
   require_text "$PROJECT_FILE" 'SongFavoriteModels.swift in Sources'
+  require_text "$HARNESS_SOURCE" 'FavoriteSongRecord.self'
+  require_text "$STORE_TESTS" 'testSongFavoritesDeduplicateAndReload'
+  require_text "$STORE_TESTS" 'testSongFavoriteFallbackDoesNotPublishAnEphemeralSavedState'
+  require_text "$CONTROLLER_TESTS" 'FavoriteSongRecord.self'
+  [[ "$(rg -F -c 'FavoriteSongRecord.self' "$STORE_SOURCE" "$HARNESS_SOURCE" "$STORE_TESTS" "$CONTROLLER_TESTS" | awk -F: '{ total += $NF } END { print total + 0 }')" -ge 8 ]] || fail 'every production, review, and focused-test ModelContainer must register FavoriteSongRecord'
+  require_text "$STORE_SOURCE" 'return lhs.identity.normalizedArtist < rhs.identity.normalizedArtist'
+  require_text "$STORE_SOURCE" 'return lhs.identity.normalizedTitle < rhs.identity.normalizedTitle'
   ! rg -n 'PlaybackQueue|SystemMedia|NowPlaying|tune\(' "$MODEL_SOURCE" >/dev/null || fail 'song model acquired playback authority'
   printf 'song favorites persistence contract: PASS\n'
 }
