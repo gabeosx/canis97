@@ -1,0 +1,136 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing vMAJOR.MINOR.PATCH tag to release
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref_name }}${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: macos-26
+    timeout-minutes: 60
+    environment: release
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+      BUILD_NUMBER: ${{ github.run_number }}
+      GITHUB_REPOSITORY: ${{ github.repository }}
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate immutable release input
+        run: |
+          VERSION="$(script/validate_release_version.sh "$RELEASE_TAG")"
+          test "$(git describe --tags --exact-match HEAD)" = "$RELEASE_TAG"
+          git merge-base --is-ancestor HEAD "origin/$DEFAULT_BRANCH"
+          test "$(xcodebuild -version | head -1)" = "Xcode 26.6"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Validate signing secrets
+        env:
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          for required_name in MACOS_CERTIFICATE_P12 MACOS_CERTIFICATE_PASSWORD APPLE_TEAM_ID APPLE_ID APPLE_APP_SPECIFIC_PASSWORD; do
+            test -n "${!required_name}" || { echo "$required_name is not configured" >&2; exit 1; }
+          done
+
+      - name: Install Developer ID certificate in an ephemeral keychain
+        env:
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          CERTIFICATE_PATH="$RUNNER_TEMP/developer-id.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/canis97-release.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 24)"
+          echo "$MACOS_CERTIFICATE_P12" | /usr/bin/base64 -D > "$CERTIFICATE_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" -P "$MACOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+
+      - name: Build, sign, notarize, and verify artifacts
+        env:
+          RELEASE_OUTPUT_DIR: ${{ runner.temp }}/release
+          RELEASE_WORK_DIR: ${{ runner.temp }}/release-work
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: script/create_release_artifacts.sh "$VERSION"
+
+      - name: Publish immutable GitHub Release
+        env:
+          RELEASE_OUTPUT_DIR: ${{ runner.temp }}/release
+        run: |
+          gh release create "$RELEASE_TAG" \
+            "$RELEASE_OUTPUT_DIR/Canis97-$VERSION-arm64.zip" \
+            "$RELEASE_OUTPUT_DIR/Canis97-$VERSION.spdx" \
+            "$RELEASE_OUTPUT_DIR/SHA256SUMS" \
+            --verify-tag \
+            --title "Canis97 $VERSION" \
+            --generate-notes
+
+      - name: Inspect Homebrew tap configuration
+        id: tap
+        env:
+          HOMEBREW_TAP_REPOSITORY: ${{ vars.HOMEBREW_TAP_REPOSITORY }}
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          if [[ -n "$HOMEBREW_TAP_REPOSITORY" && -n "$HOMEBREW_TAP_TOKEN" ]]; then
+            echo 'enabled=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'enabled=false' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update the Homebrew tap
+        if: ${{ steps.tap.outputs.enabled == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          HOMEBREW_TAP_REPOSITORY: ${{ vars.HOMEBREW_TAP_REPOSITORY }}
+          RELEASE_OUTPUT_DIR: ${{ runner.temp }}/release
+        run: |
+          TAP_PATH="$RUNNER_TEMP/homebrew-tap"
+          ARCHIVE_SHA="$(awk '$2 ~ /Canis97-/ { print $1 }' "$RELEASE_OUTPUT_DIR/SHA256SUMS")"
+          gh auth setup-git
+          gh repo clone "$HOMEBREW_TAP_REPOSITORY" "$TAP_PATH"
+          mkdir -p "$TAP_PATH/Casks"
+          script/render_homebrew_cask.sh "$VERSION" "$ARCHIVE_SHA" "$GITHUB_REPOSITORY" > "$TAP_PATH/Casks/canis97.rb"
+          git -C "$TAP_PATH" config user.name "github-actions[bot]"
+          git -C "$TAP_PATH" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C "$TAP_PATH" add Casks/canis97.rb
+          git -C "$TAP_PATH" commit -m "canis97 $VERSION"
+          git -C "$TAP_PATH" push
+
+      - name: Report skipped Homebrew publishing
+        if: ${{ steps.tap.outputs.enabled != 'true' }}
+        run: echo 'GitHub Release published; configure HOMEBREW_TAP_REPOSITORY and HOMEBREW_TAP_TOKEN to publish the cask.' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove ephemeral signing keychain
+        if: always()
+        run: security delete-keychain "$RUNNER_TEMP/canis97-release.keychain-db" 2>/dev/null || true

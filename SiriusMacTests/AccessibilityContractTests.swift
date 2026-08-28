@@ -90,6 +90,14 @@ final class AccessibilityContractTests: XCTestCase {
         XCTAssertFalse(playerSource.contains(".announce("))
     }
 
+    func testAuthenticationSurfaceKeepsOneInstructionAndATallWebViewport() throws {
+        let source = try repositorySource("SiriusMac/Authentication/AuthenticationView.swift")
+
+        XCTAssertTrue(source.contains("Sign in below with your SiriusXM subscriber account."))
+        XCTAssertFalse(source.contains("connects to your SiriusXM subscriber account."))
+        XCTAssertTrue(source.contains("minimumWebViewHeight: CGFloat = 560"))
+    }
+
     func testAppearanceManagementUsesNativeFocusAndClosedErrorPresentation() throws {
         let source = try repositorySource("SiriusMac/Skins/SkinManagementView.swift")
 

@@ -41,7 +41,7 @@ final class WindowLifecyclePolicy {
 
     var defaultContentSize: CGSize {
         switch role {
-        case .authentication: CGSize(width: 760, height: 620)
+        case .authentication: CGSize(width: 760, height: 760)
         case .compact: CGSize(width: 400, height: 288)
         case .library: CGSize(width: 980, height: 700)
         }
@@ -49,7 +49,7 @@ final class WindowLifecyclePolicy {
 
     var minimumContentSize: CGSize {
         switch role {
-        case .authentication: CGSize(width: 760, height: 620)
+        case .authentication: CGSize(width: 760, height: 760)
         case .compact: CGSize(width: 400, height: 288)
         case .library: CGSize(width: 760, height: 540)
         }

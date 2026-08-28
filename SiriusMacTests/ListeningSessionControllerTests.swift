@@ -38,8 +38,8 @@ final class WindowLifecyclePolicyTests: XCTestCase {
     func testAuthenticationPolicyRestoresAUsableResizablePrimaryWindow() {
         let policy = WindowLifecyclePolicy(role: .authentication)
 
-        XCTAssertEqual(policy.defaultContentSize, CGSize(width: 760, height: 620))
-        XCTAssertEqual(policy.minimumContentSize, CGSize(width: 760, height: 620))
+        XCTAssertEqual(policy.defaultContentSize, CGSize(width: 760, height: 760))
+        XCTAssertEqual(policy.minimumContentSize, CGSize(width: 760, height: 760))
         XCTAssertTrue(policy.isResizable)
         XCTAssertTrue(policy.allowsFullScreen)
         XCTAssertEqual(policy.frameAutosaveName, ProductIdentity.FrameAutosaveName.authentication)
@@ -60,7 +60,7 @@ final class WindowLifecyclePolicyTests: XCTestCase {
         CompactWindowController(role: .authentication, restoresPersistedFrame: false)
             .attach(to: window, alwaysOnTop: false)
 
-        XCTAssertEqual(window.contentView?.frame.size, NSSize(width: 760, height: 620))
+        XCTAssertEqual(window.contentView?.frame.size, NSSize(width: 760, height: 760))
         XCTAssertTrue(window.styleMask.contains(.resizable))
         XCTAssertTrue(window.collectionBehavior.contains(.fullScreenPrimary))
         XCTAssertFalse(window.collectionBehavior.contains(.fullScreenNone))

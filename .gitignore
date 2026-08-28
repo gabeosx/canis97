@@ -1,3 +1,7 @@
 dist/
 .build/
 build/
+.DS_Store
+.gsd/
+.planning/research/.cache/
+**/xcuserdata/

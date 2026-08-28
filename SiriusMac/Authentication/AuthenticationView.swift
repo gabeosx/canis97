@@ -199,12 +199,7 @@ private struct WebViewAuthenticationContainer: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Sign in below. \(ProductIdentity.displayName) will continue automatically when the session is ready.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 4)
-
-            Text("\(ProductIdentity.displayName) connects to your SiriusXM subscriber account.")
+            Text("Sign in below with your SiriusXM subscriber account. \(ProductIdentity.displayName) will continue automatically when the session is ready.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 4)
@@ -232,6 +227,6 @@ private struct WebViewAuthenticationContainer: View {
 private enum AuthenticationLayout {
     static let contentPadding: CGFloat = 24
     static let maximumContentWidth: CGFloat = 1_200
-    static let minimumWebViewHeight: CGFloat = 420
+    static let minimumWebViewHeight: CGFloat = 560
     static let webViewCornerRadius: CGFloat = 8
 }

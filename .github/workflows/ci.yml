@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: macos-26
+    timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Validate release and shell contracts
+        run: |
+          script/validate_release_version.sh
+          bash -n script/*.sh script/lib/*.sh script/tests/*.sh
+          test "$(xcodebuild -version | head -1)" = "Xcode 26.6"
+
+      - name: Test SiriusXMClient
+        run: |
+          swift test \
+            --package-path Packages/SiriusXMClient \
+            --scratch-path "$RUNNER_TEMP/siriusxmclient-tests"
+
+      - name: Compile app and app tests without launching them
+        run: |
+          xcodebuild build-for-testing \
+            -project SiriusMac.xcodeproj \
+            -scheme Canis97 \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/canis97-derived-data" \
+            -only-testing:Canis97Tests \
+            -parallel-testing-enabled NO \
+            CODE_SIGNING_ALLOWED=NO

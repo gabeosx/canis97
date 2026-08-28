@@ -9,6 +9,7 @@ struct Canis97App: App {
     private let sessionController: ListeningSessionController?
     private let appearanceController: SkinAppearanceController
     private let skinImportCoordinator: SkinImportCoordinator
+    private let updateChecker: UpdateChecker
     private let terminationObserver: ApplicationTerminationObserver?
 #if DEBUG
     private let offlineReviewHarness: OfflineReviewHarness?
@@ -16,6 +17,7 @@ struct Canis97App: App {
 
     init() {
         let environment = ProcessInfo.processInfo.environment
+        updateChecker = UpdateChecker()
 #if DEBUG
         if OfflineReviewLaunchMode.isOfflineReviewMode(environment: environment) {
             let offlineAppearanceController = SkinAppearanceController(
@@ -73,8 +75,9 @@ struct Canis97App: App {
     var body: some Scene {
         WindowGroup(ProductIdentity.displayName, id: ProductIdentity.SceneID.compact) {
             compactSceneContent
+                .softwareUpdatePresentation(checker: updateChecker)
         }
-        .defaultSize(width: 760, height: 620)
+        .defaultSize(width: 760, height: 760)
         // The primary scene changes from a resizable authentication surface to
         // a fixed 400 x 288 player. Tracking the complete content size lets the
         // window shed the authentication frame instead of leaving the compact
@@ -83,7 +86,8 @@ struct Canis97App: App {
         .commands {
             ListeningCommands(
                 controller: sessionController,
-                appearanceController: appearanceController
+                appearanceController: appearanceController,
+                updateChecker: updateChecker
             )
         }
 
@@ -121,7 +125,7 @@ struct Canis97App: App {
             )
         } else {
             Color.clear
-                .frame(minWidth: 760, minHeight: 620)
+                .frame(minWidth: 760, minHeight: 760)
                 .accessibilityHidden(true)
         }
 #else
@@ -132,7 +136,7 @@ struct Canis97App: App {
             )
         } else {
             Color.clear
-                .frame(minWidth: 760, minHeight: 620)
+                .frame(minWidth: 760, minHeight: 760)
                 .accessibilityHidden(true)
         }
 #endif
@@ -179,7 +183,7 @@ private struct CompactAuthenticationRoot: View {
                 )
             } else {
                 AuthenticationView(controller: controller)
-                    .frame(minWidth: 760, minHeight: 620)
+                    .frame(minWidth: 760, minHeight: 760)
             }
         }
         .onChange(of: controller.authenticationModel.isReady, initial: true) { _, isReady in
@@ -294,6 +298,7 @@ private struct CompactListeningSlice: View {
 private struct ListeningCommands: Commands {
     let controller: ListeningSessionController?
     let appearanceController: SkinAppearanceController
+    let updateChecker: UpdateChecker
     @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
@@ -397,6 +402,13 @@ private struct ListeningCommands: Commands {
             Button("About \(ProductIdentity.displayName)") {
                 openWindow(id: ProductSceneID.about)
             }
+
+            Divider()
+
+            Button(updateChecker.isChecking ? "Checking for Updates…" : "Check for Updates…") {
+                Task { await updateChecker.check(manual: true) }
+            }
+            .disabled(updateChecker.isChecking)
         }
 
     }
