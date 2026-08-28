@@ -66,7 +66,8 @@ struct CompactPlayerView: View {
         .tint(surfaceTint(.interactiveAccent))
         .mask {
             if hasExpressiveFaceplate {
-                Rectangle()
+                RoundedRectangle(cornerRadius: expressiveFaceplateCornerRadius, style: .continuous)
+                    .padding(4)
             } else {
                 CompactSkinSilhouetteShape(
                     variant: renderingAppearance.layoutPlan.silhouette,
@@ -90,6 +91,17 @@ struct CompactPlayerView: View {
         .onChange(of: appearance.reference) { _, reference in
             guard reference != .native, !needsNativeAppearanceRecovery else { return }
             showsNativeAppearanceRecoveryStatus = false
+        }
+    }
+
+    /// Generated faceplates already draw their own device silhouette. This
+    /// shallow, inset mask removes only the opaque source-image corners while
+    /// preserving the authored bezel, glow, and every semantic control well.
+    private var expressiveFaceplateCornerRadius: CGFloat {
+        switch renderingAppearance.layoutPlan.silhouette {
+        case .discPod: 30
+        case .bubbleCapsule: 28
+        default: renderingAppearance.cornerRadius
         }
     }
 
@@ -243,26 +255,28 @@ struct CompactPlayerView: View {
 
     @ViewBuilder
     private var metadata: some View {
-        if let primary = presentation.primaryMetadata {
-            Text(primary)
-                .font(skinFont(renderingAppearance.layoutPlan.typography.body, size: 14, weight: .semibold))
-                .lineLimit(CompactPlayerPresentation.metadataLineLimit)
-                .truncationMode(.tail)
-                .help(primary)
-                .accessibilityLabel("Current program: \(primary)")
-                .accessibilityValue(primary)
-                .accessibilitySortPriority(55)
-        }
-        if let secondary = presentation.secondaryMetadata {
-            Text(secondary)
-                .font(skinFont(renderingAppearance.layoutPlan.typography.body, size: 13))
-                .foregroundStyle(.secondary)
-                .lineLimit(CompactPlayerPresentation.metadataLineLimit)
-                .truncationMode(.tail)
-                .help(secondary)
-                .accessibilityLabel("Artist: \(secondary)")
-                .accessibilityValue(secondary)
-                .accessibilitySortPriority(54)
+        VStack(alignment: .leading, spacing: 2) {
+            if let primary = presentation.primaryMetadata {
+                Text(primary)
+                    .font(skinFont(renderingAppearance.layoutPlan.typography.body, size: 14, weight: .semibold))
+                    .lineLimit(CompactPlayerPresentation.metadataLineLimit)
+                    .truncationMode(.tail)
+                    .help(primary)
+                    .accessibilityLabel("Current program: \(primary)")
+                    .accessibilityValue(primary)
+                    .accessibilitySortPriority(55)
+            }
+            if let secondary = presentation.secondaryMetadata {
+                Text(secondary)
+                    .font(skinFont(renderingAppearance.layoutPlan.typography.body, size: 13))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(CompactPlayerPresentation.metadataLineLimit)
+                    .truncationMode(.tail)
+                    .help(secondary)
+                    .accessibilityLabel("Artist: \(secondary)")
+                    .accessibilityValue(secondary)
+                    .accessibilitySortPriority(54)
+            }
         }
     }
 

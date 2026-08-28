@@ -10,12 +10,12 @@ enum BundledThemeManifestOfflineTests {
         "layoutVariant", "silhouette", "size", "typography", "slots", "dragRegions", "decorations"
     ]
     private static let themeKeys: Set<String> = [
-        "identifier", "displayName", "source", "rendererLayers", "fontTokens", "fontFiles", "externalAssetURLs"
+        "identifier", "displayName", "source", "rendererLayers", "assetFiles", "fontTokens", "fontFiles", "externalAssetURLs"
     ]
-    private static let expected: [(name: String, identifier: String, layout: String, silhouette: String, size: String, palette: [String], fonts: [String], layers: [String])] = [
-        ("Pixel Desk", "pixel-desk", "desktopUtility", "pixelNotched", "desktop432x304", ["#C8C2AF", "#8A8E83", "#304D92", "#A63A32"], ["systemMonospaced", "systemDefault"], ["pixel-bevel-frame", "pixel-dither-cells", "pixel-display-plate"]),
-        ("Pocket Disc", "pocket-disc", "discConsole", "discPod", "console384x320", ["#3E4641", "#202825", "#A6E15A", "#D85A48"], ["systemMonospaced", "systemDefault"], ["disc-molded-plane", "disc-screw-set", "disc-segment-bars"]),
-        ("Aqua Vista", "aqua-vista", "aquaPod", "bubbleCapsule", "capsule448x304", ["#C9EFF8", "#78C4E3", "#198D74", "#C74654"], ["systemRounded", "systemDefault"], ["aqua-color-planes", "aqua-bubble-set", "aqua-glass-highlights"])
+    private static let expected: [(name: String, identifier: String, layout: String, silhouette: String, size: String, palette: [String], fonts: [String], source: String, layers: [String], backdrop: String?, assets: [String])] = [
+        ("Pixel Desk", "pixel-desk", "desktopUtility", "pixelNotched", "desktop432x304", ["#C8C2AF", "#8A8E83", "#304D92", "#A63A32"], ["systemMonospaced", "systemDefault"], "original-app-drawn", ["pixel-bevel-frame", "pixel-dither-cells", "pixel-display-plate"], nil, []),
+        ("Pocket Disc", "pocket-disc", "discConsole", "discPod", "console384x320", ["#3E4641", "#202825", "#A6E15A", "#D85A48"], ["systemMonospaced", "systemDefault"], "original-generated-faceplate", ["faceplate-backdrop", "disc-molded-plane", "disc-screw-set", "disc-segment-bars"], "PocketDiscFaceplate@2x.png", ["PocketDiscFaceplate@2x.png"]),
+        ("Aqua Vista", "aqua-vista", "aquaPod", "bubbleCapsule", "capsule448x304", ["#C9EFF8", "#78C4E3", "#198D74", "#C74654"], ["systemRounded", "systemDefault"], "original-generated-faceplate", ["faceplate-backdrop", "aqua-color-planes", "aqua-bubble-set", "aqua-glass-highlights"], "AquaVistaFaceplate@2x.png", ["AquaVistaFaceplate@2x.png"])
     ]
     private static let prohibitedAttributions = ["apple", "finder", "platinum", "sony", "minidisc", "walkman", "atrac", "microsoft", "windows", "winamp"]
 
@@ -56,7 +56,7 @@ enum BundledThemeManifestOfflineTests {
             try require(Set(item.fonts).isSubset(of: Set(typography.values)), "\(item.name) typography lost its approved treatment")
             let slots = try validateSlots(manifest, item.name)
             try validateDragRegions(manifest, slots: slots, name: item.name)
-            try validateDecorations(manifest, name: item.name)
+            try validateDecorations(manifest, name: item.name, expectedBackdrop: item.backdrop)
             for attribution in prohibitedAttributions {
                 try require(!manifestTexts[index].lowercased().contains(attribution), "\(item.name) contains barred attribution \(attribution)")
             }
@@ -109,17 +109,23 @@ enum BundledThemeManifestOfflineTests {
         }
     }
 
-    private static func validateDecorations(_ manifest: [String: Any], name: String) throws {
+    private static func validateDecorations(_ manifest: [String: Any], name: String, expectedBackdrop: String?) throws {
         guard let decorations = manifest["decorations"] as? [String: Any] else { throw Failure(description: "\(name) decorations are malformed") }
         try require(Set(decorations.keys) == ["backdrop", "chromeFrame", "displayPlate", "ornaments"], "\(name) decoration keys changed")
-        try require(decorations["backdrop"] is NSNull && decorations["chromeFrame"] is NSNull && decorations["displayPlate"] is NSNull && (decorations["ornaments"] as? [Any])?.isEmpty == true, "\(name) declares unsupported decoration assets")
+        if let expectedBackdrop {
+            try require(decorations["backdrop"] as? String == expectedBackdrop, "\(name) faceplate changed")
+        } else {
+            try require(decorations["backdrop"] is NSNull, "\(name) declares an unexpected faceplate")
+        }
+        try require(decorations["chromeFrame"] is NSNull && decorations["displayPlate"] is NSNull && (decorations["ornaments"] as? [Any])?.isEmpty == true, "\(name) declares unsupported decoration assets")
     }
 
-    private static func validateProvenance(_ record: [String: Any], expected item: (name: String, identifier: String, layout: String, silhouette: String, size: String, palette: [String], fonts: [String], layers: [String])) throws {
+    private static func validateProvenance(_ record: [String: Any], expected item: (name: String, identifier: String, layout: String, silhouette: String, size: String, palette: [String], fonts: [String], source: String, layers: [String], backdrop: String?, assets: [String])) throws {
         try require(Set(record.keys) == themeKeys, "\(item.name) provenance keys changed")
         try require(record["identifier"] as? String == item.identifier && record["displayName"] as? String == item.name, "\(item.name) provenance identity changed")
-        try require(record["source"] as? String == "original-app-drawn", "\(item.name) provenance must be original app drawing")
+        try require(record["source"] as? String == item.source, "\(item.name) provenance source changed")
         try require(record["rendererLayers"] as? [String] == item.layers, "\(item.name) layer provenance changed")
+        try require(record["assetFiles"] as? [String] == item.assets, "\(item.name) asset provenance changed")
         try require(record["fontTokens"] as? [String] == item.fonts, "\(item.name) font provenance changed")
         try require((record["fontFiles"] as? [Any])?.isEmpty == true, "\(item.name) must not carry font binaries")
         try require((record["externalAssetURLs"] as? [Any])?.isEmpty == true, "\(item.name) must not depend on external assets")
