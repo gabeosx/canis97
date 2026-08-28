@@ -43,7 +43,7 @@ jobs:
           VERSION="$(script/validate_release_version.sh "$RELEASE_TAG")"
           test "$(git describe --tags --exact-match HEAD)" = "$RELEASE_TAG"
           git merge-base --is-ancestor HEAD "origin/$DEFAULT_BRANCH"
-          test "$(xcodebuild -version | head -1)" = "Xcode 26.6"
+          test "$(xcodebuild -version | sed -n '1p')" = "Xcode 26.6"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
 
       - name: Validate signing secrets
