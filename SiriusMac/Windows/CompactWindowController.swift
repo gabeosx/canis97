@@ -131,6 +131,71 @@ enum WindowFrameMigration {
     }
 }
 
+/// A small, app-owned restoration payload. It deliberately stores only a
+/// finite top-left origin; package data has no persistence or screen authority.
+struct CompactWindowPositionRecord: Codable, Equatable, Sendable {
+    static let schemaVersion = 1
+    let schemaVersion: Int
+    let x: CGFloat
+    let y: CGFloat
+
+    init(x: CGFloat, y: CGFloat) {
+        schemaVersion = Self.schemaVersion
+        self.x = x
+        self.y = y
+    }
+
+    var isValid: Bool { schemaVersion == Self.schemaVersion && x.isFinite && y.isFinite }
+}
+
+struct CompactWindowPositionStore: Sendable {
+    static let defaultKey = "Canis97.compact.window-position.v1"
+    let key: String
+
+    init(key: String = Self.defaultKey) { self.key = key }
+
+    func load(from defaults: UserDefaults = .standard) -> CompactWindowPositionRecord? {
+        guard let data = defaults.data(forKey: key),
+              let record = try? JSONDecoder().decode(CompactWindowPositionRecord.self, from: data),
+              record.isValid
+        else { return nil }
+        return record
+    }
+
+    func save(_ record: CompactWindowPositionRecord, to defaults: UserDefaults = .standard) {
+        guard record.isValid, let data = try? JSONEncoder().encode(record) else { return }
+        defaults.set(data, forKey: key)
+    }
+
+    func clear(from defaults: UserDefaults = .standard) { defaults.removeObject(forKey: key) }
+}
+
+/// Pure geometry helpers make the compact bridge deterministic and testable
+/// without creating an AppKit window or trusting package-supplied dimensions.
+enum CompactWindowGeometry {
+    static func frame(size: CGSize, preservingTopLeft topLeft: CGPoint) -> CGRect {
+        CGRect(x: topLeft.x, y: topLeft.y - size.height, width: size.width, height: size.height)
+    }
+
+    static func topLeft(of frame: CGRect) -> CGPoint { CGPoint(x: frame.minX, y: frame.maxY) }
+
+    static func containingScreen(for topLeft: CGPoint, screens: [CGRect]) -> CGRect? {
+        screens.first { $0.contains(topLeft) }
+    }
+
+    static func clamped(_ frame: CGRect, to visibleFrame: CGRect) -> CGRect {
+        guard frame.width <= visibleFrame.width, frame.height <= visibleFrame.height else {
+            return CGRect(origin: CGPoint(x: visibleFrame.midX - frame.width / 2, y: visibleFrame.midY - frame.height / 2), size: frame.size)
+        }
+        return CGRect(
+            x: min(max(frame.minX, visibleFrame.minX), visibleFrame.maxX - frame.width),
+            y: min(max(frame.minY, visibleFrame.minY), visibleFrame.maxY - frame.height),
+            width: frame.width,
+            height: frame.height
+        )
+    }
+}
+
 /// A role-scoped AppKit adapter. It never owns playback, app session state,
 /// window delegates, or non-window preference data.
 @MainActor
@@ -139,14 +204,21 @@ final class CompactWindowController {
     private let restoresPersistedFrame: Bool
     private var closeObserver: NSObjectProtocol?
     private weak var attachedWindow: NSWindow?
+    private let positionStore: CompactWindowPositionStore
+    private let restoreNativeAppearance: @MainActor () -> Void
+    private var hasRestoredCompactPosition = false
 
     init(
         role: WindowRole,
         terminator: any ApplicationTerminating = NSApplicationTerminator(),
-        restoresPersistedFrame: Bool = true
+        restoresPersistedFrame: Bool = true,
+        positionStore: CompactWindowPositionStore = .init(),
+        restoreNativeAppearance: @escaping @MainActor () -> Void = {}
     ) {
         policy = WindowLifecyclePolicy(role: role, terminator: terminator)
         self.restoresPersistedFrame = restoresPersistedFrame
+        self.positionStore = positionStore
+        self.restoreNativeAppearance = restoreNativeAppearance
     }
 
     deinit {
@@ -188,7 +260,48 @@ final class CompactWindowController {
         window.titlebarAppearsTransparent = true
         window.contentMinSize = size
         window.contentMaxSize = size
-        window.setContentSize(size)
+        if !applyCompactFrame(window, contentSize: size) {
+            let nativeSize = CompactSkinSizeVariant.legacy400x288.contentSize
+            window.contentMinSize = nativeSize
+            window.contentMaxSize = nativeSize
+            _ = applyCompactFrame(window, contentSize: nativeSize)
+        }
+    }
+
+    @discardableResult
+    private func applyCompactFrame(_ window: NSWindow, contentSize: CGSize) -> Bool {
+        let visibleFrames = NSScreen.screens.map(\.visibleFrame)
+        guard !visibleFrames.isEmpty else {
+            window.setContentSize(contentSize)
+            return true
+        }
+        var topLeft = CompactWindowGeometry.topLeft(of: window.frame)
+        if !hasRestoredCompactPosition {
+            hasRestoredCompactPosition = true
+            let defaults = UserDefaults.standard
+            if defaults.object(forKey: positionStore.key) != nil {
+                guard let record = positionStore.load(from: defaults),
+                      CompactWindowGeometry.containingScreen(for: CGPoint(x: record.x, y: record.y), screens: visibleFrames) != nil
+                else {
+                    positionStore.clear(from: defaults)
+                    restoreNativeAppearance()
+                    return false
+                }
+                topLeft = CGPoint(x: record.x, y: record.y)
+            } else if !restoresPersistedFrame {
+                center(window)
+                topLeft = CompactWindowGeometry.topLeft(of: window.frame)
+            }
+        }
+        let frameSize = window.frameRect(forContentRect: NSRect(origin: .zero, size: contentSize)).size
+        let preferred = CompactWindowGeometry.frame(size: frameSize, preservingTopLeft: topLeft)
+        let visible = CompactWindowGeometry.containingScreen(for: topLeft, screens: visibleFrames)
+            ?? window.screen?.visibleFrame
+            ?? visibleFrames[0]
+        let clamped = CompactWindowGeometry.clamped(preferred, to: visible)
+        window.setFrame(clamped, display: false)
+        positionStore.save(.init(x: clamped.minX, y: clamped.maxY))
+        return true
     }
 
     private func configure(_ window: NSWindow) {
@@ -313,9 +426,14 @@ struct WindowAttachmentView: NSViewRepresentable {
     var appearance: ValidatedSkinAppearance = .native
     var restoresPersistedFrame = true
     var contentRegionAccessibilityIdentifier: String? = nil
+    var restoreNativeAppearance: @MainActor () -> Void = {}
 
     func makeCoordinator() -> CompactWindowController {
-        CompactWindowController(role: role, restoresPersistedFrame: restoresPersistedFrame)
+        CompactWindowController(
+            role: role,
+            restoresPersistedFrame: restoresPersistedFrame,
+            restoreNativeAppearance: restoreNativeAppearance
+        )
     }
 
     func makeNSView(context: Context) -> NSView {

@@ -204,7 +204,10 @@ private struct CompactListeningSlice: View {
             WindowAttachmentView(
                 role: .compact,
                 alwaysOnTop: controller.libraryStore.alwaysOnTop,
-                appearance: appearanceController.selectedAppearance
+                appearance: appearanceController.selectedAppearance,
+                restoreNativeAppearance: {
+                    Task { await appearanceController.restoreNativeAppearance() }
+                }
             )
         )
         .onChange(of: current, initial: true) { _, next in
