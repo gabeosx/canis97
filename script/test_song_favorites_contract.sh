@@ -46,7 +46,10 @@ check_persistence() {
   require_text "$STORE_TESTS" 'testSongFavoritesDeduplicateAndReload'
   require_text "$STORE_TESTS" 'testSongFavoriteFallbackDoesNotPublishAnEphemeralSavedState'
   require_text "$CONTROLLER_TESTS" 'FavoriteSongRecord.self'
-  [[ "$(rg -F -c 'FavoriteSongRecord.self' "$STORE_SOURCE" "$HARNESS_SOURCE" "$STORE_TESTS" "$CONTROLLER_TESTS" | awk -F: '{ total += $NF } END { print total + 0 }')" -ge 8 ]] || fail 'every production, review, and focused-test ModelContainer must register FavoriteSongRecord'
+  local container_count song_record_count
+  container_count="$(rg -F 'ModelContainer(' "$STORE_SOURCE" "$HARNESS_SOURCE" "$STORE_TESTS" "$CONTROLLER_TESTS" | wc -l | tr -d ' ')"
+  song_record_count="$(rg -F 'FavoriteSongRecord.self' "$STORE_SOURCE" "$HARNESS_SOURCE" "$STORE_TESTS" "$CONTROLLER_TESTS" | wc -l | tr -d ' ')"
+  [[ "$song_record_count" -ge "$container_count" ]] || fail 'every production, review, and focused-test ModelContainer must register FavoriteSongRecord'
   require_text "$STORE_SOURCE" 'return lhs.identity.normalizedArtist < rhs.identity.normalizedArtist'
   require_text "$STORE_SOURCE" 'return lhs.identity.normalizedTitle < rhs.identity.normalizedTitle'
   ! rg -n 'PlaybackQueue|SystemMedia|NowPlaying|tune\(' "$MODEL_SOURCE" >/dev/null || fail 'song model acquired playback authority'

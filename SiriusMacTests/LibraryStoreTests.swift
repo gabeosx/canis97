@@ -10,6 +10,7 @@ final class LibraryStoreTests: XCTestCase {
         let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
         let fallback = try ModelContainer(
             for: FavoriteRecord.self,
+            FavoriteSongRecord.self,
             RecentRecord.self,
             PlayerPreferenceRecord.self,
             configurations: configuration
@@ -116,6 +117,7 @@ final class LibraryStoreTests: XCTestCase {
         let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
         let container = try ModelContainer(
             for: FavoriteRecord.self,
+            FavoriteSongRecord.self,
             RecentRecord.self,
             PlayerPreferenceRecord.self,
             configurations: configuration
@@ -173,14 +175,96 @@ final class LibraryStoreTests: XCTestCase {
 
     func testDurableModelsExposeOnlyTheDeclaredSafeAllowList() {
         XCTAssertEqual(FavoriteRecord.persistedPropertyNames, ["channelID", "name", "displayNumber", "category"])
+        XCTAssertEqual(FavoriteSongRecord.persistedPropertyNames, [
+            "storageKey", "normalizedTitle", "normalizedArtist", "title", "artist",
+            "albumName", "sourceChannelID", "sourceChannelName",
+            "sourceChannelDisplayNumber", "savedAt",
+        ])
         XCTAssertEqual(RecentRecord.persistedPropertyNames, ["channelID", "name", "displayNumber", "category", "rank", "confirmedAt"])
         XCTAssertEqual(PlayerPreferenceRecord.persistedPropertyNames, ["selectedTab", "compactWindowAlwaysOnTop", "compactFrameAutosaveName", "libraryFrameAutosaveName"])
+    }
+
+    func testSongFavoritesDeduplicateAndReload() throws {
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(
+            for: FavoriteRecord.self,
+            FavoriteSongRecord.self,
+            RecentRecord.self,
+            PlayerPreferenceRecord.self,
+            configurations: configuration
+        )
+        let firstStore = LibraryStore(modelContainer: container)
+        let original = song(
+            title: "  Song\tTitle  ",
+            artist: "  Artist  Name  ",
+            sourceID: "source-one",
+            sourceName: "One",
+            savedAt: Date(timeIntervalSince1970: 10)
+        )
+        let refreshed = song(
+            title: "song title",
+            artist: "artist name",
+            albumName: "Verified Album",
+            sourceID: "source-two",
+            sourceName: "Two",
+            savedAt: Date(timeIntervalSince1970: 20)
+        )
+
+        XCTAssertEqual(firstStore.setSongFavorite(original, isFavorite: true), .saved)
+        XCTAssertEqual(firstStore.setSongFavorite(refreshed, isFavorite: true), .saved)
+        XCTAssertEqual(try firstStore.favoriteSongRecordCount(for: original.identity), 1)
+        XCTAssertEqual(firstStore.favoriteSongs.count, 1)
+        XCTAssertEqual(firstStore.favoriteSongs[0].savedAt, original.savedAt)
+
+        let reopenedStore = LibraryStore(modelContainer: container)
+        XCTAssertEqual(reopenedStore.favoriteSongs.count, 1)
+        XCTAssertEqual(reopenedStore.favoriteSongs[0].identity, original.identity)
+        XCTAssertEqual(reopenedStore.favoriteSongs[0].title, "song title")
+        XCTAssertEqual(reopenedStore.favoriteSongs[0].artist, "artist name")
+        XCTAssertEqual(reopenedStore.favoriteSongs[0].albumName, "Verified Album")
+        XCTAssertEqual(reopenedStore.favoriteSongs[0].sourceChannel.rawIdentity, "source-two")
+        XCTAssertEqual(reopenedStore.favoriteSongs[0].savedAt, original.savedAt)
+    }
+
+    func testSongFavoriteRemovalIsIdempotentAndSeparateFromChannelFavorites() throws {
+        let store = try makeStore()
+        let channelFavorite = channel("fixture-channel-favorite")
+        let savedSong = song()
+        store.setFavorite(channelFavorite, isFavorite: true)
+        XCTAssertEqual(store.setSongFavorite(savedSong, isFavorite: true), .saved)
+
+        XCTAssertEqual(store.setSongFavorite(savedSong, isFavorite: false), .removed)
+        XCTAssertEqual(store.setSongFavorite(savedSong, isFavorite: false), .removed)
+        XCTAssertTrue(store.favoriteSongs.isEmpty)
+        XCTAssertEqual(try store.favoriteSongRecordCount(for: savedSong.identity), 0)
+        XCTAssertTrue(store.isFavorite(channelFavorite.id))
+    }
+
+    func testSongFavoriteFallbackDoesNotPublishAnEphemeralSavedState() throws {
+        enum PersistentContainerError: Error { case unavailable }
+        let fallback = try ModelContainer(
+            for: FavoriteRecord.self,
+            FavoriteSongRecord.self,
+            RecentRecord.self,
+            PlayerPreferenceRecord.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        let setup = LibraryStore.makeDefaultContainer(
+            persistentContainer: { throw PersistentContainerError.unavailable },
+            fallbackContainer: { fallback }
+        )
+        let store = LibraryStore(modelContainer: setup.container, persistence: setup.persistence)
+
+        XCTAssertEqual(store.setSongFavorite(song(), isFavorite: true), .failed)
+        XCTAssertTrue(store.favoriteSongs.isEmpty)
+        XCTAssertTrue(store.lastSaveFailed)
     }
 
     private func makeStore() throws -> LibraryStore {
         let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
         let container = try ModelContainer(
             for: FavoriteRecord.self,
+            FavoriteSongRecord.self,
             RecentRecord.self,
             PlayerPreferenceRecord.self,
             configurations: configuration
@@ -195,6 +279,28 @@ final class LibraryStoreTests: XCTestCase {
             displayNumber: 42,
             category: "Test"
         )
+    }
+
+    private func song(
+        title: String = "Fixture Song",
+        artist: String = "Fixture Artist",
+        albumName: String? = nil,
+        sourceID: String = "fixture-source",
+        sourceName: String? = "Fixture Channel",
+        savedAt: Date = Date(timeIntervalSince1970: 1)
+    ) -> FavoriteSongSnapshot {
+        let source = FavoriteSongSourceChannel(
+            rawIdentity: sourceID,
+            name: sourceName,
+            displayNumber: 42
+        )!
+        return FavoriteSongSnapshot(
+            title: title,
+            artist: artist,
+            albumName: albumName,
+            sourceChannel: source,
+            savedAt: savedAt
+        )!
     }
 }
 

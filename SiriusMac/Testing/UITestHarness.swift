@@ -31,6 +31,7 @@ final class OfflineReviewHarness {
         reviewAppearance = OfflineReviewAppearanceFixture(environment: environment)
         guard let container = try? ModelContainer(
             for: FavoriteRecord.self,
+            FavoriteSongRecord.self,
             RecentRecord.self,
             PlayerPreferenceRecord.self,
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)

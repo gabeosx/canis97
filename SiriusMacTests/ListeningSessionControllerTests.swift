@@ -227,6 +227,7 @@ final class WindowLifecyclePolicyTests: XCTestCase {
     private func makePreferenceContainer() throws -> ModelContainer {
         try ModelContainer(
             for: FavoriteRecord.self,
+            FavoriteSongRecord.self,
             RecentRecord.self,
             PlayerPreferenceRecord.self,
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
@@ -1101,6 +1102,7 @@ final class ListeningSessionControllerTests: XCTestCase {
     private func makeLibraryStore() throws -> LibraryStore {
         let container = try ModelContainer(
             for: FavoriteRecord.self,
+            FavoriteSongRecord.self,
             RecentRecord.self,
             PlayerPreferenceRecord.self,
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
