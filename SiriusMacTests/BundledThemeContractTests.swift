@@ -27,6 +27,8 @@ final class BundledThemeContractTests: XCTestCase {
         )
         XCTAssertEqual(appearances[1].layoutPlan.slotFrames[.transport], .init(x: 200, y: 112, width: 136, height: 56))
         XCTAssertEqual(appearances[2].layoutPlan.slotFrames[.transport], .init(x: 188, y: 216, width: 176, height: 56))
+        XCTAssertEqual(appearances[1].layoutPlan.slotFrames[.channelIdentity], .init(x: 140, y: 32, width: 160, height: 24))
+        XCTAssertEqual(appearances[1].layoutPlan.slotFrames[.metadata], .init(x: 136, y: 56, width: 168, height: 48))
         XCTAssertEqual(appearances[1].layoutPlan.slotFrames[.status], .init(x: 32, y: 116, width: 88, height: 32))
         XCTAssertEqual(appearances[1].layoutPlan.slotFrames[.library], .init(x: 28, y: 252, width: 88, height: 40))
         XCTAssertEqual(appearances[1].layoutPlan.slotFrames[.overflowMenu], .init(x: 308, y: 252, width: 40, height: 40))
@@ -52,7 +54,9 @@ final class BundledThemeContractTests: XCTestCase {
         XCTAssertTrue(source.contains("expressiveTransportControlCenters"))
         XCTAssertTrue(source.contains("FaceplateGlyphView"))
         XCTAssertTrue(source.contains("BoundedMarqueeText"))
+        XCTAssertTrue(source.contains(".compositingGroup()"))
         XCTAssertTrue(source.contains("TimelineView(.animation"))
+        XCTAssertEqual(source.components(separatedBy: "TimelineView(.animation").count - 1, 1)
         XCTAssertTrue(source.contains("menuIndicator(.hidden)"))
         XCTAssertFalse(source.contains("switch appearance.reference.classification"))
         for identifier in ["compact.favorite", "compact.transport.previous", "compact.transport.play-pause", "compact.transport.next", "compact.show-library", "compact.always-on-top", "compact.sign-out"] {

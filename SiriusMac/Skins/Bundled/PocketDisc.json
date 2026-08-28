@@ -17,8 +17,8 @@
   },
   "slots": [
     { "semantic": "artwork", "frame": { "x": 32, "y": 28, "width": 88, "height": 88 } },
-    { "semantic": "channelIdentity", "frame": { "x": 140, "y": 32, "width": 160, "height": 32 } },
-    { "semantic": "metadata", "frame": { "x": 136, "y": 64, "width": 168, "height": 48 } },
+    { "semantic": "channelIdentity", "frame": { "x": 140, "y": 32, "width": 160, "height": 24 } },
+    { "semantic": "metadata", "frame": { "x": 136, "y": 56, "width": 168, "height": 48 } },
     { "semantic": "favorite", "frame": { "x": 312, "y": 28, "width": 40, "height": 40 } },
     { "semantic": "status", "frame": { "x": 32, "y": 116, "width": 88, "height": 32 } },
     { "semantic": "transport", "frame": { "x": 200, "y": 112, "width": 136, "height": 56 } },

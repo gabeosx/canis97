@@ -10,6 +10,7 @@ struct CompactPlayerView: View {
     let onAppearanceRecovery: @MainActor () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showsNativeAppearanceRecoveryStatus = false
+    @State private var marqueeCycleOrigin = Date.now
 
     private var renderingAppearance: ValidatedSkinAppearance {
         appearance.renderableAppearance { NSImage(contentsOf: $0) != nil }
@@ -42,23 +43,25 @@ struct CompactPlayerView: View {
     }
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            decorativeImage(at: renderingAppearance.backgroundAssetURL)
-            expressiveFaceplateLayer
-            if !hasExpressiveFaceplate {
-                appOwnedDecorativeSurfaces
-            }
-            if renderingAppearance.layoutPlan.isLegacy {
-                VStack(alignment: .leading, spacing: style.sectionSpacing) {
-                    if let channel = presentation.channelIdentity {
-                        populatedContent(channel)
-                    } else {
-                        emptyContent
-                    }
+        TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: reduceMotion)) { timeline in
+            ZStack(alignment: .topLeading) {
+                decorativeImage(at: renderingAppearance.backgroundAssetURL)
+                expressiveFaceplateLayer
+                if !hasExpressiveFaceplate {
+                    appOwnedDecorativeSurfaces
                 }
-                .padding(style.padding)
-            } else {
-                expressiveContent
+                if renderingAppearance.layoutPlan.isLegacy {
+                    VStack(alignment: .leading, spacing: style.sectionSpacing) {
+                        if let channel = presentation.channelIdentity {
+                            populatedContent(channel, at: timeline.date)
+                        } else {
+                            emptyContent(at: timeline.date)
+                        }
+                    }
+                    .padding(style.padding)
+                } else {
+                    expressiveContent(at: timeline.date)
+                }
             }
         }
         .frame(width: style.contentSize.width, height: style.contentSize.height, alignment: .topLeading)
@@ -89,9 +92,24 @@ struct CompactPlayerView: View {
             onAppearanceRecovery()
         }
         .onChange(of: appearance.reference) { _, reference in
+            marqueeCycleOrigin = .now
             guard reference != .native, !needsNativeAppearanceRecovery else { return }
             showsNativeAppearanceRecoveryStatus = false
         }
+        .onChange(of: marqueeContentIdentity) { _, _ in
+            marqueeCycleOrigin = .now
+        }
+    }
+
+    private var marqueeContentIdentity: String {
+        [
+            presentation.channelIdentity?.displayText,
+            presentation.primaryMetadata,
+            presentation.secondaryMetadata,
+            presentation.emptyBody,
+        ]
+        .compactMap { $0 }
+        .joined(separator: "\u{1F}")
     }
 
     /// Generated faceplates already draw their own device silhouette. This
@@ -115,7 +133,7 @@ struct CompactPlayerView: View {
     /// The semantic registry is fixed in this source order. Schema-v3 supplies
     /// only prevalidated frames; it never creates a control or carries action,
     /// help, accessibility, keyboard, or playback authority.
-    private var expressiveContent: some View {
+    private func expressiveContent(at marqueeDate: Date) -> some View {
         let plan = renderingAppearance.layoutPlan
         return ZStack(alignment: .topLeading) {
             if !hasExpressiveFaceplate {
@@ -126,7 +144,9 @@ struct CompactPlayerView: View {
                 let channelText = presentation.channelIdentity?.displayText ?? "Nothing Playing"
                 BoundedMarqueeText(
                     channelText,
-                    font: skinFont(plan.typography.display, size: 18, weight: .semibold)
+                    font: skinFont(plan.typography.display, size: 18, weight: .semibold),
+                    timestamp: marqueeDate,
+                    cycleOrigin: marqueeCycleOrigin
                 )
                     .padding(.horizontal, 8)
                     .padding(.vertical, 2)
@@ -136,9 +156,9 @@ struct CompactPlayerView: View {
                     .accessibilityLabel("Channel \(channelText)")
                     .accessibilityValue(channelText)
             }
-            expressiveSlot(.metadata) { metadata }
+            expressiveSlot(.metadata) { metadata(at: marqueeDate) }
             expressiveSlot(.favorite) { favoriteButton }
-            expressiveSlot(.status) { statusAndRecovery }
+            expressiveSlot(.status) { statusAndRecovery(at: marqueeDate) }
             expressiveSlot(.transport) { transport }
             expressiveSlot(.library) { libraryButton }
             expressiveSlot(.overflowMenu) { overflowMenu }
@@ -191,7 +211,7 @@ struct CompactPlayerView: View {
     }
 
     @ViewBuilder
-    private func populatedContent(_ channel: CompactPlayerPresentation.ChannelIdentity) -> some View {
+    private func populatedContent(_ channel: CompactPlayerPresentation.ChannelIdentity, at marqueeDate: Date) -> some View {
         ZStack {
             decorativeImage(at: renderingAppearance.metadataPanelAssetURL)
             HStack(alignment: .top, spacing: 8) {
@@ -217,14 +237,14 @@ struct CompactPlayerView: View {
                         .accessibilityValue(presentation.isFavorite ? "Favorite" : "Not favorite")
                         .accessibilitySortPriority(40)
                     }
-                    metadata
+                    metadata(at: marqueeDate)
                 }
             }
             .padding(4)
         }
         .background(surfaceBackground(.metadata))
         .clipShape(.rect(cornerRadius: renderingAppearance.cornerRadius))
-        statusAndRecovery
+        statusAndRecovery(at: marqueeDate)
         transport
         footer
     }
@@ -275,12 +295,14 @@ struct CompactPlayerView: View {
     }
 
     @ViewBuilder
-    private var metadata: some View {
+    private func metadata(at marqueeDate: Date) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             if let primary = presentation.primaryMetadata {
                 BoundedMarqueeText(
                     primary,
-                    font: skinFont(renderingAppearance.layoutPlan.typography.body, size: 14, weight: .semibold)
+                    font: skinFont(renderingAppearance.layoutPlan.typography.body, size: 14, weight: .semibold),
+                    timestamp: marqueeDate,
+                    cycleOrigin: marqueeCycleOrigin
                 )
                     .frame(height: 17)
                     .help(primary)
@@ -292,7 +314,9 @@ struct CompactPlayerView: View {
                 BoundedMarqueeText(
                     secondary,
                     font: skinFont(renderingAppearance.layoutPlan.typography.body, size: 13),
-                    tone: .secondary
+                    tone: .secondary,
+                    timestamp: marqueeDate,
+                    cycleOrigin: marqueeCycleOrigin
                 )
                     .frame(height: 16)
                     .help(secondary)
@@ -308,7 +332,7 @@ struct CompactPlayerView: View {
     }
 
     @ViewBuilder
-    private var statusAndRecovery: some View {
+    private func statusAndRecovery(at marqueeDate: Date) -> some View {
         VStack(alignment: hasExpressiveFaceplate ? .center : .leading, spacing: 2) {
             if let status = presentation.status {
                 playbackStatus(status)
@@ -317,7 +341,9 @@ struct CompactPlayerView: View {
                     BoundedMarqueeText(
                         emptyBody,
                         font: skinFont(renderingAppearance.layoutPlan.typography.label, size: 12, weight: .medium),
-                        tone: .secondary
+                        tone: .secondary,
+                        timestamp: marqueeDate,
+                        cycleOrigin: marqueeCycleOrigin
                     )
                     .frame(height: 16)
                     .help(emptyBody)
@@ -577,7 +603,7 @@ struct CompactPlayerView: View {
         }
     }
 
-    private var emptyContent: some View {
+    private func emptyContent(at marqueeDate: Date) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             Spacer()
             Text(presentation.emptyTitle ?? "Nothing Playing")
@@ -594,7 +620,7 @@ struct CompactPlayerView: View {
                     .accessibilityLabel(emptyBody)
                     .accessibilityValue(emptyBody)
             }
-            statusAndRecovery
+            statusAndRecovery(at: marqueeDate)
             Button(presentation.emptyLibraryButtonTitle ?? "Show Library") { onAction(.showLibrary) }
                 .accessibilityIdentifier("compact.show-library")
                 .accessibilityLabel("Show Library")
@@ -837,14 +863,23 @@ private struct BoundedMarqueeText: View {
     let text: String
     let font: Font
     let tone: MarqueeTextTone
+    let timestamp: Date
+    let cycleOrigin: Date
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var measuredTextWidth: CGFloat = 0
-    @State private var cycleOrigin = Date.now
 
-    init(_ text: String, font: Font, tone: MarqueeTextTone = .primary) {
+    init(
+        _ text: String,
+        font: Font,
+        tone: MarqueeTextTone = .primary,
+        timestamp: Date,
+        cycleOrigin: Date
+    ) {
         self.text = text
         self.font = font
         self.tone = tone
+        self.timestamp = timestamp
+        self.cycleOrigin = cycleOrigin
     }
 
     var body: some View {
@@ -854,13 +889,12 @@ private struct BoundedMarqueeText: View {
 
             ZStack(alignment: .leading) {
                 if overflows && !reduceMotion {
-                    TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
-                        HStack(spacing: Self.gap) {
-                            fixedText
-                            fixedText.accessibilityHidden(true)
-                        }
-                        .offset(x: marqueeOffset(at: timeline.date))
+                    HStack(spacing: Self.gap) {
+                        fixedText
+                        fixedText.accessibilityHidden(true)
                     }
+                    .compositingGroup()
+                    .offset(x: marqueeOffset(textWidth: measuredTextWidth))
                 } else if overflows {
                     Text(text)
                         .font(font)
@@ -886,10 +920,6 @@ private struct BoundedMarqueeText: View {
             .clipped()
         }
         .onPreferenceChange(MarqueeTextWidthKey.self) { measuredTextWidth = $0 }
-        .onChange(of: text) { _, _ in
-            measuredTextWidth = 0
-            cycleOrigin = .now
-        }
     }
 
     private var fixedText: some View {
@@ -900,12 +930,12 @@ private struct BoundedMarqueeText: View {
             .fixedSize(horizontal: true, vertical: true)
     }
 
-    private func marqueeOffset(at date: Date) -> CGFloat {
-        let travelDistance = measuredTextWidth + Self.gap
+    private func marqueeOffset(textWidth: CGFloat) -> CGFloat {
+        let travelDistance = textWidth + Self.gap
         guard travelDistance > 0 else { return 0 }
         let travelDuration = TimeInterval(travelDistance / Self.speed)
         let cycleDuration = Self.leadingPause + travelDuration
-        let elapsed = max(0, date.timeIntervalSince(cycleOrigin)).truncatingRemainder(dividingBy: cycleDuration)
+        let elapsed = max(0, timestamp.timeIntervalSince(cycleOrigin)).truncatingRemainder(dividingBy: cycleDuration)
         guard elapsed > Self.leadingPause else { return 0 }
         return -min(travelDistance, CGFloat(elapsed - Self.leadingPause) * Self.speed)
     }
