@@ -124,12 +124,10 @@ struct CompactPlayerView: View {
             expressiveSlot(.artwork) { artwork }
             expressiveSlot(.channelIdentity) {
                 let channelText = presentation.channelIdentity?.displayText ?? "Nothing Playing"
-                Text(channelText)
-                    .font(skinFont(plan.typography.display, size: 18, weight: .semibold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.72)
-                    .allowsTightening(true)
-                    .truncationMode(.tail)
+                BoundedMarqueeText(
+                    channelText,
+                    font: skinFont(plan.typography.display, size: 18, weight: .semibold)
+                )
                     .padding(.horizontal, 8)
                     .padding(.vertical, 2)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
@@ -163,7 +161,6 @@ struct CompactPlayerView: View {
         @ViewBuilder content: () -> Content
     ) -> some View {
         guard let frame = renderingAppearance.layoutPlan.slotFrames[slot] else { return AnyView(EmptyView()) }
-        let opticalOffset = expressiveSlotOpticalOffset(slot)
         return AnyView(
             content()
                 .frame(
@@ -172,8 +169,8 @@ struct CompactPlayerView: View {
                     alignment: expressiveSlotAlignment(slot)
                 )
                 .offset(
-                    x: CGFloat(frame.x) + opticalOffset.width,
-                    y: CGFloat(frame.y) + opticalOffset.height
+                    x: CGFloat(frame.x),
+                    y: CGFloat(frame.y)
                 )
         )
     }
@@ -182,18 +179,6 @@ struct CompactPlayerView: View {
         switch slot {
         case .channelIdentity, .metadata: .topLeading
         case .artwork, .favorite, .status, .transport, .library, .overflowMenu: .center
-        }
-    }
-
-    /// Small optical corrections align semantic hit regions with asymmetric
-    /// illustrated wells without changing their validated target sizes.
-    private func expressiveSlotOpticalOffset(_ slot: CompactSkinSemanticSlot) -> CGSize {
-        guard renderingAppearance.layoutPlan.layoutVariant == .discConsole else { return .zero }
-        return switch slot {
-        case .status: CGSize(width: 8, height: 0)
-        case .library: CGSize(width: -6, height: 0)
-        case .overflowMenu: CGSize(width: -12, height: 0)
-        default: .zero
         }
     }
 
@@ -267,9 +252,16 @@ struct CompactPlayerView: View {
 
     private var favoriteButton: some View {
         Button(action: { onAction(.toggleFavorite) }) {
-            Image(systemName: presentation.isFavorite ? "star.fill" : "star")
-                .frame(width: CompactPlayerPresentation.transportControlSize, height: CompactPlayerPresentation.transportControlSize)
-                .contentShape(.rect)
+            if hasExpressiveFaceplate {
+                FaceplateGlyphView(glyph: .favorite, isFilled: presentation.isFavorite)
+                    .frame(width: 15, height: 15)
+                    .frame(width: CompactPlayerPresentation.transportControlSize, height: CompactPlayerPresentation.transportControlSize)
+                    .contentShape(.rect)
+            } else {
+                Image(systemName: presentation.isFavorite ? "star.fill" : "star")
+                    .frame(width: CompactPlayerPresentation.transportControlSize, height: CompactPlayerPresentation.transportControlSize)
+                    .contentShape(.rect)
+            }
         }
         .buttonStyle(.plain)
         .foregroundStyle(presentation.isFavorite ? Color(hex: style.accentHex) : .secondary)
@@ -286,25 +278,23 @@ struct CompactPlayerView: View {
     private var metadata: some View {
         VStack(alignment: .leading, spacing: 2) {
             if let primary = presentation.primaryMetadata {
-                Text(primary)
-                    .font(skinFont(renderingAppearance.layoutPlan.typography.body, size: 14, weight: .semibold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.78)
-                    .allowsTightening(true)
-                    .truncationMode(.tail)
+                BoundedMarqueeText(
+                    primary,
+                    font: skinFont(renderingAppearance.layoutPlan.typography.body, size: 14, weight: .semibold)
+                )
+                    .frame(height: 17)
                     .help(primary)
                     .accessibilityLabel("Current program: \(primary)")
                     .accessibilityValue(primary)
                     .accessibilitySortPriority(55)
             }
             if let secondary = presentation.secondaryMetadata {
-                Text(secondary)
-                    .font(skinFont(renderingAppearance.layoutPlan.typography.body, size: 13))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.78)
-                    .allowsTightening(true)
-                    .truncationMode(.tail)
+                BoundedMarqueeText(
+                    secondary,
+                    font: skinFont(renderingAppearance.layoutPlan.typography.body, size: 13),
+                    tone: .secondary
+                )
+                    .frame(height: 16)
                     .help(secondary)
                     .accessibilityLabel("Artist: \(secondary)")
                     .accessibilityValue(secondary)
@@ -319,66 +309,101 @@ struct CompactPlayerView: View {
 
     @ViewBuilder
     private var statusAndRecovery: some View {
-        if let status = presentation.status {
-            let surface = statusSurface(for: status)
-            HStack(spacing: 4) {
-                switch status {
-                case .pending:
-                    ProgressView().controlSize(.small)
-                    Text("Loading playback")
-                case .playing:
-                    Label("Playing", systemImage: "play.fill")
-                case .paused:
-                    Label("Paused", systemImage: "pause.fill")
-                case .stopped:
-                    Label("Stopped", systemImage: "stop.fill")
-                case let .unavailable(recovery):
-                    Text("Playback couldn’t start.")
-                    Button(recovery.title) { onAction(recovery.compactAction) }
+        VStack(alignment: hasExpressiveFaceplate ? .center : .leading, spacing: 2) {
+            if let status = presentation.status {
+                playbackStatus(status)
+            } else if let emptyBody = presentation.emptyBody {
+                if hasExpressiveFaceplate {
+                    BoundedMarqueeText(
+                        emptyBody,
+                        font: skinFont(renderingAppearance.layoutPlan.typography.label, size: 12, weight: .medium),
+                        tone: .secondary
+                    )
+                    .frame(height: 16)
+                    .help(emptyBody)
+                    .accessibilityLabel(emptyBody)
+                    .accessibilityValue(emptyBody)
+                    .accessibilityIdentifier("compact.status")
+                    .accessibilitySortPriority(50)
+                } else {
+                    Text(emptyBody)
+                        .font(skinFont(renderingAppearance.layoutPlan.typography.label, size: 12, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .truncationMode(.tail)
+                        .help(emptyBody)
+                        .accessibilityLabel(emptyBody)
+                        .accessibilityValue(emptyBody)
+                        .accessibilityIdentifier("compact.status")
+                        .accessibilitySortPriority(50)
                 }
             }
-            .font(skinFont(renderingAppearance.layoutPlan.typography.label, size: 12, weight: .medium))
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
-            .minimumScaleFactor(0.8)
-            .allowsTightening(true)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 3)
-            .frame(
-                maxWidth: .infinity,
-                maxHeight: .infinity,
-                alignment: hasExpressiveFaceplate ? .center : .leading
-            )
-            .multilineTextAlignment(hasExpressiveFaceplate ? .center : .leading)
-            .background(surfaceBackground(surface).opacity(hasExpressiveFaceplate ? 0 : 1))
-            .tint(surfaceTint(surface))
-            .accessibilityValue(status.accessibilityValue)
-            .accessibilityIdentifier("compact.status")
-            .accessibilitySortPriority(50)
-        } else if let emptyBody = presentation.emptyBody {
-            Text(emptyBody)
-                .font(skinFont(renderingAppearance.layoutPlan.typography.label, size: 12, weight: .medium))
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-                .truncationMode(.tail)
-                .help(emptyBody)
-                .accessibilityLabel(emptyBody)
-                .accessibilityValue(emptyBody)
-                .accessibilityIdentifier("compact.status")
-                .accessibilitySortPriority(50)
+            if needsNativeAppearanceRecovery || showsNativeAppearanceRecoveryStatus {
+                Text("This appearance is unavailable. Native appearance has been restored.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 4)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(surfaceBackground(.criticalState))
+                    .tint(surfaceTint(.criticalState))
+                    .accessibilityIdentifier("compact.appearance-recovery")
+                    .accessibilityLabel("This appearance is unavailable. Native appearance has been restored.")
+                    .accessibilitySortPriority(45)
+            }
         }
-        if needsNativeAppearanceRecovery || showsNativeAppearanceRecoveryStatus {
-            Text("This appearance is unavailable. Native appearance has been restored.")
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 4)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(surfaceBackground(.criticalState))
-                .tint(surfaceTint(.criticalState))
-                .accessibilityIdentifier("compact.appearance-recovery")
-                .accessibilityLabel("This appearance is unavailable. Native appearance has been restored.")
-                .accessibilitySortPriority(45)
+        .frame(
+            maxWidth: .infinity,
+            maxHeight: .infinity,
+            alignment: hasExpressiveFaceplate ? .center : .leading
+        )
+    }
+
+    @ViewBuilder
+    private func playbackStatus(_ status: CompactPlayerPresentation.Status) -> some View {
+        let surface = statusSurface(for: status)
+        HStack(spacing: 4) {
+            switch status {
+            case .pending:
+                ProgressView().controlSize(.small)
+                Text("Loading playback")
+            case .playing:
+                playbackStatusLabel("Playing", glyph: .play, systemImage: "play.fill")
+            case .paused:
+                playbackStatusLabel("Paused", glyph: .pause, systemImage: "pause.fill")
+            case .stopped:
+                playbackStatusLabel("Stopped", glyph: .stop, systemImage: "stop.fill")
+            case let .unavailable(recovery):
+                Text("Playback couldn’t start.")
+                Button(recovery.title) { onAction(recovery.compactAction) }
+            }
+        }
+        .font(skinFont(renderingAppearance.layoutPlan.typography.label, size: 12, weight: .medium))
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
+        .minimumScaleFactor(0.8)
+        .allowsTightening(true)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .fixedSize(horizontal: hasExpressiveFaceplate, vertical: true)
+        .multilineTextAlignment(hasExpressiveFaceplate ? .center : .leading)
+        .background(surfaceBackground(surface).opacity(hasExpressiveFaceplate ? 0 : 1))
+        .tint(surfaceTint(surface))
+        .accessibilityValue(status.accessibilityValue)
+        .accessibilityIdentifier("compact.status")
+        .accessibilitySortPriority(50)
+    }
+
+    @ViewBuilder
+    private func playbackStatusLabel(_ title: String, glyph: FaceplateGlyph, systemImage: String) -> some View {
+        if hasExpressiveFaceplate {
+            HStack(spacing: 4) {
+                FaceplateGlyphView(glyph: glyph)
+                    .frame(width: 9, height: 9)
+                Text(title)
+            }
+        } else {
+            Label(title, systemImage: systemImage)
         }
     }
 
@@ -388,20 +413,20 @@ struct CompactPlayerView: View {
         let playPause = availability?.playPause ?? .play
         if let centers = expressiveTransportControlCenters {
             ZStack(alignment: .topLeading) {
-                transportButton("Previous", systemImage: "backward.fill", enabled: availability?.previousEnabled == true, action: .previous)
+                transportButton("Previous", glyph: .previous, systemImage: "backward.fill", enabled: availability?.previousEnabled == true, action: .previous)
                     .position(centers[0])
-                transportButton(playPause == .pause ? "Pause" : "Play Live", systemImage: playPause == .pause ? "pause.fill" : "play.fill", enabled: availability != nil, action: .playPause)
+                transportButton(playPause == .pause ? "Pause" : "Play Live", glyph: playPause == .pause ? .pause : .play, systemImage: playPause == .pause ? "pause.fill" : "play.fill", enabled: availability != nil, action: .playPause)
                     .position(centers[1])
-                transportButton("Next", systemImage: "forward.fill", enabled: availability?.nextEnabled == true, action: .next)
+                transportButton("Next", glyph: .next, systemImage: "forward.fill", enabled: availability?.nextEnabled == true, action: .next)
                     .position(centers[2])
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .tint(surfaceTint(.interactiveAccent))
         } else {
             HStack(spacing: 8) {
-                transportButton("Previous", systemImage: "backward.fill", enabled: availability?.previousEnabled == true, action: .previous)
-                transportButton(playPause == .pause ? "Pause" : "Play Live", systemImage: playPause == .pause ? "pause.fill" : "play.fill", enabled: availability != nil, action: .playPause)
-                transportButton("Next", systemImage: "forward.fill", enabled: availability?.nextEnabled == true, action: .next)
+                transportButton("Previous", glyph: .previous, systemImage: "backward.fill", enabled: availability?.previousEnabled == true, action: .previous)
+                transportButton(playPause == .pause ? "Pause" : "Play Live", glyph: playPause == .pause ? .pause : .play, systemImage: playPause == .pause ? "pause.fill" : "play.fill", enabled: availability != nil, action: .playPause)
+                transportButton("Next", glyph: .next, systemImage: "forward.fill", enabled: availability?.nextEnabled == true, action: .next)
             }
             .padding(CompactPlayerPresentation.focusClearance)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
@@ -416,20 +441,27 @@ struct CompactPlayerView: View {
     private var expressiveTransportControlCenters: [CGPoint]? {
         switch renderingAppearance.layoutPlan.layoutVariant {
         case .discConsole:
-            [CGPoint(x: 28, y: 28), CGPoint(x: 66, y: 28), CGPoint(x: 104, y: 28)]
+            [CGPoint(x: 30, y: 23), CGPoint(x: 65, y: 23), CGPoint(x: 100, y: 23)]
         case .aquaPod:
-            [CGPoint(x: 36, y: 30), CGPoint(x: 80, y: 30), CGPoint(x: 124, y: 30)]
+            [CGPoint(x: 32, y: 34), CGPoint(x: 80, y: 34), CGPoint(x: 128, y: 34)]
         case .legacyStack, .desktopUtility:
             nil
         }
     }
 
     @ViewBuilder
-    private func transportButton(_ title: String, systemImage: String, enabled: Bool, action: CompactPlayerAction) -> some View {
+    private func transportButton(_ title: String, glyph: FaceplateGlyph, systemImage: String, enabled: Bool, action: CompactPlayerAction) -> some View {
         let button = Button(action: { onAction(action) }) {
-            Image(systemName: systemImage)
-                .frame(width: CompactPlayerPresentation.transportControlSize, height: CompactPlayerPresentation.transportControlSize)
-                .contentShape(.rect)
+            if hasExpressiveFaceplate {
+                FaceplateGlyphView(glyph: glyph)
+                    .frame(width: 14, height: 14)
+                    .frame(width: CompactPlayerPresentation.transportControlSize, height: CompactPlayerPresentation.transportControlSize)
+                    .contentShape(.rect)
+            } else {
+                Image(systemName: systemImage)
+                    .frame(width: CompactPlayerPresentation.transportControlSize, height: CompactPlayerPresentation.transportControlSize)
+                    .contentShape(.rect)
+            }
         }
         .disabled(!enabled)
         .help(title)
@@ -441,6 +473,7 @@ struct CompactPlayerView: View {
 
         if hasExpressiveFaceplate {
             button.buttonStyle(.plain)
+                .foregroundStyle(surfaceTint(.interactiveAccent))
         } else {
             button
         }
@@ -464,7 +497,8 @@ struct CompactPlayerView: View {
             Button {
                 onAction(.showLibrary)
             } label: {
-                Image(systemName: "rectangle.stack")
+                FaceplateGlyphView(glyph: .library)
+                    .frame(width: 15, height: 15)
                     .frame(width: CompactPlayerPresentation.transportControlSize, height: CompactPlayerPresentation.transportControlSize)
                     .contentShape(.rect)
             }
@@ -493,7 +527,8 @@ struct CompactPlayerView: View {
             Menu {
                 overflowMenuActions
             } label: {
-                Image(systemName: "ellipsis")
+                FaceplateGlyphView(glyph: .overflow)
+                    .frame(width: 15, height: 15)
                     .frame(width: CompactPlayerPresentation.transportControlSize, height: CompactPlayerPresentation.transportControlSize)
                     .contentShape(.rect)
                     .accessibilityLabel("More")
@@ -683,6 +718,196 @@ struct CompactPlayerView: View {
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
         }
+    }
+}
+
+/// Expressive skins use app-owned vector ink so the visible glyph centroid is
+/// exactly the same point as the validated 32-point hit target. System-symbol
+/// side bearings remain available to the native layout, where AppKit owns the
+/// surrounding button chrome.
+private enum FaceplateGlyph {
+    case previous
+    case play
+    case pause
+    case stop
+    case next
+    case library
+    case overflow
+    case favorite
+}
+
+private struct FaceplateGlyphView: View {
+    let glyph: FaceplateGlyph
+    var isFilled = true
+
+    var body: some View {
+        Canvas { context, size in
+            let extent = min(size.width, size.height)
+            let center = CGPoint(x: size.width / 2, y: size.height / 2)
+            let strokeWidth = max(1, extent * 0.1)
+
+            func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+                CGPoint(x: center.x + x * extent, y: center.y + y * extent)
+            }
+
+            func triangle(_ points: [CGPoint]) -> Path {
+                var path = Path()
+                path.move(to: points[0])
+                path.addLine(to: points[1])
+                path.addLine(to: points[2])
+                path.closeSubpath()
+                return path
+            }
+
+            switch glyph {
+            case .play:
+                // The triangle's area centroid, rather than its bounding box,
+                // sits on the control center.
+                context.fill(
+                    triangle([point(-0.24, -0.42), point(-0.24, 0.42), point(0.48, 0)]),
+                    with: .foreground
+                )
+            case .previous:
+                context.fill(triangle([point(0.32, -0.40), point(0.32, 0.40), point(-0.04, 0)]), with: .foreground)
+                context.fill(triangle([point(-0.08, -0.40), point(-0.08, 0.40), point(-0.44, 0)]), with: .foreground)
+            case .next:
+                context.fill(triangle([point(-0.32, -0.40), point(-0.32, 0.40), point(0.04, 0)]), with: .foreground)
+                context.fill(triangle([point(0.08, -0.40), point(0.08, 0.40), point(0.44, 0)]), with: .foreground)
+            case .pause:
+                context.fill(Path(roundedRect: CGRect(x: center.x - extent * 0.28, y: center.y - extent * 0.38, width: extent * 0.18, height: extent * 0.76), cornerRadius: extent * 0.05), with: .foreground)
+                context.fill(Path(roundedRect: CGRect(x: center.x + extent * 0.10, y: center.y - extent * 0.38, width: extent * 0.18, height: extent * 0.76), cornerRadius: extent * 0.05), with: .foreground)
+            case .stop:
+                context.fill(Path(roundedRect: CGRect(x: center.x - extent * 0.31, y: center.y - extent * 0.31, width: extent * 0.62, height: extent * 0.62), cornerRadius: extent * 0.08), with: .foreground)
+            case .overflow:
+                for x in [-0.32, 0, 0.32] as [CGFloat] {
+                    context.fill(Path(ellipseIn: CGRect(x: point(x, 0).x - extent * 0.085, y: center.y - extent * 0.085, width: extent * 0.17, height: extent * 0.17)), with: .foreground)
+                }
+            case .library:
+                let upper = Path(roundedRect: CGRect(x: center.x - extent * 0.41, y: center.y - extent * 0.28, width: extent * 0.82, height: extent * 0.26), cornerRadius: extent * 0.07)
+                let lower = Path(roundedRect: CGRect(x: center.x - extent * 0.41, y: center.y + extent * 0.02, width: extent * 0.82, height: extent * 0.26), cornerRadius: extent * 0.07)
+                context.stroke(upper, with: .foreground, lineWidth: strokeWidth)
+                context.stroke(lower, with: .foreground, lineWidth: strokeWidth)
+            case .favorite:
+                var star = Path()
+                for index in 0..<10 {
+                    let radius = extent * (index.isMultiple(of: 2) ? 0.46 : 0.20)
+                    let angle = -CGFloat.pi / 2 + CGFloat(index) * CGFloat.pi / 5
+                    let vertex = CGPoint(x: center.x + cos(angle) * radius, y: center.y + sin(angle) * radius)
+                    if index == 0 { star.move(to: vertex) } else { star.addLine(to: vertex) }
+                }
+                star.closeSubpath()
+                if isFilled {
+                    context.fill(star, with: .foreground)
+                } else {
+                    context.stroke(star, with: .foreground, lineWidth: strokeWidth)
+                }
+            }
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+private enum MarqueeTextTone {
+    case primary
+    case secondary
+
+    var color: Color {
+        switch self {
+        case .primary: .primary
+        case .secondary: .secondary
+        }
+    }
+}
+
+private struct MarqueeTextWidthKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+/// One app-owned overflow policy serves every bounded schema-v3 text slot.
+/// Skins choose only geometry and typography; they never supply timing or code.
+private struct BoundedMarqueeText: View {
+    private static let gap: CGFloat = 32
+    private static let speed: CGFloat = 28
+    private static let leadingPause: TimeInterval = 1.15
+
+    let text: String
+    let font: Font
+    let tone: MarqueeTextTone
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var measuredTextWidth: CGFloat = 0
+    @State private var cycleOrigin = Date.now
+
+    init(_ text: String, font: Font, tone: MarqueeTextTone = .primary) {
+        self.text = text
+        self.font = font
+        self.tone = tone
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let viewportWidth = max(0, proxy.size.width)
+            let overflows = measuredTextWidth > viewportWidth + 1
+
+            ZStack(alignment: .leading) {
+                if overflows && !reduceMotion {
+                    TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
+                        HStack(spacing: Self.gap) {
+                            fixedText
+                            fixedText.accessibilityHidden(true)
+                        }
+                        .offset(x: marqueeOffset(at: timeline.date))
+                    }
+                } else if overflows {
+                    Text(text)
+                        .font(font)
+                        .foregroundStyle(tone.color)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .minimumScaleFactor(0.82)
+                        .allowsTightening(true)
+                } else {
+                    fixedText
+                }
+
+                fixedText
+                    .background {
+                        GeometryReader { measurement in
+                            Color.clear.preference(key: MarqueeTextWidthKey.self, value: measurement.size.width)
+                        }
+                    }
+                    .hidden()
+                    .accessibilityHidden(true)
+            }
+            .frame(width: viewportWidth, height: proxy.size.height, alignment: .leading)
+            .clipped()
+        }
+        .onPreferenceChange(MarqueeTextWidthKey.self) { measuredTextWidth = $0 }
+        .onChange(of: text) { _, _ in
+            measuredTextWidth = 0
+            cycleOrigin = .now
+        }
+    }
+
+    private var fixedText: some View {
+        Text(text)
+            .font(font)
+            .foregroundStyle(tone.color)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: true)
+    }
+
+    private func marqueeOffset(at date: Date) -> CGFloat {
+        let travelDistance = measuredTextWidth + Self.gap
+        guard travelDistance > 0 else { return 0 }
+        let travelDuration = TimeInterval(travelDistance / Self.speed)
+        let cycleDuration = Self.leadingPause + travelDuration
+        let elapsed = max(0, date.timeIntervalSince(cycleOrigin)).truncatingRemainder(dividingBy: cycleDuration)
+        guard elapsed > Self.leadingPause else { return 0 }
+        return -min(travelDistance, CGFloat(elapsed - Self.leadingPause) * Self.speed)
     }
 }
 

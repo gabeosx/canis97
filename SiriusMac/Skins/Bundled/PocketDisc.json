@@ -16,14 +16,14 @@
     "label": "systemMonospaced"
   },
   "slots": [
-    { "semantic": "artwork", "frame": { "x": 32, "y": 36, "width": 88, "height": 88 } },
+    { "semantic": "artwork", "frame": { "x": 32, "y": 28, "width": 88, "height": 88 } },
     { "semantic": "channelIdentity", "frame": { "x": 140, "y": 32, "width": 160, "height": 32 } },
     { "semantic": "metadata", "frame": { "x": 136, "y": 64, "width": 168, "height": 48 } },
     { "semantic": "favorite", "frame": { "x": 312, "y": 28, "width": 40, "height": 40 } },
-    { "semantic": "status", "frame": { "x": 32, "y": 124, "width": 88, "height": 32 } },
+    { "semantic": "status", "frame": { "x": 32, "y": 116, "width": 88, "height": 32 } },
     { "semantic": "transport", "frame": { "x": 200, "y": 112, "width": 136, "height": 56 } },
-    { "semantic": "library", "frame": { "x": 32, "y": 256, "width": 88, "height": 40 } },
-    { "semantic": "overflowMenu", "frame": { "x": 320, "y": 256, "width": 40, "height": 40 } }
+    { "semantic": "library", "frame": { "x": 28, "y": 252, "width": 88, "height": 40 } },
+    { "semantic": "overflowMenu", "frame": { "x": 308, "y": 252, "width": 40, "height": 40 } }
   ],
   "dragRegions": [
     { "x": 16, "y": 4, "width": 224, "height": 20 }

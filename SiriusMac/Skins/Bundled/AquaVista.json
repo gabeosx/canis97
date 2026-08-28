@@ -20,10 +20,10 @@
     { "semantic": "channelIdentity", "frame": { "x": 156, "y": 44, "width": 208, "height": 32 } },
     { "semantic": "metadata", "frame": { "x": 156, "y": 80, "width": 208, "height": 56 } },
     { "semantic": "favorite", "frame": { "x": 376, "y": 36, "width": 48, "height": 48 } },
-    { "semantic": "status", "frame": { "x": 32, "y": 156, "width": 152, "height": 32 } },
+    { "semantic": "status", "frame": { "x": 28, "y": 156, "width": 152, "height": 36 } },
     { "semantic": "transport", "frame": { "x": 188, "y": 216, "width": 176, "height": 56 } },
-    { "semantic": "library", "frame": { "x": 32, "y": 240, "width": 112, "height": 40 } },
-    { "semantic": "overflowMenu", "frame": { "x": 376, "y": 224, "width": 48, "height": 48 } }
+    { "semantic": "library", "frame": { "x": 28, "y": 244, "width": 112, "height": 40 } },
+    { "semantic": "overflowMenu", "frame": { "x": 376, "y": 228, "width": 48, "height": 52 } }
   ],
   "dragRegions": [
     { "x": 16, "y": 8, "width": 280, "height": 20 }

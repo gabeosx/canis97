@@ -15,6 +15,7 @@ final class OfflineReviewHarness {
     private(set) var confirmedChannelID: LiveChannelID?
     private(set) var lastOriginIDs: [LiveChannelID] = []
     let reviewSurface: OfflineReviewSurface
+    let reviewAppearance: OfflineReviewAppearanceFixture
     let appearanceController: SkinAppearanceController
     let skinImportCoordinator: SkinImportCoordinator
 
@@ -27,6 +28,7 @@ final class OfflineReviewHarness {
 
     private init?(environment: [String: String]) {
         reviewSurface = OfflineReviewSurface(environment: environment)
+        reviewAppearance = OfflineReviewAppearanceFixture(environment: environment)
         guard let container = try? ModelContainer(
             for: FavoriteRecord.self,
             RecentRecord.self,
@@ -118,6 +120,11 @@ enum OfflineReviewAppearanceFixture: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    init(environment: [String: String]) {
+        self = environment[OfflineReviewLaunchMode.reviewAppearanceEnvironmentKey]
+            .flatMap(Self.init(rawValue:)) ?? .native
+    }
+
     var title: String {
         switch self {
         case .native: "Native"
@@ -177,6 +184,7 @@ struct OfflineReviewCompactRoot: View {
     init(harness: OfflineReviewHarness) {
         self.harness = harness
         _selectedSurface = State(initialValue: harness.reviewSurface)
+        _selectedAppearance = State(initialValue: harness.reviewAppearance)
     }
 
     var body: some View {

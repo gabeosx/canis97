@@ -411,6 +411,7 @@ private enum ProductSceneID {
 enum OfflineReviewLaunchMode {
     static let reviewModeEnvironmentKey = "\(ProductIdentity.environmentPrefix)_OFFLINE_REVIEW_MODE"
     static let reviewSurfaceEnvironmentKey = "\(ProductIdentity.environmentPrefix)_OFFLINE_REVIEW_SURFACE"
+    static let reviewAppearanceEnvironmentKey = "\(ProductIdentity.environmentPrefix)_OFFLINE_REVIEW_APPEARANCE"
 
     static func isOfflineReviewRequested(
         environment: [String: String] = ProcessInfo.processInfo.environment
