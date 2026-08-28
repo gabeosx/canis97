@@ -382,7 +382,7 @@ final class LibraryViewStateContractTests: XCTestCase {
             title: "Title Match",
             artist: "Artist Match",
             albumName: "Album Match",
-            sourceChannel: FavoriteSongSourceChannel(rawIdentity: "source", name: "Source Match", displayNumber: 42),
+            sourceChannel: FavoriteSongSourceChannel(rawIdentity: "source", name: "Source Match", displayNumber: 42)!,
             savedAt: Date(timeIntervalSince1970: 1)
         )!
 
@@ -398,7 +398,7 @@ final class LibraryViewStateContractTests: XCTestCase {
             title: "Saved Title",
             artist: "Saved Artist",
             albumName: "Verified Album",
-            sourceChannel: FavoriteSongSourceChannel(rawIdentity: "source-id", name: "Saved Source", displayNumber: 42),
+            sourceChannel: FavoriteSongSourceChannel(rawIdentity: "source-id", name: "Saved Source", displayNumber: 42)!,
             savedAt: Date(timeIntervalSince1970: 1)
         )!
 

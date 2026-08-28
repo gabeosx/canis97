@@ -126,6 +126,21 @@ final class AccessibilityContractTests: XCTestCase {
         XCTAssertFalse(managementSource.contains("accessibilityLabel(appearance.displayName)"))
     }
 
+    func testFavoriteSongActionsStaySeparateFromCompactChannelFavoriteSemantics() throws {
+        let librarySource = try repositorySource("SiriusMac/Catalog/ListeningView.swift")
+        let appSource = try repositorySource("SiriusMac/SiriusMacApp.swift")
+        let compactSource = try repositorySource("SiriusMac/Player/CompactPlayerView.swift")
+
+        XCTAssertTrue(librarySource.contains("library.favorite-songs"))
+        XCTAssertTrue(librarySource.contains("library.favorite-song.copy."))
+        XCTAssertTrue(librarySource.contains("library.favorite-song.remove."))
+        XCTAssertTrue(librarySource.contains(".frame(minWidth: 32, minHeight: 32)"))
+        XCTAssertTrue(appSource.contains("Button(favoriteCurrentSongState.title)"))
+        XCTAssertTrue(appSource.contains("favoriteCurrentSongState.accessibilityHint"))
+        XCTAssertTrue(compactSource.contains("compact.favorite"))
+        XCTAssertTrue(compactSource.contains("CompactPlayerAction.toggleFavorite"))
+    }
+
     func testCompactSemanticOrderAndDecorationsRemainAppOwnedAcrossLayouts() throws {
         let source = try repositorySource("SiriusMac/Player/CompactPlayerView.swift")
 

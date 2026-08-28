@@ -365,12 +365,15 @@ private struct ListeningCommands: Commands {
                 }
 
                 let favoriteCurrentSongState = controller.favoriteCurrentSongActionState
-                Button("Favorite Current Song") {
-                    if case let .enabled(isFavorite) = favoriteCurrentSongState {
+                Button(favoriteCurrentSongState.title) {
+                    if case let .enabled(isFavorite) = controller.favoriteCurrentSongActionState {
                         _ = controller.setFavoriteCurrentSong(isFavorite: !isFavorite)
                     }
                 }
                 .disabled(!favoriteCurrentSongState.isEnabled)
+                .accessibilityLabel(favoriteCurrentSongState.accessibilityLabel)
+                .accessibilityValue(favoriteCurrentSongState.accessibilityValue)
+                .accessibilityHint(favoriteCurrentSongState.accessibilityHint)
 
                 Toggle(
                     "Always on Top",

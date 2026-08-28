@@ -104,6 +104,18 @@ enum FavoriteCurrentSongDisabledReason: Equatable {
     case metadataNotCurrent
     case missingTitle
     case missingArtist
+
+    var accessibilityHint: String {
+        switch self {
+        case .tunePending: "Wait for the current channel to finish tuning"
+        case .noConfirmedPlayback: "Play a confirmed channel before saving its current song"
+        case .confirmedChannelUnavailable: "The confirmed channel is unavailable"
+        case .metadataForAnotherChannel: "Current song metadata belongs to another channel"
+        case .metadataNotCurrent: "Current song metadata is not current"
+        case .missingTitle: "Current song title is unavailable"
+        case .missingArtist: "Current song artist is unavailable"
+        }
+    }
 }
 
 enum FavoriteCurrentSongActionState: Equatable {
@@ -113,6 +125,37 @@ enum FavoriteCurrentSongActionState: Equatable {
     var isEnabled: Bool {
         if case .enabled = self { return true }
         return false
+    }
+
+    var title: String {
+        switch self {
+        case let .enabled(isFavorite):
+            isFavorite ? "Remove Current Song from Favorite Songs" : "Favorite Current Song"
+        case .disabled:
+            "Favorite Current Song"
+        }
+    }
+
+    var accessibilityLabel: String { title }
+
+    var accessibilityValue: String {
+        switch self {
+        case let .enabled(isFavorite):
+            isFavorite ? "Saved to Favorite Songs" : "Not saved to Favorite Songs"
+        case .disabled:
+            "Unavailable"
+        }
+    }
+
+    var accessibilityHint: String {
+        switch self {
+        case let .enabled(isFavorite):
+            isFavorite
+                ? "Removes the confirmed current song from Favorite Songs"
+                : "Saves the confirmed current song to Favorite Songs"
+        case let .disabled(reason):
+            reason.accessibilityHint
+        }
     }
 }
 
@@ -301,7 +344,7 @@ final class ListeningSessionController {
         let result = libraryStore.setSongFavorite(snapshot, isFavorite: isFavorite)
         switch result {
         case .saved:
-            accessibilityAnnouncer.announce(.songFavoriteSaved(generation: nextAnnouncementGeneration()))
+            accessibilityAnnouncer.announce(.songFavoriteAdded(generation: nextAnnouncementGeneration()))
         case .removed:
             accessibilityAnnouncer.announce(.songFavoriteRemoved(generation: nextAnnouncementGeneration()))
         case .failed:

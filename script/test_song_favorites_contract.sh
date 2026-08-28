@@ -9,6 +9,7 @@ readonly CONTROLLER_SOURCE="$ROOT_DIR/SiriusMac/App/ListeningSessionController.s
 readonly APP_SOURCE="$ROOT_DIR/SiriusMac/SiriusMacApp.swift"
 readonly LIBRARY_VIEW_SOURCE="$ROOT_DIR/SiriusMac/Catalog/ListeningView.swift"
 readonly ANNOUNCER_SOURCE="$ROOT_DIR/SiriusMac/Accessibility/AccessibilityAnnouncer.swift"
+readonly COMPACT_PLAYER_SOURCE="$ROOT_DIR/SiriusMac/Player/CompactPlayerView.swift"
 readonly PROJECT_FILE="$ROOT_DIR/SiriusMac.xcodeproj/project.pbxproj"
 readonly HARNESS_SOURCE="$ROOT_DIR/SiriusMac/Testing/UITestHarness.swift"
 readonly STORE_TESTS="$ROOT_DIR/SiriusMacTests/LibraryStoreTests.swift"
@@ -42,7 +43,7 @@ check_persistence() {
   require_text "$STORE_SOURCE" 'static let persistedPropertyNames'
   require_text "$CONTROLLER_SOURCE" 'func setFavoriteCurrentSong'
   require_text "$CONTROLLER_SOURCE" 'favoriteCurrentSongCandidate'
-  require_text "$APP_SOURCE" 'Favorite Current Song'
+  require_text "$APP_SOURCE" 'favoriteCurrentSongState.title'
   require_text "$PROJECT_FILE" 'SongFavoriteModels.swift in Sources'
   require_text "$HARNESS_SOURCE" 'FavoriteSongRecord.self'
   require_text "$STORE_TESTS" 'testSongFavoritesDeduplicateAndReload'
@@ -90,7 +91,8 @@ check_action() {
   require_text "$ANNOUNCER_SOURCE" 'Removed song from Favorite Songs'
   require_text "$CONTROLLER_TESTS" 'testEveryIneligibleReasonHasClosedAccessibleCopy'
   require_text "$CONTROLLER_TESTS" 'testSongMutationRouteStaysOutsideListeningAndSystemMediaAuthority'
-  require_text "$APP_SOURCE" 'CompactPlayerAction.toggleFavorite'
+  require_text "$APP_SOURCE" 'case .toggleFavorite:'
+  require_text "$COMPACT_PLAYER_SOURCE" 'compact.favorite'
   require_text "$APP_SOURCE" 'case .toggleFavorite:'
   printf 'song favorites action contract: PASS\n'
 }

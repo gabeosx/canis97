@@ -31,7 +31,7 @@ enum AccessibilityAnnouncementEvent: Hashable {
     case paused(generation: Int)
     case favoriteAdded(generation: Int)
     case favoriteRemoved(generation: Int)
-    case songFavoriteSaved(generation: Int)
+    case songFavoriteAdded(generation: Int)
     case songFavoriteRemoved(generation: Int)
     case songFavoriteMutationFailed(generation: Int)
     case playbackFailed(generation: Int)
@@ -45,9 +45,9 @@ enum AccessibilityAnnouncementEvent: Hashable {
         case .paused: "Paused"
         case .favoriteAdded: "Added to Favorites"
         case .favoriteRemoved: "Removed from Favorites"
-        case .songFavoriteSaved: "Current song saved to Favorite Songs"
-        case .songFavoriteRemoved: "Current song removed from Favorite Songs"
-        case .songFavoriteMutationFailed: "Favorite song could not be saved"
+        case .songFavoriteAdded: "Added song to Favorite Songs"
+        case .songFavoriteRemoved: "Removed song from Favorite Songs"
+        case .songFavoriteMutationFailed: "Favorite Songs could not be updated"
         case .playbackFailed: "Playback unavailable"
         case .metadataStale: "Current program is stale"
         case .metadataUnavailable: "Current program unavailable"
