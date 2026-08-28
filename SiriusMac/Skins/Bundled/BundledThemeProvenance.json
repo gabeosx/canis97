@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "themes": [
+    {
+      "identifier": "pixel-desk",
+      "displayName": "Pixel Desk",
+      "source": "original-app-drawn",
+      "rendererLayers": ["pixel-bevel-frame", "pixel-dither-cells", "pixel-display-plate"],
+      "fontTokens": ["systemMonospaced", "systemDefault"],
+      "fontFiles": [],
+      "externalAssetURLs": []
+    },
+    {
+      "identifier": "pocket-disc",
+      "displayName": "Pocket Disc",
+      "source": "original-app-drawn",
+      "rendererLayers": ["disc-molded-plane", "disc-screw-set", "disc-segment-bars"],
+      "fontTokens": ["systemMonospaced", "systemDefault"],
+      "fontFiles": [],
+      "externalAssetURLs": []
+    },
+    {
+      "identifier": "aqua-vista",
+      "displayName": "Aqua Vista",
+      "source": "original-app-drawn",
+      "rendererLayers": ["aqua-color-planes", "aqua-bubble-set", "aqua-glass-highlights"],
+      "fontTokens": ["systemRounded", "systemDefault"],
+      "fontFiles": [],
+      "externalAssetURLs": []
+    }
+  ]
+}
