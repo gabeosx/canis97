@@ -61,6 +61,9 @@ struct CompactPlayerView: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel("\(ProductIdentity.displayName) compact player")
         .accessibilityIdentifier("compact.canvas")
+        .id(renderingAppearance.reference)
+        .transition(.opacity)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: renderingAppearance.reference)
         .onChange(of: needsNativeAppearanceRecovery, initial: true) { _, needsRecovery in
             guard needsRecovery else { return }
             showsNativeAppearanceRecoveryStatus = true
@@ -88,11 +91,14 @@ struct CompactPlayerView: View {
             expressiveMaterialLayer
             expressiveSlot(.artwork) { artwork }
             expressiveSlot(.channelIdentity) {
-                Text(presentation.channelIdentity?.displayText ?? "Nothing Playing")
+                let channelText = presentation.channelIdentity?.displayText ?? "Nothing Playing"
+                Text(channelText)
                     .font(skinFont(plan.typography.display, size: 18, weight: .semibold))
                     .lineLimit(1)
-                    .help(presentation.channelIdentity?.displayText ?? "Nothing Playing")
-                    .accessibilityLabel("Channel \(presentation.channelIdentity?.displayText ?? "Nothing Playing")")
+                    .truncationMode(.tail)
+                    .help(channelText)
+                    .accessibilityLabel("Channel \(channelText)")
+                    .accessibilityValue(channelText)
             }
             expressiveSlot(.metadata) { metadata }
             expressiveSlot(.favorite) { favoriteButton }
@@ -191,6 +197,7 @@ struct CompactPlayerView: View {
         .clipShape(.rect(cornerRadius: renderingAppearance.cornerRadius))
         .accessibilityLabel(presentation.primaryMetadata.map { "Artwork for \($0)" } ?? presentation.channelIdentity.map { "Artwork for channel \($0.displayText)" } ?? "Artwork")
         .accessibilitySortPriority(60)
+        .padding(CompactPlayerPresentation.focusClearance)
     }
 
     private var favoriteButton: some View {
@@ -206,6 +213,8 @@ struct CompactPlayerView: View {
         .accessibilityLabel(presentation.isFavorite ? "Remove from Favorites" : "Add to Favorites")
         .accessibilityValue(presentation.isFavorite ? "Favorite" : "Not favorite")
         .accessibilitySortPriority(40)
+        .padding(CompactPlayerPresentation.focusClearance)
+        .disabled(presentation.channelIdentity == nil)
     }
 
     @ViewBuilder
@@ -214,6 +223,7 @@ struct CompactPlayerView: View {
             Text(primary)
                 .font(skinFont(renderingAppearance.layoutPlan.typography.body, size: 14, weight: .semibold))
                 .lineLimit(CompactPlayerPresentation.metadataLineLimit)
+                .truncationMode(.tail)
                 .help(primary)
                 .accessibilityLabel("Current program: \(primary)")
                 .accessibilityValue(primary)
@@ -224,6 +234,7 @@ struct CompactPlayerView: View {
                 .font(skinFont(renderingAppearance.layoutPlan.typography.body, size: 13))
                 .foregroundStyle(.secondary)
                 .lineLimit(CompactPlayerPresentation.metadataLineLimit)
+                .truncationMode(.tail)
                 .help(secondary)
                 .accessibilityLabel("Artist: \(secondary)")
                 .accessibilityValue(secondary)
@@ -261,9 +272,20 @@ struct CompactPlayerView: View {
             .accessibilityValue(status.accessibilityValue)
             .accessibilityIdentifier("compact.status")
             .accessibilitySortPriority(50)
+        } else if let emptyBody = presentation.emptyBody {
+            Text(emptyBody)
+                .font(skinFont(renderingAppearance.layoutPlan.typography.label, size: 12, weight: .medium))
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .truncationMode(.tail)
+                .help(emptyBody)
+                .accessibilityLabel(emptyBody)
+                .accessibilityValue(emptyBody)
+                .accessibilityIdentifier("compact.status")
+                .accessibilitySortPriority(50)
         }
         if needsNativeAppearanceRecovery || showsNativeAppearanceRecoveryStatus {
-            Text("Native appearance restored because the selected decoration is unavailable.")
+            Text("This appearance is unavailable. Native appearance has been restored.")
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 6)
@@ -272,23 +294,24 @@ struct CompactPlayerView: View {
                 .background(surfaceBackground(.criticalState))
                 .tint(surfaceTint(.criticalState))
                 .accessibilityIdentifier("compact.appearance-recovery")
+                .accessibilityLabel("This appearance is unavailable. Native appearance has been restored.")
                 .accessibilitySortPriority(45)
         }
     }
 
     @ViewBuilder
     private var transport: some View {
-        if let transport = presentation.transport {
-            HStack(spacing: 8) {
-                transportButton("Previous", systemImage: "backward.fill", enabled: transport.previousEnabled, action: .previous)
-                transportButton(transport.playPause == .pause ? "Pause" : "Play Live", systemImage: transport.playPause == .pause ? "pause.fill" : "play.fill", enabled: true, action: .playPause)
-                transportButton("Next", systemImage: "forward.fill", enabled: transport.nextEnabled, action: .next)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(4)
-            .background(surfaceBackground(.transport))
-            .tint(surfaceTint(.interactiveAccent))
+        let availability = presentation.transport
+        let playPause = availability?.playPause ?? .play
+        HStack(spacing: 8) {
+            transportButton("Previous", systemImage: "backward.fill", enabled: availability?.previousEnabled == true, action: .previous)
+            transportButton(playPause == .pause ? "Pause" : "Play Live", systemImage: playPause == .pause ? "pause.fill" : "play.fill", enabled: availability != nil, action: .playPause)
+            transportButton("Next", systemImage: "forward.fill", enabled: availability?.nextEnabled == true, action: .next)
         }
+        .frame(maxWidth: .infinity)
+        .padding(CompactPlayerPresentation.focusClearance)
+        .background(surfaceBackground(.transport))
+        .tint(surfaceTint(.interactiveAccent))
     }
 
     private func transportButton(_ title: String, systemImage: String, enabled: Bool, action: CompactPlayerAction) -> some View {
@@ -333,6 +356,11 @@ struct CompactPlayerView: View {
                 .accessibilityValue(isAlwaysOnTop ? "On" : "Off")
                 .accessibilitySortPriority(10)
             Divider()
+            Button("Use Native Appearance") { onAppearanceRecovery() }
+                .accessibilityIdentifier("compact.overflow.use-native-appearance")
+                .accessibilityLabel("Use Native Appearance")
+                .accessibilitySortPriority(9)
+            Divider()
             Button("Sign Out") { onAction(.signOut) }.accessibilityIdentifier("compact.sign-out")
         } label: { Label("More", systemImage: "ellipsis.circle") }
     }
@@ -357,10 +385,23 @@ struct CompactPlayerView: View {
             Spacer()
             Text(presentation.emptyTitle ?? "Nothing Playing")
                 .font(.system(size: 22, weight: .bold, design: .rounded))
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .help(presentation.emptyTitle ?? "Nothing Playing")
+            if let emptyBody = presentation.emptyBody {
+                Text(emptyBody)
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(2)
+                    .truncationMode(.tail)
+                    .help(emptyBody)
+                    .accessibilityLabel(emptyBody)
+                    .accessibilityValue(emptyBody)
+            }
             statusAndRecovery
-            Button(presentation.emptyLibraryButtonTitle ?? "Open Library") { onAction(.showLibrary) }
+            Button(presentation.emptyLibraryButtonTitle ?? "Show Library") { onAction(.showLibrary) }
                 .accessibilityIdentifier("compact.show-library")
-                .accessibilityLabel("Open Library")
+                .accessibilityLabel("Show Library")
+                .frame(minWidth: CompactPlayerPresentation.transportControlSize, minHeight: CompactPlayerPresentation.transportControlSize)
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
@@ -406,7 +447,6 @@ struct CompactPlayerView: View {
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: renderingAppearance.reference)
     }
 
     @ViewBuilder

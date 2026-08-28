@@ -36,7 +36,10 @@ final class OfflineReviewHarness {
         libraryStore = LibraryStore(modelContainer: container)
         listeningModel = ListeningPresentationModel(flow: UITestCatalogFlow())
         let importer = SkinPackageImporter()
-        appearanceController = SkinAppearanceController(catalog: .phaseOne, selectionStore: nil)
+        appearanceController = SkinAppearanceController(
+            catalog: .phaseOne.inserting(OfflineReviewAppearanceFixture.legacySchema1Appearance),
+            selectionStore: nil
+        )
         skinImportCoordinator = SkinImportCoordinator(
             importer: importer,
             appearanceController: appearanceController
@@ -55,8 +58,15 @@ final class OfflineReviewHarness {
         return true
     }
 
-    func appearance(named displayName: String) -> ValidatedSkinAppearance {
-        appearanceController.availableAppearances.first(where: { $0.displayName == displayName }) ?? .native
+    func appearance(for fixture: OfflineReviewAppearanceFixture) -> ValidatedSkinAppearance {
+        switch fixture {
+        case .native:
+            .native
+        case .legacySchema1:
+            OfflineReviewAppearanceFixture.legacySchema1Appearance
+        default:
+            appearanceController.availableAppearances.first(where: { $0.displayName == fixture.displayName }) ?? .native
+        }
     }
 }
 
@@ -66,13 +76,12 @@ enum OfflineReviewSurface: String, CaseIterable, Identifiable {
     case compactPopulated
     case compactPending
     case compactError
+    case compactLongText
+    case compactAppearanceFailure
     case libraryCollections
     case libraryEmpty
     case libraryError
     case appearanceManagement
-    case nativeAppearance
-    case signalGlowAppearance
-    case tapeDeckAppearance
 
     var id: String { rawValue }
 
@@ -88,15 +97,63 @@ enum OfflineReviewSurface: String, CaseIterable, Identifiable {
         case .compactPopulated: "Compact populated"
         case .compactPending: "Compact pending"
         case .compactError: "Compact error"
+        case .compactLongText: "Compact long Unicode text"
+        case .compactAppearanceFailure: "Compact appearance recovery"
         case .libraryCollections: "Library collections"
         case .libraryEmpty: "Library empty"
         case .libraryError: "Library error"
         case .appearanceManagement: "Appearance management"
-        case .nativeAppearance: "Native"
-        case .signalGlowAppearance: "Signal Glow"
-        case .tapeDeckAppearance: "Tape Deck"
         }
     }
+}
+
+enum OfflineReviewAppearanceFixture: String, CaseIterable, Identifiable {
+    case native
+    case legacySchema1
+    case signalGlow
+    case tapeDeck
+    case pixelDesk
+    case pocketDisc
+    case aquaVista
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .native: "Native"
+        case .legacySchema1: "Legacy schema v1"
+        case .signalGlow: "Signal Glow"
+        case .tapeDeck: "Tape Deck"
+        case .pixelDesk: "Pixel Desk"
+        case .pocketDisc: "Pocket Disc"
+        case .aquaVista: "Aqua Vista"
+        }
+    }
+
+    var displayName: String { title }
+
+    static let legacySchema1Appearance: ValidatedSkinAppearance = try! SkinManifestValidator.validate(
+        Data(
+            #"""
+            {
+              "schemaVersion": 1,
+              "identifier": "offline-legacy-schema-1",
+              "displayName": "Legacy schema v1",
+              "playerBackground": "#101010",
+              "metadataPanel": "#202020",
+              "accent": "#C6FF00",
+              "destructive": "#FF453A",
+              "foregroundScheme": "dark",
+              "contentPadding": 16,
+              "sectionSpacing": 8,
+              "cornerRadius": 4,
+              "backgroundAsset": null,
+              "metadataPanelAsset": null
+            }
+            """#.utf8
+        ),
+        classification: .bundled
+    )
 }
 
 private final class UITestCatalogFlow: ListeningFlow, Sendable {
@@ -115,6 +172,7 @@ struct OfflineReviewCompactRoot: View {
     let harness: OfflineReviewHarness
     @Environment(\.openWindow) private var openWindow
     @State private var selectedSurface: OfflineReviewSurface
+    @State private var selectedAppearance: OfflineReviewAppearanceFixture = .native
 
     init(harness: OfflineReviewHarness) {
         self.harness = harness
@@ -130,6 +188,14 @@ struct OfflineReviewCompactRoot: View {
             }
             .pickerStyle(.menu)
             .accessibilityIdentifier("offline-review.surface-picker")
+
+            Picker("Offline review appearance", selection: $selectedAppearance) {
+                ForEach(OfflineReviewAppearanceFixture.allCases) { fixture in
+                    Text(fixture.title).tag(fixture)
+                }
+            }
+            .pickerStyle(.menu)
+            .accessibilityIdentifier("offline-review.appearance-picker")
 
             reviewContent
         }
@@ -157,11 +223,12 @@ struct OfflineReviewCompactRoot: View {
         case .authenticationOutcomes:
             OfflineAuthenticationOutcomesView()
         case .compactEmpty, .compactPopulated, .compactPending, .compactError,
-             .nativeAppearance, .signalGlowAppearance, .tapeDeckAppearance:
+             .compactLongText, .compactAppearanceFailure:
             CompactPlayerView(
                 presentation: compactPresentation,
                 appearance: reviewAppearance,
-                onAction: { _ in }
+                onAction: { _ in },
+                onAppearanceRecovery: { selectedAppearance = .native }
             )
         case .libraryCollections:
             OfflineReviewLibraryRoot(harness: harness)
@@ -190,6 +257,17 @@ struct OfflineReviewCompactRoot: View {
         case .compactEmpty: .empty()
         case .compactPending: .empty(status: .pending)
         case .compactError: .empty(status: .unavailable(.tryAgain))
+        case .compactLongText:
+            .confirmed(
+                channel: .init(number: 97, name: "音楽と星空のためのライブ・ラジオ・セッション — مرحبا بالعالم"),
+                artwork: .placeholder,
+                primaryMetadata: "An unusually long Unicode program title — 音楽と星空のためのライブ・ラジオ・セッション — कलाकार और अतिथि",
+                secondaryMetadata: "A deliberately long Unicode artist credit — कलाकार और अतिथि — مرحبا بالعالم",
+                playback: .playing,
+                isFavorite: false,
+                queueAvailability: .both
+            )
+        case .compactAppearanceFailure: .empty(status: .unavailable(.tryAgain))
         default:
             .confirmed(
                 channel: .init(number: 1, name: "Orbit"),
@@ -204,11 +282,20 @@ struct OfflineReviewCompactRoot: View {
     }
 
     private var reviewAppearance: ValidatedSkinAppearance {
-        switch selectedSurface {
-        case .signalGlowAppearance: harness.appearance(named: "Signal Glow")
-        case .tapeDeckAppearance: harness.appearance(named: "Tape Deck")
-        default: .native
+        if selectedSurface == .compactAppearanceFailure {
+            return ValidatedSkinAppearance(
+                reference: SkinSelectionReference(
+                    identifier: SkinIdentifier(rawValue: "offline-appearance-failure")!,
+                    classification: .imported
+                ),
+                displayName: "Offline appearance failure",
+                style: .fallback,
+                cornerRadius: 4,
+                backgroundAssetURL: URL(fileURLWithPath: "/offline/unavailable-decoration.png"),
+                metadataPanelAssetURL: nil
+            )
         }
+        return harness.appearance(for: selectedAppearance)
     }
 }
 

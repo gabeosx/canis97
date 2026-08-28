@@ -160,7 +160,7 @@ final class CompactPlayerPresentationTests: XCTestCase {
             [
                 "backgroundRole", "channelIdentity", "artwork", "primaryMetadata",
                 "secondaryMetadata", "status", "isFavorite", "transport", "emptyTitle",
-                "emptyLibraryButtonTitle"
+                "emptyBody", "emptyLibraryButtonTitle"
             ]
         )
         XCTAssertFalse(storedValues.contains { $0.value is CompactPlayerAction })
@@ -171,7 +171,8 @@ final class CompactPlayerPresentationTests: XCTestCase {
         let presentation = CompactPlayerPresentation.empty()
 
         XCTAssertEqual(presentation.emptyTitle, "Nothing Playing")
-        XCTAssertEqual(presentation.emptyLibraryButtonTitle, "Open Library")
+        XCTAssertEqual(presentation.emptyBody, "Choose a channel in the Library to start listening.")
+        XCTAssertEqual(presentation.emptyLibraryButtonTitle, "Show Library")
         XCTAssertNil(presentation.channelIdentity)
         XCTAssertNil(presentation.primaryMetadata)
         XCTAssertNil(presentation.secondaryMetadata)
@@ -241,7 +242,7 @@ final class CompactPlayerPresentationTests: XCTestCase {
         XCTAssertNil(presentation.status)
         XCTAssertFalse(presentation.showsNativeProgress)
         XCTAssertEqual(presentation.emptyTitle, "Nothing Playing")
-        XCTAssertEqual(presentation.emptyLibraryButtonTitle, "Open Library")
+        XCTAssertEqual(presentation.emptyLibraryButtonTitle, "Show Library")
     }
 
     func testFailuresExposeOnlyTheirApprovedRecoveryAction() {

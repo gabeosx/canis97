@@ -6,6 +6,7 @@ import SiriusXMClient
 struct CompactPlayerPresentation: Sendable, Equatable {
     static let metadataLineLimit = 2
     static let transportControlSize: CGFloat = 32
+    static let focusClearance: CGFloat = 4
     struct ChannelIdentity: Sendable, Equatable {
         let number: Int?
         let name: String?
@@ -50,6 +51,7 @@ struct CompactPlayerPresentation: Sendable, Equatable {
     let isFavorite: Bool
     let transport: Transport?
     let emptyTitle: String?
+    let emptyBody: String?
     /// Inert copy for the empty-state button; the view still supplies the
     /// matching `showLibrary` command through its injected action closure.
     let emptyLibraryButtonTitle: String?
@@ -78,6 +80,7 @@ struct CompactPlayerPresentation: Sendable, Equatable {
                 nextEnabled: availability.next
             ),
             emptyTitle: nil,
+            emptyBody: nil,
             emptyLibraryButtonTitle: nil
         )
     }
@@ -93,7 +96,8 @@ struct CompactPlayerPresentation: Sendable, Equatable {
             isFavorite: false,
             transport: nil,
             emptyTitle: "Nothing Playing",
-            emptyLibraryButtonTitle: "Open Library"
+            emptyBody: "Choose a channel in the Library to start listening.",
+            emptyLibraryButtonTitle: "Show Library"
         )
     }
 
@@ -175,6 +179,7 @@ struct CompactPlayerPresentation: Sendable, Equatable {
             isFavorite: previous.isFavorite,
             transport: retainedTransport,
             emptyTitle: nil,
+            emptyBody: nil,
             emptyLibraryButtonTitle: nil
         )
     }
