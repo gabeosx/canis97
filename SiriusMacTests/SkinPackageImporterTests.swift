@@ -4,6 +4,11 @@ import XCTest
 
 @MainActor
 final class SkinPackageImporterTests: XCTestCase {
+    func testImporterDelegatesReferencedAssetsToTheManifestCompiler() throws {
+        let source = try repositorySource("SiriusMac/Skins/SkinPackageImporter.swift")
+        XCTAssertTrue(source.contains("SkinManifestValidator.referencedAssetPaths"))
+        XCTAssertFalse(source.contains("JSONDecoder().decode(SkinManifest.self"))
+    }
     func testManagedRootsRemainUnderOneApplicationSupportSkinRoot() {
         let support = URL(fileURLWithPath: "/tmp/skin-import-contract", isDirectory: true)
         let store = ManagedSkinStore(applicationSupportDirectory: support)
