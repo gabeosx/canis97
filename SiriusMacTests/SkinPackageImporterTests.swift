@@ -5,7 +5,8 @@ import XCTest
 @MainActor
 final class SkinPackageImporterTests: XCTestCase {
     func testImporterDelegatesReferencedAssetsToTheManifestCompiler() throws {
-        let source = try repositorySource("SiriusMac/Skins/SkinPackageImporter.swift")
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        let source = try String(contentsOf: root.appendingPathComponent("SiriusMac/Skins/SkinPackageImporter.swift"), encoding: .utf8)
         XCTAssertTrue(source.contains("SkinManifestValidator.referencedAssetPaths"))
         XCTAssertFalse(source.contains("JSONDecoder().decode(SkinManifest.self"))
     }
