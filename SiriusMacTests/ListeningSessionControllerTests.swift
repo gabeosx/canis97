@@ -2,7 +2,7 @@ import AVFoundation
 import SwiftData
 import XCTest
 @_spi(Playback) import SiriusXMClient
-@testable import SiriusMac
+@testable import Canis97
 
 @MainActor
 final class WindowLifecyclePolicyTests: XCTestCase {
@@ -15,7 +15,9 @@ final class WindowLifecyclePolicyTests: XCTestCase {
             encoding: .utf8
         )
         let primaryScene = try XCTUnwrap(
-            source.components(separatedBy: "Window(\"Library\", id: \"sirius-library\")").first
+            source.components(
+                separatedBy: "Window(\"\\(ProductIdentity.displayName) Library\", id: ProductIdentity.SceneID.library)"
+            ).first
         )
 
         XCTAssertTrue(primaryScene.contains(".windowResizability(.contentSize)"))
@@ -29,7 +31,8 @@ final class WindowLifecyclePolicyTests: XCTestCase {
         XCTAssertEqual(policy.minimumContentSize, CGSize(width: 400, height: 288))
         XCTAssertFalse(policy.isResizable)
         XCTAssertFalse(policy.allowsFullScreen)
-        XCTAssertEqual(policy.frameAutosaveName, ProductIdentity.compactFrameAutosaveName)
+        XCTAssertEqual(policy.frameAutosaveName, ProductIdentity.FrameAutosaveName.compact)
+        XCTAssertEqual(policy.legacyFrameAutosaveName, ProductIdentity.Legacy.compactFrameAutosaveName)
     }
 
     func testAuthenticationPolicyRestoresAUsableResizablePrimaryWindow() {
@@ -39,7 +42,11 @@ final class WindowLifecyclePolicyTests: XCTestCase {
         XCTAssertEqual(policy.minimumContentSize, CGSize(width: 760, height: 620))
         XCTAssertTrue(policy.isResizable)
         XCTAssertTrue(policy.allowsFullScreen)
-        XCTAssertEqual(policy.frameAutosaveName, ProductIdentity.authenticationFrameAutosaveName)
+        XCTAssertEqual(policy.frameAutosaveName, ProductIdentity.FrameAutosaveName.authentication)
+        XCTAssertEqual(
+            policy.legacyFrameAutosaveName,
+            ProductIdentity.Legacy.authenticationFrameAutosaveName
+        )
     }
 
     func testAuthenticationAttachmentReversesCompactWindowRestrictionsAfterSignOut() {
@@ -142,7 +149,8 @@ final class WindowLifecyclePolicyTests: XCTestCase {
         XCTAssertEqual(policy.minimumContentSize, CGSize(width: 760, height: 540))
         XCTAssertTrue(policy.isResizable)
         XCTAssertTrue(policy.allowsFullScreen)
-        XCTAssertEqual(policy.frameAutosaveName, ProductIdentity.libraryFrameAutosaveName)
+        XCTAssertEqual(policy.frameAutosaveName, ProductIdentity.FrameAutosaveName.library)
+        XCTAssertEqual(policy.legacyFrameAutosaveName, ProductIdentity.Legacy.libraryFrameAutosaveName)
     }
 
     func testRestoresOnlyFramesIntersectingAnAvailableScreen() {
@@ -1047,7 +1055,7 @@ final class ListeningSessionControllerTests: XCTestCase {
     }
 
     func testUnitTestHostDoesNotConstructTheProductionSessionController() {
-        XCTAssertNil(SiriusMacApp.makeSessionController(environment: [
+        XCTAssertNil(Canis97App.makeSessionController(environment: [
             "XCTestConfigurationFilePath": "/tmp/host.xctestconfiguration",
         ]))
     }
