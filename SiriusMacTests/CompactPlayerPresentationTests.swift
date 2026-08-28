@@ -177,6 +177,39 @@ final class CompactPlayerPresentationTests: XCTestCase {
         XCTAssertNil(presentation.secondaryMetadata)
     }
 
+    func testExpressiveStateContractKeepsExactCopyAndBoundedMotionAppOwned() throws {
+        let source = try repositorySource("SiriusMac/Player/CompactPlayerView.swift")
+        let presentationSource = try repositorySource("SiriusMac/Player/CompactPlayerPresentation.swift")
+
+        XCTAssertTrue(presentationSource.contains("Choose a channel in the Library to start listening."))
+        XCTAssertTrue(source.contains("This appearance is unavailable. Native appearance has been restored."))
+        XCTAssertTrue(source.contains("Use Native Appearance"))
+        XCTAssertTrue(source.contains(".lineLimit(1)"))
+        XCTAssertTrue(source.contains(".lineLimit(CompactPlayerPresentation.metadataLineLimit)"))
+        XCTAssertTrue(source.contains(".help(primary)"))
+        XCTAssertTrue(source.contains(".help(secondary)"))
+        XCTAssertTrue(source.contains(".accessibilityValue(primary)"))
+        XCTAssertTrue(source.contains(".accessibilityValue(secondary)"))
+        XCTAssertTrue(source.contains(".opacity"))
+        XCTAssertTrue(source.contains("duration: 0.15"))
+        XCTAssertTrue(source.contains("reduceMotion ? nil"))
+        XCTAssertTrue(source.contains("CompactPlayerPresentation.focusClearance"))
+    }
+
+    func testOfflineReviewMatrixListsAllAppearancesAndCompactStates() throws {
+        let source = try repositorySource("SiriusMac/Testing/UITestHarness.swift")
+
+        for appearance in ["native", "legacySchema1", "signalGlow", "tapeDeck", "pixelDesk", "pocketDisc", "aquaVista"] {
+            XCTAssertTrue(source.contains("case \(appearance)"))
+        }
+        for state in ["compactEmpty", "compactPopulated", "compactPending", "compactError", "compactLongText", "compactAppearanceFailure"] {
+            XCTAssertTrue(source.contains("case \(state)"))
+        }
+        XCTAssertTrue(source.contains("OfflineReviewAppearanceFixture"))
+        XCTAssertTrue(source.contains("SkinManifestValidator.validate"))
+        XCTAssertTrue(source.contains("isStoredInMemoryOnly: true"))
+    }
+
     func testPendingWithoutAConfirmedChannelShowsNativeProgressWithoutMetadata() {
         let presentation = CompactPlayerPresentation.project(
             channel: nil,

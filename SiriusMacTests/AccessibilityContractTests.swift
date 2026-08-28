@@ -98,6 +98,31 @@ final class AccessibilityContractTests: XCTestCase {
         XCTAssertFalse(managementSource.contains("accessibilityLabel(appearance.displayName)"))
     }
 
+    func testCompactSemanticOrderAndDecorationsRemainAppOwnedAcrossLayouts() throws {
+        let source = try repositorySource("SiriusMac/Player/CompactPlayerView.swift")
+
+        let expectedOrder = [
+            "expressiveSlot(.artwork)",
+            "expressiveSlot(.channelIdentity)",
+            "expressiveSlot(.metadata)",
+            "expressiveSlot(.favorite)",
+            "expressiveSlot(.status)",
+            "expressiveSlot(.transport)",
+            "expressiveSlot(.library)",
+            "expressiveSlot(.overflowMenu)",
+        ]
+        var previousIndex = -1
+        for slot in expectedOrder {
+            let index = try XCTUnwrap(source.range(of: slot)?.lowerBound.utf16Offset(in: source))
+            XCTAssertGreaterThan(index, previousIndex)
+            previousIndex = index
+        }
+        XCTAssertTrue(source.contains(".accessibilityHidden(true)"))
+        XCTAssertTrue(source.contains(".allowsHitTesting(false)"))
+        XCTAssertTrue(source.contains("CompactPlayerPresentation.focusClearance"))
+        XCTAssertTrue(source.contains("compact.overflow.use-native-appearance"))
+    }
+
     func testSkinImportKeepsBothExtensionsBehindTheClosedImporter() throws {
         let importerSource = try repositorySource("SiriusMac/Skins/SkinPackageImporter.swift")
 
