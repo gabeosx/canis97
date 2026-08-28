@@ -203,7 +203,8 @@ private struct CompactListeningSlice: View {
         .background(
             WindowAttachmentView(
                 role: .compact,
-                alwaysOnTop: controller.libraryStore.alwaysOnTop
+                alwaysOnTop: controller.libraryStore.alwaysOnTop,
+                appearance: appearanceController.selectedAppearance
             )
         )
         .onChange(of: current, initial: true) { _, next in

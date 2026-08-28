@@ -153,7 +153,11 @@ final class CompactWindowController {
         if let closeObserver { NotificationCenter.default.removeObserver(closeObserver) }
     }
 
-    func attach(to window: NSWindow, alwaysOnTop: Bool) {
+    func attach(
+        to window: NSWindow,
+        alwaysOnTop: Bool,
+        appearance: ValidatedSkinAppearance = .native
+    ) {
         if attachedWindow !== window {
             removeCloseObserver()
             attachedWindow = window
@@ -161,6 +165,7 @@ final class CompactWindowController {
             installCloseObserver(for: window)
         }
         update(alwaysOnTop: alwaysOnTop)
+        updateAppearance(appearance, in: window)
     }
 
     func update(alwaysOnTop: Bool) {
@@ -169,6 +174,21 @@ final class CompactWindowController {
         case .normal: .normal
         case .floating: .floating
         }
+    }
+
+    /// Resolves only the already-validated finite appearance policy. No raw
+    /// manifest value, style mask, or package persistence key reaches AppKit.
+    func updateAppearance(_ appearance: ValidatedSkinAppearance, in window: NSWindow? = nil) {
+        guard policy.role == .compact else { return }
+        let window = window ?? attachedWindow
+        guard let window else { return }
+        let size = appearance.layoutPlan.size.contentSize
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.titlebarAppearsTransparent = true
+        window.contentMinSize = size
+        window.contentMaxSize = size
+        window.setContentSize(size)
     }
 
     private func configure(_ window: NSWindow) {
@@ -281,9 +301,16 @@ protocol WindowLifecycleAttaching {
 
 extension CompactWindowController: WindowLifecycleAttaching {}
 
+extension CompactWindowController {
+    func attach(to window: NSWindow, alwaysOnTop: Bool) {
+        attach(to: window, alwaysOnTop: alwaysOnTop, appearance: .native)
+    }
+}
+
 struct WindowAttachmentView: NSViewRepresentable {
     let role: WindowRole
     let alwaysOnTop: Bool
+    var appearance: ValidatedSkinAppearance = .native
     var restoresPersistedFrame = true
     var contentRegionAccessibilityIdentifier: String? = nil
 
@@ -300,14 +327,14 @@ struct WindowAttachmentView: NSViewRepresentable {
         }
         DispatchQueue.main.async {
             guard let window = view.window else { return }
-            context.coordinator.attach(to: window, alwaysOnTop: alwaysOnTop)
+            context.coordinator.attach(to: window, alwaysOnTop: alwaysOnTop, appearance: appearance)
         }
         return view
     }
 
     func updateNSView(_ view: NSView, context: Context) {
         guard let window = view.window else { return }
-        context.coordinator.attach(to: window, alwaysOnTop: alwaysOnTop)
+        context.coordinator.attach(to: window, alwaysOnTop: alwaysOnTop, appearance: appearance)
     }
 }
 

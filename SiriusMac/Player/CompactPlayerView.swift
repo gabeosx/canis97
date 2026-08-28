@@ -38,19 +38,23 @@ struct CompactPlayerView: View {
         ZStack(alignment: .topLeading) {
             decorativeImage(at: renderingAppearance.backgroundAssetURL)
             appOwnedDecorativeSurfaces
-            VStack(alignment: .leading, spacing: style.sectionSpacing) {
-                if let channel = presentation.channelIdentity {
-                    populatedContent(channel)
-                } else {
-                    emptyContent
+            if renderingAppearance.layoutPlan.isLegacy {
+                VStack(alignment: .leading, spacing: style.sectionSpacing) {
+                    if let channel = presentation.channelIdentity {
+                        populatedContent(channel)
+                    } else {
+                        emptyContent
+                    }
                 }
+                .padding(style.padding)
+            } else {
+                expressiveContent
             }
-            .padding(style.padding)
         }
         .frame(width: style.contentSize.width, height: style.contentSize.height, alignment: .topLeading)
         .background(surfaceBackground(.canvas))
         .tint(surfaceTint(.interactiveAccent))
-        .clipShape(.rect(cornerRadius: renderingAppearance.cornerRadius))
+        .clipShape(CompactSkinSilhouetteShape(variant: renderingAppearance.layoutPlan.silhouette, cornerRadius: renderingAppearance.cornerRadius))
         .environment(\.colorScheme, contentColorScheme)
         .foregroundStyle(.primary)
         .accessibilityElement(children: .contain)
@@ -71,6 +75,61 @@ struct CompactPlayerView: View {
         switch style.foregroundColorScheme {
         case .light: .light
         case .dark: .dark
+        }
+    }
+
+    /// The semantic registry is fixed in this source order. Schema-v3 supplies
+    /// only prevalidated frames; it never creates a control or carries action,
+    /// help, accessibility, keyboard, or playback authority.
+    private var expressiveContent: some View {
+        let plan = renderingAppearance.layoutPlan
+        return ZStack(alignment: .topLeading) {
+            pixelDeskOrnament
+            expressiveSlot(.artwork) { artwork }
+            expressiveSlot(.channelIdentity) {
+                Text(presentation.channelIdentity?.displayText ?? "Nothing Playing")
+                    .font(skinFont(plan.typography.display, size: 18, weight: .semibold))
+                    .lineLimit(1)
+                    .help(presentation.channelIdentity?.displayText ?? "Nothing Playing")
+                    .accessibilityLabel("Channel \(presentation.channelIdentity?.displayText ?? "Nothing Playing")")
+            }
+            expressiveSlot(.metadata) { metadata }
+            expressiveSlot(.favorite) { favoriteButton }
+            expressiveSlot(.status) { statusAndRecovery }
+            expressiveSlot(.transport) { transport }
+            expressiveSlot(.library) { libraryButton }
+            expressiveSlot(.overflowMenu) { overflowMenu }
+        }
+        .overlay(alignment: .topLeading) {
+            ForEach(Array(plan.dragRegions.enumerated()), id: \.offset) { _, drag in
+                Color.clear
+                    .contentShape(.rect)
+                    .frame(width: CGFloat(drag.width), height: CGFloat(drag.height))
+                    .offset(x: CGFloat(drag.x), y: CGFloat(drag.y))
+                    .gesture(WindowDragGesture())
+                    .allowsHitTesting(true)
+                    .accessibilityHidden(true)
+            }
+        }
+    }
+
+    private func expressiveSlot<Content: View>(
+        _ slot: CompactSkinSemanticSlot,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        guard let frame = renderingAppearance.layoutPlan.slotFrames[slot] else { return AnyView(EmptyView()) }
+        return AnyView(
+            content()
+                .frame(width: CGFloat(frame.width), height: CGFloat(frame.height), alignment: .topLeading)
+                .offset(x: CGFloat(frame.x), y: CGFloat(frame.y))
+        )
+    }
+
+    private func skinFont(_ token: CompactSkinTypographyToken, size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        switch token {
+        case .systemDefault: .system(size: size, weight: weight)
+        case .systemRounded: .system(size: size, weight: weight, design: .rounded)
+        case .systemMonospaced: .system(size: size, weight: weight, design: .monospaced)
         }
     }
 
@@ -131,6 +190,21 @@ struct CompactPlayerView: View {
         .clipShape(.rect(cornerRadius: renderingAppearance.cornerRadius))
         .accessibilityLabel(presentation.primaryMetadata.map { "Artwork for \($0)" } ?? presentation.channelIdentity.map { "Artwork for channel \($0.displayText)" } ?? "Artwork")
         .accessibilitySortPriority(60)
+    }
+
+    private var favoriteButton: some View {
+        Button(action: { onAction(.toggleFavorite) }) {
+            Image(systemName: presentation.isFavorite ? "star.fill" : "star")
+                .frame(width: CompactPlayerPresentation.transportControlSize, height: CompactPlayerPresentation.transportControlSize)
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(presentation.isFavorite ? Color(hex: style.accentHex) : .secondary)
+        .help(presentation.isFavorite ? "Remove from Favorites" : "Add to Favorites")
+        .accessibilityIdentifier("compact.favorite")
+        .accessibilityLabel(presentation.isFavorite ? "Remove from Favorites" : "Add to Favorites")
+        .accessibilityValue(presentation.isFavorite ? "Favorite" : "Not favorite")
+        .accessibilitySortPriority(40)
     }
 
     @ViewBuilder
@@ -232,37 +306,34 @@ struct CompactPlayerView: View {
 
     private var footer: some View {
         HStack {
-            Button { onAction(.showLibrary) } label: {
-                Label("Show Library", systemImage: "rectangle.stack")
-            }
-                .help("Show Library")
-                .accessibilityIdentifier("compact.show-library")
-                .accessibilityLabel("Show Library")
-                .accessibilitySortPriority(20)
+            libraryButton
             Spacer()
-            Menu {
-                Toggle(
-                    "Always on Top",
-                    isOn: Binding(
-                        get: { isAlwaysOnTop },
-                        set: { onAlwaysOnTopChanged($0) }
-                    )
-                )
-                .accessibilityIdentifier("compact.always-on-top")
-                .accessibilityLabel("Always on Top")
-                .accessibilityValue(isAlwaysOnTop ? "On" : "Off")
-                .accessibilitySortPriority(10)
-                Divider()
-                Button("Sign Out") { onAction(.signOut) }
-                    .accessibilityIdentifier("compact.sign-out")
-            } label: {
-                Label("More", systemImage: "ellipsis.circle")
-            }
+            overflowMenu
         }
         .font(.system(size: 12))
         .padding(4)
         .background(surfaceBackground(.footer))
         .tint(surfaceTint(.interactiveAccent))
+    }
+
+    private var libraryButton: some View {
+        Button { onAction(.showLibrary) } label: { Label("Show Library", systemImage: "rectangle.stack") }
+            .help("Show Library")
+            .accessibilityIdentifier("compact.show-library")
+            .accessibilityLabel("Show Library")
+            .accessibilitySortPriority(20)
+    }
+
+    private var overflowMenu: some View {
+        Menu {
+            Toggle("Always on Top", isOn: Binding(get: { isAlwaysOnTop }, set: { onAlwaysOnTopChanged($0) }))
+                .accessibilityIdentifier("compact.always-on-top")
+                .accessibilityLabel("Always on Top")
+                .accessibilityValue(isAlwaysOnTop ? "On" : "Off")
+                .accessibilitySortPriority(10)
+            Divider()
+            Button("Sign Out") { onAction(.signOut) }.accessibilityIdentifier("compact.sign-out")
+        } label: { Label("More", systemImage: "ellipsis.circle") }
     }
 
     private func accessibilityIdentifier(for action: CompactPlayerAction) -> String {
@@ -337,6 +408,21 @@ struct CompactPlayerView: View {
     }
 
     @ViewBuilder
+    private var pixelDeskOrnament: some View {
+        if renderingAppearance.layoutPlan.silhouette == .pixelNotched {
+            Canvas { context, size in
+                let dot = Path(roundedRect: CGRect(x: 8, y: 8, width: size.width - 16, height: size.height - 16), cornerRadius: 0)
+                context.stroke(dot, with: .color(surfaceTint(.chromeHighlight).opacity(0.72)), lineWidth: 2)
+                for x in stride(from: 16, through: Int(size.width) - 16, by: 8) {
+                    context.fill(Path(CGRect(x: x, y: 20, width: 2, height: 2)), with: .color(surfaceTint(.chromeHighlight).opacity(0.35)))
+                }
+            }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
+    }
+
+    @ViewBuilder
     private func decorativeImage(at url: URL?) -> some View {
         if let url, let image = NSImage(contentsOf: url) {
             Image(nsImage: image)
@@ -374,6 +460,35 @@ private extension Color {
     init(hex: String) {
         let value = UInt64(hex.dropFirst(), radix: 16) ?? 0
         self.init(red: Double((value >> 16) & 0xFF) / 255, green: Double((value >> 8) & 0xFF) / 255, blue: Double(value & 0xFF) / 255)
+    }
+}
+
+private struct CompactSkinSilhouetteShape: Shape {
+    let variant: CompactSkinSilhouetteVariant
+    let cornerRadius: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        switch variant {
+        case .nativeRect:
+            return Path(roundedRect: rect, cornerRadius: cornerRadius)
+        case .pixelNotched:
+            let notch: CGFloat = 8
+            var path = Path()
+            path.move(to: CGPoint(x: rect.minX + notch, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.maxX - notch, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + notch))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - notch))
+            path.addLine(to: CGPoint(x: rect.maxX - notch, y: rect.maxY))
+            path.addLine(to: CGPoint(x: rect.minX + notch, y: rect.maxY))
+            path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY - notch))
+            path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + notch))
+            path.closeSubpath()
+            return path
+        case .discPod:
+            return Path(roundedRect: rect.insetBy(dx: 2, dy: 2), cornerRadius: min(rect.width, rect.height) / 2)
+        case .bubbleCapsule:
+            return Path(roundedRect: rect, cornerRadius: min(rect.width, rect.height) / 3)
+        }
     }
 }
 

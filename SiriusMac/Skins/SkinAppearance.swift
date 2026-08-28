@@ -126,6 +126,126 @@ struct CompactSkinSurfaceTreatment: Equatable, Sendable {
     let strokeOpacity: Double
 }
 
+/// Schema-v3 can select only these application-owned arrangements. The values
+/// intentionally describe appearance, never behavior or window flags.
+enum CompactSkinLayoutVariant: String, Codable, CaseIterable, Sendable {
+    case legacyStack
+    case desktopUtility
+    case discConsole
+    case aquaPod
+}
+
+enum CompactSkinSilhouetteVariant: String, Codable, CaseIterable, Sendable {
+    case nativeRect
+    case pixelNotched
+    case discPod
+    case bubbleCapsule
+}
+
+enum CompactSkinSizeVariant: String, Codable, CaseIterable, Sendable {
+    case legacy400x288
+    case desktop432x304
+    case console384x320
+    case capsule448x304
+
+    var contentSize: CGSize {
+        switch self {
+        case .legacy400x288: CGSize(width: 400, height: 288)
+        case .desktop432x304: CGSize(width: 432, height: 304)
+        case .console384x320: CGSize(width: 384, height: 320)
+        case .capsule448x304: CGSize(width: 448, height: 304)
+        }
+    }
+}
+
+enum CompactSkinSemanticSlot: String, Codable, CaseIterable, Hashable, Sendable {
+    case artwork
+    case channelIdentity
+    case metadata
+    case favorite
+    case status
+    case transport
+    case library
+    case overflowMenu
+}
+
+enum CompactSkinTypographyToken: String, Codable, CaseIterable, Sendable {
+    case systemDefault
+    case systemRounded
+    case systemMonospaced
+}
+
+struct CompactSkinRect: Codable, Equatable, Hashable, Sendable {
+    let x: Int
+    let y: Int
+    let width: Int
+    let height: Int
+
+    var cgRect: CGRect { CGRect(x: x, y: y, width: width, height: height) }
+}
+
+/// The only three typography roles a v3 document may name.
+struct CompactSkinTypography: Codable, Equatable, Sendable {
+    let display: CompactSkinTypographyToken
+    let body: CompactSkinTypographyToken
+    let label: CompactSkinTypographyToken
+}
+
+struct CompactSkinDecorationReferences: Codable, Equatable, Sendable {
+    let backdrop: String?
+    let chromeFrame: String?
+    let displayPlate: String?
+    let ornaments: [String]
+}
+
+/// Fully validated data consumed by the renderer and compact-window bridge.
+/// There are no raw JSON dictionaries downstream of this type.
+struct CompactSkinLayoutPlan: Equatable, Sendable {
+    let layoutVariant: CompactSkinLayoutVariant
+    let silhouette: CompactSkinSilhouetteVariant
+    let size: CompactSkinSizeVariant
+    let slotFrames: [CompactSkinSemanticSlot: CompactSkinRect]
+    let dragRegions: [CompactSkinRect]
+    let typography: CompactSkinTypography
+    let decorations: CompactSkinDecorationReferences
+
+    var contentSize: CGSize { size.contentSize }
+    var isLegacy: Bool { layoutVariant == .legacyStack }
+    var decorationPaths: [String] {
+        [decorations.backdrop, decorations.chromeFrame, decorations.displayPlate]
+            .compactMap { $0 } + decorations.ornaments
+    }
+
+    static let legacy = Self(
+        layoutVariant: .legacyStack,
+        silhouette: .nativeRect,
+        size: .legacy400x288,
+        slotFrames: [:],
+        dragRegions: [],
+        typography: .init(display: .systemDefault, body: .systemDefault, label: .systemDefault),
+        decorations: .init(backdrop: nil, chromeFrame: nil, displayPlate: nil, ornaments: [])
+    )
+}
+
+private struct SkinManifestVersion3: Codable, Sendable {
+    struct Slot: Codable, Sendable { let semantic: CompactSkinSemanticSlot; let frame: CompactSkinRect }
+    let schemaVersion: Int
+    let identifier: SkinIdentifier
+    let displayName: String
+    let playerBackground: String
+    let metadataPanel: String
+    let accent: String
+    let destructive: String
+    let foregroundScheme: SkinManifest.ForegroundScheme
+    let layoutVariant: CompactSkinLayoutVariant
+    let silhouette: CompactSkinSilhouetteVariant
+    let size: CompactSkinSizeVariant
+    let typography: CompactSkinTypography
+    let slots: [Slot]
+    let dragRegions: [CompactSkinRect]
+    let decorations: CompactSkinDecorationReferences
+}
+
 struct ValidatedSkinAppearance: Identifiable, Equatable, Sendable {
     let reference: SkinSelectionReference
     let displayName: String
@@ -135,6 +255,8 @@ struct ValidatedSkinAppearance: Identifiable, Equatable, Sendable {
     let metadataPanelAssetURL: URL?
     let chromeHighlightHex: String
     let displayGlowHex: String
+    let layoutPlan: CompactSkinLayoutPlan
+    let decorationAssetURLs: [URL]
 
     init(
         reference: SkinSelectionReference,
@@ -144,7 +266,9 @@ struct ValidatedSkinAppearance: Identifiable, Equatable, Sendable {
         backgroundAssetURL: URL?,
         metadataPanelAssetURL: URL?,
         chromeHighlightHex: String? = nil,
-        displayGlowHex: String? = nil
+        displayGlowHex: String? = nil,
+        layoutPlan: CompactSkinLayoutPlan = .legacy,
+        decorationAssetURLs: [URL] = []
     ) {
         self.reference = reference
         self.displayName = displayName
@@ -154,6 +278,8 @@ struct ValidatedSkinAppearance: Identifiable, Equatable, Sendable {
         self.metadataPanelAssetURL = metadataPanelAssetURL
         self.chromeHighlightHex = chromeHighlightHex ?? style.accentHex
         self.displayGlowHex = displayGlowHex ?? style.secondaryHex
+        self.layoutPlan = layoutPlan
+        self.decorationAssetURLs = decorationAssetURLs
     }
 
     var id: SkinSelectionReference { reference }
@@ -163,7 +289,7 @@ struct ValidatedSkinAppearance: Identifiable, Equatable, Sendable {
     func renderableAppearance(
         _ assetIsUsable: (URL) -> Bool
     ) -> ValidatedSkinAppearance {
-        let decorationURLs = [backgroundAssetURL, metadataPanelAssetURL].compactMap { $0 }
+        let decorationURLs = [backgroundAssetURL, metadataPanelAssetURL].compactMap { $0 } + decorationAssetURLs
         guard decorationURLs.allSatisfy(assetIsUsable) else { return .native }
         return self
     }
@@ -270,6 +396,10 @@ enum SkinManifestValidator {
     ]
     private static let version1OptionalKeys: Set<String> = ["backgroundAsset", "metadataPanelAsset"]
     private static let version2RequiredKeys = version1RequiredKeys.union(["chromeHighlight", "displayGlow"])
+    private static let version3Keys: Set<String> = [
+        "schemaVersion", "identifier", "displayName", "playerBackground", "metadataPanel", "accent", "destructive", "foregroundScheme",
+        "layoutVariant", "silhouette", "size", "typography", "slots", "dragRegions", "decorations"
+    ]
 
     static func validate(
         _ data: Data,
@@ -290,9 +420,160 @@ enum SkinManifestValidator {
             return try validateVersion1(data, dictionary: dictionary, classification: classification, assetResolver: assetResolver)
         case 2:
             return try validateVersion2(data, classification: classification, assetResolver: assetResolver)
+        case 3:
+            return try validateVersion3(data, dictionary: dictionary, classification: classification, assetResolver: assetResolver)
         default:
             throw SkinManifestValidationError.unsupportedSchema
         }
+    }
+
+    /// Returns canonical, schema-owned asset paths before any archive accounting
+    /// occurs. Importers use this one accessor for every validation stage.
+    static func referencedAssetPaths(in data: Data) throws -> Set<String> {
+        guard let object = try? JSONSerialization.jsonObject(with: data),
+              let dictionary = object as? [String: Any],
+              let schemaVersion = dictionary["schemaVersion"] as? Int
+        else { throw SkinManifestValidationError.malformedDocument }
+        switch schemaVersion {
+        case 1, 2:
+            let background = dictionary["backgroundAsset"] as? String
+            let panel = dictionary["metadataPanelAsset"] as? String
+            return Set([background, panel].compactMap { $0 })
+        case 3:
+            guard Set(dictionary.keys) == version3Keys,
+                  let manifest = try? JSONDecoder().decode(SkinManifestVersion3.self, from: data)
+            else { throw SkinManifestValidationError.unknownOrMissingKeys }
+            return Set(manifestDecorationPaths(manifest))
+        default:
+            throw SkinManifestValidationError.unsupportedSchema
+        }
+    }
+
+    private static func validateVersion3(
+        _ data: Data,
+        dictionary: [String: Any],
+        classification: SkinClassification,
+        assetResolver: AssetResolver
+    ) throws -> ValidatedSkinAppearance {
+        guard Set(dictionary.keys) == version3Keys,
+              let manifest = try? JSONDecoder().decode(SkinManifestVersion3.self, from: data),
+              manifest.schemaVersion == 3
+        else { throw SkinManifestValidationError.unknownOrMissingKeys }
+
+        let plan = try validateLayout(manifest)
+        let colors = [manifest.playerBackground, manifest.metadataPanel, manifest.accent, manifest.destructive]
+        guard colors.allSatisfy(isSixDigitRGB) else { throw SkinManifestValidationError.invalidColor }
+        let trimmedName = manifest.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedName == manifest.displayName, (1...64).contains(manifest.displayName.count) else {
+            throw SkinManifestValidationError.invalidDisplayName
+        }
+        let decorationURLs = try plan.decorationPaths.map { path -> URL in
+            guard let url = assetResolver(path) else { throw SkinManifestValidationError.unresolvedAsset }
+            return url
+        }
+        let scheme: CompactPlayerForegroundColorScheme = manifest.foregroundScheme == .light ? .light : .dark
+        return ValidatedSkinAppearance(
+            reference: .init(identifier: manifest.identifier, classification: classification),
+            displayName: manifest.displayName,
+            style: .init(
+                contentSize: plan.contentSize,
+                dominantHex: manifest.playerBackground,
+                secondaryHex: manifest.metadataPanel,
+                accentHex: manifest.accent,
+                destructiveHex: manifest.destructive,
+                foregroundColorScheme: scheme,
+                padding: 0,
+                sectionSpacing: 0
+            ),
+            cornerRadius: plan.silhouette == .pixelNotched ? 0 : 8,
+            backgroundAssetURL: nil,
+            metadataPanelAssetURL: nil,
+            chromeHighlightHex: manifest.accent,
+            displayGlowHex: manifest.metadataPanel,
+            layoutPlan: plan,
+            decorationAssetURLs: decorationURLs
+        )
+    }
+
+    private static func manifestDecorationPaths(_ manifest: SkinManifestVersion3) -> [String] {
+        [manifest.decorations.backdrop, manifest.decorations.chromeFrame, manifest.decorations.displayPlate]
+            .compactMap { $0 } + manifest.decorations.ornaments
+    }
+
+    private static func validateLayout(_ manifest: SkinManifestVersion3) throws -> CompactSkinLayoutPlan {
+        let expected: (CompactSkinLayoutVariant, CompactSkinSilhouetteVariant, CompactSkinSizeVariant) = switch manifest.layoutVariant {
+        case .legacyStack: (.legacyStack, .nativeRect, .legacy400x288)
+        case .desktopUtility: (.desktopUtility, .pixelNotched, .desktop432x304)
+        case .discConsole: (.discConsole, .discPod, .console384x320)
+        case .aquaPod: (.aquaPod, .bubbleCapsule, .capsule448x304)
+        }
+        guard manifest.silhouette == expected.1, manifest.size == expected.2,
+              manifest.decorations.ornaments.count <= 3,
+              Set(manifest.slots.map(\.semantic)) == Set(CompactSkinSemanticSlot.allCases),
+              manifest.slots.count == CompactSkinSemanticSlot.allCases.count
+        else { throw SkinManifestValidationError.invalidMetric }
+        let paths = manifestDecorationPaths(manifest)
+        guard paths.count <= 6, Set(paths).count == paths.count,
+              paths.allSatisfy(isCanonicalLocalAssetPath)
+        else { throw SkinManifestValidationError.unresolvedAsset }
+
+        let size = manifest.size.contentSize
+        let frames = Dictionary(uniqueKeysWithValues: manifest.slots.map { ($0.semantic, $0.frame) })
+        let allFrames = Array(frames.values)
+        guard allFrames.allSatisfy({ validGridRect($0, in: size) }),
+              nonOverlapping(allFrames),
+              validInteractiveFloors(frames),
+              validTextCapacity(frames),
+              validFocusClearance(allFrames, in: size),
+              !manifest.dragRegions.isEmpty,
+              manifest.dragRegions.allSatisfy({ drag in
+                  validGridRect(drag, in: size) && drag.width >= 80 && drag.height >= 20 &&
+                      !allFrames.contains(where: { $0.cgRect.intersects(drag.cgRect) })
+              })
+        else { throw SkinManifestValidationError.invalidMetric }
+        return .init(
+            layoutVariant: expected.0,
+            silhouette: manifest.silhouette,
+            size: manifest.size,
+            slotFrames: frames,
+            dragRegions: manifest.dragRegions,
+            typography: manifest.typography,
+            decorations: manifest.decorations
+        )
+    }
+
+    private static func validGridRect(_ rect: CompactSkinRect, in size: CGSize) -> Bool {
+        [rect.x, rect.y, rect.width, rect.height].allSatisfy { $0 >= 0 && $0.isMultiple(of: 4) } &&
+            rect.width > 0 && rect.height > 0 &&
+            rect.x + rect.width <= Int(size.width) && rect.y + rect.height <= Int(size.height)
+    }
+
+    private static func nonOverlapping(_ frames: [CompactSkinRect]) -> Bool {
+        for index in frames.indices {
+            for other in frames.indices.dropFirst(index + 1) where frames[index].cgRect.intersects(frames[other].cgRect) { return false }
+        }
+        return true
+    }
+
+    private static func validInteractiveFloors(_ frames: [CompactSkinSemanticSlot: CompactSkinRect]) -> Bool {
+        let interactiveSlots: [CompactSkinSemanticSlot] = [.favorite, .transport, .library, .overflowMenu]
+        return interactiveSlots.allSatisfy {
+            guard let frame = frames[$0] else { return false }
+            return frame.width >= 32 && frame.height >= 32
+        }
+    }
+
+    private static func validTextCapacity(_ frames: [CompactSkinSemanticSlot: CompactSkinRect]) -> Bool {
+        guard let channel = frames[.channelIdentity], let metadata = frames[.metadata], let status = frames[.status] else { return false }
+        return channel.width >= 96 && channel.height >= 20 && metadata.width >= 128 && metadata.height >= 40 && status.width >= 80 && status.height >= 20
+    }
+
+    private static func validFocusClearance(_ frames: [CompactSkinRect], in size: CGSize) -> Bool {
+        frames.allSatisfy { $0.x >= 4 && $0.y >= 4 && $0.x + $0.width <= Int(size.width) - 4 && $0.y + $0.height <= Int(size.height) - 4 }
+    }
+
+    private static func isCanonicalLocalAssetPath(_ path: String) -> Bool {
+        !path.isEmpty && !path.contains("..") && !path.contains("\\\\") && !path.hasPrefix("/") && !path.contains("://") && URL(string: path)?.scheme == nil
     }
 
     /// Validates schema version 2 as a separate, exact contract so version 1
@@ -499,7 +780,7 @@ struct SkinAppearanceCatalog: Sendable {
     static let phaseOne = bundledCatalog()
 
     static func bundledCatalog(in bundle: Bundle = .main) -> SkinAppearanceCatalog {
-        let bundledAppearances: [ValidatedSkinAppearance] = ["SignalGlow", "TapeDeck"].compactMap { resourceName -> ValidatedSkinAppearance? in
+        let bundledAppearances: [ValidatedSkinAppearance] = ["SignalGlow", "TapeDeck", "PixelDesk"].compactMap { resourceName -> ValidatedSkinAppearance? in
             guard let manifestURL = bundle.url(forResource: resourceName, withExtension: "json"),
                   let data = try? Data(contentsOf: manifestURL)
             else { return nil }

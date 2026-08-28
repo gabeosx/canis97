@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 3,
+  "identifier": "pixel-desk",
+  "displayName": "Pixel Desk",
+  "playerBackground": "#C8C2AF",
+  "metadataPanel": "#8A8E83",
+  "accent": "#304D92",
+  "destructive": "#A63A32",
+  "foregroundScheme": "light",
+  "layoutVariant": "desktopUtility",
+  "silhouette": "pixelNotched",
+  "size": "desktop432x304",
+  "typography": {
+    "display": "systemMonospaced",
+    "body": "systemDefault",
+    "label": "systemMonospaced"
+  },
+  "slots": [
+    { "semantic": "artwork", "frame": { "x": 16, "y": 40, "width": 80, "height": 80 } },
+    { "semantic": "channelIdentity", "frame": { "x": 112, "y": 40, "width": 224, "height": 24 } },
+    { "semantic": "metadata", "frame": { "x": 112, "y": 72, "width": 288, "height": 56 } },
+    { "semantic": "favorite", "frame": { "x": 368, "y": 32, "width": 32, "height": 32 } },
+    { "semantic": "status", "frame": { "x": 16, "y": 136, "width": 192, "height": 24 } },
+    { "semantic": "transport", "frame": { "x": 224, "y": 144, "width": 144, "height": 40 } },
+    { "semantic": "library", "frame": { "x": 16, "y": 248, "width": 112, "height": 32 } },
+    { "semantic": "overflowMenu", "frame": { "x": 368, "y": 248, "width": 48, "height": 32 } }
+  ],
+  "dragRegions": [
+    { "x": 16, "y": 8, "width": 320, "height": 20 }
+  ],
+  "decorations": {
+    "backdrop": null,
+    "chromeFrame": null,
+    "displayPlate": null,
+    "ornaments": []
+  }
+}
