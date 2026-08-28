@@ -25,6 +25,7 @@ readonly PLAYBACK_COORDINATOR="$ROOT/SiriusMac/Listening/PlaybackCoordinator.swi
 readonly OFFLINE_REVIEW_HARNESS="$ROOT/SiriusMac/Testing/UITestHarness.swift"
 readonly ICON="$ROOT/SiriusMac/Assets/ProductIcon.icon"
 readonly PROJECT_FILE="$ROOT/SiriusMac.xcodeproj/project.pbxproj"
+readonly APP_INFO_PLIST="$ROOT/SiriusMac/Info.plist"
 readonly APP_SCHEME="$ROOT/SiriusMac.xcodeproj/xcshareddata/xcschemes/Canis97.xcscheme"
 readonly UI_VALIDATION_SCHEME="$ROOT/SiriusMac.xcodeproj/xcshareddata/xcschemes/Canis97UIValidation.xcscheme"
 
@@ -77,7 +78,7 @@ check_tracer() {
   rg -q '"supported-platforms"' "$ICON/icon.json" || fail 'Icon Composer platform declaration is missing'
   ! rg -ni '<(image|text)|siriusxm|sirius|apple|winamp' "$ICON/Assets" || fail 'icon layer contains prohibited imagery or text metadata'
   local forbidden_runtime_pattern="xcode""build|xct""est|XC""UIApplication|build_""and_run|Sirius""XMClient\\("
-  ! rg -n "$forbidden_runtime_pattern" "$0" >/dev/null || fail 'tracer must remain source-only and launch-safe'
+  ! /usr/bin/sed -n '/^check_tracer()/,/^}/p' "$0" | rg -n "$forbidden_runtime_pattern" >/dev/null || fail 'tracer must remain source-only and launch-safe'
   printf 'product-identity tracer: PASS\n'
 }
 
@@ -185,8 +186,9 @@ check_appearance() {
 check_cutover() {
   check_appearance
   local test_product_suffix="xc""test"
-  require_file "$PROJECT_FILE"; require_file "$APP_SCHEME"; require_file "$UI_VALIDATION_SCHEME"
+  require_file "$PROJECT_FILE"; require_file "$APP_INFO_PLIST"; require_file "$APP_SCHEME"; require_file "$UI_VALIDATION_SCHEME"
   /usr/bin/plutil -lint "$PROJECT_FILE" >/dev/null
+  /usr/bin/plutil -lint "$APP_INFO_PLIST" >/dev/null
   /usr/bin/xmllint --noout "$APP_SCHEME" "$UI_VALIDATION_SCHEME"
   [[ ! -e "$ROOT/SiriusMac.xcodeproj/xcshareddata/xcschemes/SiriusMac.xcscheme" ]] || fail 'legacy app scheme file remains'
   [[ ! -e "$ROOT/SiriusMac.xcodeproj/xcshareddata/xcschemes/SiriusMacUIValidation.xcscheme" ]] || fail 'legacy UI-validation scheme file remains'
@@ -217,10 +219,11 @@ check_cutover() {
   [[ "$(rg -c 'ASSETCATALOG_COMPILER_APPICON_NAME = ProductIcon;' "$PROJECT_FILE")" == '2' ]] || fail 'ProductIcon must be the sole Debug and Release app-icon association'
   ! rg -Fq 'ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon' "$PROJECT_FILE" || fail 'competing AppIcon authority remains'
   [[ "$(find "$ROOT/SiriusMac" -type d -name '*.icon' | wc -l | tr -d ' ')" == '1' ]] || fail 'exactly one Icon Composer source is required after cutover'
-  rg -Fq 'UTTypeIdentifier = "com.canis97.skin-package"' "$PROJECT_FILE" || fail 'primary skin UTType declaration is missing'
-  rg -Fq '"public.filename-extension" = (canis97skin)' "$PROJECT_FILE" || fail 'primary skin extension declaration is missing'
-  rg -Fq 'UTTypeIdentifier = "com.siriusmac.skin-package"' "$PROJECT_FILE" || fail 'legacy skin UTType declaration is missing'
-  rg -Fq '"public.filename-extension" = (siriusskin)' "$PROJECT_FILE" || fail 'legacy skin extension declaration is missing'
+  [[ "$(/usr/bin/plutil -extract UTExportedTypeDeclarations.0.UTTypeIdentifier raw "$APP_INFO_PLIST")" == 'com.canis97.skin-package' ]] || fail 'primary skin UTType declaration is missing'
+  [[ "$(/usr/bin/plutil -convert json -o - "$APP_INFO_PLIST" | /usr/bin/jq -r '.UTExportedTypeDeclarations[0].UTTypeTagSpecification["public.filename-extension"][0]')" == 'canis97skin' ]] || fail 'primary skin extension declaration is missing'
+  [[ "$(/usr/bin/plutil -extract UTImportedTypeDeclarations.0.UTTypeIdentifier raw "$APP_INFO_PLIST")" == 'com.siriusmac.skin-package' ]] || fail 'legacy skin UTType declaration is missing'
+  [[ "$(/usr/bin/plutil -convert json -o - "$APP_INFO_PLIST" | /usr/bin/jq -r '.UTImportedTypeDeclarations[0].UTTypeTagSpecification["public.filename-extension"][0]')" == 'siriusskin' ]] || fail 'legacy skin extension declaration is missing'
+  [[ "$(rg -c 'INFOPLIST_FILE = SiriusMac/Info.plist;' "$PROJECT_FILE")" == '2' ]] || fail 'app configurations must use the authoritative Info.plist'
 
   for scheme in "$APP_SCHEME" "$UI_VALIDATION_SCHEME"; do
     rg -Fq 'BlueprintIdentifier="A00100050000000000000001" BuildableName="Canis97.app" BlueprintName="Canis97"' "$scheme" || fail 'scheme app reference does not match the approved tuple'
@@ -233,12 +236,118 @@ check_cutover() {
   printf 'product-identity cutover contract: PASS\n'
 }
 
+selected_value() {
+  /usr/bin/plutil -extract "selectedIdentity.$1" raw "$ARTIFACT"
+}
+
+check_final_source() {
+  check_cutover
+
+  local module_name app_bundle_identifier executable_name scheme_name environment_prefix
+  local app_log_subsystem script_prefix display_name
+  module_name="$(selected_value moduleName)"
+  app_bundle_identifier="$(selected_value appBundleIdentifier)"
+  executable_name="$(selected_value executableName)"
+  scheme_name="$(selected_value schemeName)"
+  environment_prefix="$(selected_value environmentPrefix)"
+  app_log_subsystem="$(selected_value appLogSubsystem)"
+  script_prefix="$(selected_value scriptPrefix)"
+  display_name="$(selected_value displayName)"
+
+  local unit_test_sources=(
+    "$ROOT/SiriusMacTests/SelectedAuthenticationCompositionTests.swift"
+    "$ROOT/SiriusMacTests/SkinPackageImporterTests.swift"
+    "$ROOT/SiriusMacTests/SystemMediaControllerTests.swift"
+    "$ROOT/SiriusMacTests/WebAuthenticationBridgeTests.swift"
+  )
+  local source
+  for source in "${unit_test_sources[@]}"; do
+    require_file "$source"
+    rg -Fq "@testable import $module_name" "$source" || fail "remaining unit test must import approved module: ${source#$ROOT/}"
+    ! rg -Fq '@testable import SiriusMac' "$source" || fail "legacy app module import remains: ${source#$ROOT/}"
+  done
+
+  local ui_tests="$ROOT/SiriusMacUITests/SiriusMacUITests.swift"
+  require_file "$ui_tests"
+  rg -Fq "$app_bundle_identifier" "$ui_tests" || fail 'UI tests must use the approved app bundle identifier'
+  rg -Fq "$executable_name.app/Contents/MacOS/$executable_name" "$ui_tests" || fail 'UI tests must verify the approved exact executable path'
+  rg -Fq "$environment_prefix" "$ui_tests" || fail 'UI tests must use the approved environment prefix'
+  rg -Fq "$display_name" "$ui_tests" || fail 'UI tests must use the approved display/window identity'
+  rg -Fq 'runningApplications' "$ui_tests" || fail 'UI tests must retain preflight process refusal'
+  rg -Fq 'terminate' "$ui_tests" || fail 'UI tests must retain guarded teardown'
+
+  local launcher="$ROOT/script/build_and_run.sh"
+  local native_launcher="$ROOT/script/native_single_instance_launcher.swift"
+  local live_checkpoint="$ROOT/script/live_compatibility_checkpoint.sh"
+  local source_suite="$ROOT/script/tests/build_and_run_script_tests.sh"
+  local build_suite="$ROOT/script/tests/build_and_run_tests.sh"
+  for source in "$launcher" "$native_launcher" "$live_checkpoint" "$source_suite" "$build_suite"; do
+    require_file "$source"
+  done
+
+  for expected in "$scheme_name" "$app_bundle_identifier" "$executable_name" "$app_log_subsystem" "$environment_prefix" "$script_prefix"; do
+    rg -Fq "$expected" "$launcher" "$native_launcher" "$live_checkpoint" "$source_suite" "$build_suite" || fail "launcher consumers are missing approved identity value: $expected"
+  done
+  rg -Fq 'com.siriusmac.client' "$launcher" || fail 'provider-client telemetry subsystem must remain unchanged'
+  rg -Fq 'SiriusXMClient' "$live_checkpoint" || fail 'live compatibility checkpoint must retain provider-client identity'
+
+  ! rg -n '@testable import SiriusMac|com\.siriusmac\.player\.uitests|SIRIUS_MAC_UI_TEST_MODE|SiriusMac\.app/Contents/MacOS/SiriusMac' \
+    "$ROOT/SiriusMacTests" "$ui_tests" "$launcher" "$native_launcher" "$live_checkpoint" "$source_suite" "$build_suite" >/dev/null \
+    || fail 'stale app-owned identity remains outside an explicit compatibility fixture'
+
+  printf 'product-identity final source contract: PASS\n'
+}
+
+check_built_product() {
+  check_final_source
+  local derived_data="${IDENTITY_DERIVED_DATA_PATH:-}"
+  [[ -n "$derived_data" ]] || fail 'IDENTITY_DERIVED_DATA_PATH is required for built-product inspection'
+  [[ -d "$derived_data" ]] || fail "DerivedData path does not exist: $derived_data"
+
+  local executable_name app_bundle_identifier module_name icon_basename skin_type skin_extension
+  executable_name="$(selected_value executableName)"
+  app_bundle_identifier="$(selected_value appBundleIdentifier)"
+  module_name="$(selected_value moduleName)"
+  icon_basename="$(selected_value iconBasename)"
+  skin_type="$(selected_value skinPackageTypeIdentifier)"
+  skin_extension="$(selected_value skinPackageExtension)"
+
+  local built_app
+  built_app="$(find "$derived_data/Build/Products" -type d -path "*/$executable_name.app" -print -quit 2>/dev/null || true)"
+  [[ -n "$built_app" ]] || fail "built app not found below $derived_data/Build/Products"
+  local info="$built_app/Contents/Info.plist"
+  local binary="$built_app/Contents/MacOS/$executable_name"
+  require_file "$info"
+  require_file "$binary"
+
+  [[ "$(/usr/bin/plutil -extract CFBundleIdentifier raw "$info")" == "$app_bundle_identifier" ]] || fail 'built app bundle identifier does not match approved identity'
+  [[ "$(/usr/bin/plutil -extract CFBundleExecutable raw "$info")" == "$executable_name" ]] || fail 'built app executable does not match approved identity'
+  [[ "$(/usr/bin/plutil -extract CFBundleName raw "$info")" == "$executable_name" ]] || fail 'built app product name does not match approved identity'
+  [[ "$(/usr/bin/plutil -extract CFBundleIconName raw "$info")" == "$icon_basename" ]] || fail 'built app icon basename does not match ProductIcon'
+  /usr/bin/plutil -p "$info" | rg -Fq "$skin_type" || fail 'built app is missing the approved skin UTType'
+  /usr/bin/plutil -p "$info" | rg -Fq "$skin_extension" || fail 'built app is missing the approved skin extension'
+  /usr/bin/plutil -p "$info" | rg -Fq 'com.siriusmac.skin-package' || fail 'built app is missing the legacy skin compatibility UTType'
+  /usr/bin/plutil -p "$info" | rg -Fq 'siriusskin' || fail 'built app is missing the legacy skin compatibility extension'
+  ! /usr/bin/plutil -p "$info" | rg -Fq 'AppIcon' || fail 'built app contains a competing icon authority'
+
+  local unit_product ui_product
+  unit_product="$(find "$derived_data/Build/Products" -type d -name 'Canis97Tests.xctest' -print -quit 2>/dev/null || true)"
+  ui_product="$(find "$derived_data/Build/Products" -type d -name 'Canis97UITests.xctest' -print -quit 2>/dev/null || true)"
+  [[ -n "$unit_product" ]] || fail 'built unit-test product is missing'
+  [[ -n "$ui_product" ]] || fail 'built UI-test product is missing'
+  [[ -d "$built_app/Contents/Resources/$icon_basename.icon" || -f "$built_app/Contents/Resources/$icon_basename.icns" || -f "$built_app/Contents/Resources/Assets.car" ]] || fail 'built app has no compiled ProductIcon resource authority'
+  [[ "$module_name" == 'Canis97' ]] || fail 'approved module identity changed before built-product inspection'
+
+  printf 'product-identity built product: PASS (%s)\n' "$built_app"
+}
+
 case "${1:-}" in
   --tracer) check_tracer ;;
   --migration) check_migration ;;
   --presentation) check_presentation ;;
   --appearance) check_appearance ;;
   --cutover) check_cutover ;;
-  --final-source|--built-product) fail "${1} contract is staged for its downstream plan" ;;
+  --final-source) check_final_source ;;
+  --built-product) check_built_product ;;
   *) printf 'usage: %s --tracer|--migration|--presentation|--appearance|--cutover|--final-source|--built-product\n' "$0" >&2; exit 64 ;;
 esac
