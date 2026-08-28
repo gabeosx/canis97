@@ -163,6 +163,7 @@ struct CompactPlayerView: View {
         @ViewBuilder content: () -> Content
     ) -> some View {
         guard let frame = renderingAppearance.layoutPlan.slotFrames[slot] else { return AnyView(EmptyView()) }
+        let opticalOffset = expressiveSlotOpticalOffset(slot)
         return AnyView(
             content()
                 .frame(
@@ -170,14 +171,29 @@ struct CompactPlayerView: View {
                     height: CGFloat(frame.height),
                     alignment: expressiveSlotAlignment(slot)
                 )
-                .offset(x: CGFloat(frame.x), y: CGFloat(frame.y))
+                .offset(
+                    x: CGFloat(frame.x) + opticalOffset.width,
+                    y: CGFloat(frame.y) + opticalOffset.height
+                )
         )
     }
 
     private func expressiveSlotAlignment(_ slot: CompactSkinSemanticSlot) -> Alignment {
         switch slot {
-        case .channelIdentity, .metadata, .status: .topLeading
-        case .artwork, .favorite, .transport, .library, .overflowMenu: .center
+        case .channelIdentity, .metadata: .topLeading
+        case .artwork, .favorite, .status, .transport, .library, .overflowMenu: .center
+        }
+    }
+
+    /// Small optical corrections align semantic hit regions with asymmetric
+    /// illustrated wells without changing their validated target sizes.
+    private func expressiveSlotOpticalOffset(_ slot: CompactSkinSemanticSlot) -> CGSize {
+        guard renderingAppearance.layoutPlan.layoutVariant == .discConsole else { return .zero }
+        return switch slot {
+        case .status: CGSize(width: 8, height: 0)
+        case .library: CGSize(width: -6, height: 0)
+        case .overflowMenu: CGSize(width: -12, height: 0)
+        default: .zero
         }
     }
 
@@ -262,7 +278,7 @@ struct CompactPlayerView: View {
         .accessibilityLabel(presentation.isFavorite ? "Remove from Favorites" : "Add to Favorites")
         .accessibilityValue(presentation.isFavorite ? "Favorite" : "Not favorite")
         .accessibilitySortPriority(40)
-        .padding(CompactPlayerPresentation.focusClearance)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         .disabled(presentation.channelIdentity == nil)
     }
 
@@ -328,7 +344,12 @@ struct CompactPlayerView: View {
             .allowsTightening(true)
             .padding(.horizontal, 6)
             .padding(.vertical, 3)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .frame(
+                maxWidth: .infinity,
+                maxHeight: .infinity,
+                alignment: hasExpressiveFaceplate ? .center : .leading
+            )
+            .multilineTextAlignment(hasExpressiveFaceplate ? .center : .leading)
             .background(surfaceBackground(surface).opacity(hasExpressiveFaceplate ? 0 : 1))
             .tint(surfaceTint(surface))
             .accessibilityValue(status.accessibilityValue)
@@ -365,21 +386,50 @@ struct CompactPlayerView: View {
     private var transport: some View {
         let availability = presentation.transport
         let playPause = availability?.playPause ?? .play
-        HStack(spacing: 8) {
-            transportButton("Previous", systemImage: "backward.fill", enabled: availability?.previousEnabled == true, action: .previous)
-            transportButton(playPause == .pause ? "Pause" : "Play Live", systemImage: playPause == .pause ? "pause.fill" : "play.fill", enabled: availability != nil, action: .playPause)
-            transportButton("Next", systemImage: "forward.fill", enabled: availability?.nextEnabled == true, action: .next)
+        if let centers = expressiveTransportControlCenters {
+            ZStack(alignment: .topLeading) {
+                transportButton("Previous", systemImage: "backward.fill", enabled: availability?.previousEnabled == true, action: .previous)
+                    .position(centers[0])
+                transportButton(playPause == .pause ? "Pause" : "Play Live", systemImage: playPause == .pause ? "pause.fill" : "play.fill", enabled: availability != nil, action: .playPause)
+                    .position(centers[1])
+                transportButton("Next", systemImage: "forward.fill", enabled: availability?.nextEnabled == true, action: .next)
+                    .position(centers[2])
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .tint(surfaceTint(.interactiveAccent))
+        } else {
+            HStack(spacing: 8) {
+                transportButton("Previous", systemImage: "backward.fill", enabled: availability?.previousEnabled == true, action: .previous)
+                transportButton(playPause == .pause ? "Pause" : "Play Live", systemImage: playPause == .pause ? "pause.fill" : "play.fill", enabled: availability != nil, action: .playPause)
+                transportButton("Next", systemImage: "forward.fill", enabled: availability?.nextEnabled == true, action: .next)
+            }
+            .padding(CompactPlayerPresentation.focusClearance)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            .background(surfaceBackground(.transport))
+            .tint(surfaceTint(.interactiveAccent))
         }
-        .padding(CompactPlayerPresentation.focusClearance)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-        .background(surfaceBackground(.transport).opacity(hasExpressiveFaceplate ? 0 : 1))
-        .tint(surfaceTint(.interactiveAccent))
     }
 
+    /// App-owned optical centers for the three physical transport wells drawn
+    /// by each finite faceplate layout. The surrounding semantic slot remains
+    /// the validated accessibility and focus region.
+    private var expressiveTransportControlCenters: [CGPoint]? {
+        switch renderingAppearance.layoutPlan.layoutVariant {
+        case .discConsole:
+            [CGPoint(x: 28, y: 28), CGPoint(x: 66, y: 28), CGPoint(x: 104, y: 28)]
+        case .aquaPod:
+            [CGPoint(x: 36, y: 30), CGPoint(x: 80, y: 30), CGPoint(x: 124, y: 30)]
+        case .legacyStack, .desktopUtility:
+            nil
+        }
+    }
+
+    @ViewBuilder
     private func transportButton(_ title: String, systemImage: String, enabled: Bool, action: CompactPlayerAction) -> some View {
-        Button(action: { onAction(action) }) {
+        let button = Button(action: { onAction(action) }) {
             Image(systemName: systemImage)
                 .frame(width: CompactPlayerPresentation.transportControlSize, height: CompactPlayerPresentation.transportControlSize)
+                .contentShape(.rect)
         }
         .disabled(!enabled)
         .help(title)
@@ -388,6 +438,12 @@ struct CompactPlayerView: View {
         .accessibilityValue(enabled ? "Available" : "Unavailable for the current queue")
         .accessibilityHint(enabled ? "" : "Unavailable for the current queue")
         .accessibilitySortPriority(30)
+
+        if hasExpressiveFaceplate {
+            button.buttonStyle(.plain)
+        } else {
+            button
+        }
     }
 
     private var footer: some View {
@@ -402,48 +458,73 @@ struct CompactPlayerView: View {
         .tint(surfaceTint(.interactiveAccent))
     }
 
+    @ViewBuilder
     private var libraryButton: some View {
-        Button {
-            onAction(.showLibrary)
-        } label: {
-            if hasExpressiveFaceplate {
+        if hasExpressiveFaceplate {
+            Button {
+                onAction(.showLibrary)
+            } label: {
                 Image(systemName: "rectangle.stack")
                     .frame(width: CompactPlayerPresentation.transportControlSize, height: CompactPlayerPresentation.transportControlSize)
                     .contentShape(.rect)
-            } else {
-                Label("Show Library", systemImage: "rectangle.stack")
             }
-        }
+            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             .help("Show Library")
             .accessibilityIdentifier("compact.show-library")
             .accessibilityLabel("Show Library")
             .accessibilitySortPriority(20)
+        } else {
+            Button {
+                onAction(.showLibrary)
+            } label: {
+                Label("Show Library", systemImage: "rectangle.stack")
+            }
+            .help("Show Library")
+            .accessibilityIdentifier("compact.show-library")
+            .accessibilityLabel("Show Library")
+            .accessibilitySortPriority(20)
+        }
     }
 
+    @ViewBuilder
     private var overflowMenu: some View {
-        Menu {
-            Toggle("Always on Top", isOn: Binding(get: { isAlwaysOnTop }, set: { onAlwaysOnTopChanged($0) }))
-                .accessibilityIdentifier("compact.always-on-top")
-                .accessibilityLabel("Always on Top")
-                .accessibilityValue(isAlwaysOnTop ? "On" : "Off")
-                .accessibilitySortPriority(10)
-            Divider()
-            Button("Use Native Appearance") { onAppearanceRecovery() }
-                .accessibilityIdentifier("compact.overflow.use-native-appearance")
-                .accessibilityLabel("Use Native Appearance")
-                .accessibilitySortPriority(9)
-            Divider()
-            Button("Sign Out") { onAction(.signOut) }.accessibilityIdentifier("compact.sign-out")
-        } label: {
-            if hasExpressiveFaceplate {
+        if hasExpressiveFaceplate {
+            Menu {
+                overflowMenuActions
+            } label: {
                 Image(systemName: "ellipsis")
                     .frame(width: CompactPlayerPresentation.transportControlSize, height: CompactPlayerPresentation.transportControlSize)
                     .contentShape(.rect)
                     .accessibilityLabel("More")
-            } else {
+            }
+            .menuIndicator(.hidden)
+            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        } else {
+            Menu {
+                overflowMenuActions
+            } label: {
                 Label("More", systemImage: "ellipsis.circle")
             }
         }
+    }
+
+    @ViewBuilder
+    private var overflowMenuActions: some View {
+        Toggle("Always on Top", isOn: Binding(get: { isAlwaysOnTop }, set: { onAlwaysOnTopChanged($0) }))
+            .accessibilityIdentifier("compact.always-on-top")
+            .accessibilityLabel("Always on Top")
+            .accessibilityValue(isAlwaysOnTop ? "On" : "Off")
+            .accessibilitySortPriority(10)
+        Divider()
+        Button("Use Native Appearance") { onAppearanceRecovery() }
+            .accessibilityIdentifier("compact.overflow.use-native-appearance")
+            .accessibilityLabel("Use Native Appearance")
+            .accessibilitySortPriority(9)
+        Divider()
+        Button("Sign Out") { onAction(.signOut) }
+            .accessibilityIdentifier("compact.sign-out")
     }
 
     private func accessibilityIdentifier(for action: CompactPlayerAction) -> String {
