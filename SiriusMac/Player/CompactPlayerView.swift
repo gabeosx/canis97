@@ -8,6 +8,7 @@ struct CompactPlayerView: View {
     let isAlwaysOnTop: Bool
     let onAlwaysOnTopChanged: @MainActor (Bool) -> Void
     let onAppearanceRecovery: @MainActor () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showsNativeAppearanceRecoveryStatus = false
 
     private var renderingAppearance: ValidatedSkinAppearance {
@@ -405,6 +406,7 @@ struct CompactPlayerView: View {
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: renderingAppearance.reference)
     }
 
     @ViewBuilder
@@ -438,7 +440,13 @@ struct CompactPlayerView: View {
                         context.fill(Path(CGRect(x: x, y: 72, width: 6, height: 3)), with: .color(surfaceTint(.interactiveAccent).opacity(0.5)))
                     }
                 case .bubbleCapsule:
-                    break
+                    context.fill(Path(CGRect(x: 8, y: 8, width: size.width - 16, height: size.height * 0.45)), with: .color(surfaceTint(.displayGlow).opacity(0.38)))
+                    context.fill(Path(CGRect(x: 8, y: size.height * 0.5, width: size.width - 16, height: size.height * 0.42)), with: .color(surfaceTint(.metadata).opacity(0.34)))
+                    context.fill(Path(roundedRect: CGRect(x: 16, y: 36, width: size.width - 32, height: 112), cornerRadius: 24), with: .color(surfaceTint(.chromeHighlight).opacity(0.18)))
+                    context.stroke(Path(roundedRect: CGRect(x: 12, y: 12, width: size.width - 24, height: size.height - 24), cornerRadius: 40), with: .color(surfaceTint(.chromeHighlight).opacity(0.7)), lineWidth: 2)
+                    for bubble in [CGRect(x: 32, y: 176, width: 12, height: 12), CGRect(x: 72, y: 204, width: 8, height: 8), CGRect(x: size.width - 64, y: 172, width: 16, height: 16), CGRect(x: size.width - 92, y: 204, width: 8, height: 8)] {
+                        context.stroke(Path(ellipseIn: bubble), with: .color(surfaceTint(.chromeHighlight).opacity(0.58)), lineWidth: 1)
+                    }
                 case .nativeRect:
                     break
                 }

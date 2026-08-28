@@ -779,8 +779,13 @@ struct SkinAppearanceCatalog: Sendable {
 
     static let phaseOne = bundledCatalog()
 
+    /// The public v3 resources stay in one deterministic catalog order while
+    /// retaining the legacy bundled appearances before them.
+    static let expressiveBundledResourceNames = ["PixelDesk", "PocketDisc", "AquaVista"]
+    private static let bundledResourceNames = ["SignalGlow", "TapeDeck"] + expressiveBundledResourceNames
+
     static func bundledCatalog(in bundle: Bundle = .main) -> SkinAppearanceCatalog {
-        let bundledAppearances: [ValidatedSkinAppearance] = ["SignalGlow", "TapeDeck", "PixelDesk", "PocketDisc"].compactMap { resourceName -> ValidatedSkinAppearance? in
+        let bundledAppearances: [ValidatedSkinAppearance] = Self.bundledResourceNames.compactMap { resourceName -> ValidatedSkinAppearance? in
             guard let manifestURL = bundle.url(forResource: resourceName, withExtension: "json"),
                   let data = try? Data(contentsOf: manifestURL)
             else { return nil }

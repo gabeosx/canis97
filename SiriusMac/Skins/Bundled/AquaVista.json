@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 3,
+  "identifier": "aqua-vista",
+  "displayName": "Aqua Vista",
+  "playerBackground": "#C9EFF8",
+  "metadataPanel": "#78C4E3",
+  "accent": "#198D74",
+  "destructive": "#C74654",
+  "foregroundScheme": "light",
+  "layoutVariant": "aquaPod",
+  "silhouette": "bubbleCapsule",
+  "size": "capsule448x304",
+  "typography": {
+    "display": "systemRounded",
+    "body": "systemDefault",
+    "label": "systemDefault"
+  },
+  "slots": [
+    { "semantic": "artwork", "frame": { "x": 20, "y": 48, "width": 88, "height": 88 } },
+    { "semantic": "channelIdentity", "frame": { "x": 124, "y": 48, "width": 224, "height": 24 } },
+    { "semantic": "metadata", "frame": { "x": 124, "y": 80, "width": 268, "height": 56 } },
+    { "semantic": "favorite", "frame": { "x": 396, "y": 48, "width": 32, "height": 32 } },
+    { "semantic": "status", "frame": { "x": 20, "y": 160, "width": 200, "height": 24 } },
+    { "semantic": "transport", "frame": { "x": 244, "y": 220, "width": 136, "height": 40 } },
+    { "semantic": "library", "frame": { "x": 20, "y": 260, "width": 112, "height": 32 } },
+    { "semantic": "overflowMenu", "frame": { "x": 396, "y": 260, "width": 32, "height": 32 } }
+  ],
+  "dragRegions": [
+    { "x": 16, "y": 8, "width": 288, "height": 20 }
+  ],
+  "decorations": {
+    "backdrop": null,
+    "chromeFrame": null,
+    "displayPlate": null,
+    "ornaments": []
+  }
+}

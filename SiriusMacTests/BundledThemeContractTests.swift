@@ -35,7 +35,7 @@ final class BundledThemeContractTests: XCTestCase {
 
     func testExpressiveThemesRetainSemanticActionsAndNativeRecovery() throws {
         let source = try repositorySource("SiriusMac/Player/CompactPlayerView.swift")
-        let catalog = SkinAppearanceCatalog.bundledCatalog()
+        let catalog = SkinAppearanceCatalog(appearances: try SkinAppearanceCatalog.expressiveBundledResourceNames.map(bundledAppearance))
 
         XCTAssertEqual(catalog.appearances.filter { $0.layoutPlan.isLegacy == false }.count, 3)
         XCTAssertEqual(ValidatedSkinAppearance.native.layoutPlan.contentSize, .init(width: 400, height: 288))
