@@ -42,7 +42,7 @@ final class CompactPlayerPresentationTests: XCTestCase {
 
         XCTAssertEqual(
             CompactSkinSurface.allCases,
-            [.canvas, .metadata, .status, .transport, .footer, .interactiveAccent, .criticalState]
+            [.canvas, .chromeHighlight, .displayGlow, .metadata, .status, .transport, .footer, .interactiveAccent, .criticalState]
         )
 
         for surface in CompactSkinSurface.allCases {
@@ -58,6 +58,49 @@ final class CompactPlayerPresentationTests: XCTestCase {
         XCTAssertEqual(appearance.surfaceTreatment(for: .metadata).fillHex, "#202020")
         XCTAssertEqual(appearance.surfaceTreatment(for: .interactiveAccent).tintHex, "#C6FF00")
         XCTAssertEqual(appearance.surfaceTreatment(for: .criticalState).tintHex, "#FF453A")
+        XCTAssertEqual(appearance.surfaceTreatment(for: .chromeHighlight).tintHex, "#C6FF00")
+        XCTAssertEqual(appearance.surfaceTreatment(for: .displayGlow).fillHex, "#202020")
+    }
+
+    func testVersionOneAppearanceRemainsExactWhileVersionTwoProjectsOnlyDecorativeTreatments() throws {
+        let versionOneData = manifestData(identifier: "version-one", displayName: "Version One")
+        let versionOne = try SkinManifestValidator.validate(versionOneData)
+        var document = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: versionOneData) as? [String: Any]
+        )
+        document["schemaVersion"] = 2
+        document["chromeHighlight"] = "#D8FF59"
+        document["displayGlow"] = "#315C48"
+        let versionTwoData = try JSONSerialization.data(withJSONObject: document)
+        let versionTwo = try SkinManifestValidator.validateVersion2(versionTwoData)
+
+        XCTAssertEqual(versionOne.reference, versionTwo.reference)
+        XCTAssertEqual(versionOne.displayName, versionTwo.displayName)
+        XCTAssertEqual(versionOne.style, versionTwo.style)
+        XCTAssertEqual(versionOne.cornerRadius, versionTwo.cornerRadius)
+        XCTAssertEqual(versionTwo.surfaceTreatment(for: .chromeHighlight).tintHex, "#D8FF59")
+        XCTAssertEqual(versionTwo.surfaceTreatment(for: .displayGlow).fillHex, "#315C48")
+    }
+
+    func testVersionTwoRejectsUnknownFieldsAndMissingOrInvalidDecorativeRoles() throws {
+        var document = try XCTUnwrap(
+            JSONSerialization.jsonObject(
+                with: manifestData(identifier: "version-two-rejection", displayName: "Version Two Rejection")
+            ) as? [String: Any]
+        )
+        document["schemaVersion"] = 2
+        document["chromeHighlight"] = "#D8FF59"
+        document["displayGlow"] = "#315C48"
+
+        for mutation in ["menuAction", "accessibilityLabel", "contentWidth"] {
+            document[mutation] = "forbidden"
+            XCTAssertThrowsError(try SkinManifestValidator.validate(try JSONSerialization.data(withJSONObject: document)))
+            document.removeValue(forKey: mutation)
+        }
+        document.removeValue(forKey: "displayGlow")
+        XCTAssertThrowsError(try SkinManifestValidator.validate(try JSONSerialization.data(withJSONObject: document)))
+        document["displayGlow"] = "not-a-color"
+        XCTAssertThrowsError(try SkinManifestValidator.validate(try JSONSerialization.data(withJSONObject: document)))
     }
 
     func testUnusableDecorationFallsBackBeforeSurfaceTreatmentIsDerived() throws {
@@ -100,6 +143,9 @@ final class CompactPlayerPresentationTests: XCTestCase {
         XCTAssertTrue(source.contains(".environment(\\.colorScheme, contentColorScheme)"))
         XCTAssertTrue(source.contains(".foregroundStyle(.primary)"))
         XCTAssertTrue(source.contains("surfaceBackground(.canvas)"))
+        XCTAssertTrue(source.contains("appOwnedDecorativeSurfaces"))
+        XCTAssertTrue(source.contains(".allowsHitTesting(false)"))
+        XCTAssertTrue(source.contains(".accessibilityHidden(true)"))
     }
 
     func testViewActionsStayOutsideThePresentationValue() {

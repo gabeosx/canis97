@@ -37,6 +37,7 @@ struct CompactPlayerView: View {
     var body: some View {
         ZStack(alignment: .topLeading) {
             decorativeImage(at: renderingAppearance.backgroundAssetURL)
+            appOwnedDecorativeSurfaces
             VStack(alignment: .leading, spacing: style.sectionSpacing) {
                 if let channel = presentation.channelIdentity {
                     populatedContent(channel)
@@ -316,6 +317,22 @@ struct CompactPlayerView: View {
 
     private func surfaceTint(_ surface: CompactSkinSurface) -> Color {
         Color(hex: renderingAppearance.surfaceTreatment(for: surface).tintHex)
+    }
+
+    /// These treatments consume only validated colors. Their geometry, opacity,
+    /// hit-testing, and accessibility behavior remain fixed and app-owned.
+    private var appOwnedDecorativeSurfaces: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: renderingAppearance.cornerRadius)
+                .stroke(surfaceTint(.chromeHighlight).opacity(0.72), lineWidth: 2)
+                .padding(6)
+            RoundedRectangle(cornerRadius: renderingAppearance.cornerRadius)
+                .fill(surfaceTint(.displayGlow).opacity(0.24))
+                .blur(radius: 18)
+                .padding(20)
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 
     @ViewBuilder

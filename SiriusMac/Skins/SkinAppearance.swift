@@ -69,6 +69,27 @@ struct SkinManifest: Codable, Equatable, Sendable {
     let metadataPanelAsset: String?
 }
 
+/// Schema version 2 keeps the version 1 document intact while adding only two
+/// finite, noninteractive decorative colors. It deliberately does not inherit
+/// a permissive decoder or an open-ended style dictionary.
+private struct SkinManifestVersion2: Codable, Equatable, Sendable {
+    let schemaVersion: Int
+    let identifier: SkinIdentifier
+    let displayName: String
+    let playerBackground: String
+    let metadataPanel: String
+    let accent: String
+    let destructive: String
+    let chromeHighlight: String
+    let displayGlow: String
+    let foregroundScheme: SkinManifest.ForegroundScheme
+    let contentPadding: Int
+    let sectionSpacing: Int
+    let cornerRadius: Int
+    let backgroundAsset: String?
+    let metadataPanelAsset: String?
+}
+
 enum SkinManifestValidationError: Error, Equatable {
     case malformedDocument
     case unknownOrMissingKeys
@@ -86,6 +107,8 @@ typealias CompactSkinStyle = NativeCompactPlayerStyle
 /// influence control, layout, accessibility, or playback behavior.
 enum CompactSkinSurface: String, CaseIterable, Sendable {
     case canvas
+    case chromeHighlight
+    case displayGlow
     case metadata
     case status
     case transport
@@ -110,6 +133,28 @@ struct ValidatedSkinAppearance: Identifiable, Equatable, Sendable {
     let cornerRadius: CGFloat
     let backgroundAssetURL: URL?
     let metadataPanelAssetURL: URL?
+    let chromeHighlightHex: String
+    let displayGlowHex: String
+
+    init(
+        reference: SkinSelectionReference,
+        displayName: String,
+        style: CompactSkinStyle,
+        cornerRadius: CGFloat,
+        backgroundAssetURL: URL?,
+        metadataPanelAssetURL: URL?,
+        chromeHighlightHex: String? = nil,
+        displayGlowHex: String? = nil
+    ) {
+        self.reference = reference
+        self.displayName = displayName
+        self.style = style
+        self.cornerRadius = cornerRadius
+        self.backgroundAssetURL = backgroundAssetURL
+        self.metadataPanelAssetURL = metadataPanelAssetURL
+        self.chromeHighlightHex = chromeHighlightHex ?? style.accentHex
+        self.displayGlowHex = displayGlowHex ?? style.secondaryHex
+    }
 
     var id: SkinSelectionReference { reference }
 
@@ -135,6 +180,22 @@ struct ValidatedSkinAppearance: Identifiable, Equatable, Sendable {
                 tintHex: style.accentHex,
                 fillOpacity: 1,
                 strokeOpacity: 0.5
+            )
+        case .chromeHighlight:
+            .init(
+                fillHex: style.dominantHex,
+                strokeHex: chromeHighlightHex,
+                tintHex: chromeHighlightHex,
+                fillOpacity: 0,
+                strokeOpacity: 0.72
+            )
+        case .displayGlow:
+            .init(
+                fillHex: displayGlowHex,
+                strokeHex: displayGlowHex,
+                tintHex: displayGlowHex,
+                fillOpacity: 0.24,
+                strokeOpacity: 0
             )
         case .metadata:
             .init(
@@ -193,19 +254,22 @@ struct ValidatedSkinAppearance: Identifiable, Equatable, Sendable {
         style: .fallback,
         cornerRadius: 4,
         backgroundAssetURL: nil,
-        metadataPanelAssetURL: nil
+        metadataPanelAssetURL: nil,
+        chromeHighlightHex: "#C6FF00",
+        displayGlowHex: "#31422B"
     )
 }
 
 enum SkinManifestValidator {
     typealias AssetResolver = @Sendable (String) -> URL?
 
-    private static let requiredKeys: Set<String> = [
+    private static let version1RequiredKeys: Set<String> = [
         "schemaVersion", "identifier", "displayName", "playerBackground",
         "metadataPanel", "accent", "destructive", "foregroundScheme",
         "contentPadding", "sectionSpacing", "cornerRadius"
     ]
-    private static let optionalKeys: Set<String> = ["backgroundAsset", "metadataPanelAsset"]
+    private static let version1OptionalKeys: Set<String> = ["backgroundAsset", "metadataPanelAsset"]
+    private static let version2RequiredKeys = version1RequiredKeys.union(["chromeHighlight", "displayGlow"])
 
     static func validate(
         _ data: Data,
@@ -217,9 +281,71 @@ enum SkinManifestValidator {
               let dictionary = object as? [String: Any]
         else { throw SkinManifestValidationError.malformedDocument }
 
+        guard let schemaVersion = dictionary["schemaVersion"] as? Int else {
+            throw SkinManifestValidationError.malformedDocument
+        }
+
+        switch schemaVersion {
+        case 1:
+            return try validateVersion1(data, dictionary: dictionary, classification: classification, assetResolver: assetResolver)
+        case 2:
+            return try validateVersion2(data, classification: classification, assetResolver: assetResolver)
+        default:
+            throw SkinManifestValidationError.unsupportedSchema
+        }
+    }
+
+    /// Validates schema version 2 as a separate, exact contract so version 1
+    /// retains its original key set and behavior byte-for-byte.
+    static func validateVersion2(
+        _ data: Data,
+        classification: SkinClassification = .imported,
+        assetResolver: AssetResolver = { _ in nil }
+    ) throws -> ValidatedSkinAppearance {
+        guard classification != .native else { return .native }
+        guard let object = try? JSONSerialization.jsonObject(with: data),
+              let dictionary = object as? [String: Any]
+        else { throw SkinManifestValidationError.malformedDocument }
+
         let keys = Set(dictionary.keys)
-        guard requiredKeys.isSubset(of: keys),
-              keys.isSubset(of: requiredKeys.union(optionalKeys))
+        guard dictionary["schemaVersion"] as? Int == 2,
+              version2RequiredKeys.isSubset(of: keys),
+              keys.isSubset(of: version2RequiredKeys.union(version1OptionalKeys))
+        else { throw SkinManifestValidationError.unknownOrMissingKeys }
+
+        let decoder = JSONDecoder()
+        guard let manifest = try? decoder.decode(SkinManifestVersion2.self, from: data) else {
+            throw SkinManifestValidationError.malformedDocument
+        }
+        return try validatedAppearance(
+            identifier: manifest.identifier,
+            displayName: manifest.displayName,
+            playerBackground: manifest.playerBackground,
+            metadataPanel: manifest.metadataPanel,
+            accent: manifest.accent,
+            destructive: manifest.destructive,
+            chromeHighlight: manifest.chromeHighlight,
+            displayGlow: manifest.displayGlow,
+            foregroundScheme: manifest.foregroundScheme,
+            contentPadding: manifest.contentPadding,
+            sectionSpacing: manifest.sectionSpacing,
+            cornerRadius: manifest.cornerRadius,
+            backgroundAsset: manifest.backgroundAsset,
+            metadataPanelAsset: manifest.metadataPanelAsset,
+            classification: classification,
+            assetResolver: assetResolver
+        )
+    }
+
+    private static func validateVersion1(
+        _ data: Data,
+        dictionary: [String: Any],
+        classification: SkinClassification,
+        assetResolver: AssetResolver
+    ) throws -> ValidatedSkinAppearance {
+        let keys = Set(dictionary.keys)
+        guard version1RequiredKeys.isSubset(of: keys),
+              keys.isSubset(of: version1RequiredKeys.union(version1OptionalKeys))
         else { throw SkinManifestValidationError.unknownOrMissingKeys }
 
         let decoder = JSONDecoder()
@@ -230,43 +356,83 @@ enum SkinManifestValidator {
             throw SkinManifestValidationError.unsupportedSchema
         }
 
-        let trimmedName = manifest.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmedName == manifest.displayName,
-              (1...64).contains(manifest.displayName.count)
+        return try validatedAppearance(
+            identifier: manifest.identifier,
+            displayName: manifest.displayName,
+            playerBackground: manifest.playerBackground,
+            metadataPanel: manifest.metadataPanel,
+            accent: manifest.accent,
+            destructive: manifest.destructive,
+            chromeHighlight: manifest.accent,
+            displayGlow: manifest.metadataPanel,
+            foregroundScheme: manifest.foregroundScheme,
+            contentPadding: manifest.contentPadding,
+            sectionSpacing: manifest.sectionSpacing,
+            cornerRadius: manifest.cornerRadius,
+            backgroundAsset: manifest.backgroundAsset,
+            metadataPanelAsset: manifest.metadataPanelAsset,
+            classification: classification,
+            assetResolver: assetResolver
+        )
+    }
+
+    private static func validatedAppearance(
+        identifier: SkinIdentifier,
+        displayName: String,
+        playerBackground: String,
+        metadataPanel: String,
+        accent: String,
+        destructive: String,
+        chromeHighlight: String,
+        displayGlow: String,
+        foregroundScheme: SkinManifest.ForegroundScheme,
+        contentPadding: Int,
+        sectionSpacing: Int,
+        cornerRadius: Int,
+        backgroundAsset: String?,
+        metadataPanelAsset: String?,
+        classification: SkinClassification,
+        assetResolver: AssetResolver
+    ) throws -> ValidatedSkinAppearance {
+        let trimmedName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedName == displayName,
+              (1...64).contains(displayName.count)
         else { throw SkinManifestValidationError.invalidDisplayName }
 
-        let colors = [manifest.playerBackground, manifest.metadataPanel, manifest.accent, manifest.destructive]
+        let colors = [playerBackground, metadataPanel, accent, destructive, chromeHighlight, displayGlow]
         guard colors.allSatisfy(isSixDigitRGB) else {
             throw SkinManifestValidationError.invalidColor
         }
-        guard (12...20).contains(manifest.contentPadding),
-              (4...12).contains(manifest.sectionSpacing),
-              (0...12).contains(manifest.cornerRadius)
+        guard (12...20).contains(contentPadding),
+              (4...12).contains(sectionSpacing),
+              (0...12).contains(cornerRadius)
         else { throw SkinManifestValidationError.invalidMetric }
 
-        let backgroundAssetURL = try resolve(manifest.backgroundAsset, using: assetResolver)
-        let metadataPanelAssetURL = try resolve(manifest.metadataPanelAsset, using: assetResolver)
-        let foregroundScheme: CompactPlayerForegroundColorScheme = switch manifest.foregroundScheme {
+        let backgroundAssetURL = try resolve(backgroundAsset, using: assetResolver)
+        let metadataPanelAssetURL = try resolve(metadataPanelAsset, using: assetResolver)
+        let playerForegroundScheme: CompactPlayerForegroundColorScheme = switch foregroundScheme {
         case .light: .light
         case .dark: .dark
         }
 
         return ValidatedSkinAppearance(
-            reference: SkinSelectionReference(identifier: manifest.identifier, classification: classification),
-            displayName: manifest.displayName,
+            reference: SkinSelectionReference(identifier: identifier, classification: classification),
+            displayName: displayName,
             style: CompactSkinStyle(
                 contentSize: NativeCompactPlayerStyle.fallback.contentSize,
-                dominantHex: manifest.playerBackground,
-                secondaryHex: manifest.metadataPanel,
-                accentHex: manifest.accent,
-                destructiveHex: manifest.destructive,
-                foregroundColorScheme: foregroundScheme,
-                padding: CGFloat(manifest.contentPadding),
-                sectionSpacing: CGFloat(manifest.sectionSpacing)
+                dominantHex: playerBackground,
+                secondaryHex: metadataPanel,
+                accentHex: accent,
+                destructiveHex: destructive,
+                foregroundColorScheme: playerForegroundScheme,
+                padding: CGFloat(contentPadding),
+                sectionSpacing: CGFloat(sectionSpacing)
             ),
-            cornerRadius: CGFloat(manifest.cornerRadius),
+            cornerRadius: CGFloat(cornerRadius),
             backgroundAssetURL: backgroundAssetURL,
-            metadataPanelAssetURL: metadataPanelAssetURL
+            metadataPanelAssetURL: metadataPanelAssetURL,
+            chromeHighlightHex: chromeHighlight,
+            displayGlowHex: displayGlow
         )
     }
 

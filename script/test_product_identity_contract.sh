@@ -141,10 +141,50 @@ check_presentation() {
   printf 'product-identity presentation contract: PASS\n'
 }
 
+check_appearance() {
+  check_presentation
+  local skin_appearance="$ROOT/SiriusMac/Skins/SkinAppearance.swift"
+  local compact_player="$ROOT/SiriusMac/Player/CompactPlayerView.swift"
+  local presentation_tests="$ROOT/SiriusMacTests/CompactPlayerPresentationTests.swift"
+  local signal_glow="$ROOT/SiriusMac/Skins/Bundled/SignalGlow.json"
+  local tape_deck="$ROOT/SiriusMac/Skins/Bundled/TapeDeck.json"
+  require_file "$skin_appearance"; require_file "$compact_player"; require_file "$presentation_tests"
+  require_file "$signal_glow"; require_file "$tape_deck"
+  /usr/bin/jq -e . "$signal_glow" "$tape_deck" >/dev/null
+  rg -Fq 'case chromeHighlight' "$skin_appearance" || fail 'closed chromeHighlight surface is required'
+  rg -Fq 'case displayGlow' "$skin_appearance" || fail 'closed displayGlow surface is required'
+  rg -Fq 'static func validateVersion2' "$skin_appearance" || fail 'schema version 2 validator is required'
+  rg -Fq 'version1RequiredKeys' "$skin_appearance" || fail 'schema version 1 key set must remain explicit'
+  rg -Fq 'version2RequiredKeys' "$skin_appearance" || fail 'schema version 2 key set must remain explicit'
+  rg -Fq 'appOwnedDecorativeSurfaces' "$compact_player" || fail 'one native renderer must consume the decorative treatments'
+  rg -Fq '.chromeHighlight' "$compact_player" || fail 'renderer must consume chromeHighlight'
+  rg -Fq '.displayGlow' "$compact_player" || fail 'renderer must consume displayGlow'
+  rg -Fq '.allowsHitTesting(false)' "$compact_player" || fail 'decorative treatments must remain noninteractive'
+  rg -Fq '.accessibilityHidden(true)' "$compact_player" || fail 'decorative treatments must remain hidden from accessibility'
+  rg -Fq '.frame(width: style.contentSize.width, height: style.contentSize.height' "$compact_player" || fail 'compact renderer must preserve fixed style content size'
+  rg -Fq 'CGSize(width: 400, height: 288)' "$ROOT/SiriusMac/Player/CompactPlayerPresentation.swift" || fail 'Native fallback must remain 400×288'
+  rg -Fq 'testVersionOneAppearanceRemainsExactWhileVersionTwoProjectsOnlyDecorativeTreatments' "$presentation_tests" || fail 'version compatibility coverage is required'
+  rg -Fq 'testVersionTwoRejectsUnknownFieldsAndMissingOrInvalidDecorativeRoles' "$presentation_tests" || fail 'schema authority rejection coverage is required'
+  rg -Fq 'testCompactAppearanceInputCannotChangeSemanticControlsOrGeometry' "$presentation_tests" || fail 'control and geometry coverage is required'
+  for manifest in "$signal_glow" "$tape_deck"; do
+    local schema_version
+    schema_version="$(/usr/bin/jq -r '.schemaVersion' "$manifest")"
+    [[ "$schema_version" == '1' || "$schema_version" == '2' ]] || fail 'bundled appearances must use a supported schema version'
+    if [[ "$schema_version" == '2' ]]; then
+      [[ "$(/usr/bin/jq -r '.chromeHighlight' "$manifest")" != 'null' ]] || fail 'schema version 2 requires chromeHighlight'
+      [[ "$(/usr/bin/jq -r '.displayGlow' "$manifest")" != 'null' ]] || fail 'schema version 2 requires displayGlow'
+    fi
+  done
+  local forbidden_manifest_pattern='"(action|accessibility|focus|reduceMotion|contentWidth|contentHeight|transportControlSize|url|URL|menu|playback|authentication|persistence|window)'
+  ! rg -n "$forbidden_manifest_pattern" "$skin_appearance" >/dev/null || fail 'skin manifest authority expanded beyond bounded appearance fields'
+  printf 'product-identity appearance contract: PASS\n'
+}
+
 case "${1:-}" in
   --tracer) check_tracer ;;
   --migration) check_migration ;;
   --presentation) check_presentation ;;
-  --appearance|--cutover|--final-source|--built-product) fail "${1} contract is staged for its downstream plan" ;;
+  --appearance) check_appearance ;;
+  --cutover|--final-source|--built-product) fail "${1} contract is staged for its downstream plan" ;;
   *) printf 'usage: %s --tracer|--migration|--presentation|--appearance|--cutover|--final-source|--built-product\n' "$0" >&2; exit 64 ;;
 esac
