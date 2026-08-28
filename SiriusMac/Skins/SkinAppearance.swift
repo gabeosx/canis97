@@ -780,7 +780,7 @@ struct SkinAppearanceCatalog: Sendable {
     static let phaseOne = bundledCatalog()
 
     static func bundledCatalog(in bundle: Bundle = .main) -> SkinAppearanceCatalog {
-        let bundledAppearances: [ValidatedSkinAppearance] = ["SignalGlow", "TapeDeck", "PixelDesk"].compactMap { resourceName -> ValidatedSkinAppearance? in
+        let bundledAppearances: [ValidatedSkinAppearance] = ["SignalGlow", "TapeDeck", "PixelDesk", "PocketDisc"].compactMap { resourceName -> ValidatedSkinAppearance? in
             guard let manifestURL = bundle.url(forResource: resourceName, withExtension: "json"),
                   let data = try? Data(contentsOf: manifestURL)
             else { return nil }

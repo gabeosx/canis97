@@ -84,7 +84,7 @@ struct CompactPlayerView: View {
     private var expressiveContent: some View {
         let plan = renderingAppearance.layoutPlan
         return ZStack(alignment: .topLeading) {
-            pixelDeskOrnament
+            expressiveMaterialLayer
             expressiveSlot(.artwork) { artwork }
             expressiveSlot(.channelIdentity) {
                 Text(presentation.channelIdentity?.displayText ?? "Nothing Playing")
@@ -211,7 +211,7 @@ struct CompactPlayerView: View {
     private var metadata: some View {
         if let primary = presentation.primaryMetadata {
             Text(primary)
-                .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                .font(skinFont(renderingAppearance.layoutPlan.typography.body, size: 14, weight: .semibold))
                 .lineLimit(CompactPlayerPresentation.metadataLineLimit)
                 .help(primary)
                 .accessibilityLabel("Current program: \(primary)")
@@ -220,7 +220,7 @@ struct CompactPlayerView: View {
         }
         if let secondary = presentation.secondaryMetadata {
             Text(secondary)
-                .font(.system(size: 13, design: .monospaced))
+                .font(skinFont(renderingAppearance.layoutPlan.typography.body, size: 13))
                 .foregroundStyle(.secondary)
                 .lineLimit(CompactPlayerPresentation.metadataLineLimit)
                 .help(secondary)
@@ -250,7 +250,7 @@ struct CompactPlayerView: View {
                     Button(recovery.title) { onAction(recovery.compactAction) }
                 }
             }
-            .font(.system(size: 12, weight: .medium, design: .monospaced))
+            .font(skinFont(renderingAppearance.layoutPlan.typography.label, size: 12, weight: .medium))
             .foregroundStyle(.secondary)
             .padding(.horizontal, 6)
             .padding(.vertical, 4)
@@ -408,13 +408,39 @@ struct CompactPlayerView: View {
     }
 
     @ViewBuilder
-    private var pixelDeskOrnament: some View {
-        if renderingAppearance.layoutPlan.silhouette == .pixelNotched {
+    private var expressiveMaterialLayer: some View {
+        let silhouette = renderingAppearance.layoutPlan.silhouette
+        if silhouette != .nativeRect {
             Canvas { context, size in
-                let dot = Path(roundedRect: CGRect(x: 8, y: 8, width: size.width - 16, height: size.height - 16), cornerRadius: 0)
-                context.stroke(dot, with: .color(surfaceTint(.chromeHighlight).opacity(0.72)), lineWidth: 2)
-                for x in stride(from: 16, through: Int(size.width) - 16, by: 8) {
-                    context.fill(Path(CGRect(x: x, y: 20, width: 2, height: 2)), with: .color(surfaceTint(.chromeHighlight).opacity(0.35)))
+                switch silhouette {
+                case .pixelNotched:
+                    let border = Path(roundedRect: CGRect(x: 8, y: 8, width: size.width - 16, height: size.height - 16), cornerRadius: 0)
+                    context.stroke(border, with: .color(surfaceTint(.chromeHighlight).opacity(0.72)), lineWidth: 2)
+                    context.fill(Path(CGRect(x: 12, y: 28, width: size.width - 24, height: 8)), with: .color(surfaceTint(.displayGlow).opacity(0.38)))
+                    for x in stride(from: 16, through: Int(size.width) - 16, by: 8) {
+                        context.fill(Path(CGRect(x: x, y: 20, width: 2, height: 2)), with: .color(surfaceTint(.chromeHighlight).opacity(0.35)))
+                    }
+                case .discPod:
+                    context.fill(
+                        Path(roundedRect: CGRect(x: 8, y: 8, width: size.width - 16, height: size.height - 16), cornerRadius: 36),
+                        with: .color(surfaceTint(.displayGlow).opacity(0.36))
+                    )
+                    context.stroke(
+                        Path(roundedRect: CGRect(x: 12, y: 12, width: size.width - 24, height: size.height - 24), cornerRadius: 32),
+                        with: .color(surfaceTint(.chromeHighlight).opacity(0.62)),
+                        lineWidth: 2
+                    )
+                    context.fill(Path(ellipseIn: CGRect(x: 20, y: 164, width: 176, height: 92)), with: .color(surfaceTint(.metadata).opacity(0.32)))
+                    for point in [CGPoint(x: 24, y: 24), CGPoint(x: size.width - 30, y: 24), CGPoint(x: 24, y: size.height - 30), CGPoint(x: size.width - 30, y: size.height - 30)] {
+                        context.fill(Path(ellipseIn: CGRect(x: point.x, y: point.y, width: 6, height: 6)), with: .color(surfaceTint(.chromeHighlight).opacity(0.72)))
+                    }
+                    for x in stride(from: 132, through: 300, by: 12) {
+                        context.fill(Path(CGRect(x: x, y: 72, width: 6, height: 3)), with: .color(surfaceTint(.interactiveAccent).opacity(0.5)))
+                    }
+                case .bubbleCapsule:
+                    break
+                case .nativeRect:
+                    break
                 }
             }
             .allowsHitTesting(false)

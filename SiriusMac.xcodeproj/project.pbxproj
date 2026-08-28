@@ -11,6 +11,7 @@
 		040100010000000000000003 /* SignalGlow.json in Resources */ = {isa = PBXBuildFile; fileRef = 040100020000000000000003 /* SignalGlow.json */; };
 		040100010000000000000004 /* TapeDeck.json in Resources */ = {isa = PBXBuildFile; fileRef = 040100020000000000000004 /* TapeDeck.json */; };
 		042000010000000000000001 /* PixelDesk.json in Resources */ = {isa = PBXBuildFile; fileRef = 042000020000000000000001 /* PixelDesk.json */; };
+		042000010000000000000002 /* PocketDisc.json in Resources */ = {isa = PBXBuildFile; fileRef = 042000020000000000000002 /* PocketDisc.json */; };
 		040200010000000000000001 /* SkinPackagePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 040200020000000000000001 /* SkinPackagePolicy.swift */; };
 		040200010000000000000002 /* SkinPackageImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 040200020000000000000002 /* SkinPackageImporter.swift */; };
 		040200010000000000000004 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = 040200100000000000000001 /* ZIPFoundation */; };
@@ -71,6 +72,7 @@
 		040100020000000000000003 /* SignalGlow.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = SignalGlow.json; sourceTree = "<group>"; };
 		040100020000000000000004 /* TapeDeck.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = TapeDeck.json; sourceTree = "<group>"; };
 		042000020000000000000001 /* PixelDesk.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = PixelDesk.json; sourceTree = "<group>"; };
+		042000020000000000000002 /* PocketDisc.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = PocketDisc.json; sourceTree = "<group>"; };
 		040200020000000000000001 /* SkinPackagePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkinPackagePolicy.swift; sourceTree = "<group>"; };
 		040200020000000000000002 /* SkinPackageImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkinPackageImporter.swift; sourceTree = "<group>"; };
 		040200020000000000000003 /* SkinPackageImporterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiriusMacTests/SkinPackageImporterTests.swift; sourceTree = SOURCE_ROOT; };
@@ -139,7 +141,7 @@
 		030900040000000000000001 /* SiriusMacUITests */ = {isa = PBXGroup; children = (030900020000000000000001 /* SiriusMacUITests.swift */,); path = SiriusMacUITests; sourceTree = SOURCE_ROOT; };
 		A00100040000000000000005 /* Security */ = {isa = PBXGroup; children = (A00100020000000000000005 /* KeychainCredentialStore.swift */,); path = Security; sourceTree = "<group>"; };
 		040100040000000000000001 /* Skins */ = {isa = PBXGroup; children = (040100020000000000000001 /* SkinAppearance.swift */, 040100020000000000000002 /* SkinSelectionStore.swift */, 040200020000000000000001 /* SkinPackagePolicy.swift */, 040200020000000000000002 /* SkinPackageImporter.swift */, 040300020000000000000001 /* SkinManagementView.swift */, 040100040000000000000002 /* Bundled */,); path = Skins; sourceTree = "<group>"; };
-		040100040000000000000002 /* Bundled */ = {isa = PBXGroup; children = (040100020000000000000003 /* SignalGlow.json */, 040100020000000000000004 /* TapeDeck.json */, 042000020000000000000001 /* PixelDesk.json */,); path = Bundled; sourceTree = "<group>"; };
+		040100040000000000000002 /* Bundled */ = {isa = PBXGroup; children = (040100020000000000000003 /* SignalGlow.json */, 040100020000000000000004 /* TapeDeck.json */, 042000020000000000000001 /* PixelDesk.json */, 042000020000000000000002 /* PocketDisc.json */,); path = Bundled; sourceTree = "<group>"; };
 		B00100040000000000000001 /* Authentication */ = {isa = PBXGroup; children = (B00100020000000000000001 /* AuthenticationPresentationModel.swift */, B00100020000000000000002 /* AuthenticationView.swift */, B00100020000000000000003 /* UnsupportedAuthenticationView.swift */, C00100020000000000000002 /* FirstPartyTokenCookiePolicy.swift */, C00100020000000000000000003 /* WebAuthenticationBridge.swift */, C00100020000000000000004 /* WebAuthenticationView.swift */, D00100020000000000000001 /* RestorableAuthenticationCredentialSource.swift */,); path = Authentication; sourceTree = "<group>"; };
 		A00100040000000000000004 /* Products */ = {isa = PBXGroup; children = (A00100020000000000000003 /* Canis97.app */, A00100020000000000000004 /* Canis97Tests.xctest */, 030900020000000000000002 /* Canis97UITests.xctest */,); name = Products; sourceTree = "<group>"; };
 /* End PBXGroup section */
@@ -155,7 +157,7 @@
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		040100070000000000000001 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (041000010000000000000004 /* ProductIcon.icon in Resources */, 040100010000000000000003 /* SignalGlow.json in Resources */, 040100010000000000000004 /* TapeDeck.json in Resources */, 042000010000000000000001 /* PixelDesk.json in Resources */,); runOnlyForDeploymentPostprocessing = 0; };
+		040100070000000000000001 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (041000010000000000000004 /* ProductIcon.icon in Resources */, 040100010000000000000003 /* SignalGlow.json in Resources */, 040100010000000000000004 /* TapeDeck.json in Resources */, 042000010000000000000001 /* PixelDesk.json in Resources */, 042000010000000000000002 /* PocketDisc.json in Resources */,); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
