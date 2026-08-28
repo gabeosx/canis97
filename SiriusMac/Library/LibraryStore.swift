@@ -157,6 +157,68 @@ final class FavoriteRecord {
     }
 }
 
+/// A separate persisted domain from channel favorites. Its exact allow-list is
+/// intentionally small so provider and playback details cannot enter SwiftData.
+@Model
+final class FavoriteSongRecord {
+    static let persistedPropertyNames = [
+        "storageKey", "normalizedTitle", "normalizedArtist", "title", "artist",
+        "albumName", "sourceChannelID", "sourceChannelName",
+        "sourceChannelDisplayNumber", "savedAt",
+    ]
+
+    @Attribute(.unique) var storageKey: String
+    var normalizedTitle: String
+    var normalizedArtist: String
+    var title: String
+    var artist: String
+    var albumName: String?
+    var sourceChannelID: String
+    var sourceChannelName: String?
+    var sourceChannelDisplayNumber: Int?
+    var savedAt: Date
+
+    init(snapshot: FavoriteSongSnapshot) {
+        storageKey = snapshot.identity.storageKey
+        normalizedTitle = snapshot.identity.normalizedTitle
+        normalizedArtist = snapshot.identity.normalizedArtist
+        title = snapshot.title
+        artist = snapshot.artist
+        albumName = snapshot.albumName
+        sourceChannelID = snapshot.sourceChannel.rawIdentity
+        sourceChannelName = snapshot.sourceChannel.name
+        sourceChannelDisplayNumber = snapshot.sourceChannel.displayNumber
+        savedAt = snapshot.savedAt
+    }
+
+    func applyPresentation(from snapshot: FavoriteSongSnapshot) {
+        title = snapshot.title
+        artist = snapshot.artist
+        albumName = snapshot.albumName
+        sourceChannelID = snapshot.sourceChannel.rawIdentity
+        sourceChannelName = snapshot.sourceChannel.name
+        sourceChannelDisplayNumber = snapshot.sourceChannel.displayNumber
+    }
+
+    var snapshot: FavoriteSongSnapshot? {
+        guard let sourceChannel = FavoriteSongSourceChannel(
+            rawIdentity: sourceChannelID,
+            name: sourceChannelName,
+            displayNumber: sourceChannelDisplayNumber
+        ), let snapshot = FavoriteSongSnapshot(
+            title: title,
+            artist: artist,
+            albumName: albumName,
+            sourceChannel: sourceChannel,
+            savedAt: savedAt
+        ), snapshot.identity.storageKey == storageKey,
+           snapshot.identity.normalizedTitle == normalizedTitle,
+           snapshot.identity.normalizedArtist == normalizedArtist
+        else { return nil }
+        return snapshot
+    }
+}
+
 @Model
 final class RecentRecord {
     static let persistedPropertyNames = ["channelID", "name", "displayNumber", "category", "rank", "confirmedAt"]
@@ -226,6 +288,7 @@ final class LibraryStore {
 
     private(set) var favorites: [LibraryChannelSnapshot] = []
     private(set) var favoriteChannelIDs: [LiveChannelID] = []
+    private(set) var favoriteSongs: [FavoriteSongSnapshot] = []
     private(set) var recents: [LibraryChannelSnapshot] = []
     private(set) var selectedLibraryTab = "channels"
     private(set) var alwaysOnTop = false
@@ -243,6 +306,7 @@ final class LibraryStore {
         persistence = setup.persistence
         self.now = now
         publishFavorites()
+        publishFavoriteSongs()
         publishRecents()
         publishPlayerPreferences()
     }
@@ -280,6 +344,46 @@ final class LibraryStore {
 
         saveIfNeeded(didMutate)
         publishFavorites()
+    }
+
+    func isFavoriteSong(_ snapshot: FavoriteSongSnapshot) -> Bool {
+        favoriteSongs.contains { $0.identity == snapshot.identity }
+    }
+
+    /// Applies a requested durable state. A failed save never changes the
+    /// published song list or reports success to the session controller.
+    @discardableResult
+    func setSongFavorite(_ snapshot: FavoriteSongSnapshot, isFavorite: Bool) -> FavoriteSongMutationResult {
+        guard persistence == .durable else {
+            lastSaveFailed = true
+            return .failed
+        }
+        guard let records = favoriteSongRecords() else { return .failed }
+        let matches = records.filter { $0.storageKey == snapshot.identity.storageKey }
+
+        var didMutate = false
+        if isFavorite {
+            if let retained = matches.first {
+                let before = retained.snapshot
+                retained.applyPresentation(from: snapshot)
+                for duplicate in matches.dropFirst() { modelContext.delete(duplicate) }
+                didMutate = before?.title != snapshot.title ||
+                    before?.artist != snapshot.artist ||
+                    before?.albumName != snapshot.albumName ||
+                    before?.sourceChannel != snapshot.sourceChannel ||
+                    matches.count > 1
+            } else {
+                modelContext.insert(FavoriteSongRecord(snapshot: snapshot))
+                didMutate = true
+            }
+        } else {
+            for record in matches { modelContext.delete(record) }
+            didMutate = !matches.isEmpty
+        }
+
+        guard saveIfNeeded(didMutate) else { return .failed }
+        publishFavoriteSongs()
+        return isFavorite ? .saved : .removed
     }
 
     /// Records only a caller-confirmed playback transition. Catalog selection
@@ -384,6 +488,13 @@ final class LibraryStore {
             .count
     }
 
+    /// Test-only inspection of the song-specific stable identity boundary.
+    func favoriteSongRecordCount(for identity: FavoriteSongIdentity) throws -> Int {
+        try modelContext.fetch(FetchDescriptor<FavoriteSongRecord>())
+            .filter { $0.storageKey == identity.storageKey }
+            .count
+    }
+
     private func favoriteRecords() -> [FavoriteRecord]? {
         do {
             return try modelContext.fetch(FetchDescriptor<FavoriteRecord>())
@@ -396,6 +507,15 @@ final class LibraryStore {
     private func recentRecords() -> [RecentRecord]? {
         do {
             return try modelContext.fetch(FetchDescriptor<RecentRecord>())
+        } catch {
+            lastLoadFailed = true
+            return nil
+        }
+    }
+
+    private func favoriteSongRecords() -> [FavoriteSongRecord]? {
+        do {
+            return try modelContext.fetch(FetchDescriptor<FavoriteSongRecord>())
         } catch {
             lastLoadFailed = true
             return nil
@@ -452,6 +572,21 @@ final class LibraryStore {
         favoriteChannelIDs = projected.map(\.id)
     }
 
+    private func publishFavoriteSongs() {
+        guard let records = favoriteSongRecords() else { return }
+        var seen = Set<FavoriteSongIdentity>()
+        favoriteSongs = records
+            .compactMap(\.snapshot)
+            .sorted { lhs, rhs in
+                if lhs.savedAt != rhs.savedAt { return lhs.savedAt > rhs.savedAt }
+                if lhs.identity.normalizedArtist != rhs.identity.normalizedArtist {
+                    return lhs.identity.normalizedArtist < rhs.identity.normalizedArtist
+                }
+                return lhs.identity.normalizedTitle < rhs.identity.normalizedTitle
+            }
+            .filter { seen.insert($0.identity).inserted }
+    }
+
     private func publishRecents() {
         guard let records = recentRecords() else { return }
         var seen = Set<LiveChannelID>()
@@ -469,15 +604,18 @@ final class LibraryStore {
             .map { $0 }
     }
 
-    private func saveIfNeeded(_ didMutate: Bool) {
-        guard didMutate || modelContext.hasChanges else { return }
+    @discardableResult
+    private func saveIfNeeded(_ didMutate: Bool) -> Bool {
+        guard didMutate || modelContext.hasChanges else { return true }
         do {
             try modelContext.save()
             lastSaveFailed = false
+            return true
         } catch {
             // Fail closed: do not expose an unsaved mutation or log storage internals.
             modelContext.rollback()
             lastSaveFailed = true
+            return false
         }
     }
 
@@ -489,6 +627,7 @@ final class LibraryStore {
             let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
             return try ModelContainer(
                 for: FavoriteRecord.self,
+                FavoriteSongRecord.self,
                 RecentRecord.self,
                 PlayerPreferenceRecord.self,
                 configurations: configuration
@@ -578,6 +717,7 @@ final class LibraryStore {
         )
         return try ModelContainer(
             for: FavoriteRecord.self,
+            FavoriteSongRecord.self,
             RecentRecord.self,
             PlayerPreferenceRecord.self,
             configurations: configuration

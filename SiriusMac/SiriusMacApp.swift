@@ -364,6 +364,14 @@ private struct ListeningCommands: Commands {
                     }
                 }
 
+                let favoriteCurrentSongState = controller.favoriteCurrentSongActionState
+                Button("Favorite Current Song") {
+                    if case let .enabled(isFavorite) = favoriteCurrentSongState {
+                        _ = controller.setFavoriteCurrentSong(isFavorite: !isFavorite)
+                    }
+                }
+                .disabled(!favoriteCurrentSongState.isEnabled)
+
                 Toggle(
                     "Always on Top",
                     isOn: Binding(

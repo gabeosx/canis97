@@ -8,6 +8,12 @@ enum ListeningSurfaceRole: Equatable {
     case library
 }
 
+enum LibraryWindowDirective: Equatable {
+    case open
+    case close
+    case none
+}
+
 private enum MetadataAnnouncementState: Equatable {
     case loading
     case current
@@ -90,6 +96,26 @@ struct ListeningCommandAvailability: Equatable {
     var playPauseTitle: String { pause ? "Pause" : "Play" }
 }
 
+enum FavoriteCurrentSongDisabledReason: Equatable {
+    case tunePending
+    case noConfirmedPlayback
+    case confirmedChannelUnavailable
+    case metadataForAnotherChannel
+    case metadataNotCurrent
+    case missingTitle
+    case missingArtist
+}
+
+enum FavoriteCurrentSongActionState: Equatable {
+    case enabled(isFavorite: Bool)
+    case disabled(FavoriteCurrentSongDisabledReason)
+
+    var isEnabled: Bool {
+        if case .enabled = self { return true }
+        return false
+    }
+}
+
 /// The app-lifetime owner for authentication, catalog browsing, and the sole
 /// playback coordinator. SwiftUI scenes receive this controller; they never
 /// construct an alternate authentication or media ownership path.
@@ -114,7 +140,7 @@ final class ListeningSessionController {
     private(set) var librarySearchFocusGeneration = 0
     private var hasTriggeredAutomaticCatalogLoad = false
     private var hasShutdown = false
-    private var lastObservedPlaybackState: LivePlaybackState = .awaitingLiveContract
+    private var lastObservedPlaybackState: LivePlaybackState = .idle
     private var lastObservedMetadataAnnouncementState: MetadataAnnouncementState = .unavailable
     private var announcementGeneration = 0
     private var revealGeneration = 0
@@ -139,6 +165,9 @@ final class ListeningSessionController {
         self.remoteCommandCenter = remoteCommandCenter
         self.nowPlayingPublisher = nowPlayingPublisher
         self.accessibilityAnnouncer = accessibilityAnnouncer
+        bridge.setAutomaticCredentialReadyHandler { [weak self] in
+            self?.authenticationModel.useAutomaticallyDetectedSession()
+        }
         observeAuthenticationReadiness()
         observeConfirmedPlayback()
         observeMetadataAccessibilityState()
@@ -157,12 +186,30 @@ final class ListeningSessionController {
         )
     }
 
+    var favoriteCurrentSongActionState: FavoriteCurrentSongActionState {
+        guard let candidate = favoriteCurrentSongCandidate else {
+            return .disabled(favoriteCurrentSongDisabledReason)
+        }
+        return .enabled(isFavorite: libraryStore.isFavoriteSong(candidate))
+    }
+
     /// Returns whether this is the first request for the singleton library
     /// route. Repeated requests focus that route without creating new state.
     func requestLibraryOpen() -> Bool {
         guard !hasRequestedLibraryOpen else { return false }
         hasRequestedLibraryOpen = true
         return true
+    }
+
+    /// Makes the library window lifecycle session-scoped. Signing out closes
+    /// the authenticated library surface and rearms its automatic presentation
+    /// for the next ready session; repeated ready observations remain inert.
+    func libraryWindowDirective(authenticationIsReady: Bool) -> LibraryWindowDirective {
+        guard authenticationIsReady else {
+            hasRequestedLibraryOpen = false
+            return .close
+        }
+        return requestLibraryOpen() ? .open : .none
     }
 
     /// A generation-tagged request keeps focus ownership inside the singleton
@@ -208,8 +255,8 @@ final class ListeningSessionController {
     }
 
     var queueAvailability: QueueDirectionAvailability {
-        let lineup = currentEntitledIDs
-        return playbackQueue?.availability(currentEntitledIDs: lineup, fullLineup: lineup) ?? .none
+        let lineup = currentCatalogIDs
+        return playbackQueue?.availability(currentAvailableIDs: lineup, fullLineup: lineup) ?? .none
     }
 
     @discardableResult
@@ -237,6 +284,23 @@ final class ListeningSessionController {
                 ? .favoriteAdded(generation: nextAnnouncementGeneration())
                 : .favoriteRemoved(generation: nextAnnouncementGeneration())
         )
+    }
+
+    /// This desired-state action intentionally only crosses from confirmed
+    /// metadata into the library facade; it has no tuning or media authority.
+    @discardableResult
+    func setFavoriteCurrentSong(isFavorite: Bool) -> FavoriteSongMutationResult {
+        guard let candidate = favoriteCurrentSongCandidate else { return .failed }
+        let result = libraryStore.setSongFavorite(candidate, isFavorite: isFavorite)
+        switch result {
+        case .saved:
+            accessibilityAnnouncer.announce(.songFavoriteSaved(generation: nextAnnouncementGeneration()))
+        case .removed:
+            accessibilityAnnouncer.announce(.songFavoriteRemoved(generation: nextAnnouncementGeneration()))
+        case .failed:
+            accessibilityAnnouncer.announce(.songFavoriteMutationFailed(generation: nextAnnouncementGeneration()))
+        }
+        return result
     }
 
     /// The application composition, never a window, owns MediaPlayer's single
@@ -459,7 +523,7 @@ final class ListeningSessionController {
         )
     }
 
-    private var currentEntitledIDs: [LiveChannelID] {
+    private var currentCatalogIDs: [LiveChannelID] {
         listeningModel.state.snapshot?.channels.map(\.id) ?? []
     }
 
@@ -468,8 +532,8 @@ final class ListeningSessionController {
               var queue = playbackQueue,
               let channelID = queue.candidate(
                   direction,
-                  currentEntitledIDs: currentEntitledIDs,
-                  fullLineup: currentEntitledIDs
+                  currentAvailableIDs: currentCatalogIDs,
+                  fullLineup: currentCatalogIDs
               )
         else { return nil }
 
@@ -526,6 +590,62 @@ final class ListeningSessionController {
             return ("Last updated earlier: \(metadata.programTitle ?? value)", metadata.programArtist, false)
         case .channelFallback, .unavailable:
             return ("Current program unavailable", listeningModel.confirmedChannelLabel, true)
+        }
+    }
+
+    private var favoriteCurrentSongCandidate: FavoriteSongSnapshot? {
+        guard !listeningModel.isTunePending,
+              let confirmedChannelID = listeningModel.confirmedChannelID,
+              isConfirmedPlayableState(for: confirmedChannelID),
+              let channel = listeningModel.state.snapshot?.channels.first(where: { $0.id == confirmedChannelID }),
+              let sourceChannel = FavoriteSongSourceChannel(
+                rawIdentity: channel.id.rawValue,
+                name: channel.name,
+                displayNumber: channel.displayNumber
+              )
+        else { return nil }
+
+        let metadata = listeningModel.metadataPresentation
+        guard metadata.state.channelID == confirmedChannelID,
+              metadata.availability == .current,
+              case .current = metadata.state.text,
+              let title = metadata.programTitle?.trimmingCharacters(in: .whitespacesAndNewlines),
+              let artist = metadata.programArtist?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !title.isEmpty,
+              !artist.isEmpty
+        else { return nil }
+
+        // The public client has no verified semantic album field today.
+        return FavoriteSongSnapshot(title: title, artist: artist, albumName: nil, sourceChannel: sourceChannel)
+    }
+
+    private var favoriteCurrentSongDisabledReason: FavoriteCurrentSongDisabledReason {
+        guard !listeningModel.isTunePending else { return .tunePending }
+        guard let confirmedChannelID = listeningModel.confirmedChannelID,
+              isConfirmedPlayableState(for: confirmedChannelID)
+        else { return .noConfirmedPlayback }
+        guard listeningModel.state.snapshot?.channels.contains(where: { $0.id == confirmedChannelID }) == true else {
+            return .confirmedChannelUnavailable
+        }
+        let metadata = listeningModel.metadataPresentation
+        guard metadata.state.channelID == confirmedChannelID else { return .metadataForAnotherChannel }
+        guard metadata.availability == .current,
+              case .current = metadata.state.text
+        else { return .metadataNotCurrent }
+        guard metadata.programTitle?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
+            return .missingTitle
+        }
+        guard metadata.programArtist?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
+            return .missingArtist
+        }
+        return .metadataNotCurrent
+    }
+
+    private func isConfirmedPlayableState(for channelID: LiveChannelID) -> Bool {
+        switch listeningModel.playbackState {
+        case let .playing(playingChannelID?): playingChannelID == channelID
+        case .paused: true
+        case .awaitingLiveContract, .idle, .playing(nil), .stopped, .unavailable: false
         }
     }
 }
