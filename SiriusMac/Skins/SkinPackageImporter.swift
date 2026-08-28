@@ -550,12 +550,11 @@ struct SkinPackageImporter: @unchecked Sendable {
     }
 
     private func referencedAssetPaths(in manifestData: Data) throws -> Set<CanonicalSkinPath> {
-        guard let manifest = try? JSONDecoder().decode(SkinManifest.self, from: manifestData) else {
-            throw SkinPackageRejection.invalidManifest
-        }
-        let rawPaths = [manifest.backgroundAsset, manifest.metadataPanelAsset].compactMap { $0 }
         do {
+            let rawPaths = try SkinManifestValidator.referencedAssetPaths(in: manifestData)
             return Set(try rawPaths.map { try CanonicalSkinPath($0, kind: .file, limits: limits) })
+        } catch SkinManifestValidationError.unsupportedSchema {
+            throw SkinPackageCompatibilityFailure.unsupportedSchema
         } catch {
             throw SkinPackageRejection.invalidAssetReference
         }

@@ -323,6 +323,19 @@ final class CompactPlayerPresentationTests: XCTestCase {
         }
     }
 
+    func testPixelDeskUsesTheSharedBundledSelectionIdentityAndFinitePolicy() throws {
+        let pixelDesk = try bundledAppearance(named: "PixelDesk")
+        let catalog = SkinAppearanceCatalog(appearances: [pixelDesk])
+
+        XCTAssertEqual(pixelDesk.reference.identifier.rawValue, "pixel-desk")
+        XCTAssertEqual(pixelDesk.reference.classification, .bundled)
+        XCTAssertEqual(catalog.resolve(pixelDesk.reference), pixelDesk)
+        XCTAssertEqual(pixelDesk.layoutPlan.layoutVariant, .desktopUtility)
+        XCTAssertEqual(pixelDesk.layoutPlan.silhouette, .pixelNotched)
+        XCTAssertEqual(pixelDesk.layoutPlan.contentSize, .init(width: 432, height: 304))
+        XCTAssertEqual(ValidatedSkinAppearance.native.layoutPlan.contentSize, .init(width: 400, height: 288))
+    }
+
     func testNativeBundledAndImportedAppearancesUseOneSelectionPath() async throws {
         let bundled = try SkinManifestValidator.validate(
             manifestData(identifier: "bundled-fixture", displayName: "Bundled Fixture"),
