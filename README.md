@@ -4,57 +4,45 @@
 [![Latest release](https://img.shields.io/github/v/release/gabeosx/canis97?display_name=tag&sort=semver)](https://github.com/gabeosx/canis97/releases/latest)
 [![macOS 26+](https://img.shields.io/badge/macOS-26%2B-111111?logo=apple)](https://github.com/gabeosx/canis97)
 
-Canis97 (pronounced “CAN-iss nine-seven”) is a compact, native macOS player for SiriusXM subscribers. It pairs a dependable live-radio library with a playful, skinnable player inspired by the spirit of turn-of-the-century desktop music apps—without wrapping the SiriusXM website.
+Canis97 (pronounced “CAN-iss nine-seven”) is a native SiriusXM player for macOS. It brings live radio, channel browsing, favorites, media keys, and a compact skinnable player together in one proper Mac app.
 
 > [!IMPORTANT]
 > Canis97 is an independent, unofficial project. It is not affiliated with, endorsed by, or sponsored by Sirius XM Radio LLC. A current SiriusXM subscription is required, and upstream compatibility can change without notice.
 
-## Screenshots
-
-These static previews use the app’s real bundled faceplates and synthetic channel metadata. No subscriber session or live SiriusXM content was captured.
-
 <table>
   <tr>
-    <td width="50%"><img src="docs/screenshots/pocket-disc.png" alt="Canis97 Pocket Disc compact-player preview with synthetic playback content"></td>
-    <td width="50%"><img src="docs/screenshots/aqua-vista.png" alt="Canis97 Aqua Vista compact-player preview with synthetic playback content"></td>
-  </tr>
-  <tr>
-    <td align="center"><strong>Pocket Disc</strong></td>
-    <td align="center"><strong>Aqua Vista</strong></td>
+    <td width="44%" valign="top"><img width="100%" src="docs/screenshots/canis97-siriusxmu-player.png" alt="Canis97 playing SiriusXMU in its compact player"></td>
+    <td width="56%" valign="top"><img width="100%" src="docs/screenshots/canis97-siriusxmu-library.png" alt="The Canis97 channel library with SiriusXMU playing"></td>
   </tr>
 </table>
 
-## Highlights
+## Features
 
-- Native SwiftUI and AppKit experience built for the current macOS release.
-- Live entitled-channel browsing, search, favorites, recents, and playback queue navigation.
-- Compact always-on-top player with artwork, current program or song metadata, and clear playback state.
-- macOS media keys and Control Center integration for play, pause, previous, and next.
-- Local Favorite Songs list for keeping track of music you want to revisit elsewhere.
-- Bundled appearances plus validated, declarative `.canis97skin` packages with no executable scripts.
-- Keychain-backed sign-in restoration, ephemeral stream URLs, privacy-aware diagnostics, and explicit sign-out cleanup.
-- Manual and daily update checks against the canonical GitHub Releases feed; updates are never installed silently.
+- Browse and search the live channels included with your subscription.
+- Keep favorite channels, recent stations, and songs you want to revisit close at hand.
+- See live artwork and program or song information in a compact always-on-top player.
+- Control playback with the app, Mac media keys, or Control Center.
+- Switch between bundled appearances or import a `.canis97skin` theme.
+- Check GitHub Releases for updates from inside the app.
+- Restore sign-in securely with macOS Keychain.
 
-## Status and requirements
+## Requirements
 
-Canis97 is preparing its first public `0.1.0` release. The source tree is usable for development, but there is not yet a signed public binary.
-
-- macOS 26 or newer
-- Apple silicon Mac for the initial binary release
-- Active SiriusXM subscriber account
-- Xcode 26.6 and Swift 6.3 to build from source
-
-Canis97 does not bypass CAPTCHA, MFA, subscription or device limits, anti-bot controls, DRM, or other service protections. When an upstream flow is unknown or unsupported, the app stops and reports that state.
+- macOS 26 or later
+- Apple silicon Mac
+- Active SiriusXM subscription
 
 ## Installation
 
 ### GitHub Releases
 
-Signed, notarized Apple-silicon archives will be published on the [Releases page](https://github.com/gabeosx/canis97/releases). Each release includes SHA-256 checksums and an SPDX software bill of materials.
+Download the latest signed build from [GitHub Releases](https://github.com/gabeosx/canis97/releases), unzip it, and move **Canis97.app** to your Applications folder.
+
+The first public binary has not been published yet. Until then, build Canis97 from source.
 
 ### Homebrew
 
-A `canis97` Homebrew Cask is generated from the same immutable GitHub release. The tap and exact install command will be added here with the first signed release, after clean-machine Gatekeeper and Cask verification pass.
+Homebrew installation will be available with the first public release.
 
 ### Build from source
 
@@ -64,32 +52,25 @@ cd canis97
 open SiriusMac.xcodeproj
 ```
 
-Select the `Canis97` scheme and build for **My Mac**. Development builds intentionally have no update feed configured.
+Select the `Canis97` scheme and build for **My Mac**. Building from source requires Xcode 26.6 and Swift 6.3.
 
-## Using Canis97
+## Getting started
 
 1. Launch Canis97 and choose **Sign In with SiriusXM**.
 2. Complete sign-in in the app’s nonpersistent SiriusXM browser surface.
-3. Open the Library, refresh your entitled channels, and double-click or choose **Tune**.
-4. Use the compact player, menu commands, media keys, or Control Center to manage playback.
-5. Choose an appearance in **Settings**, or import a validated local `.canis97skin` package.
+3. Open the Library and refresh your channels.
+4. Double-click a channel—or select it and choose **Tune**—to start listening.
+5. Choose an appearance in **Settings**, or import a local `.canis97skin` theme.
 
-Credentials and session tokens stay on your Mac except when sent directly to SiriusXM. Passwords, cookies, authorization headers, session identifiers, stream URLs, and raw provider responses are excluded from app diagnostics.
+## Privacy and account safety
 
-## Project structure
+Credentials and session tokens are stored in macOS Keychain and sent only to SiriusXM. Canis97 excludes passwords, cookies, authorization headers, session identifiers, stream URLs, and raw provider responses from diagnostics.
 
-```text
-Canis97 app
-├── SwiftUI/AppKit windows, playback, library, skins, and Keychain storage
-└── SiriusXMClient
-    └── Reusable SwiftPM library for authentication, catalog, metadata, and streams
-```
-
-The `SiriusXMClient` package isolates volatile provider behavior behind typed public APIs so compatibility repairs do not spread into the player UI. Views never make SiriusXM requests directly.
+Canis97 does not bypass CAPTCHA, MFA, subscription or device limits, anti-bot controls, DRM, or other service protections.
 
 ## Development
 
-The narrow, non-launching validation path is:
+The SiriusXM integration lives in the reusable `SiriusXMClient` Swift package. Run the package tests and compile the app test bundle with:
 
 ```sh
 swift test --package-path Packages/SiriusXMClient
@@ -103,23 +84,15 @@ xcodebuild build-for-testing \
   CODE_SIGNING_ALLOWED=NO
 ```
 
-CI runs those checks on pull requests and `main`. Live provider checks are deliberately separate, serialized, owner-authorized operations.
-
-To regenerate the synthetic README screenshots without launching Canis97:
-
-```sh
-swift script/render_readme_previews.swift
-```
+CI runs these checks for pull requests and changes to `main`.
 
 ## Releases and versioning
 
-Canis97 follows stable Semantic Versioning with immutable `vMAJOR.MINOR.PATCH` tags. GitHub Releases is the canonical binary channel; the Homebrew Cask always points to the matching signed and notarized archive. See [RELEASING.md](RELEASING.md) for the complete signing, notarization, checksum, SBOM, and rollback process, and [CHANGELOG.md](CHANGELOG.md) for user-facing changes.
+Canis97 uses Semantic Versioning and `vMAJOR.MINOR.PATCH` release tags. GitHub Releases is the canonical download source, and the Homebrew Cask uses the same signed and notarized build. See [RELEASING.md](RELEASING.md) for the release process and [CHANGELOG.md](CHANGELOG.md) for release notes.
 
 ## Contributing
 
-Issues and focused pull requests are welcome. Please keep provider-specific behavior inside `SiriusXMClient`, add deterministic tests for compatibility changes, and never include credentials, cookies, stream URLs, raw authenticated responses, or subscriber data in reports and fixtures.
-
-For security-sensitive findings, avoid opening an issue containing secrets or account data. Provide only redacted reproduction details.
+Issues and pull requests are welcome. Never include credentials, cookies, stream URLs, authenticated responses, or subscriber data in bug reports or test fixtures.
 
 ## Legal
 
