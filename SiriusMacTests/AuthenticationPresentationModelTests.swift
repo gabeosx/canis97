@@ -1,6 +1,6 @@
 import XCTest
 import SiriusXMClient
-@testable import SiriusMac
+@testable import Canis97
 
 @MainActor
 final class AuthenticationPresentationModelTests: XCTestCase {

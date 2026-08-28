@@ -1,7 +1,7 @@
 import Foundation
 import Security
 import XCTest
-@testable import SiriusMac
+@testable import Canis97
 @_spi(AppIntegration) import SiriusXMClient
 
 final class KeychainCredentialStoreTests: XCTestCase {

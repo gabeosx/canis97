@@ -1,6 +1,6 @@
 import SwiftData
 import XCTest
-@testable import SiriusMac
+@testable import Canis97
 import SiriusXMClient
 
 @MainActor
@@ -35,10 +35,12 @@ final class LibraryStoreTests: XCTestCase {
 
     func testAppSpecificStoreMigratesLegacyRowsExactlyOnce() throws {
         let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("SiriusMacLibraryStoreTests-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("Canis97LibraryStoreTests-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: directory) }
         let legacyURL = directory.appendingPathComponent("default.store")
-        let destinationURL = directory.appendingPathComponent("Sirius Mac/Library.store")
+        let destinationURL = directory
+            .appendingPathComponent(ProductIdentity.applicationSupportDirectoryName, isDirectory: true)
+            .appendingPathComponent(ProductIdentity.NonSecretStorage.libraryStoreFileName)
 
         let legacyContainer = try LibraryStore.makePersistentContainer(at: legacyURL)
         let legacyStore = LibraryStore(modelContainer: legacyContainer)

@@ -1,5 +1,5 @@
 import XCTest
-@testable import SiriusMac
+@testable import Canis97
 import SiriusXMClient
 
 @MainActor
