@@ -521,11 +521,14 @@ struct SkinPackageImporter: @unchecked Sendable {
     }
 
     private func validateManagedCandidate(at root: URL) throws -> ValidatedSkinAppearance {
-        guard store.managedPackageURLs().contains(root.standardizedFileURL) else {
+        let standardizedRoot = root.resolvingSymlinksInPath().standardizedFileURL
+        guard store.managedPackageURLs().contains(where: {
+            $0.resolvingSymlinksInPath().standardizedFileURL == standardizedRoot
+        }) else {
             throw SkinPackageRejection.storageFailed
         }
-        let files = try regularPackageFiles(at: root)
-        return try validateCandidate(at: root, extractedFiles: Set(files))
+        let files = try regularPackageFiles(at: standardizedRoot)
+        return try validateCandidate(at: standardizedRoot, extractedFiles: Set(files))
     }
 
     func validateManagedPackage(at root: URL) throws -> ValidatedSkinAppearance {
@@ -543,7 +546,8 @@ struct SkinPackageImporter: @unchecked Sendable {
             let values = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
             guard values.isSymbolicLink != true else { throw SkinPackageRejection.symbolicLink }
             guard values.isRegularFile == true else { continue }
-            let relative = String(url.path.dropFirst(root.path.count + 1))
+            let standardizedURL = url.resolvingSymlinksInPath().standardizedFileURL
+            let relative = String(standardizedURL.path.dropFirst(root.path.count + 1))
             files.append(try CanonicalSkinPath(relative, kind: .file, limits: limits))
         }
         return files

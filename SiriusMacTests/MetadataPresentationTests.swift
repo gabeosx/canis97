@@ -16,7 +16,7 @@ final class MetadataPresentationTests: XCTestCase {
         XCTAssertTrue(source.contains(".toolbar {"))
         XCTAssertTrue(source.contains("ToolbarItem(placement: .principal)"))
         XCTAssertTrue(source.contains("Picker(\"Library\", selection: $tab)"))
-        XCTAssertTrue(source.contains("TextField(\"Search Channels\", text: $query)"))
+        XCTAssertTrue(source.contains(#"TextField("Search \(tab.title)", text: $query)"#))
         XCTAssertTrue(source.contains(".accessibilityIdentifier(\"library.tabs\")"))
         XCTAssertTrue(source.contains(".accessibilityIdentifier(\"library.search\")"))
         XCTAssertTrue(source.contains("Label(\"Refresh\", systemImage: \"arrow.clockwise\")"))

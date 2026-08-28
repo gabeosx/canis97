@@ -1,9 +1,9 @@
 ---
-status: diagnosed
+status: passed
 phase: 03-native-mac-listening-experience
 source: ["03-01-SUMMARY.md", "03-02-SUMMARY.md", "03-03-SUMMARY.md", "03-04-SUMMARY.md", "03-05-SUMMARY.md", "03-06-SUMMARY.md", "03-07-SUMMARY.md", "03-08-SUMMARY.md"]
 started: 2026-08-22T14:18:19Z
-updated: 2026-08-22T15:41:30Z
+updated: 2026-08-28T23:47:18Z
 ---
 
 ## Current Test
@@ -48,9 +48,9 @@ coverage_id: D3
 
 ### 7. Four-Tab Native Library
 expected: The separate library window provides Channels, Categories, Favorites, and Recents tabs; visible-tab search filters native rows, and Return or double-click explicitly tunes the selected entitled channel.
-result: issue
-reported: "clicking around the library doesn't seem to work correctly - the highlighting doesn't move to a newly selected channel, the UI seems to hang when you click on a station briefly"
-severity: major
+result: pass
+source: authorized-live-app-run
+notes: Native row highlighting followed keyboard selection immediately while SiriusXMU continued playing; selection no longer stalled the library.
 
 ### 8. Captured Queue Navigation
 expected: Previous and Next traverse the captured entitled lineup without wrapping, skip channels no longer entitled, tune through the shared session, and reveal the resulting channel in the library.
@@ -96,15 +96,15 @@ source: approved-native-evidence
 
 ### 17. Compact Window Chrome
 expected: The fixed compact player window fits its 400 x 288 player canvas without an unintended large border or excess surrounding chrome.
-result: issue
-reported: "the compact player opens with a large boarder around the player"
-severity: cosmetic
+result: pass
+source: authorized-live-app-run
+notes: The compact window matched the active skin canvas without excess surrounding chrome.
 
 ## Summary
 
 total: 17
-passed: 15
-issues: 2
+passed: 17
+issues: 0
 pending: 0
 skipped: 0
 blocked: 0
@@ -113,7 +113,7 @@ blocked: 0
 
 - gap_id: G-03-7
   truth: "Selecting a library channel immediately moves the native highlight to that row and does not briefly hang the UI."
-  status: failed
+  status: resolved
   reason: "User reported: clicking around the library doesn't seem to work correctly - the highlighting doesn't move to a newly selected channel, the UI seems to hang when you click on a station briefly"
   severity: major
   test: 7
@@ -123,14 +123,12 @@ blocked: 0
       issue: "Each tagged selectable row installs .onTapGesture(count: 2), delaying or suppressing immediate native single-click selection."
     - path: "SiriusMacTests/LibraryStoreTests.swift"
       issue: "Library view contract tests do not exercise real row selection or activation; no XCUITest target exists."
-  missing:
-    - "Separate native single-click selection from double-click activation without a competing SwiftUI tap recognizer."
-    - "Add launched-app UI automation for prompt highlight movement and exactly-one activation."
+  resolution: "Native List selection and AppKit double-action ownership are separated; the authorized SiriusXMU run confirmed immediate selection without interrupting playback."
   debug_session: ".planning/debug/library-selection-gesture-stall.md"
 
 - gap_id: G-03-17
   truth: "The fixed compact player window fits its 400 x 288 player canvas without an unintended large border or excess surrounding chrome."
-  status: failed
+  status: resolved
   reason: "User reported: the compact player opens with a large boarder around the player"
   severity: cosmetic
   test: 17
@@ -142,7 +140,5 @@ blocked: 0
       issue: "Compact restoration applies any intersecting saved frame and returns without enforcing the exact compact content size."
     - path: "SiriusMacTests/ListeningSessionControllerTests.swift"
       issue: "Window tests cover policy values but not the configured NSWindow content frame after attachment."
-  missing:
-    - "Always enforce 400 x 288 compact content size while restoring only a safe window origin."
-    - "Add AppKit and launched-app assertions for compact window geometry."
+  resolution: "Compact restoration preserves a safe top-left position while reapplying the validated canvas size; AppKit tests and the authorized run confirmed the fitted window."
   debug_session: ".planning/debug/compact-window-excess-chrome.md"

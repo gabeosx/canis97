@@ -139,8 +139,11 @@ check_presentation() {
   rg -Fq 'ProductIdentity.environmentPrefix' "$APP" || fail 'offline review environment keys must use the approved prefix'
   rg -Fq 'enum OfflineReviewSurface' "$OFFLINE_REVIEW_HARNESS" || fail 'offline review surface selector is required'
   rg -Fq 'ClosedAuthenticationTerminal.allCases' "$OFFLINE_REVIEW_HARNESS" || fail 'offline review must cover all authentication outcomes'
-  for surface in compactEmpty compactPopulated compactPending compactError libraryCollections libraryEmpty libraryError appearanceManagement nativeAppearance signalGlowAppearance tapeDeckAppearance; do
+  for surface in compactEmpty compactPopulated compactPending compactError libraryCollections libraryEmpty libraryError appearanceManagement; do
     rg -Fq "case $surface" "$OFFLINE_REVIEW_HARNESS" || fail "offline review surface missing: $surface"
+  done
+  for appearance in native signalGlow tapeDeck pixelDesk pocketDisc aquaVista; do
+    rg -Fq "case $appearance" "$OFFLINE_REVIEW_HARNESS" || fail "offline review appearance missing: $appearance"
   done
   ! rg -Fq 'SIRIUS_MAC_UI_TEST_MODE' "$APP" "$OFFLINE_REVIEW_HARNESS" || fail 'legacy offline-review environment key remains'
   ! rg -Fq 'struct SiriusMacApp: App' "$APP" || fail 'legacy app entry-point type remains'

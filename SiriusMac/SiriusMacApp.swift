@@ -109,6 +109,12 @@ struct Canis97App: App {
         }
         .defaultSize(width: 520, height: 420)
         .windowResizability(.contentSize)
+
+        Window("Compatibility & Support", id: ProductSceneID.support) {
+            CompatibilitySupportView(controller: sessionController)
+        }
+        .defaultSize(width: 760, height: 650)
+        .windowResizability(.contentMinSize)
     }
 
     @ViewBuilder
@@ -379,6 +385,7 @@ private struct ListeningCommands: Commands {
                         _ = controller.setFavoriteCurrentSong(isFavorite: !isFavorite)
                     }
                 }
+                .keyboardShortcut("f", modifiers: [.command, .option])
                 .disabled(!favoriteCurrentSongState.isEnabled)
                 .accessibilityLabel(favoriteCurrentSongState.accessibilityLabel)
                 .accessibilityValue(favoriteCurrentSongState.accessibilityValue)
@@ -415,6 +422,12 @@ private struct ListeningCommands: Commands {
             .disabled(updateChecker.isChecking)
         }
 
+        CommandGroup(after: .help) {
+            Button("Compatibility & Support…") {
+                openWindow(id: ProductSceneID.support)
+            }
+        }
+
     }
 }
 
@@ -430,6 +443,7 @@ private struct LibraryRoot: View {
 
 private enum ProductSceneID {
     static let about = "\(ProductIdentity.appBundleIdentifier).about"
+    static let support = "\(ProductIdentity.appBundleIdentifier).support"
 }
 
 /// The unit-test bundle uses the app executable as its host. Keep that host

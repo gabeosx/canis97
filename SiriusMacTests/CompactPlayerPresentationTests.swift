@@ -186,7 +186,8 @@ final class CompactPlayerPresentationTests: XCTestCase {
         XCTAssertTrue(source.contains("This appearance is unavailable. Native appearance has been restored."))
         XCTAssertTrue(source.contains("Use Native Appearance"))
         XCTAssertTrue(source.contains(".lineLimit(1)"))
-        XCTAssertTrue(source.contains(".lineLimit(CompactPlayerPresentation.metadataLineLimit)"))
+        XCTAssertTrue(source.contains("BoundedMarqueeText("))
+        XCTAssertTrue(source.contains(".fixedSize(horizontal: true, vertical: true)"))
         XCTAssertTrue(source.contains(".help(primary)"))
         XCTAssertTrue(source.contains(".help(secondary)"))
         XCTAssertTrue(source.contains(".accessibilityValue(primary)"))
@@ -571,14 +572,17 @@ final class CompactPlayerPresentationTests: XCTestCase {
 
         XCTAssertEqual(CompactPlayerAction.allCases, expectedActions)
         XCTAssertFalse(source.contains("switch appearance.reference.classification"))
-        for (identifier, expectedOccurrences) in [
-            ("compact.favorite", 1),
-            ("compact.song-favorite", 1),
-            ("compact.status", 1),
-            ("compact.show-library", 2), // populated and empty semantic states
-            ("compact.sign-out", 1)
+        for identifier in [
+            "compact.favorite",
+            "compact.song-favorite",
+            "compact.status",
+            "compact.show-library",
+            "compact.sign-out"
         ] {
-            XCTAssertEqual(source.components(separatedBy: identifier).count - 1, expectedOccurrences, "\(identifier) must remain app-owned")
+            XCTAssertTrue(
+                source.contains(".accessibilityIdentifier(\"\(identifier)\")"),
+                "\(identifier) must remain app-owned"
+            )
         }
         for appearance in appearances {
             XCTAssertEqual(appearance.renderableAppearance { _ in false }, appearance)

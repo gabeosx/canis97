@@ -100,9 +100,9 @@ jobs:
         id: tap
         env:
           HOMEBREW_TAP_REPOSITORY: ${{ vars.HOMEBREW_TAP_REPOSITORY }}
-          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          HOMEBREW_TAP_DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
         run: |
-          if [[ -n "$HOMEBREW_TAP_REPOSITORY" && -n "$HOMEBREW_TAP_TOKEN" ]]; then
+          if [[ -n "$HOMEBREW_TAP_REPOSITORY" && -n "$HOMEBREW_TAP_DEPLOY_KEY" ]]; then
             echo 'enabled=true' >> "$GITHUB_OUTPUT"
           else
             echo 'enabled=false' >> "$GITHUB_OUTPUT"
@@ -111,14 +111,17 @@ jobs:
       - name: Update the Homebrew tap
         if: ${{ steps.tap.outputs.enabled == 'true' }}
         env:
-          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          HOMEBREW_TAP_DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
           HOMEBREW_TAP_REPOSITORY: ${{ vars.HOMEBREW_TAP_REPOSITORY }}
           RELEASE_OUTPUT_DIR: ${{ runner.temp }}/release
         run: |
           TAP_PATH="$RUNNER_TEMP/homebrew-tap"
           ARCHIVE_SHA="$(awk '$2 ~ /Canis97-/ { print $1 }' "$RELEASE_OUTPUT_DIR/SHA256SUMS")"
-          gh auth setup-git
-          gh repo clone "$HOMEBREW_TAP_REPOSITORY" "$TAP_PATH"
+          eval "$(ssh-agent -s)"
+          trap 'ssh-agent -k' EXIT
+          ssh-add - <<< "$HOMEBREW_TAP_DEPLOY_KEY"
+          export GIT_SSH_COMMAND='ssh -o StrictHostKeyChecking=accept-new'
+          git clone "git@github.com:$HOMEBREW_TAP_REPOSITORY.git" "$TAP_PATH"
           mkdir -p "$TAP_PATH/Casks"
           script/render_homebrew_cask.sh "$VERSION" "$ARCHIVE_SHA" "$GITHUB_REPOSITORY" > "$TAP_PATH/Casks/canis97.rb"
           git -C "$TAP_PATH" config user.name "github-actions[bot]"
@@ -129,7 +132,7 @@ jobs:
 
       - name: Report skipped Homebrew publishing
         if: ${{ steps.tap.outputs.enabled != 'true' }}
-        run: echo 'GitHub Release published; configure HOMEBREW_TAP_REPOSITORY and HOMEBREW_TAP_TOKEN to publish the cask.' >> "$GITHUB_STEP_SUMMARY"
+        run: echo 'GitHub Release published; configure HOMEBREW_TAP_REPOSITORY and HOMEBREW_TAP_DEPLOY_KEY to publish the cask.' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Remove ephemeral signing keychain
         if: always()

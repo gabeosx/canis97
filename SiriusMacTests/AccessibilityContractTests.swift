@@ -147,7 +147,7 @@ final class AccessibilityContractTests: XCTestCase {
         XCTAssertTrue(appSource.contains("favoriteCurrentSongState.accessibilityHint"))
         XCTAssertTrue(compactSource.contains("compact.favorite"))
         XCTAssertTrue(compactSource.contains("compact.song-favorite"))
-        XCTAssertTrue(compactSource.contains("CompactPlayerAction.toggleFavorite"))
+        XCTAssertTrue(compactSource.contains(".toggleFavorite"))
         XCTAssertTrue(compactSource.contains(".toggleSongFavorite"))
     }
 

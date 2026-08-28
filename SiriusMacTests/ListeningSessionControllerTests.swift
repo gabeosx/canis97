@@ -69,18 +69,18 @@ final class WindowLifecyclePolicyTests: XCTestCase {
     }
 
     func testCompactAttachmentRetainsSavedOriginButResetsOversizedSavedContentSize() {
-        let key = "NSWindow Frame \(ProductIdentity.compactFrameAutosaveName)"
-        let previousValue = UserDefaults.standard.object(forKey: key)
-        defer {
-            if let previousValue {
-                UserDefaults.standard.set(previousValue, forKey: key)
-            } else {
-                UserDefaults.standard.removeObject(forKey: key)
-            }
+        guard let visibleFrame = NSScreen.main?.visibleFrame else {
+            return XCTFail("A visible screen is required for window restoration")
         }
-
-        let savedFrame = NSRect(x: 120, y: 96, width: 760, height: 620)
-        UserDefaults.standard.set(NSStringFromRect(savedFrame), forKey: key)
+        let positionStore = CompactWindowPositionStore(
+            key: "Canis97Tests.compact-position.\(UUID().uuidString)"
+        )
+        defer { positionStore.clear() }
+        let savedTopLeft = CGPoint(
+            x: visibleFrame.minX + 40,
+            y: visibleFrame.maxY - 40
+        )
+        positionStore.save(.init(x: savedTopLeft.x, y: savedTopLeft.y))
 
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 760, height: 620),
@@ -88,12 +88,16 @@ final class WindowLifecyclePolicyTests: XCTestCase {
             backing: .buffered,
             defer: false
         )
-        let controller = CompactWindowController(role: .compact)
+        let controller = CompactWindowController(
+            role: .compact,
+            restoresPersistedFrame: false,
+            positionStore: positionStore
+        )
 
         controller.attach(to: window, alwaysOnTop: false)
 
         XCTAssertEqual(window.contentView?.frame.size, NSSize(width: 400, height: 288))
-        XCTAssertEqual(window.frame.origin, savedFrame.origin)
+        XCTAssertEqual(CompactWindowGeometry.topLeft(of: window.frame), savedTopLeft)
     }
 
     func testCompactAttachmentRemovesTitleBarGeometry() {

@@ -42,10 +42,10 @@ has an independent release cadence. Its public API still follows SemVer.
 4. Protect tags matching `v*.*.*` so only release maintainers can create them.
 5. Create a separate `OWNER/homebrew-tap` repository containing a `Casks/`
    directory. Set repository variable `HOMEBREW_TAP_REPOSITORY` to that
-   `owner/repository` value and add `HOMEBREW_TAP_TOKEN`, a fine-grained token
-   with Contents read/write access to only that tap. If either is absent, the
-   GitHub Release succeeds and the workflow reports that Homebrew publishing
-   was skipped.
+   `owner/repository` value. Add a dedicated write-enabled SSH deploy key to
+   that tap and store only its private half as the source repository secret
+   `HOMEBREW_TAP_DEPLOY_KEY`. If either setting is absent, the GitHub Release
+   succeeds and the workflow reports that Homebrew publishing was skipped.
 
 The workflows pin third-party actions to full commit SHAs. Dependabot or a
 reviewed maintenance change should update those pins.
@@ -128,5 +128,5 @@ release page; it never downloads or installs an update.
   version from the tap, and publish a fixed patch version. Do not reuse the old
   tag or asset URL.
 - If Homebrew publication alone fails, the GitHub Release remains canonical.
-  Correct the tap token or branch policy, regenerate the cask with
+  Correct the tap deploy key or branch policy, regenerate the cask with
   `script/render_homebrew_cask.sh`, and submit that isolated tap change.

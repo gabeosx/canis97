@@ -8,6 +8,7 @@ export CLANG_MODULE_CACHE_PATH="$TEMP_DIR/clang-cache"
 export SWIFT_MODULE_CACHE_PATH="$TEMP_DIR/swift-cache"
 
 swiftc \
+  "$ROOT_DIR/SiriusMac/App/ProductIdentity.swift" \
   "$ROOT_DIR/SiriusMac/Authentication/ClosedAuthenticationOracle.swift" \
   "$ROOT_DIR/script/tests/OfflineAuthenticationMatrixTests.swift" \
   -o "$TEMP_DIR/offline-auth-matrix"

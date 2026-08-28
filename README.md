@@ -24,6 +24,7 @@ Canis97 (pronounced “CAN-iss nine-seven”) is a native SiriusXM player for ma
 - Control playback with the app, Mac media keys, or Control Center.
 - Switch between bundled appearances or import a `.canis97skin` theme.
 - Check GitHub Releases for updates from inside the app.
+- See which integration stage needs attention and review a privacy-safe support bundle before exporting it.
 - Restore sign-in securely with macOS Keychain.
 
 ## Requirements
@@ -66,6 +67,8 @@ Select the `Canis97` scheme and build for **My Mac**. Building from source requi
 
 Credentials and session tokens are stored in macOS Keychain and sent only to SiriusXM. Canis97 excludes passwords, cookies, authorization headers, session identifiers, stream URLs, and raw provider responses from diagnostics.
 
+Choose **Help > Compatibility & Support…** to see the current authentication, entitlement, catalog, stream, metadata, and playback classifications. The optional JSON support bundle contains only the app/OS versions, architecture, and the six classifications shown in its on-screen preview.
+
 Canis97 does not bypass CAPTCHA, MFA, subscription or device limits, anti-bot controls, DRM, or other service protections.
 
 ## Development
@@ -97,3 +100,5 @@ Issues and pull requests are welcome. Never include credentials, cookies, stream
 ## Legal
 
 Canis97 is an independent app and is not affiliated with, endorsed by, or sponsored by Sirius XM Radio LLC. SiriusXM names and marks belong to their respective owners.
+
+Canis97 is available under the [MIT License](LICENSE).

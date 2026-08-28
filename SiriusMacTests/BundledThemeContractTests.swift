@@ -59,8 +59,12 @@ final class BundledThemeContractTests: XCTestCase {
         XCTAssertEqual(source.components(separatedBy: "TimelineView(.animation").count - 1, 1)
         XCTAssertTrue(source.contains("menuIndicator(.hidden)"))
         XCTAssertFalse(source.contains("switch appearance.reference.classification"))
-        for identifier in ["compact.favorite", "compact.transport.previous", "compact.transport.play-pause", "compact.transport.next", "compact.show-library", "compact.always-on-top", "compact.sign-out"] {
+        for identifier in ["compact.favorite", "compact.show-library", "compact.always-on-top", "compact.sign-out"] {
             XCTAssertTrue(source.contains(identifier))
+        }
+        XCTAssertTrue(source.contains(#".accessibilityIdentifier("compact.transport.\(accessibilityIdentifier(for: action))")"#))
+        for (action, identifier) in [("previous", "previous"), ("playPause", "play-pause"), ("next", "next")] {
+            XCTAssertTrue(source.contains("case .\(action): \"\(identifier)\""))
         }
     }
 
