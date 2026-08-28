@@ -18,7 +18,10 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Safe Interoperability Foundation** - Subscribers get a fail-closed, private authorization foundation and a reusable client boundary. (completed 2026-08-18)
 - [x] **Phase 2: Authorized Live Listening** - Subscribers can browse entitled linear channels and listen reliably with truthful playback and metadata states. (completed 2026-08-20)
 - [x] **Phase 3: Native Mac Listening Experience** - Subscribers control one shared listening session through native windows, local library features, and macOS media controls. (completed 2026-08-24)
-- [ ] **Phase 4: Safe Skins & Accessible Recovery** - Subscribers can personalize the player with bundled or validated local skins without compromising safety or access.
+- [x] **Phase 4: Safe Skins & Accessible Recovery** - Subscribers can personalize the player with bundled or validated local skins without compromising safety or access. (completed 2026-08-26)
+- [x] **Phase 4.1: Product Identity & Experience Polish** - The app receives a distinctive 2000s-music identity, release-quality icon and presentation, richer bounded customization, and complete visual/accessibility validation. (completed 2026-08-27)
+- [x] **Phase 4.2: Expressive Skin Architecture & Bundled Themes** - Subscribers can transform the compact player through safe declarative layouts, artwork, window silhouettes, chrome, and typography, beginning with complete macOS 8, MiniDisc, and Frutiger Aero themes. (completed 2026-08-28)
+- [ ] **Phase 4.3: Local Song Favorites** - Subscribers can save currently confirmed songs locally and revisit that list when manually adding music to any service they prefer.
 - [ ] **Phase 5: Public Release & Compatibility Support** - Subscribers can install trusted public releases and receive privacy-safe compatibility help.
 
 ## Phase Details
@@ -301,9 +304,11 @@ Plans:
   4. A package with an unknown schema, unsafe/traversal/symlink path, disallowed file type, or excessive file, archive, decoded-asset, image, or processing budget is rejected safely.
   5. A failed or invalid skin preserves the prior valid appearance and offers a built-in recovery path; custom appearance cannot remove semantic controls, usable hit targets, readable focus/state indicators, or the unskinned native fallback.
 
-**Plans**: 3/3 plans executed
+**Plans**: 4/4 plans executed
 
 Plans:
+
+- [x] 04-04-PLAN.md
 
 **Wave 1**
 
@@ -319,11 +324,90 @@ Plans:
 
 **UI hint**: yes
 
+### Phase 04.1: Product Identity & Experience Polish (INSERTED)
+
+**Goal:** Subscribers can recognize and use an independently branded native player with a release-quality icon and coherent, bounded, accessible presentation, while existing non-secret local state remains available and provider-facing security boundaries remain unchanged.
+**Requirements**: None — this inserted phase is defined by D-01 through D-12 in `04.1-CONTEXT.md`; no requirement IDs are mapped.
+**Depends on:** Phase 4
+**Plans:** 6/6 plans complete
+
+Plans:
+
+**Wave 1 — screened identity tracer and human decision gate**
+
+- [x] 04.1-01-PLAN.md — Screen and prove a concrete provider-neutral identity, original Icon Composer direction, runtime registry, representative surface, and offline tracer before human approval.
+
+**Wave 2 — parallel expansion from the approved identity**
+
+- [x] 04.1-02-PLAN.md — Preserve app-owned library, appearance, managed-skin, and window state through semantic non-secret migrations without touching Keychain/provider state.
+- [x] 04.1-03-PLAN.md — Apply the approved identity and non-affiliation boundary across native scenes, About, authentication, library, appearance, accessibility, logs, UTTypes, and the offline review matrix.
+- [x] 04.1-04-PLAN.md — Enrich Native, Signal Glow, and Tape Deck through one versioned closed appearance validator/catalog/renderer while retaining fixed geometry and accessibility.
+
+**Wave 3 — serialized Xcode/module identity cutover**
+
+- [x] 04.1-05-PLAN.md — Rename the app/test target, product, module, bundle, host, and scheme graph and wire ProductIcon as the sole app icon.
+
+**Wave 4 — offline build evidence and authorized human review**
+
+- [x] 04.1-06-PLAN.md — Finish test/script identities, run source-only and build-for-testing validation, then complete the separately authorized visual/VoiceOver review.
+
+### Phase 04.2: Expressive Skin Architecture & Bundled Themes (INSERTED)
+
+**Goal:** Deliver genuinely transformative Winamp-inspired skinning through declarative layouts, artwork, window silhouettes, chrome, and typography while native behavior, accessibility, safety, and recovery remain app-owned.
+**Requirements**: TBD
+**Depends on:** Phase 04.1
+**Success Criteria** (what must be TRUE):
+
+  1. Subscribers can choose complete macOS 8, MiniDisc, and Frutiger Aero themes that differ materially in artwork, window shape, chrome, typography, and semantic-control arrangement rather than functioning as palette swaps.
+  2. A versioned declarative skin contract can arrange a closed set of semantic controls and bounded decorative assets, drag regions, and window silhouettes without executable behavior, networking, or arbitrary-file access.
+  3. Every theme preserves native interaction, minimum hit targets, keyboard navigation, VoiceOver semantics, visible focus and state, Reduce Motion behavior, and a package-independent Native recovery path.
+  4. Invalid or hostile layouts and assets cannot hide required controls, escape validated bounds, weaken recovery, or alter authentication, playback ownership, persistence, menus, or accessibility authority.
+  5. Existing skins remain safely supported or receive explicit compatibility migration, and all bundled themes pass deliberate visual and accessibility review.
+
+**Plans:** 4/4 plans complete
+
+Plans:
+
+**Wave 1 — schema-v3 expressive-skin tracer**
+
+- [x] 04.2-01-PLAN.md — Deliver Pixel Desk end to end through strict schema-v3 validation, the native semantic renderer, finite window policy, legacy compatibility, and Native recovery.
+
+**Wave 2 — complete bundled theme family** *(blocked on Wave 1 completion)*
+
+- [x] 04.2-02-PLAN.md — Expand the public declarative contract with original Pocket Disc and Aqua Vista themes plus provenance and deterministic bundle contracts.
+
+**Wave 3 — state, accessibility, and offline review hardening** *(blocked on Wave 2 completion)*
+
+- [x] 04.2-03-PLAN.md — Harden every documented state, accessibility boundary, management flow, recovery route, and long-content case without launching the app.
+
+**Wave 4 — authorized human visual and accessibility review** *(blocked on Wave 3 completion)*
+
+- [x] 04.2-04-PLAN.md — Establish a separately authorized safe review environment and complete visual, keyboard, VoiceOver, motion, window, restoration, and recovery UAT.
+
+### Phase 04.3: Local Song Favorites (INSERTED)
+
+**Goal:** Save currently confirmed songs locally so subscribers can revisit a durable favorite-songs list and manually add those songs to any music service they prefer.
+**Requirements**: TBD
+**Depends on:** Phase 04.2
+**Success Criteria** (what must be TRUE):
+
+  1. A subscriber can favorite only currently confirmed song metadata with a nonempty title and artist; stale, unavailable, channel-fallback, and display-composed text are never saved as songs.
+  2. Song favorites persist only non-secret identity and presentation snapshots, deduplicate repeat saves by normalized title and artist, and publish saved or removed state only after durable mutation succeeds.
+  3. A subscriber can revisit, copy from, and remove entries in a dedicated Favorite Songs collection after relaunch, with useful title, artist, source-channel, and saved-date context.
+  4. Song favorites remain distinct from existing channel favorites and do not interrupt playback, alter the shared listening session, or weaken existing accessibility behavior.
+  5. The phase introduces no external music-service authentication, account connection, catalog matching, or playlist API; users manually use the local list with their preferred service.
+
+**Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd-plan-phase 04.3 to break down)
+
 ### Phase 5: Public Release & Compatibility Support
 
-**Goal**: Subscribers and Apple-platform developers can use a maintained, diagnosable client and install a trusted public Sirius Mac release.
+**Goal**: Subscribers and Apple-platform developers can use a maintained, diagnosable client and install the app's trusted public release.
 **Mode:** mvp
-**Depends on**: Phase 4
+**Depends on**: Phase 04.3
 **Requirements**: CLNT-05, COMP-01, COMP-02, REL-01, REL-02, REL-03
 **Success Criteria** (what must be TRUE):
 
@@ -339,7 +423,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Active product execution proceeds 1 → 2 → 3 → 4 → 5. Phase 0 is retained historical work, not an execution dependency.
+Active product execution proceeds 1 → 2 → 3 → 4 → 4.1 → 4.2 → 4.3 → 5. Phase 0 is retained historical work, not an execution dependency.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -347,5 +431,8 @@ Active product execution proceeds 1 → 2 → 3 → 4 → 5. Phase 0 is retained
 | 1. Safe Interoperability Foundation | 16/16 | Complete    | 2026-08-18 |
 | 2. Authorized Live Listening | 18/18 | Complete    | 2026-08-20 |
 | 3. Native Mac Listening Experience | 8/8 | In Progress|  |
-| 4. Safe Skins & Accessible Recovery | 3/3 | In Progress|  |
+| 4. Safe Skins & Accessible Recovery | 4/4 | Complete    | 2026-08-26 |
+| 4.1 Product Identity & Experience Polish | 6/6 | Complete    | 2026-08-27 |
+| 4.2 Expressive Skin Architecture & Bundled Themes | 4/4 | Complete    | 2026-08-28 |
+| 4.3 Local Song Favorites | 0/TBD | Not started | - |
 | 5. Public Release & Compatibility Support | 0/TBD | Not started | - |

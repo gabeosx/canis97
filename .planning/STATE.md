@@ -2,43 +2,43 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 04
-current_phase_name: safe-skins-accessible-recovery
-status: executing
-stopped_at: Phase 04 planned; ready for execution
-last_updated: "2026-08-25T21:36:01.327Z"
-last_activity: 2026-08-25
-last_activity_desc: Phase 04 execution started
+current_phase: 04.3
+current_phase_name: Local Song Favorites
+status: planning
+stopped_at: Phase 04.2 complete; ready to plan 04.3
+last_updated: "2026-08-28T17:20:39.747Z"
+last_activity: 2026-08-28
+last_activity_desc: Phase 04.2 complete; transitioned to Phase 04.3
 progress:
-  total_phases: 5
-  completed_phases: 4
-  total_plans: 58
-  completed_plans: 55
+  total_phases: 8
+  completed_phases: 7
+  total_plans: 69
+  completed_plans: 69
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-08-18)
+See: .planning/PROJECT.md (updated 2026-08-26)
 
 **Core value:** Subscribers can reliably start and control a live SiriusXM stream from a delightful native Mac player, even as the unsupported SiriusXM integration evolves underneath it.
-**Current focus:** Phase 04 — safe-skins-accessible-recovery
+**Current focus:** Phase 04.3 — Local Song Favorites
 
 ## Current Position
 
-Phase: 04 (safe-skins-accessible-recovery) — EXECUTING
-Plan: 1 of 3
-Status: Executing Phase 04
-Last activity: 2026-08-25 — Phase 04 execution started
+Phase: 04.3 — Local Song Favorites
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-08-28 — Phase 04.2 complete, transitioned to Phase 04.3
 
-Planned-work progress: [█████████░] 95% (55/58; Phase 04 plans ready)
+Planned-work progress: [██████████] 100% (69/69 completed plans; Phase 04.3 planning not started)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 55
+- Total plans completed: 23
 - Average duration: Not reliably tracked
 - Total execution time: Not reliably tracked
 
@@ -46,9 +46,10 @@ Planned-work progress: [█████████░] 95% (55/58; Phase 04 pla
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01 | 16 | - | - |
-| 02 | 18 | - | - |
 | 03 | 9 | - | - |
+| 04 | 4 | - | - |
+| 04.1 | 6 | - | - |
+| 04.2 | 4 | - | - |
 
 **Recent Trend:**
 
@@ -115,6 +116,9 @@ Planned-work progress: [█████████░] 95% (55/58; Phase 04 pla
 | Phase 03 P07 | 19min | 2 tasks | 7 files |
 | Phase 03 P08 | 1257s | 2 tasks | 6 files |
 | Phase 03 P09 | multi-session | 3 tasks | 10 files |
+| Phase 04.2 P01 | 44m | 3 tasks | 11 files |
+| Phase 04.2 P02 | 8m | 3 tasks | 8 files |
+| Phase 04.2 P03 | 8 min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -133,6 +137,9 @@ Decisions are logged in PROJECT.md. Active decisions affecting current work:
 - Phase 3: Compact restoration preserves only a safe origin and always reapplies the fixed 400 x 288 content size.
 - Phase 3: Native List owns browse selection while one AppKit double action owns explicit activation.
 - Phase 4: Skins are declarative local data/assets only and preserve accessible native semantics and recovery.
+- Phase 4: Native, bundled, and imported appearances share one closed selected-appearance and renderer path.
+- Phase 4: Imported packages render only from validated app-owned managed copies; source archives are never durable dependencies.
+- Phase 4: The permanent Native appearance is the package-independent recovery anchor, including decoration failure and selected-package removal.
 
 All earlier Phase 0 feasibility-selection, proof-run, quartet, GO/NO-GO, and callback/native-path decisions are historical and superseded for product execution.
 
@@ -161,8 +168,6 @@ All earlier Phase 0 feasibility-selection, proof-run, quartet, GO/NO-GO, and cal
 - [Phase ?]: Retained the E4/E1 test graph as the sole SiriusMacTests configuration.
 - [Phase ?]: Reserve WebView credential selection before cookie-store suspension and commit consumption before credential delivery.
 - [Phase ?]: Only explicit user-operated sign-in may re-arm a consumed WebView credential handoff.
-- [Phase 01]: Profile-v4 authentication accepts only a non-empty JSON object after existing transport and control preflight, without inventing a profile field. — Preserves the settled Phase 0 predicate while allowing representative unrelated fields.
-- [Phase 01]: Subscription-v1 entitlement uses `/subscription/v1/subscriptions` and classifies only recognized `items[].state` values (`active` or `finished`); missing, malformed, empty, or unknown evidence fails closed. — Matches the successful live contract while containing volatile provider schema details internally.
 - [Phase ?]: Redirect instrumentation exposes only an internal scalar attempt count and never retains redirect or credential-bearing request data.
 - [Phase ?]: Accept one current root-path AUTH_TOKEN from siriusxm.com or any label-boundary-safe subdomain independent of WebKit's Secure flag; continue rejecting expired, path-mismatched, duplicate, and suffix-lookalike cookies.
 - [Phase ?]: Cleanup succeeds only after an exact-token rescan is clean and bridge-owned nonpersistent WebKit session retirement succeeds.
@@ -173,9 +178,6 @@ All earlier Phase 0 feasibility-selection, proof-run, quartet, GO/NO-GO, and cal
 - [Phase ?]: Keep Wave 0 listening seams semantic and provider-neutral until the owner-visible contract checkpoint.
 - [Phase ?]: Treat catalog snapshots as browse-only; playback requires separate current authorization confirmation.
 - [Phase ?]: Use generation checks and finite recovery budgets to reject stale, superseded, and cancelled listening work.
-- [Phase 02]: Treat ordinary tune HTTP 4xx outcomes as closed native failures that preserve Keychain material; only explicit Sign Out or Clear Local Session erases local session state.
-- [Phase 02]: Runtime catalog, tune, metadata, key, enforcement, and live-activity operations are fixed direct authenticated JSON APIs. A one-time official-player DOM interaction was research only and is never shipped architecture.
-- [Phase 02]: Sanitized provider-contract evidence supports Plan 02-03's strict opaque media handoff and fixtures, while AVFoundation audibility and controls remain unobserved until Plan 02-05.
 - [Phase ?]: Phase 02 live operations remain fixed and non-materializable until a later capability plan has validated opaque inputs.
 - [Phase ?]: Use an SPI AVPlayerItem factory handoff without resource, header, key, or URL access; AVFoundation proof remains in Plan 02-05.
 - [Phase ?]: Catalog browsing consumes only semantic values and fails closed until later compatibility work supplies observed opaque materialization inputs.
@@ -192,7 +194,6 @@ All earlier Phase 0 feasibility-selection, proof-run, quartet, GO/NO-GO, and cal
 - [Phase ?]: Keep playback, metadata, recovery, failure, and expiry statuses truthful: NOT OBSERVED or NOT FORCED unless actually observed.
 - [Phase ?]: Use closed 401/403 stage labels while preserving public rejected semantics.
 - [Phase ?]: Publish a durable active session only after opaque credential persistence succeeds.
-- [Phase 02-authorized-live-listening]: Require exact executable-path identity and an atomic lock for bounded SiriusMac launch safety. — A matching process name cannot distinguish stale or duplicate builds.
 - [Phase ?]: Use a closed enum-only authentication oracle and rotate the nonpersistent WebView session before each explicit sign-in.
 - [Phase ?]: Await the current explicit cleanup before acquiring an authentication lease or credential source material.
 - [Phase ?]: Expose cleanup as a fixed in-progress state and reject every auth action until it settles.
@@ -216,6 +217,14 @@ All earlier Phase 0 feasibility-selection, proof-run, quartet, GO/NO-GO, and cal
 - [Phase ?]: Menu and compact/library controls call the same ListeningSessionController routes.
 - [Phase ?]: Phase 03 acceptance evidence records only bounded semantic outcomes and excludes screenshots or sensitive runtime data.
 - [Phase ?]: Compact fallback pairs its dark canvas with a declarative semantic foreground scheme so confirmed, pending, and error content stays readable.
+- [Phase 04.1]: The new product identity should evoke 2000s music-player nostalgia while avoiding Sirius, XM, and any implication of official affiliation. — The user wants a distinctive nostalgic music identity, and the pre-release rename is the right point to align the app name, icon, skins, copy, bundle identity, and release artifacts.
+- [Phase ?]: Schema-v3 layouts compile to a closed validated plan before rendering or window policy.
+- [Phase ?]: Invalid compact restoration routes through package-independent Native recovery.
+- [Phase ?]: The expressive catalog has one deterministic resource list; all bundled manifests still validate as ordinary schema-v3 appearances.
+- [Phase ?]: Materials are selected solely by validated finite silhouette tokens, so imported packages receive the same renderer behavior without identifier or classification branches.
+- [Phase ?]: Provenance records only original app-drawn layer names and system font tokens; no theme includes font files or external assets.
+- [Phase ?]: Keep compact controls and recovery structurally app-owned across expressive layouts.
+- [Phase ?]: Use an in-memory schema-v1 fixture plus bundled appearances for offline review.
 
 ### Pending Todos
 
@@ -226,7 +235,7 @@ None yet.
 - Phase 1: The SiriusXM WebView/token/native-request contract remains volatile; drift must fail closed behind replaceable adapters, never trigger a new authentication-method experiment during execution.
 - Phase 5: Verify signing, notarization, stapling, immutable release, Gatekeeper, and Homebrew Cask behavior against the current release toolchain before publishing.
 - Phase 02 remains volatile: unknown hosts, redirects, protected controls, malformed contracts, authorization loss, and DRM ambiguity must continue to fail closed behind repairable adapters.
-- Plan 02-18: final exact-process verification found two SiriusMac processes after the bounded restore/listening observation; both were closed and no relaunch is authorized.
+- Phase 5: Runtime and release checks must preflight exact executable paths and enforce one SiriusMac instance; Phase 4 UAT again exposed the ambiguity created by duplicate debug builds.
 
 ### Quick Tasks Completed
 
@@ -236,11 +245,17 @@ None yet.
 | 260818-c4r | Update only Phase 1's Goal line in .planning/ROADMAP.md | 2026-08-18 | fd464e6 | [260818-c4r-update-only-phase-1-goal-line-in-plannin](./quick/260818-c4r-update-only-phase-1-goal-line-in-plannin/) |
 | 260818-tf1 | Improve sign-in window with responsive WebView sizing and subtler border | 2026-08-18 | e469deb | [260818-tf1-improve-sign-in-window-with-responsive-w](./quick/260818-tf1-improve-sign-in-window-with-responsive-w/) |
 | 260818-tn3 | Make one live auth attempt fully diagnosable with secret-free native reason labels | 2026-08-18 | 2b51d30 | [260818-tn3-make-one-live-auth-attempt-fully-diagnos](./quick/260818-tn3-make-one-live-auth-attempt-fully-diagnos/) |
+| 5 | Use Canis97 in the compact-player accessibility label | 2026-08-28 | fce8902 | — |
 
 ### Roadmap Evolution
 
 - Phase 0 retained as historical feasibility work; its GO artifacts no longer gate Phase 1.
 - Phase 1 replanned to consume the settled WKWebView token-extraction and native authenticated-request architecture directly.
+- Phase 4 completed with all 15 UAT checks passing; safe bundled/imported appearances and package-independent Native recovery are validated.
+- Phase 04.1 inserted after Phase 4: Product Identity & Experience Polish (URGENT)
+- Phase 04.2 inserted after Phase 4: Song Favorites & Playlist Connections (URGENT)
+- Phase 04.2 edited: repurposed for expressive skin architecture and three complete bundled themes; local song favorites moved to follow-up phase
+- Phase 04.3 inserted after Phase 04.2: Local Song Favorites — durable confirmed-song list for manual use with any music service (URGENT)
 
 ## Deferred Items
 
@@ -250,6 +265,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-24T23:11:15.359Z
-Stopped at: Phase 04 planned; ready for execution
-Resume file: .planning/phases/04-safe-skins-accessible-recovery/04-01-PLAN.md
+Last session: 2026-08-28T11:45:50.108Z
+Stopped at: Completed 04.2-03-PLAN.md
+Resume file: None
