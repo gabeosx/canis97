@@ -255,8 +255,8 @@ struct ValidatedSkinAppearance: Identifiable, Equatable, Sendable {
         cornerRadius: 4,
         backgroundAssetURL: nil,
         metadataPanelAssetURL: nil,
-        chromeHighlightHex: "#C6FF00",
-        displayGlowHex: "#31422B"
+        chromeHighlightHex: "#D6FF60",
+        displayGlowHex: "#173A46"
     )
 }
 

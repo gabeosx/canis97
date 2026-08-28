@@ -485,6 +485,50 @@ final class CompactPlayerPresentationTests: XCTestCase {
         XCTAssertEqual(CompactPlayerPresentation.transportControlSize, 32)
     }
 
+    func testAppearanceFamilyKeepsOneActionAndAccessibilityContractForLongEmptyAndErrorContent() throws {
+        let appearances = [
+            ValidatedSkinAppearance.native,
+            try bundledAppearance(named: "SignalGlow"),
+            try bundledAppearance(named: "TapeDeck")
+        ]
+        let longMetadata = String(repeating: "Orbital signal / ", count: 18)
+        let presentations = [
+            CompactPlayerPresentation.confirmed(
+                channel: .init(number: 97, name: "Canis"),
+                artwork: .placeholder,
+                primaryMetadata: longMetadata,
+                secondaryMetadata: longMetadata,
+                playback: .playing,
+                isFavorite: false,
+                queueAvailability: .both
+            ),
+            CompactPlayerPresentation.empty(),
+            CompactPlayerPresentation.empty(status: .unavailable(.tryAgain))
+        ]
+        let source = try repositorySource("SiriusMac/Player/CompactPlayerView.swift")
+        let expectedActions: [CompactPlayerAction] = [
+            .previous, .playPause, .next, .toggleFavorite, .showLibrary,
+            .toggleAlwaysOnTop, .retryPlayback, .signInAgain, .refreshLibrary, .signOut
+        ]
+
+        XCTAssertEqual(CompactPlayerAction.allCases, expectedActions)
+        XCTAssertFalse(source.contains("switch appearance.reference.classification"))
+        for (identifier, expectedOccurrences) in [
+            ("compact.favorite", 1),
+            ("compact.status", 1),
+            ("compact.show-library", 2), // populated and empty semantic states
+            ("compact.sign-out", 1)
+        ] {
+            XCTAssertEqual(source.components(separatedBy: identifier).count - 1, expectedOccurrences, "\(identifier) must remain app-owned")
+        }
+        for appearance in appearances {
+            XCTAssertEqual(appearance.renderableAppearance { _ in false }, appearance)
+            for presentation in presentations {
+                XCTAssertFalse(Array(Mirror(reflecting: presentation).children).contains { $0.value is CompactPlayerAction })
+            }
+        }
+    }
+
     private func repositorySource(_ path: String) throws -> String {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

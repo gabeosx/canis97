@@ -166,14 +166,13 @@ check_appearance() {
   rg -Fq 'testVersionOneAppearanceRemainsExactWhileVersionTwoProjectsOnlyDecorativeTreatments' "$presentation_tests" || fail 'version compatibility coverage is required'
   rg -Fq 'testVersionTwoRejectsUnknownFieldsAndMissingOrInvalidDecorativeRoles' "$presentation_tests" || fail 'schema authority rejection coverage is required'
   rg -Fq 'testCompactAppearanceInputCannotChangeSemanticControlsOrGeometry' "$presentation_tests" || fail 'control and geometry coverage is required'
+  rg -Fq 'testAppearanceFamilyKeepsOneActionAndAccessibilityContractForLongEmptyAndErrorContent' "$presentation_tests" || fail 'appearance family semantic coverage is required'
   for manifest in "$signal_glow" "$tape_deck"; do
     local schema_version
     schema_version="$(/usr/bin/jq -r '.schemaVersion' "$manifest")"
-    [[ "$schema_version" == '1' || "$schema_version" == '2' ]] || fail 'bundled appearances must use a supported schema version'
-    if [[ "$schema_version" == '2' ]]; then
-      [[ "$(/usr/bin/jq -r '.chromeHighlight' "$manifest")" != 'null' ]] || fail 'schema version 2 requires chromeHighlight'
-      [[ "$(/usr/bin/jq -r '.displayGlow' "$manifest")" != 'null' ]] || fail 'schema version 2 requires displayGlow'
-    fi
+    [[ "$schema_version" == '2' ]] || fail 'bundled appearances must use schema version 2'
+    [[ "$(/usr/bin/jq -r '.chromeHighlight' "$manifest")" != 'null' ]] || fail 'schema version 2 requires chromeHighlight'
+    [[ "$(/usr/bin/jq -r '.displayGlow' "$manifest")" != 'null' ]] || fail 'schema version 2 requires displayGlow'
   done
   local forbidden_manifest_pattern='"(action|accessibility|focus|reduceMotion|contentWidth|contentHeight|transportControlSize|url|URL|menu|playback|authentication|persistence|window)'
   ! rg -n "$forbidden_manifest_pattern" "$skin_appearance" >/dev/null || fail 'skin manifest authority expanded beyond bounded appearance fields'

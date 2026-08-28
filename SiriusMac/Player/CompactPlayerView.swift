@@ -83,7 +83,7 @@ struct CompactPlayerView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 4) {
                         Text(channel.displayText)
-                            .font(.system(size: 18, weight: .semibold))
+                            .font(.system(size: 18, weight: .bold, design: .rounded))
                             .lineLimit(1)
                             .help(channel.displayText)
                             .accessibilityLabel("Channel \(channel.displayText)")
@@ -137,7 +137,7 @@ struct CompactPlayerView: View {
     private var metadata: some View {
         if let primary = presentation.primaryMetadata {
             Text(primary)
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: 14, weight: .semibold, design: .monospaced))
                 .lineLimit(CompactPlayerPresentation.metadataLineLimit)
                 .help(primary)
                 .accessibilityLabel("Current program: \(primary)")
@@ -146,7 +146,7 @@ struct CompactPlayerView: View {
         }
         if let secondary = presentation.secondaryMetadata {
             Text(secondary)
-                .font(.system(size: 14))
+                .font(.system(size: 13, design: .monospaced))
                 .foregroundStyle(.secondary)
                 .lineLimit(CompactPlayerPresentation.metadataLineLimit)
                 .help(secondary)
@@ -176,7 +176,7 @@ struct CompactPlayerView: View {
                     Button(recovery.title) { onAction(recovery.compactAction) }
                 }
             }
-            .font(.system(size: 12))
+            .font(.system(size: 12, weight: .medium, design: .monospaced))
             .foregroundStyle(.secondary)
             .padding(.horizontal, 6)
             .padding(.vertical, 4)
@@ -283,7 +283,8 @@ struct CompactPlayerView: View {
     private var emptyContent: some View {
         VStack(alignment: .leading, spacing: 16) {
             Spacer()
-            Text(presentation.emptyTitle ?? "Nothing Playing").font(.system(size: 24, weight: .semibold))
+            Text(presentation.emptyTitle ?? "Nothing Playing")
+                .font(.system(size: 22, weight: .bold, design: .rounded))
             statusAndRecovery
             Button(presentation.emptyLibraryButtonTitle ?? "Open Library") { onAction(.showLibrary) }
                 .accessibilityIdentifier("compact.show-library")
