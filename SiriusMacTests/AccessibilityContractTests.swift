@@ -75,7 +75,14 @@ final class AccessibilityContractTests: XCTestCase {
         XCTAssertTrue(source.contains("@FocusState private var focusedReference"))
         XCTAssertTrue(source.contains("focusedReference = appearanceController.selectedReference"))
         XCTAssertTrue(source.contains("enum SkinManagementErrorPresentation"))
-        XCTAssertTrue(source.contains("Button(\"Remove\", role: .destructive"))
+        XCTAssertTrue(source.contains("Button(\"Select Appearance\""))
+        XCTAssertTrue(source.contains("No imported appearances yet."))
+        XCTAssertTrue(source.contains("Import a local .siriusskin package to add one."))
+        XCTAssertTrue(source.contains("This appearance couldn’t be used. Choose another package or select Native."))
+        XCTAssertTrue(source.contains("Button(\"Keep \\(confirmation.displayName)\""))
+        XCTAssertTrue(source.contains(".truncationMode(.tail)"))
+        XCTAssertTrue(source.contains("ProgressView(\"Importing appearance\")"))
+        XCTAssertTrue(source.contains(".disabled(isBusy)"))
         XCTAssertTrue(source.contains(".frame(minHeight: 32)"))
         XCTAssertFalse(source.contains("NSAlert"))
         XCTAssertFalse(source.contains("NSOpenPanel"))
@@ -121,6 +128,16 @@ final class AccessibilityContractTests: XCTestCase {
         XCTAssertTrue(source.contains(".allowsHitTesting(false)"))
         XCTAssertTrue(source.contains("CompactPlayerPresentation.focusClearance"))
         XCTAssertTrue(source.contains("compact.overflow.use-native-appearance"))
+    }
+
+    func testNativeRecoveryRoutesStayDirectAndPackageIndependent() throws {
+        let appSource = try repositorySource("SiriusMac/SiriusMacApp.swift")
+        let playerSource = try repositorySource("SiriusMac/Player/CompactPlayerView.swift")
+
+        XCTAssertTrue(appSource.contains("Button(\"Use Native Appearance\")"))
+        XCTAssertTrue(appSource.contains("appearanceController.restoreNativeAppearance()"))
+        XCTAssertTrue(playerSource.contains("Button(\"Use Native Appearance\") { onAppearanceRecovery() }"))
+        XCTAssertFalse(playerSource.contains("catalog.resolve"))
     }
 
     func testSkinImportKeepsBothExtensionsBehindTheClosedImporter() throws {
