@@ -1,0 +1,4 @@
+interface:
+  display_name: "Create a Canis97 Skin"
+  short_description: "Design and package safe Canis97 skins"
+  default_prompt: "Use $canis97-skin-creator to create a custom Canis97 skin package."

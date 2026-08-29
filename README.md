@@ -1,49 +1,99 @@
+<div align="center">
+
 # Canis97
+
+### SiriusXM, built like a real Mac app.
+
+Live radio, media keys, favorites, and a tiny skinnable player—without living in a browser tab.
 
 [![CI](https://github.com/gabeosx/canis97/actions/workflows/ci.yml/badge.svg)](https://github.com/gabeosx/canis97/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/gabeosx/canis97?display_name=tag&sort=semver)](https://github.com/gabeosx/canis97/releases/latest)
 [![macOS 26+](https://img.shields.io/badge/macOS-26%2B-111111?logo=apple)](https://github.com/gabeosx/canis97)
+[![MIT](https://img.shields.io/badge/license-MIT-4c1)](LICENSE)
 
-Canis97 (pronounced “CAN-iss nine-seven”) is a native SiriusXM player for macOS. It brings live radio, channel browsing, favorites, media keys, and a compact skinnable player together in one proper Mac app.
+</div>
 
 > [!IMPORTANT]
 > Canis97 is an independent, unofficial project. It is not affiliated with, endorsed by, or sponsored by Sirius XM Radio LLC. A current SiriusXM subscription is required, and upstream compatibility can change without notice.
 
 <table>
   <tr>
-    <td width="44%" valign="top"><img width="100%" src="docs/screenshots/canis97-siriusxmu-player.png" alt="Canis97 playing SiriusXMU in its compact player"></td>
-    <td width="56%" valign="top"><img width="100%" src="docs/screenshots/canis97-siriusxmu-library.png" alt="The Canis97 channel library with SiriusXMU playing"></td>
+    <td width="40%" align="center" valign="middle">
+      <img width="384" src="docs/screenshots/canis97-siriusxmu-player.png" alt="Canis97 playing SiriusXMU with the Pocket Disc appearance">
+    </td>
+    <td width="60%" align="center" valign="middle">
+      <img width="980" src="docs/screenshots/canis97-siriusxmu-library.png" alt="The Canis97 channel library with SiriusXMU playing">
+    </td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Pocket Disc</strong><br><sub>A compact player that stays out of the way.</sub></td>
+    <td align="center"><strong>Native channel library</strong><br><sub>Browse, search, favorite, and tune without leaving macOS.</sub></td>
   </tr>
 </table>
 
-## Features
+## What it does
 
-- Browse and search the live channels included with your subscription.
-- Keep favorite channels, recent stations, and songs you want to revisit close at hand.
-- See live artwork and program or song information in a compact always-on-top player.
-- Control playback with the app, Mac media keys, or Control Center.
-- Switch between bundled appearances or import a `.canis97skin` theme.
-- Check GitHub Releases for updates from inside the app.
-- See which integration stage needs attention and review a privacy-safe support bundle before exporting it.
-- Restore sign-in securely with macOS Keychain.
+- Plays the live channels included with your SiriusXM subscription.
+- Browses channels by list, category, favorites, favorite songs, and recents.
+- Shows current artwork, program or song metadata, and playback state.
+- Works with Mac media keys, Control Center, keyboard shortcuts, and an always-on-top player.
+- Restores sign-in securely from macOS Keychain.
+- Checks GitHub Releases for updates without silently downloading or installing anything.
+- Reports authentication, catalog, stream, metadata, and playback compatibility without exposing subscriber data.
 
-## Requirements
+## Pick a look
 
-- macOS 26 or later
-- Apple silicon Mac
-- Active SiriusXM subscription
+Canis97 ships with five bundled appearances plus Native and supports safe, declarative `.canis97skin` packages. A skin can change color, spacing, shape, typography, fixed layout, and local decorative images—but it cannot run code or alter playback behavior.
 
-## Installation
+<table>
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <img width="448" src="docs/screenshots/canis97-siriusxmu-aqua-vista.png" alt="Aqua Vista appearance playing SiriusXMU"><br>
+      <strong>Aqua Vista</strong>
+    </td>
+    <td width="50%" align="center" valign="top">
+      <img width="432" src="docs/screenshots/canis97-siriusxmu-pixel-desk.png" alt="Pixel Desk appearance playing SiriusXMU"><br>
+      <strong>Pixel Desk</strong>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <img width="400" src="docs/screenshots/canis97-siriusxmu-signal-glow.png" alt="Signal Glow appearance playing SiriusXMU"><br>
+      <strong>Signal Glow</strong>
+    </td>
+    <td width="50%" align="center" valign="top">
+      <img width="400" src="docs/screenshots/canis97-siriusxmu-tape-deck.png" alt="Tape Deck appearance playing SiriusXMU"><br>
+      <strong>Tape Deck</strong>
+    </td>
+  </tr>
+</table>
+
+Want your own? Follow [Creating a Canis97 skin](docs/skins/creating-a-skin.md), or ask Codex:
+
+```text
+Use $skill-installer to install https://github.com/gabeosx/canis97/tree/main/.agents/skills/canis97-skin-creator
+```
+
+Then invoke `$canis97-skin-creator` with the look you want.
+
+## Install
+
+Canis97 requires macOS 26 or later, an Apple silicon Mac, and an active SiriusXM subscription.
 
 ### GitHub Releases
 
-Download the latest signed build from [GitHub Releases](https://github.com/gabeosx/canis97/releases), unzip it, and move **Canis97.app** to your Applications folder.
-
-The first public binary has not been published yet. Until then, build Canis97 from source.
+Download the latest signed build from [GitHub Releases](https://github.com/gabeosx/canis97/releases), unzip it, and move **Canis97.app** to Applications.
 
 ### Homebrew
 
-Homebrew installation will be available with the first public release.
+Install the same signed release from the project-owned tap:
+
+```sh
+brew tap gabeosx/tap
+brew install --cask canis97
+```
+
+Later releases can be installed with `brew upgrade --cask canis97`.
 
 ### Build from source
 
@@ -53,25 +103,25 @@ cd canis97
 open SiriusMac.xcodeproj
 ```
 
-Select the `Canis97` scheme and build for **My Mac**. Building from source requires Xcode 26.6 and Swift 6.3.
+Select the `Canis97` scheme and build for **My Mac**. Source builds require Xcode 26.6 and Swift 6.3.
 
-## Getting started
+## Start listening
 
 1. Launch Canis97 and choose **Sign In with SiriusXM**.
-2. Complete sign-in in the app’s nonpersistent SiriusXM browser surface.
+2. Complete sign-in in the app’s nonpersistent SiriusXM browser.
 3. Open the Library and refresh your channels.
 4. Double-click a channel—or select it and choose **Tune**—to start listening.
-5. Choose an appearance in **Settings**, or import a local `.canis97skin` theme.
+5. Choose an appearance from **Player → Appearance**, or manage imported skins in **Settings**.
 
 ## Privacy and account safety
 
 Credentials and session tokens are stored in macOS Keychain and sent only to SiriusXM. Canis97 excludes passwords, cookies, authorization headers, session identifiers, stream URLs, and raw provider responses from diagnostics.
 
-Choose **Help > Compatibility & Support…** to see the current authentication, entitlement, catalog, stream, metadata, and playback classifications. The optional JSON support bundle contains only the app/OS versions, architecture, and the six classifications shown in its on-screen preview.
+Choose **Help → Compatibility & Support…** to see the current authentication, entitlement, catalog, stream, metadata, and playback classifications. The optional JSON support bundle contains only the app and OS versions, architecture, and the six classifications shown in its on-screen preview.
 
 Canis97 does not bypass CAPTCHA, MFA, subscription or device limits, anti-bot controls, DRM, or other service protections.
 
-## Development
+## Develop
 
 The SiriusXM integration lives in the reusable `SiriusXMClient` Swift package. Run the package tests and compile the app test bundle with:
 
@@ -87,15 +137,15 @@ xcodebuild build-for-testing \
   CODE_SIGNING_ALLOWED=NO
 ```
 
-CI runs these checks for pull requests and changes to `main`.
+CI runs these checks for pull requests and changes to `main`. Start with the [documentation index](docs/README.md) for skin, client, and release references.
 
 ## Releases and versioning
 
-Canis97 uses Semantic Versioning and `vMAJOR.MINOR.PATCH` release tags. GitHub Releases is the canonical download source, and the Homebrew Cask uses the same signed and notarized build. See [RELEASING.md](RELEASING.md) for the release process and [CHANGELOG.md](CHANGELOG.md) for release notes.
+Canis97 follows Semantic Versioning with `vMAJOR.MINOR.PATCH` release tags. GitHub Releases is the canonical channel; the Homebrew Cask points to the same Apple-signed and notarized archive. See [RELEASING.md](RELEASING.md) and [CHANGELOG.md](CHANGELOG.md).
 
 ## Contributing
 
-Issues and pull requests are welcome. Never include credentials, cookies, stream URLs, authenticated responses, or subscriber data in bug reports or test fixtures.
+Issues and pull requests are welcome. Never include credentials, cookies, stream URLs, authenticated responses, or subscriber data in bug reports or fixtures.
 
 ## Legal
 
