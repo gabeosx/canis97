@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 04.3
-current_phase_name: Local Song Favorites
-status: planning
-stopped_at: Phase 04.2 complete; ready to plan 04.3
-last_updated: "2026-08-28T17:20:39.747Z"
-last_activity: 2026-08-28
-last_activity_desc: Phase 04.2 complete; transitioned to Phase 04.3
+current_phase: 5
+current_phase_name: Public Release & Compatibility Support
+status: verification
+stopped_at: v0.1.0 candidate integration and local validation complete; awaiting release commit and CI
+last_updated: "2026-08-29T18:55:31Z"
+last_activity: 2026-08-29
+last_activity_desc: Integrated audio output routing, the packaged skin-creator skill, and the bundled Vintage Cassette Deck for v0.1.0
 progress:
   total_phases: 8
-  completed_phases: 7
-  total_plans: 69
-  completed_plans: 69
+  completed_phases: 8
+  total_plans: 71
+  completed_plans: 71
 ---
 
 # Project State
@@ -23,16 +23,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-26)
 
 **Core value:** Subscribers can reliably start and control a live SiriusXM stream from a delightful native Mac player, even as the unsupported SiriusXM integration evolves underneath it.
-**Current focus:** Phase 04.3 — Local Song Favorites
+**Current focus:** Phase 5 — Public Release & Compatibility Support
 
 ## Current Position
 
-Phase: 04.3 — Local Song Favorites
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-08-28 — Phase 04.2 complete, transitioned to Phase 04.3
+Phase: 5 (Public Release & Compatibility Support) — RELEASE GATE
+Plan: release preparation
+Status: Candidate integration and local validation complete; waiting for a clean release commit and exact-commit CI
+Last activity: 2026-08-29 — Audio output routing, the installable skin skill, and Vintage Cassette Deck were integrated for v0.1.0
 
-Planned-work progress: [██████████] 100% (69/69 completed plans; Phase 04.3 planning not started)
+Planned-work progress: [██████████] 99% (release publication remains)
 
 ## Performance Metrics
 
@@ -119,6 +119,8 @@ Planned-work progress: [██████████] 100% (69/69 completed pl
 | Phase 04.2 P01 | 44m | 3 tasks | 11 files |
 | Phase 04.2 P02 | 8m | 3 tasks | 8 files |
 | Phase 04.2 P03 | 8 min | 2 tasks | 7 files |
+| Phase 04.3 P01 | 9 min | 3 tasks | 11 files |
+| Phase 04.3-local-song-favorites P02 | 5 min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -225,6 +227,12 @@ All earlier Phase 0 feasibility-selection, proof-run, quartet, GO/NO-GO, and cal
 - [Phase ?]: Provenance records only original app-drawn layer names and system font tokens; no theme includes font files or external assets.
 - [Phase ?]: Keep compact controls and recovery structurally app-owned across expressive layouts.
 - [Phase ?]: Use an in-memory schema-v1 fixture plus bundled appearances for offline review.
+- [Phase ?]: Song favorites use a separate normalized title-and-artist identity and SwiftData record; channel favorites remain keyed by LiveChannelID.
+- [Phase ?]: Favorite Current Song only accepts confirmed, current, channel-matched discrete metadata; album remains nil until verified by the client contract.
+- [Phase ?]: Song favorite state is published only after successful durable SwiftData mutation.
+- [Phase ?]: Favorite Songs render in a separate nonselecting List and never become LibraryChannelItem values.
+- [Phase ?]: The Player menu derives every current-song label, enabled state, value, and VoiceOver hint from FavoriteCurrentSongActionState.
+- [Phase ?]: Copy remains an explicit local pasteboard operation using FavoriteSongSnapshot.copyText; no external-service path is introduced.
 
 ### Pending Todos
 
@@ -265,6 +273,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-28T11:45:50.108Z
-Stopped at: Completed 04.2-03-PLAN.md
+Last session: 2026-08-28T19:48:00.690Z
+Stopped at: v0.1.0 candidate integration and local validation complete
 Resume file: None

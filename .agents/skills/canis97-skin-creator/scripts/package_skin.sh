@@ -12,6 +12,8 @@ SOURCE_DIR="$(cd "$1" 2>/dev/null && pwd)" || {
 }
 DEFAULT_NAME="$(basename "$SOURCE_DIR").canis97skin"
 OUTPUT_PATH="${2:-$PWD/$DEFAULT_NAME}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VALIDATOR="$SCRIPT_DIR/validate_skin.py"
 if [[ "$OUTPUT_PATH" != /* ]]; then
   OUTPUT_PATH="$PWD/$OUTPUT_PATH"
 fi
@@ -28,16 +30,11 @@ fi
   echo "refusing to overwrite existing package: $OUTPUT_PATH" >&2
   exit 1
 }
-if find "$SOURCE_DIR" -type l -print -quit | grep -q .; then
-  echo "symbolic links are not allowed" >&2
+[[ -x "$VALIDATOR" ]] || {
+  echo "skin validator is missing or not executable: $VALIDATOR" >&2
   exit 1
-fi
-if find "$SOURCE_DIR" -mindepth 1 -name '.*' -print -quit | grep -q .; then
-  echo "hidden files and directories are not allowed" >&2
-  exit 1
-fi
-
-/usr/bin/jq -e 'type == "object"' "$SOURCE_DIR/manifest.json" >/dev/null
+}
+python3 "$VALIDATOR" "$SOURCE_DIR" >&2
 mkdir -p "$(dirname "$OUTPUT_PATH")"
 
 pushd "$SOURCE_DIR" >/dev/null
@@ -56,6 +53,11 @@ ARCHIVE_BYTES="$(stat -f '%z' "$OUTPUT_PATH")"
 if (( ARCHIVE_BYTES > 16 * 1024 * 1024 )); then
   rm -f "$OUTPUT_PATH"
   echo "package exceeds the 16 MiB archive limit" >&2
+  exit 1
+fi
+
+if ! python3 "$VALIDATOR" "$OUTPUT_PATH" >&2; then
+  rm -f "$OUTPUT_PATH"
   exit 1
 fi
 

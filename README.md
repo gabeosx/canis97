@@ -42,7 +42,7 @@ Live radio, media keys, favorites, and a tiny skinnable player—without living 
 
 ## Pick a look
 
-Canis97 ships with five bundled appearances plus Native and supports safe, declarative `.canis97skin` packages. A skin can change color, spacing, shape, typography, fixed layout, and local decorative images—but it cannot run code or alter playback behavior.
+Canis97 ships with six bundled appearances plus Native and supports safe, declarative `.canis97skin` packages. A skin can change color, spacing, shape, typography, fixed layout, and local decorative images—but it cannot run code or alter playback behavior.
 
 <table>
   <tr>
@@ -65,12 +65,22 @@ Canis97 ships with five bundled appearances plus Native and supports safe, decla
       <strong>Tape Deck</strong>
     </td>
   </tr>
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <img width="432" src="docs/screenshots/canis97-vintage-cassette-deck.png" alt="Vintage Cassette Deck appearance with generated cassette artwork"><br>
+      <strong>Vintage Cassette Deck</strong>
+    </td>
+    <td width="50%" align="center" valign="top">
+      <strong>Pocket Disc</strong><br>
+      A compact disc-console layout included with the app.
+    </td>
+  </tr>
 </table>
 
 Want your own? Follow [Creating a Canis97 skin](docs/skins/creating-a-skin.md), or ask Codex:
 
 ```text
-Use $skill-installer to install https://github.com/gabeosx/canis97/tree/main/.agents/skills/canis97-skin-creator
+npx skills add https://github.com/gabeosx/canis97 --skill canis97-skin-creator
 ```
 
 Then invoke `$canis97-skin-creator` with the look you want.

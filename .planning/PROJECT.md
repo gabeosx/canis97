@@ -16,6 +16,8 @@ Subscribers can reliably start and control a live SiriusXM stream from a delight
 
 - [x] A subscriber can authenticate against SiriusXM through a strict, fail-closed flow without credentials or session tokens leaving the Mac except in direct requests to SiriusXM. — Validated in Phase 1: Safe Interoperability Foundation.
 - [x] Secrets are stored through macOS Keychain-backed credential storage and never exposed in application diagnostics. — Validated in Phase 1: Safe Interoperability Foundation.
+- [x] The app provides a compact skinnable player window plus a larger native library window for browsing, metadata, favorites, and recents. — Validated across Phases 3 and 4.
+- [x] The app ships with multiple bundled skins and can load user-created local skin packages through a safe declarative format with no executable skin code. — Validated in Phase 4: Safe Skins & Accessible Recovery.
 
 ### Active
 
@@ -23,8 +25,6 @@ Subscribers can reliably start and control a live SiriusXM stream from a delight
 - [ ] A subscriber can start a live channel stream and the player handles recoverable network, playback, session, and upstream API failures clearly.
 - [ ] A subscriber can save favorite channels and return to recently played channels.
 - [ ] Playback integrates correctly with background audio, macOS media keys, and system Now Playing surfaces.
-- [ ] The app provides a compact skinnable player window plus a larger native library window for browsing, metadata, favorites, and recents.
-- [ ] The app ships with multiple bundled skins and can load user-created local skin packages through a safe declarative format with no executable skin code.
 - [ ] The SiriusXM integration is delivered as a documented, versioned, independently testable, reusable library consumed by the app.
 - [ ] SiriusXM authentication, catalog, metadata, stream resolution, compatibility behavior, and redacted diagnostics are isolated behind replaceable integration boundaries.
 - [ ] Public releases are signed, notarized, published through GitHub Releases, and installable through a Homebrew Cask.
@@ -70,7 +70,7 @@ Subscribers can reliably start and control a live SiriusXM stream from a delight
 | Enforce strict, fail-closed authentication boundaries | An unsanctioned public client must not compromise subscriber credentials or bypass service protections | ✓ Validated — Phase 1 |
 | Scope v1 content to live channels, favorites, recents, and channel metadata | Establish the core listening workflow before adding on-demand content or search | — Pending |
 | Use a compact player plus a larger library window | Preserves the always-available classic-player feel while giving discovery a native desktop workspace | — Pending |
-| Support bundled and declarative user-created skins | Skinning is a core product capability while executable extensions would create avoidable risk | — Pending |
+| Support bundled and declarative user-created skins | Skinning is a core product capability while executable extensions would create avoidable risk | ✓ Validated — Phase 4 |
 | Deliver the SiriusXM layer as a first-class reusable library | Protocol volatility and public reuse both require separation from application UI | — Pending |
 | Avoid a cross-platform mandate | The project can prioritize excellent current-macOS and Apple-platform architecture | — Pending |
 | Distribute signed and notarized releases through GitHub and Homebrew | Public users should be able to install normally without bypassing Gatekeeper | — Pending |
@@ -94,4 +94,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-08-18 after Phase 1 completion*
+*Last updated: 2026-08-26 after Phase 4 completion*

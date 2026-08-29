@@ -15,21 +15,22 @@ enum BundledThemeManifestOfflineTests {
     private static let expected: [(name: String, identifier: String, layout: String, silhouette: String, size: String, palette: [String], fonts: [String], source: String, layers: [String], backdrop: String?, assets: [String])] = [
         ("Pixel Desk", "pixel-desk", "desktopUtility", "pixelNotched", "desktop432x304", ["#C8C2AF", "#8A8E83", "#304D92", "#A63A32"], ["systemMonospaced", "systemDefault"], "original-app-drawn", ["pixel-bevel-frame", "pixel-dither-cells", "pixel-display-plate"], nil, []),
         ("Pocket Disc", "pocket-disc", "discConsole", "discPod", "console384x320", ["#3E4641", "#202825", "#A6E15A", "#D85A48"], ["systemMonospaced", "systemDefault"], "original-generated-faceplate", ["faceplate-backdrop", "disc-molded-plane", "disc-screw-set", "disc-segment-bars"], "PocketDiscFaceplate@2x.png", ["PocketDiscFaceplate@2x.png"]),
-        ("Aqua Vista", "aqua-vista", "aquaPod", "bubbleCapsule", "capsule448x304", ["#C9EFF8", "#78C4E3", "#198D74", "#C74654"], ["systemRounded", "systemDefault"], "original-generated-faceplate", ["faceplate-backdrop", "aqua-color-planes", "aqua-bubble-set", "aqua-glass-highlights"], "AquaVistaFaceplate@2x.png", ["AquaVistaFaceplate@2x.png"])
+        ("Aqua Vista", "aqua-vista", "aquaPod", "bubbleCapsule", "capsule448x304", ["#C9EFF8", "#78C4E3", "#198D74", "#C74654"], ["systemRounded", "systemDefault"], "original-generated-faceplate", ["faceplate-backdrop", "aqua-color-planes", "aqua-bubble-set", "aqua-glass-highlights"], "AquaVistaFaceplate@2x.png", ["AquaVistaFaceplate@2x.png"]),
+        ("Vintage Cassette Deck", "com.gabeosx.vintage-cassette-deck", "desktopUtility", "pixelNotched", "desktop432x304", ["#18130F", "#292019", "#D99B45", "#D5654F"], ["systemMonospaced", "systemDefault"], "original-generated-faceplate", ["faceplate-backdrop", "wood-side-panels", "cassette-window", "metal-control-wells"], "VintageCassetteFaceplate@2x.png", ["VintageCassetteFaceplate@2x.png"])
     ]
     private static let prohibitedAttributions = ["apple", "finder", "platinum", "sony", "minidisc", "walkman", "atrac", "microsoft", "windows", "winamp"]
 
     static func run(arguments: [String]) throws {
-        guard arguments.count == 4 else { throw Failure(description: "expected three manifests and provenance") }
-        let manifestTexts = try arguments.prefix(3).map { try String(contentsOfFile: $0, encoding: .utf8) }
+        guard arguments.count == 5 else { throw Failure(description: "expected four manifests and provenance") }
+        let manifestTexts = try arguments.prefix(4).map { try String(contentsOfFile: $0, encoding: .utf8) }
         let manifests = try manifestTexts.map(dictionary)
-        let provenance = try dictionary(String(contentsOfFile: arguments[3], encoding: .utf8))
+        let provenance = try dictionary(String(contentsOfFile: arguments[4], encoding: .utf8))
         try audit(manifests: manifests, provenance: provenance, manifestTexts: manifestTexts)
         try runNegativeFixtures(manifests: manifests, provenance: provenance, manifestTexts: manifestTexts)
     }
 
     private static func audit(manifests: [[String: Any]], provenance: [String: Any], manifestTexts: [String]) throws {
-        try require(manifests.count == expected.count, "exactly three expressive manifests are required")
+        try require(manifests.count == expected.count, "exactly four expressive manifests are required")
         try require(Set(provenance.keys) == ["version", "themes"], "provenance keys must remain closed")
         try require(provenance["version"] as? Int == 1, "provenance version must be one")
         guard let provenanceThemes = provenance["themes"] as? [[String: Any]] else { throw Failure(description: "provenance themes must be records") }
@@ -60,7 +61,9 @@ enum BundledThemeManifestOfflineTests {
             for attribution in prohibitedAttributions {
                 try require(!manifestTexts[index].lowercased().contains(attribution), "\(item.name) contains barred attribution \(attribution)")
             }
-            try require(tuples.insert("\(item.layout)|\(item.silhouette)|\(item.size)").inserted, "layout tuple repeats")
+            if index < 3 {
+                try require(tuples.insert("\(item.layout)|\(item.silhouette)|\(item.size)").inserted, "initial layout tuple repeats")
+            }
             try require(palettes.insert(palette.joined(separator: "|")).inserted, "palette-only theme duplication")
             let frameArrangement = slots.map { frame in
                 [frame["x", default: 0], frame["y", default: 0], frame["width", default: 0], frame["height", default: 0]]

@@ -5,25 +5,30 @@ final class BundledThemeContractTests: XCTestCase {
     func testExpressiveBundledThemesHaveExactSharedCatalogContract() throws {
         XCTAssertEqual(
             SkinAppearanceCatalog.expressiveBundledResourceNames,
-            ["PixelDesk", "PocketDisc", "AquaVista"]
+            ["PixelDesk", "PocketDisc", "AquaVista", "VintageCassetteDeck"]
         )
 
         let appearances = try SkinAppearanceCatalog.expressiveBundledResourceNames.map(bundledAppearance)
         XCTAssertEqual(
             appearances.map(\.displayName),
-            ["Pixel Desk", "Pocket Disc", "Aqua Vista"]
+            ["Pixel Desk", "Pocket Disc", "Aqua Vista", "Vintage Cassette Deck"]
         )
         XCTAssertEqual(
             appearances.map(\.layoutPlan.contentSize),
-            [.init(width: 432, height: 304), .init(width: 384, height: 320), .init(width: 448, height: 304)]
+            [
+                .init(width: 432, height: 304),
+                .init(width: 384, height: 320),
+                .init(width: 448, height: 304),
+                .init(width: 432, height: 304),
+            ]
         )
         XCTAssertEqual(
             appearances.map(\.layoutPlan.layoutVariant),
-            [.desktopUtility, .discConsole, .aquaPod]
+            [.desktopUtility, .discConsole, .aquaPod, .desktopUtility]
         )
         XCTAssertEqual(
             appearances.map(\.layoutPlan.silhouette),
-            [.pixelNotched, .discPod, .bubbleCapsule]
+            [.pixelNotched, .discPod, .bubbleCapsule, .pixelNotched]
         )
         XCTAssertEqual(appearances[1].layoutPlan.slotFrames[.transport], .init(x: 200, y: 112, width: 136, height: 56))
         XCTAssertEqual(appearances[2].layoutPlan.slotFrames[.transport], .init(x: 188, y: 216, width: 176, height: 56))
@@ -37,7 +42,9 @@ final class BundledThemeContractTests: XCTestCase {
         XCTAssertEqual(appearances[2].layoutPlan.slotFrames[.overflowMenu], .init(x: 376, y: 228, width: 48, height: 52))
         XCTAssertEqual(appearances[1].layoutPlan.decorations.backdrop, "PocketDiscFaceplate@2x.png")
         XCTAssertEqual(appearances[2].layoutPlan.decorations.backdrop, "AquaVistaFaceplate@2x.png")
-        XCTAssertEqual(Set(appearances.map(\.reference.identifier.rawValue)).count, 3)
+        XCTAssertEqual(appearances[3].layoutPlan.decorations.backdrop, "VintageCassetteFaceplate@2x.png")
+        XCTAssertEqual(appearances[3].layoutPlan.slotFrames[.transport], .init(x: 272, y: 164, width: 128, height: 40))
+        XCTAssertEqual(Set(appearances.map(\.reference.identifier.rawValue)).count, 4)
         XCTAssertTrue(appearances.allSatisfy { $0.reference.classification == .bundled })
     }
 
@@ -45,7 +52,7 @@ final class BundledThemeContractTests: XCTestCase {
         let source = try repositorySource("SiriusMac/Player/CompactPlayerView.swift")
         let catalog = SkinAppearanceCatalog(appearances: try SkinAppearanceCatalog.expressiveBundledResourceNames.map(bundledAppearance))
 
-        XCTAssertEqual(catalog.appearances.filter { $0.layoutPlan.isLegacy == false }.count, 3)
+        XCTAssertEqual(catalog.appearances.filter { $0.layoutPlan.isLegacy == false }.count, 4)
         XCTAssertEqual(ValidatedSkinAppearance.native.layoutPlan.contentSize, .init(width: 400, height: 288))
         XCTAssertTrue(source.contains("expressiveMaterialLayer"))
         XCTAssertTrue(source.contains("expressiveFaceplateLayer"))

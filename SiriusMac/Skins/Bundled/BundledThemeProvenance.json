@@ -30,6 +30,16 @@
       "fontTokens": ["systemRounded", "systemDefault"],
       "fontFiles": [],
       "externalAssetURLs": []
+    },
+    {
+      "identifier": "com.gabeosx.vintage-cassette-deck",
+      "displayName": "Vintage Cassette Deck",
+      "source": "original-generated-faceplate",
+      "rendererLayers": ["faceplate-backdrop", "wood-side-panels", "cassette-window", "metal-control-wells"],
+      "assetFiles": ["VintageCassetteFaceplate@2x.png"],
+      "fontTokens": ["systemMonospaced", "systemDefault"],
+      "fontFiles": [],
+      "externalAssetURLs": []
     }
   ]
 }

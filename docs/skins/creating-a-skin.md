@@ -72,6 +72,7 @@ Start from a bundled manifest instead of inventing the geometry from scratch:
 - [Pixel Desk](../../SiriusMac/Skins/Bundled/PixelDesk.json)
 - [Pocket Disc](../../SiriusMac/Skins/Bundled/PocketDisc.json)
 - [Aqua Vista](../../SiriusMac/Skins/Bundled/AquaVista.json)
+- [Vintage Cassette Deck](../../SiriusMac/Skins/Bundled/VintageCassetteDeck.json)
 
 Every schema 3 package must define each semantic slot exactly once: `artwork`, `channelIdentity`, `metadata`, `favorite`, `status`, `transport`, `library`, and `overflowMenu`. Rectangles use a four-point grid, stay four points inside the selected canvas, and cannot overlap. Drag regions must be at least 80×20 points and cannot overlap a slot.
 
@@ -91,4 +92,12 @@ If import fails, first check that `manifest.json` is at the archive root, the sc
 
 The importer rejects archives over 16 MiB, expanded packages over 64 MiB, more than 128 entries, individual files over 8 MiB, manifests over 64 KiB, encrypted entries, symbolic links, unsafe paths, and excessive compression ratios. These are security boundaries, not tuning recommendations.
 
-For agent-assisted creation, install and invoke [`$canis97-skin-creator`](../../.agents/skills/canis97-skin-creator/SKILL.md).
+## Install the agent skill
+
+Install the packaged skill directly from the Canis97 repository:
+
+```sh
+npx skills add https://github.com/gabeosx/canis97 --skill canis97-skin-creator
+```
+
+Then invoke [`$canis97-skin-creator`](../../.agents/skills/canis97-skin-creator/SKILL.md). The installed skill includes standalone source/archive validation and packaging helpers; a Canis97 checkout is optional for authoring and required only when the task calls for app-level visual testing.

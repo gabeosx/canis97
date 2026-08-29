@@ -21,7 +21,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Safe Skins & Accessible Recovery** - Subscribers can personalize the player with bundled or validated local skins without compromising safety or access. (completed 2026-08-26)
 - [x] **Phase 4.1: Product Identity & Experience Polish** - The app receives a distinctive 2000s-music identity, release-quality icon and presentation, richer bounded customization, and complete visual/accessibility validation. (completed 2026-08-27)
 - [x] **Phase 4.2: Expressive Skin Architecture & Bundled Themes** - Subscribers can transform the compact player through safe declarative layouts, artwork, window silhouettes, chrome, and typography, beginning with complete macOS 8, MiniDisc, and Frutiger Aero themes. (completed 2026-08-28)
-- [ ] **Phase 4.3: Local Song Favorites** - Subscribers can save currently confirmed songs locally and revisit that list when manually adding music to any service they prefer.
+- [x] **Phase 4.3: Local Song Favorites** - Subscribers can save currently confirmed songs locally and revisit that list when manually adding music to any service they prefer. (completed 2026-08-28)
 - [ ] **Phase 5: Public Release & Compatibility Support** - Subscribers can install trusted public releases and receive privacy-safe compatibility help.
 
 ## Phase Details
@@ -397,11 +397,16 @@ Plans:
   4. Song favorites remain distinct from existing channel favorites and do not interrupt playback, alter the shared listening session, or weaken existing accessibility behavior.
   5. The phase introduces no external music-service authentication, account connection, catalog matching, or playlist API; users manually use the local list with their preferred service.
 
-**Plans:** 0 plans
+**Plans:** 2/2 plans executed
 
 Plans:
+**Wave 1**
 
-- [ ] TBD (run /gsd-plan-phase 04.3 to break down)
+- [x] 04.3-01-PLAN.md
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 04.3-02-PLAN.md
 
 ### Phase 5: Public Release & Compatibility Support
 
@@ -434,5 +439,5 @@ Active product execution proceeds 1 → 2 → 3 → 4 → 4.1 → 4.2 → 4.3 �
 | 4. Safe Skins & Accessible Recovery | 4/4 | Complete    | 2026-08-26 |
 | 4.1 Product Identity & Experience Polish | 6/6 | Complete    | 2026-08-27 |
 | 4.2 Expressive Skin Architecture & Bundled Themes | 4/4 | Complete    | 2026-08-28 |
-| 4.3 Local Song Favorites | 0/TBD | Not started | - |
+| 4.3 Local Song Favorites | 2/2 | Complete | 2026-08-28 |
 | 5. Public Release & Compatibility Support | 0/TBD | Not started | - |
