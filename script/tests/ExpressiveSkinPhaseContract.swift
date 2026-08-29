@@ -27,10 +27,10 @@ enum ExpressiveSkinPhaseContract {
         let app = try source(at: root, "SiriusMac/SiriusMacApp.swift")
         let harness = try source(at: root, "SiriusMac/Testing/UITestHarness.swift")
 
-        for resource in ["SignalGlow", "TapeDeck", "PixelDesk", "PocketDisc", "AquaVista"] {
+        for resource in ["SignalGlow", "TapeDeck", "PixelDesk", "PocketDisc", "AquaVista", "VintageCassetteDeck"] {
             try require(FileManager.default.fileExists(atPath: root.appendingPathComponent("SiriusMac/Skins/Bundled/\(resource).json").path), "missing bundled appearance: \(resource)")
         }
-        for asset in ["PocketDiscFaceplate@2x.png", "AquaVistaFaceplate@2x.png"] {
+        for asset in ["PocketDiscFaceplate@2x.png", "AquaVistaFaceplate@2x.png", "VintageCassetteFaceplate@2x.png"] {
             try require(FileManager.default.fileExists(atPath: root.appendingPathComponent("SiriusMac/Skins/Bundled/Assets/\(asset)").path), "missing bundled faceplate: \(asset)")
             try require(player.contains(asset) == false, "faceplate identity must stay declarative in its manifest: \(asset)")
         }

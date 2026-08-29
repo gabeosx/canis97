@@ -186,6 +186,23 @@ final class AccessibilityContractTests: XCTestCase {
         XCTAssertFalse(playerSource.contains("catalog.resolve"))
     }
 
+    func testOverflowAudioOutputSelectorKeepsRoutingNativeAndAppOwned() throws {
+        let playerSource = try repositorySource("SiriusMac/Player/CompactPlayerView.swift")
+        let selectorSource = try repositorySource("SiriusMac/Player/AudioOutputSelector.swift")
+        let playbackSource = try repositorySource("SiriusMac/Listening/PlaybackCoordinator.swift")
+        let appSource = try repositorySource("SiriusMac/SiriusMacApp.swift")
+
+        XCTAssertTrue(playerSource.contains("compact.overflow.audio-output"))
+        XCTAssertTrue(playerSource.contains("Choose a Bluetooth, connected, or AirPlay output"))
+        XCTAssertTrue(selectorSource.contains("AVRoutePickerView"))
+        XCTAssertTrue(selectorSource.contains("audioOutputDeviceUniqueID"))
+        XCTAssertTrue(selectorSource.contains("kAudioDeviceTransportTypeBluetooth"))
+        XCTAssertTrue(selectorSource.contains("Audio Output Selector"))
+        XCTAssertTrue(playbackSource.contains("var audioRoutingPlayer: AVPlayer?"))
+        XCTAssertTrue(appSource.contains("Button(\"Audio Output…\")"))
+        XCTAssertTrue(appSource.contains("ProductSceneID.audioOutput"))
+    }
+
     func testSkinImportKeepsBothExtensionsBehindTheClosedImporter() throws {
         let importerSource = try repositorySource("SiriusMac/Skins/SkinPackageImporter.swift")
 

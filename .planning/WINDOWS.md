@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 15
+open_count: 16
 waived_count: 0
 fixed_count: 1
-total_count: 16
-last_updated: 2026-08-21T18:20:34.238Z
+total_count: 17
+last_updated: 2026-08-28T11:36:25.270Z
 ---
 
 # Broken Windows Ledger
@@ -31,6 +31,7 @@ last_updated: 2026-08-21T18:20:34.238Z
 | 14 | 03 | unmet-truth | SiriusMac/Player/CompactPlayerView.swift |  | Rendered 400 × 288 long-text displacement inspection remains for Plan 03-08; source contracts do not prove layout. | open |  | 2026-08-21T17:22:09.192Z |  |
 | 15 | 03 | deviation | SiriusMac/SiriusMacApp.swift |  | Plan listed AuthenticationView, but the compact tracer was located and replaced in SiriusMacApp's CompactListeningSlice. | open |  | 2026-08-21T17:22:09.276Z |  |
 | 16 | 03 | unrun-verify | SiriusMac.xcodeproj/project.pbxproj |  | AccessibilityContractTests cannot run because Xcode omits FirstPartyTokenCookiePolicy.swift from the generated source list. | open |  | 2026-08-21T18:20:34.238Z |  |
+| 17 | 04.2 | deviation | script/tests/BundledThemeManifestOfflineTests.swift | 65 | Corrected initial Foundation audit dictionary indexing before executing the intended RED failure. | open |  | 2026-08-28T11:36:25.270Z |  |
 
 ````json
 [
@@ -224,6 +225,18 @@ last_updated: 2026-08-21T18:20:34.238Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-21T18:20:34.238Z",
+    "resolved_at": null
+  },
+  {
+    "id": 17,
+    "kind": "deviation",
+    "phase": "04.2",
+    "file": "script/tests/BundledThemeManifestOfflineTests.swift",
+    "line": 65,
+    "description": "Corrected initial Foundation audit dictionary indexing before executing the intended RED failure.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-28T11:36:25.270Z",
     "resolved_at": null
   }
 ]

@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import SwiftUI
 
 struct CompactPlayerView: View {
@@ -9,9 +10,11 @@ struct CompactPlayerView: View {
     let isAlwaysOnTop: Bool
     let onAlwaysOnTopChanged: @MainActor (Bool) -> Void
     let onAppearanceRecovery: @MainActor () -> Void
+    let audioRoutingPlayer: AVPlayer?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showsNativeAppearanceRecoveryStatus = false
     @State private var marqueeCycleOrigin = Date.now
+    @State private var showsAudioOutputSelector = false
 
     private var renderingAppearance: ValidatedSkinAppearance {
         appearance.renderableAppearance { NSImage(contentsOf: $0) != nil }
@@ -34,7 +37,8 @@ struct CompactPlayerView: View {
         onAction: @escaping @MainActor (CompactPlayerAction) -> Void,
         isAlwaysOnTop: Bool = false,
         onAlwaysOnTopChanged: @escaping @MainActor (Bool) -> Void = { _ in },
-        onAppearanceRecovery: @escaping @MainActor () -> Void = {}
+        onAppearanceRecovery: @escaping @MainActor () -> Void = {},
+        audioRoutingPlayer: AVPlayer? = nil
     ) {
         self.presentation = presentation
         self.appearance = appearance
@@ -43,6 +47,7 @@ struct CompactPlayerView: View {
         self.isAlwaysOnTop = isAlwaysOnTop
         self.onAlwaysOnTopChanged = onAlwaysOnTopChanged
         self.onAppearanceRecovery = onAppearanceRecovery
+        self.audioRoutingPlayer = audioRoutingPlayer
     }
 
     var body: some View {
@@ -589,24 +594,31 @@ struct CompactPlayerView: View {
 
     @ViewBuilder
     private var overflowMenu: some View {
-        if hasExpressiveFaceplate {
-            Menu {
-                overflowMenuActions
-            } label: {
-                FaceplateGlyphView(glyph: .overflow)
-                    .frame(width: 15, height: 15)
-                    .frame(width: CompactPlayerPresentation.transportControlSize, height: CompactPlayerPresentation.transportControlSize)
-                    .contentShape(.rect)
-                    .accessibilityLabel("More")
+        Group {
+            if hasExpressiveFaceplate {
+                Menu {
+                    overflowMenuActions
+                } label: {
+                    FaceplateGlyphView(glyph: .overflow)
+                        .frame(width: 15, height: 15)
+                        .frame(width: CompactPlayerPresentation.transportControlSize, height: CompactPlayerPresentation.transportControlSize)
+                        .contentShape(.rect)
+                        .accessibilityLabel("More")
+                }
+                .menuIndicator(.hidden)
+                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            } else {
+                Menu {
+                    overflowMenuActions
+                } label: {
+                    Label("More", systemImage: "ellipsis.circle")
+                }
             }
-            .menuIndicator(.hidden)
-            .buttonStyle(.plain)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-        } else {
-            Menu {
-                overflowMenuActions
-            } label: {
-                Label("More", systemImage: "ellipsis.circle")
+        }
+        .popover(isPresented: $showsAudioOutputSelector, arrowEdge: .trailing) {
+            if let audioRoutingPlayer {
+                AudioOutputSelector(player: audioRoutingPlayer)
             }
         }
     }
@@ -618,6 +630,18 @@ struct CompactPlayerView: View {
             .accessibilityLabel("Always on Top")
             .accessibilityValue(isAlwaysOnTop ? "On" : "Off")
             .accessibilitySortPriority(10)
+        Divider()
+        Button("Audio Output…", systemImage: "airplayaudio") {
+            showsAudioOutputSelector = true
+        }
+        .disabled(audioRoutingPlayer == nil)
+        .accessibilityIdentifier("compact.overflow.audio-output")
+        .accessibilityLabel("Audio Output")
+        .accessibilityHint(
+            audioRoutingPlayer == nil
+                ? "Audio output selection is unavailable without an active player"
+                : "Choose a Bluetooth, connected, or AirPlay output"
+        )
         Divider()
         Button("Use Native Appearance") { onAppearanceRecovery() }
             .accessibilityIdentifier("compact.overflow.use-native-appearance")

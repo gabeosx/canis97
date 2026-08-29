@@ -115,6 +115,21 @@ struct Canis97App: App {
         }
         .defaultSize(width: 760, height: 650)
         .windowResizability(.contentMinSize)
+
+        Window("Audio Output", id: ProductSceneID.audioOutput) {
+            if let player = sessionController?.playbackCoordinator.audioRoutingPlayer {
+                AudioOutputSelector(player: player)
+            } else {
+                ContentUnavailableView(
+                    "Audio Output Unavailable",
+                    systemImage: "speaker.slash",
+                    description: Text("Start a listening session before choosing an output.")
+                )
+                .frame(width: 320, height: 220)
+            }
+        }
+        .defaultSize(width: 320, height: 360)
+        .windowResizability(.contentSize)
     }
 
     @ViewBuilder
@@ -222,7 +237,8 @@ private struct CompactListeningSlice: View {
             onAlwaysOnTopChanged: controller.libraryStore.setAlwaysOnTop,
             onAppearanceRecovery: {
                 Task { await appearanceController.restoreNativeAppearance() }
-            }
+            },
+            audioRoutingPlayer: controller.playbackCoordinator.audioRoutingPlayer
         )
         .background(
             WindowAttachmentView(
@@ -401,13 +417,20 @@ private struct ListeningCommands: Commands {
 
                 Divider()
 
+                Button("Audio Output…") {
+                    openWindow(id: ProductSceneID.audioOutput)
+                }
+                .disabled(controller.playbackCoordinator.audioRoutingPlayer == nil)
+
+                Divider()
+
                 Button("Sign Out") {
                     controller.resetListeningBeforeAuthenticationCleanup()
                     _ = controller.authenticationModel.signOut()
                 }
                 .disabled(controller.authenticationModel.isAttemptInFlight)
             }
-            }
+        }
 
         CommandGroup(replacing: .appInfo) {
             Button("About \(ProductIdentity.displayName)") {
@@ -442,6 +465,7 @@ private struct LibraryRoot: View {
 }
 
 private enum ProductSceneID {
+    static let audioOutput = "\(ProductIdentity.appBundleIdentifier).audio-output"
     static let about = "\(ProductIdentity.appBundleIdentifier).about"
     static let support = "\(ProductIdentity.appBundleIdentifier).support"
 }

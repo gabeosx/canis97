@@ -781,7 +781,12 @@ struct SkinAppearanceCatalog: Sendable {
 
     /// The public v3 resources stay in one deterministic catalog order while
     /// retaining the legacy bundled appearances before them.
-    static let expressiveBundledResourceNames = ["PixelDesk", "PocketDisc", "AquaVista"]
+    static let expressiveBundledResourceNames = [
+        "PixelDesk",
+        "PocketDisc",
+        "AquaVista",
+        "VintageCassetteDeck",
+    ]
     private static let bundledResourceNames = ["SignalGlow", "TapeDeck"] + expressiveBundledResourceNames
 
     static func bundledCatalog(in bundle: Bundle = .main) -> SkinAppearanceCatalog {

@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 3,
+  "identifier": "com.gabeosx.vintage-cassette-deck",
+  "displayName": "Vintage Cassette Deck",
+  "playerBackground": "#18130F",
+  "metadataPanel": "#292019",
+  "accent": "#D99B45",
+  "destructive": "#D5654F",
+  "foregroundScheme": "dark",
+  "layoutVariant": "desktopUtility",
+  "silhouette": "pixelNotched",
+  "size": "desktop432x304",
+  "typography": {
+    "display": "systemMonospaced",
+    "body": "systemDefault",
+    "label": "systemMonospaced"
+  },
+  "slots": [
+    { "semantic": "artwork", "frame": { "x": 16, "y": 32, "width": 80, "height": 80 } },
+    { "semantic": "channelIdentity", "frame": { "x": 112, "y": 32, "width": 224, "height": 24 } },
+    { "semantic": "metadata", "frame": { "x": 112, "y": 64, "width": 288, "height": 48 } },
+    { "semantic": "favorite", "frame": { "x": 368, "y": 24, "width": 32, "height": 32 } },
+    { "semantic": "status", "frame": { "x": 272, "y": 132, "width": 128, "height": 24 } },
+    { "semantic": "transport", "frame": { "x": 272, "y": 164, "width": 128, "height": 40 } },
+    { "semantic": "library", "frame": { "x": 272, "y": 212, "width": 112, "height": 32 } },
+    { "semantic": "overflowMenu", "frame": { "x": 368, "y": 252, "width": 48, "height": 32 } }
+  ],
+  "dragRegions": [
+    { "x": 16, "y": 8, "width": 320, "height": 20 }
+  ],
+  "decorations": {
+    "backdrop": "VintageCassetteFaceplate@2x.png",
+    "chromeFrame": null,
+    "displayPlate": null,
+    "ornaments": []
+  }
+}

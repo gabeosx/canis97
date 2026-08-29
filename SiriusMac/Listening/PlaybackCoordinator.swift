@@ -250,6 +250,7 @@ private struct RecoveryIncident: Equatable {
 /// offline tests. Production has exactly one implementation and one player.
 @MainActor
 protocol PlaybackPlayerRuntime: AnyObject {
+    var audioRoutingPlayer: AVPlayer? { get }
     func observe(
         _ item: AVPlayerItem,
         onReady: @escaping @MainActor @Sendable () -> Void,
@@ -263,6 +264,10 @@ protocol PlaybackPlayerRuntime: AnyObject {
     func clearCurrentItem()
 }
 
+extension PlaybackPlayerRuntime {
+    var audioRoutingPlayer: AVPlayer? { nil }
+}
+
 /// Owns exactly one AVPlayer for the entire composed application graph.
 @MainActor
 final class AVFoundationPlaybackRuntime: PlaybackPlayerRuntime {
@@ -273,6 +278,8 @@ final class AVFoundationPlaybackRuntime: PlaybackPlayerRuntime {
     init(telemetry: PlaybackRuntimeTelemetry = .live) {
         self.telemetry = telemetry
     }
+
+    var audioRoutingPlayer: AVPlayer? { player }
 
     func observe(
         _ item: AVPlayerItem,
@@ -547,6 +554,11 @@ final class PlaybackCoordinator {
         }
     }
     private(set) var selectedChannelID: LiveChannelID?
+
+    /// Exposes only the production player's routing surface to the app-owned
+    /// output selector. Playback commands and item ownership remain private to
+    /// the coordinator runtime.
+    var audioRoutingPlayer: AVPlayer? { runtime.audioRoutingPlayer }
 
     init(
         resolver: any PlaybackResolving,

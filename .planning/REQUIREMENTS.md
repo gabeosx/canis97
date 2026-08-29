@@ -83,15 +83,15 @@ Phase 0 is historical. FEAS-01 records the accepted architecture; FEAS-02/03/05 
 ### Accessibility
 
 - [x] **ACCS-01**: All essential player and library actions are usable with keyboard navigation and expose accurate VoiceOver labels, values, focus order, and state announcements.
-- [ ] **ACCS-02**: Skin customization cannot remove semantic controls, minimum hit targets, readable focus/state indicators, or access to an unskinned native fallback.
+- [x] **ACCS-02**: Skin customization cannot remove semantic controls, minimum hit targets, readable focus/state indicators, or access to an unskinned native fallback.
 
 ### Skins
 
-- [ ] **SKIN-01**: Subscriber can select between at least two bundled, complete, tested player skins.
-- [ ] **SKIN-02**: Subscriber can import, validate, select, and remove local user-created skin packages defined only by versioned declarative data and local assets.
-- [ ] **SKIN-03**: Skin packages cannot execute code, fetch remote content, contain active URLs, read arbitrary files, or control networking, playback, authentication, persistence, or accessibility semantics.
-- [ ] **SKIN-04**: Skin validation rejects unknown schema, unsafe paths, traversal, symlinks, disallowed file types, and packages exceeding defined file-count, archive-size, decoded-asset, image-dimension, or processing-time budgets.
-- [ ] **SKIN-05**: Invalid or failed skins leave the previous valid appearance intact and provide a reliable built-in recovery path.
+- [x] **SKIN-01**: Subscriber can select between at least two bundled, complete, tested player skins.
+- [x] **SKIN-02**: Subscriber can import, validate, select, and remove local user-created skin packages defined only by versioned declarative data and local assets.
+- [x] **SKIN-03**: Skin packages cannot execute code, fetch remote content, contain active URLs, read arbitrary files, or control networking, playback, authentication, persistence, or accessibility semantics.
+- [x] **SKIN-04**: Skin validation rejects unknown schema, unsafe paths, traversal, symlinks, disallowed file types, and packages exceeding defined file-count, archive-size, decoded-asset, image-dimension, or processing-time budgets.
+- [x] **SKIN-05**: Invalid or failed skins leave the previous valid appearance intact and provide a reliable built-in recovery path.
 
 ### Public Distribution
 
@@ -183,12 +183,12 @@ Every v1 requirement maps to exactly one delivery phase in `.planning/ROADMAP.md
 | UI-03 | Phase 3 | Complete |
 | UI-04 | Phase 3 | Complete |
 | ACCS-01 | Phase 3 | Complete |
-| ACCS-02 | Phase 4 | Pending |
-| SKIN-01 | Phase 4 | Pending |
-| SKIN-02 | Phase 4 | Pending |
-| SKIN-03 | Phase 4 | Pending |
-| SKIN-04 | Phase 4 | Pending |
-| SKIN-05 | Phase 4 | Pending |
+| ACCS-02 | Phase 4 | Complete |
+| SKIN-01 | Phase 4 | Complete |
+| SKIN-02 | Phase 4 | Complete |
+| SKIN-03 | Phase 4 | Complete |
+| SKIN-04 | Phase 4 | Complete |
+| SKIN-05 | Phase 4 | Complete |
 | REL-01 | Phase 5 | Pending |
 | REL-02 | Phase 5 | Pending |
 | REL-03 | Phase 5 | Pending |
