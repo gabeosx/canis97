@@ -90,7 +90,7 @@ upload, tag, or publish Canis97.
 Create and push an annotated tag from the reviewed commit:
 
 ```sh
-git tag -s v0.1.0 -m 'Canis97 0.1.0'
+git tag -a v0.1.0 -m 'Canis97 0.1.0'
 git push origin v0.1.0
 ```
 
