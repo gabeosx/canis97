@@ -50,6 +50,12 @@ has an independent release cadence. Its public API still follows SemVer.
 The workflows pin third-party actions to full commit SHAs. Dependabot or a
 reviewed maintenance change should update those pins.
 
+After initially configuring or rotating any Apple release secret, run the
+manual `Release Preflight` workflow from a ref permitted by the `release`
+environment. It imports the Developer ID identity into an ephemeral keychain
+and authenticates with Apple's notarization service. It does not build,
+upload, tag, or publish Canis97.
+
 ## Prepare a release
 
 1. Ensure the intended commit is on the protected default branch and CI is
