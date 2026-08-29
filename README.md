@@ -37,9 +37,8 @@ Live radio, media keys, favorites, and a tiny skinnable player—without living 
 - Browses channels by list, category, favorites, favorite songs, and recents.
 - Shows current artwork, program or song metadata, and playback state.
 - Works with Mac media keys, Control Center, keyboard shortcuts, and an always-on-top player.
-- Restores sign-in securely from macOS Keychain.
+- Keeps you signed in using macOS Keychain.
 - Checks GitHub Releases for updates without silently downloading or installing anything.
-- Reports authentication, catalog, stream, metadata, and playback compatibility without exposing subscriber data.
 
 ## Pick a look
 
@@ -115,9 +114,9 @@ Select the `Canis97` scheme and build for **My Mac**. Source builds require Xcod
 
 ## Privacy and account safety
 
-Credentials and session tokens are stored in macOS Keychain and sent only to SiriusXM. Canis97 excludes passwords, cookies, authorization headers, session identifiers, stream URLs, and raw provider responses from diagnostics.
+Your SiriusXM password is entered only on SiriusXM’s sign-in page. Canis97 keeps the resulting sign-in session in macOS Keychain so you can stay signed in.
 
-Choose **Help → Compatibility & Support…** to see the current authentication, entitlement, catalog, stream, metadata, and playback classifications. The optional JSON support bundle contains only the app and OS versions, architecture, and the six classifications shown in its on-screen preview.
+If playback stops working, **Help → Compatibility & Support…** shows which part of the connection needs attention. You can review every field before saving a support report. Support reports never contain your password, cookies, sign-in session, or listening URLs.
 
 Canis97 does not bypass CAPTCHA, MFA, subscription or device limits, anti-bot controls, DRM, or other service protections.
 
