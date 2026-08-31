@@ -23,7 +23,7 @@ printf '%s\n' \
   "  version \"$VERSION\"" \
   "  sha256 \"$SHA256\"" \
   '' \
-  "  url \"https://github.com/$GITHUB_REPOSITORY/releases/download/v#{version}/Canis97-#{version}-arm64.zip\"" \
+  "  url \"https://github.com/$GITHUB_REPOSITORY/releases/download/v#{version}/Canis97-#{version}-arm64.dmg\"" \
   '  name "Canis97"' \
   '  desc "Native macOS SiriusXM player"' \
   "  homepage \"https://github.com/$GITHUB_REPOSITORY\"" \

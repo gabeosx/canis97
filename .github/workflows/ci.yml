@@ -29,6 +29,8 @@ jobs:
         run: |
           script/validate_release_version.sh
           bash -n script/*.sh script/lib/*.sh script/tests/*.sh
+          script/tests/visual_dmg_contract_tests.sh
+          script/tests/dmg_release_contract_tests.sh
           test "$(xcodebuild -version | sed -n '1p')" = "Xcode 26.6"
 
       - name: Test SiriusXMClient
