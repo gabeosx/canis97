@@ -73,6 +73,7 @@ xcrun stapler staple "$APP_PATH"
 xcrun stapler validate "$APP_PATH"
 codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 spctl --assess --type execute --verbose=2 "$APP_PATH"
+syspolicy_check distribution "$APP_PATH"
 
 CANIS97_DMG_WORK_DIR="$WORK_DIR/visual-dmg" \
   "$ROOT_DIR/script/create_visual_dmg.sh" "$APP_PATH" "$FINAL_ARCHIVE"
@@ -93,7 +94,6 @@ xcrun stapler staple "$FINAL_ARCHIVE"
 xcrun stapler validate "$FINAL_ARCHIVE"
 codesign --verify --strict --verbose=2 "$FINAL_ARCHIVE"
 spctl --assess --type open --context context:primary-signature --verbose=2 "$FINAL_ARCHIVE"
-syspolicy_check distribution "$FINAL_ARCHIVE"
 
 (
   cd "$OUTPUT_DIR"

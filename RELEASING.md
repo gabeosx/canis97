@@ -100,10 +100,11 @@ The `Release` workflow then:
 2. Builds the exact tagged commit with Xcode 26.6 and a CI build number.
 3. Verifies the Developer ID signature and hardened runtime.
 4. Submits the app with `notarytool`, staples the accepted ticket, and validates
-   it with `stapler`, `codesign`, and Gatekeeper.
+   the application bundle with `stapler`, `codesign`, Gatekeeper, and
+   `syspolicy_check`.
 5. Builds the branded drag-to-Applications disk image, signs it with Developer
    ID Application, notarizes and staples the outermost DMG, and validates it
-   with `stapler`, `codesign`, Gatekeeper, and `syspolicy_check`.
+   with `stapler`, `codesign`, and Gatekeeper.
 6. Creates `Canis97-VERSION-arm64.dmg`, `SHA256SUMS`, and an SPDX SBOM from the
    final stapled disk-image bytes.
 7. Publishes an immutable GitHub Release from the tag.

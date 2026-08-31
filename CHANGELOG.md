@@ -6,11 +6,19 @@ Notable user-facing changes are recorded here. This project follows
 
 ## [Unreleased]
 
-## [0.1.1] - 2026-08-31
+## [0.1.2] - 2026-08-31
 
 ### Changed
 
 - Direct downloads and Homebrew now use the signed, notarized, and stapled branded DMG with its drag-to-Applications layout.
+
+### Fixed
+
+- Release validation now runs Apple's application-bundle distribution check against Canis97.app instead of passing it the outer DMG.
+
+## [0.1.1] - 2026-08-31
+
+No public artifacts were published for this version.
 
 ## [0.1.0] - 2026-08-29
 
@@ -28,6 +36,7 @@ Notable user-facing changes are recorded here. This project follows
 - GitHub Actions validation, signed/notarized release automation, checksums, and an SPDX SBOM.
 - Homebrew Cask generation and optional tap publishing.
 
-[Unreleased]: https://github.com/gabeosx/canis97/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/gabeosx/canis97/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/gabeosx/canis97/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/gabeosx/canis97/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/gabeosx/canis97/releases/tag/v0.1.0

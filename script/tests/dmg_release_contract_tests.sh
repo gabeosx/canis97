@@ -36,6 +36,8 @@ require_literal '--identifier "$DMG_IDENTIFIER"' "$ARTIFACT_SCRIPT"
 require_literal 'notarytool submit "$FINAL_ARCHIVE"' "$ARTIFACT_SCRIPT"
 require_literal 'stapler staple "$FINAL_ARCHIVE"' "$ARTIFACT_SCRIPT"
 require_literal '--type open --context context:primary-signature' "$ARTIFACT_SCRIPT"
+require_literal 'syspolicy_check distribution "$APP_PATH"' "$ARTIFACT_SCRIPT"
+reject_literal 'syspolicy_check distribution "$FINAL_ARCHIVE"' "$ARTIFACT_SCRIPT"
 require_literal 'Canis97-#{version}-arm64.dmg' "$CASK_SCRIPT"
 require_literal 'arm64\.dmg$' "$LANDING_SCRIPT"
 
