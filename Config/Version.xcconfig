@@ -1,10 +1,10 @@
 // Canis97 uses stable Semantic Versioning for user-visible releases.
 // Release tags must be exactly v$(MARKETING_VERSION).
-MARKETING_VERSION = 0.1.1
+MARKETING_VERSION = 0.1.2
 
 // Increment for every distributed build, including rebuilds of the same
 // marketing version. CI overrides this with GITHUB_RUN_NUMBER.
-CURRENT_PROJECT_VERSION = 2
+CURRENT_PROJECT_VERSION = 3
 
 // Release CI overrides this with GitHub's owner/repository value. Keeping the
 // local default empty prevents development builds from contacting an unknown
