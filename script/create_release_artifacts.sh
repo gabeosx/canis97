@@ -13,7 +13,8 @@ WORK_DIR="${RELEASE_WORK_DIR:-$ROOT_DIR/build/release-work}"
 ARCHIVE_PATH="$WORK_DIR/Canis97.xcarchive"
 APP_PATH="$ARCHIVE_PATH/Products/Applications/Canis97.app"
 NOTARY_ARCHIVE="$WORK_DIR/Canis97-notary.zip"
-FINAL_ARCHIVE="$OUTPUT_DIR/Canis97-$VERSION-arm64.zip"
+FINAL_ARCHIVE="$OUTPUT_DIR/Canis97-$VERSION-arm64.dmg"
+DMG_IDENTIFIER='com.canis97.player.dmg'
 
 if [[ ! "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
   echo "usage: $0 MAJOR.MINOR.PATCH" >&2
@@ -73,7 +74,27 @@ xcrun stapler validate "$APP_PATH"
 codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 spctl --assess --type execute --verbose=2 "$APP_PATH"
 
-/usr/bin/ditto -c -k --keepParent "$APP_PATH" "$FINAL_ARCHIVE"
+CANIS97_DMG_WORK_DIR="$WORK_DIR/visual-dmg" \
+  "$ROOT_DIR/script/create_visual_dmg.sh" "$APP_PATH" "$FINAL_ARCHIVE"
+codesign --force --timestamp \
+  --identifier "$DMG_IDENTIFIER" \
+  --sign 'Developer ID Application' \
+  "$FINAL_ARCHIVE"
+codesign --verify --strict --verbose=2 "$FINAL_ARCHIVE"
+codesign -d --verbose=4 "$FINAL_ARCHIVE" 2>&1 | grep -F "Identifier=$DMG_IDENTIFIER"
+codesign -d --verbose=4 "$FINAL_ARCHIVE" 2>&1 | grep -F 'Timestamp='
+
+xcrun notarytool submit "$FINAL_ARCHIVE" \
+  --apple-id "$APPLE_ID" \
+  --team-id "$APPLE_TEAM_ID" \
+  --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+  --wait
+xcrun stapler staple "$FINAL_ARCHIVE"
+xcrun stapler validate "$FINAL_ARCHIVE"
+codesign --verify --strict --verbose=2 "$FINAL_ARCHIVE"
+spctl --assess --type open --context context:primary-signature --verbose=2 "$FINAL_ARCHIVE"
+syspolicy_check distribution "$FINAL_ARCHIVE"
+
 (
   cd "$OUTPUT_DIR"
   shasum -a 256 "$(basename "$FINAL_ARCHIVE")" > SHA256SUMS

@@ -8,7 +8,7 @@ ARCHIVE_PATH="${RELEASE_ARCHIVE_PATH:-}"
 RESOLVED_PATH="$ROOT_DIR/SiriusMac.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
 
 if [[ -z "$VERSION" || -z "$OUTPUT_PATH" || ! -f "$ARCHIVE_PATH" ]]; then
-  echo "usage: RELEASE_ARCHIVE_PATH=archive.zip $0 VERSION OUTPUT.spdx" >&2
+  echo "usage: RELEASE_ARCHIVE_PATH=artifact.dmg $0 VERSION OUTPUT.spdx" >&2
   exit 2
 fi
 
