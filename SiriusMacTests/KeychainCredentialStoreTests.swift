@@ -113,7 +113,10 @@ final class KeychainCredentialStoreTests: XCTestCase {
 
 func renewableTestCredential(
     accessToken: String = "synthetic-access-token",
-    accessExpiresAt: Date = Date(timeIntervalSinceNow: 10_800)
+    accessExpiresAt: Date = Date(timeIntervalSinceNow: 10_800),
+    refreshExpiresAt: Date = Date(timeIntervalSinceNow: 7_776_000),
+    deviceGrantExpiresAt: Date = Date(timeIntervalSinceNow: 2_592_000),
+    deviceRefreshExpiresAt: Date = Date(timeIntervalSinceNow: 15_552_000)
 ) throws -> AuthenticationCredential {
     let formatter = ISO8601DateFormatter()
     let authentication = try JSONSerialization.data(withJSONObject: [
@@ -123,17 +126,17 @@ func renewableTestCredential(
             "accessToken": accessToken,
             "accessTokenExpiresAt": formatter.string(from: accessExpiresAt),
             "refreshToken": "synthetic-refresh-token",
-            "refreshTokenExpiresAt": formatter.string(from: Date(timeIntervalSinceNow: 7_776_000)),
+            "refreshTokenExpiresAt": formatter.string(from: refreshExpiresAt),
             "sessionType": "authenticated",
         ],
     ], options: [.sortedKeys])
     let device = try JSONSerialization.data(withJSONObject: [
         "deviceId": "synthetic-device",
         "grant": "synthetic-device-grant",
-        "grantExpiresAt": formatter.string(from: Date(timeIntervalSinceNow: 2_592_000)),
+        "grantExpiresAt": formatter.string(from: deviceGrantExpiresAt),
         "grantVersion": "v2",
         "refreshGrant": "synthetic-device-refresh-grant",
-        "refreshGrantExpiresAt": formatter.string(from: Date(timeIntervalSinceNow: 15_552_000)),
+        "refreshGrantExpiresAt": formatter.string(from: deviceRefreshExpiresAt),
     ], options: [.sortedKeys])
     let allowed = CharacterSet.alphanumerics
     return try AuthenticationCredential(

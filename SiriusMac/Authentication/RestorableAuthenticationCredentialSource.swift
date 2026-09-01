@@ -61,6 +61,8 @@ final class RestorableAuthenticationCredentialSource: CredentialSource {
     private let keychain: KeychainCredentialStore
     private let webViewSource: WebAuthenticationBridge
     private let telemetry: RestorableAuthenticationCredentialTelemetry
+    private var supportDiagnosticRecorder: (StoredCredentialLoadDiagnostic) -> Void = { _ in }
+    private var nativeAuthenticationDiagnosticRecorder: (NativeAuthenticationAttemptDiagnostic) -> Void = { _ in }
     private var attemptOrigin: AttemptOrigin = .none
     private var isStoredCredentialQuarantined = false
 
@@ -74,6 +76,25 @@ final class RestorableAuthenticationCredentialSource: CredentialSource {
         self.telemetry = telemetry
     }
 
+    func setStoredCredentialLoadDiagnosticHandler(
+        _ handler: @escaping @MainActor (StoredCredentialLoadDiagnostic) -> Void
+    ) {
+        supportDiagnosticRecorder = handler
+    }
+
+    func setNativeAuthenticationDiagnosticHandler(
+        _ handler: @escaping @MainActor (NativeAuthenticationAttemptDiagnostic) -> Void
+    ) {
+        nativeAuthenticationDiagnosticRecorder = handler
+    }
+
+    func recordNativeAuthenticationDiagnostic(_ outcome: AuthenticationDiagnosticOutcome) {
+        nativeAuthenticationDiagnosticRecorder(NativeAuthenticationAttemptDiagnostic(
+            recordedAt: Date(),
+            outcome: outcome
+        ))
+    }
+
     /// Reads the Keychain only after a user explicitly starts Sign In.
     func prepareForExplicitSignIn() -> ExplicitSignInCredentialPreparation {
         guard case .none = attemptOrigin else { return .unavailable }
@@ -83,24 +104,33 @@ final class RestorableAuthenticationCredentialSource: CredentialSource {
         // require the next explicit attempt to obtain a fresh WebView session.
         if isStoredCredentialQuarantined {
             attemptOrigin = .webViewRequired
+            recordStoredCredentialLoad(purpose: .explicitSignIn, outcome: .quarantined)
             return .webViewRequired
         }
 
         switch keychain.loadStoredCredentialForAuthentication() {
         case let .credential(credential):
             attemptOrigin = .restoredStaged(credential)
+            recordStoredCredentialLoad(
+                purpose: .explicitSignIn,
+                outcome: .ready,
+                credentialReference: credential.supportDiagnosticReference
+            )
             return .restoredCredentialReady
         case .missing:
             attemptOrigin = .webViewRequired
+            recordStoredCredentialLoad(purpose: .explicitSignIn, outcome: .missing)
             return .webViewRequired
         case .invalid:
             // Automatic restore fails closed, but an explicit owner action must
             // remain capable of replacing unusable material through SiriusXM's
             // browser sign-in. The existing item is not deleted here.
             attemptOrigin = .webViewRequired
+            recordStoredCredentialLoad(purpose: .explicitSignIn, outcome: .invalid)
             return .webViewRequired
         case .unavailable:
             attemptOrigin = .webViewRequired
+            recordStoredCredentialLoad(purpose: .explicitSignIn, outcome: .keychainUnavailable)
             return .webViewRequired
         }
     }
@@ -114,15 +144,23 @@ final class RestorableAuthenticationCredentialSource: CredentialSource {
         switch keychain.loadStoredCredentialForAuthentication() {
         case let .credential(credential):
             attemptOrigin = .restoredStaged(credential)
+            recordStoredCredentialLoad(
+                purpose: .automaticRestore,
+                outcome: .ready,
+                credentialReference: credential.supportDiagnosticReference
+            )
             return .restoredCredentialReady
         case .missing:
             telemetry.record(.localCredentialMissing)
+            recordStoredCredentialLoad(purpose: .automaticRestore, outcome: .missing)
             return .missing
         case .invalid:
             telemetry.record(.localCredentialInvalid)
+            recordStoredCredentialLoad(purpose: .automaticRestore, outcome: .invalid)
             return .invalidCredential
         case .unavailable:
             telemetry.record(.localCredentialUnavailable)
+            recordStoredCredentialLoad(purpose: .automaticRestore, outcome: .keychainUnavailable)
             return .unavailable
         }
     }
@@ -172,5 +210,18 @@ final class RestorableAuthenticationCredentialSource: CredentialSource {
         case .none, .webViewRequired, .webViewInFlight:
             false
         }
+    }
+
+    private func recordStoredCredentialLoad(
+        purpose: StoredCredentialLoadPurpose,
+        outcome: StoredCredentialLoadOutcome,
+        credentialReference: String? = nil
+    ) {
+        supportDiagnosticRecorder(StoredCredentialLoadDiagnostic(
+            recordedAt: Date(),
+            purpose: purpose,
+            outcome: outcome,
+            credentialReference: credentialReference
+        ))
     }
 }

@@ -1,5 +1,7 @@
 import AppKit
 import Foundation
+import Observation
+import OSLog
 import SiriusXMClient
 import SwiftUI
 
@@ -79,8 +81,454 @@ struct CompatibilityFinding: Codable, Equatable, Identifiable {
     }
 }
 
+enum SupportDiagnosticSeverity: String, Codable, Equatable {
+    case warning
+    case error
+}
+
+enum StoredCredentialLoadPurpose: String, Codable, Equatable {
+    case automaticRestore = "automatic-restore"
+    case explicitSignIn = "explicit-sign-in"
+}
+
+enum StoredCredentialLoadOutcome: String, Codable, Equatable {
+    case ready
+    case missing
+    case invalid
+    case keychainUnavailable = "keychain-unavailable"
+    case quarantined
+}
+
+struct StoredCredentialLoadDiagnostic: Codable, Equatable {
+    let recordedAt: Date
+    let purpose: StoredCredentialLoadPurpose
+    let outcome: StoredCredentialLoadOutcome
+    let credentialReference: String?
+}
+
+enum AuthenticationRenewalCredentialKind: String, Codable, Equatable {
+    case refreshToken = "refresh-token"
+    case sessionRefreshCookie = "session-refresh-cookie"
+    // Retained so reports produced by the short-lived identity-grant prototype
+    // remain decodable; current builds never select this credential kind.
+    case identityGrant = "identity-grant"
+    // Retained so schema-3 reports written by earlier builds remain decodable.
+    case deviceRefreshGrant = "device-refresh-grant"
+}
+
+/// Closed, provider-material-free outcomes for the isolated browser renewal.
+/// These values intentionally contain no response text, URLs, cookies, or tokens.
+enum AuthenticationRenewalOutcome: String, Codable, Equatable {
+    case inProgress = "in-progress"
+    case replacementReceived = "replacement-received"
+    case renewalCredentialExpired = "renewal-credential-expired"
+    case deviceRefreshGrantExpired = "device-refresh-grant-expired"
+    case attemptAlreadyInProgress = "attempt-already-in-progress"
+    case cookieRehydrationFailed = "cookie-rehydration-failed"
+    case navigationFailed = "navigation-failed"
+    case timedOutWaitingForCredential = "timed-out-waiting-for-credential"
+    case replacementCredentialMissing = "replacement-credential-missing"
+    case replacementCredentialAmbiguous = "replacement-credential-ambiguous"
+    case replacementCredentialMalformed = "replacement-credential-malformed"
+    case accessTokenUnchanged = "access-token-unchanged"
+    case replacementRenewalExpired = "replacement-renewal-expired"
+    case replacementCredentialUnusable = "replacement-credential-unusable"
+    case nativeRenewalAuthorityUnavailable = "native-renewal-authority-unavailable"
+    case nativeRenewalAuthorityExpired = "native-renewal-authority-expired"
+    case nativeTransportFailed = "native-transport-failed"
+    case nativeAuthorizationRejected = "native-authorization-rejected"
+    case nativeRateLimited = "native-rate-limited"
+    case nativeServerUnavailable = "native-server-unavailable"
+    case nativeRedirectRejected = "native-redirect-rejected"
+    case nativeResponseUnsupported = "native-response-unsupported"
+    case nativeReplacementUnusable = "native-replacement-unusable"
+    case cancelled
+    case configurationUnavailable = "configuration-unavailable"
+}
+
+struct AuthenticationRenewalAttemptDiagnostic: Codable, Equatable, Identifiable {
+    let id: UUID
+    let attemptedAt: Date
+    let completedAt: Date?
+    let sourceCredentialReference: String?
+    let renewalCredential: AuthenticationRenewalCredentialKind
+    let accessTokenExpiresAt: Date
+    let sessionRenewalExpiresAt: Date
+    let renewalCredentialExpiresAt: Date
+    let deviceGrantExpiresAt: Date?
+    let outcome: AuthenticationRenewalOutcome
+    let replacementCredentialReference: String?
+}
+
+struct AuthenticationStateDiagnostic: Codable, Equatable {
+    let recordedAt: Date
+    let state: String
+}
+
+struct NativeAuthenticationAttemptDiagnostic: Codable, Equatable {
+    let recordedAt: Date
+    let outcome: AuthenticationDiagnosticOutcome
+}
+
+struct AuthenticationSupportSnapshot: Codable, Equatable {
+    let currentState: AuthenticationStateDiagnostic
+    let lastSuccessfulAuthenticationAt: Date?
+    let lastStoredCredentialLoad: StoredCredentialLoadDiagnostic?
+    let lastRenewalAttempt: AuthenticationRenewalAttemptDiagnostic?
+    let lastNativeAuthenticationAttempt: NativeAuthenticationAttemptDiagnostic?
+
+    static let unknown = AuthenticationSupportSnapshot(
+        currentState: AuthenticationStateDiagnostic(recordedAt: .distantPast, state: "unknown"),
+        lastSuccessfulAuthenticationAt: nil,
+        lastStoredCredentialLoad: nil,
+        lastRenewalAttempt: nil,
+        lastNativeAuthenticationAttempt: nil
+    )
+}
+
+/// Fixed, reviewed diagnostic codes that are safe to persist and export. The
+/// journal has no API for provider text, response bodies, URLs, headers,
+/// credentials, account values, channel identities, or arbitrary errors.
+enum SupportDiagnosticCode: String, Codable, Equatable {
+    case authenticationStoredSessionUnavailable = "authentication.stored-session-unavailable"
+    case authenticationStoredSessionInvalid = "authentication.stored-session-invalid"
+    case authenticationRejected = "authentication.rejected"
+    case authenticationChallengeRequired = "authentication.challenge-required"
+    case authenticationUnsupportedResponse = "authentication.unsupported-response"
+    case authenticationWebSessionResetFailed = "authentication.web-session-reset-failed"
+    case authenticationCredentialPersistenceFailed = "authentication.credential-persistence-failed"
+    case authenticationCleanupFailed = "authentication.cleanup-failed"
+    case entitlementUnavailable = "entitlement.unavailable"
+    case catalogAuthenticationUnavailable = "catalog.authentication-unavailable"
+    case catalogNotEntitled = "catalog.not-entitled"
+    case catalogPartialLineup = "catalog.partial-lineup"
+    case catalogPaginationIncomplete = "catalog.pagination-incomplete"
+    case catalogCollectionMissing = "catalog.collection-missing"
+    case catalogMalformedChannel = "catalog.malformed-channel"
+    case catalogConflictingIdentity = "catalog.conflicting-identity"
+    case catalogUnsupportedResponse = "catalog.unsupported-response"
+    case catalogUnavailable = "catalog.unavailable"
+    case streamAuthorizationUnavailable = "stream.authorization-unavailable"
+    case streamEntitlementUnavailable = "stream.entitlement-unavailable"
+    case streamCatalogUnavailable = "stream.catalog-unavailable"
+    case streamSelectionUnavailable = "stream.selection-unavailable"
+    case streamResolutionUnavailable = "stream.resolution-unavailable"
+    case streamProtectedControl = "stream.protected-control"
+    case playbackNetworkUnavailable = "playback.network-unavailable"
+    case playbackBufferingUnavailable = "playback.buffering-unavailable"
+    case playbackDecoderUnavailable = "playback.decoder-unavailable"
+    case playbackRecoveryExhausted = "playback.recovery-exhausted"
+    case playbackUnsupported = "playback.unsupported"
+    case metadataRefreshFailed = "metadata.refresh-failed"
+    case metadataUnavailable = "metadata.unavailable"
+
+    var area: CompatibilityArea {
+        switch self {
+        case .authenticationStoredSessionUnavailable, .authenticationStoredSessionInvalid,
+             .authenticationRejected, .authenticationChallengeRequired,
+             .authenticationUnsupportedResponse, .authenticationWebSessionResetFailed,
+             .authenticationCredentialPersistenceFailed, .authenticationCleanupFailed:
+            .authentication
+        case .entitlementUnavailable:
+            .entitlement
+        case .catalogAuthenticationUnavailable, .catalogNotEntitled, .catalogPartialLineup,
+             .catalogPaginationIncomplete,
+             .catalogCollectionMissing,
+             .catalogMalformedChannel, .catalogConflictingIdentity, .catalogUnsupportedResponse,
+             .catalogUnavailable:
+            .catalog
+        case .streamAuthorizationUnavailable, .streamEntitlementUnavailable,
+             .streamCatalogUnavailable, .streamSelectionUnavailable,
+             .streamResolutionUnavailable, .streamProtectedControl:
+            .stream
+        case .playbackNetworkUnavailable, .playbackBufferingUnavailable,
+             .playbackDecoderUnavailable, .playbackRecoveryExhausted, .playbackUnsupported:
+            .playback
+        case .metadataRefreshFailed, .metadataUnavailable:
+            .metadata
+        }
+    }
+
+    var severity: SupportDiagnosticSeverity {
+        switch self {
+        case .metadataRefreshFailed, .metadataUnavailable, .playbackNetworkUnavailable,
+             .playbackBufferingUnavailable, .catalogUnavailable:
+            .warning
+        default:
+            .error
+        }
+    }
+
+    var summary: String {
+        switch self {
+        case .authenticationStoredSessionUnavailable: "The saved sign-in expired or could not be refreshed."
+        case .authenticationStoredSessionInvalid: "The saved sign-in data was no longer usable."
+        case .authenticationRejected: "SiriusXM rejected the sign-in."
+        case .authenticationChallengeRequired: "SiriusXM required an interactive account challenge."
+        case .authenticationUnsupportedResponse: "SiriusXM returned an authentication response this app does not recognize."
+        case .authenticationWebSessionResetFailed: "The private sign-in session could not be reset."
+        case .authenticationCredentialPersistenceFailed: "The verified sign-in could not be saved securely."
+        case .authenticationCleanupFailed: "The local sign-out cleanup did not finish."
+        case .entitlementUnavailable: "The account’s listening entitlement could not be confirmed."
+        case .catalogAuthenticationUnavailable: "The channel lineup request no longer had a usable sign-in."
+        case .catalogNotEntitled: "The channel lineup request did not have confirmed listening entitlement."
+        case .catalogPartialLineup: "SiriusXM returned a curated subset instead of the complete channel lineup."
+        case .catalogPaginationIncomplete: "SiriusXM's paginated channel lineup stopped before every channel was received."
+        case .catalogCollectionMissing: "SiriusXM responded without a supported channel collection."
+        case .catalogMalformedChannel: "SiriusXM returned a channel record this app could not safely interpret."
+        case .catalogConflictingIdentity: "SiriusXM returned conflicting channel identities."
+        case .catalogUnsupportedResponse: "SiriusXM returned a catalog response this app does not recognize."
+        case .catalogUnavailable: "The channel lineup service was unavailable."
+        case .streamAuthorizationUnavailable: "The channel stream request no longer had a usable sign-in."
+        case .streamEntitlementUnavailable: "The channel stream request did not have confirmed listening entitlement."
+        case .streamCatalogUnavailable: "Playback could not use the current channel lineup."
+        case .streamSelectionUnavailable: "Playback did not have a valid channel selection."
+        case .streamResolutionUnavailable: "SiriusXM did not produce a supported stream handoff."
+        case .streamProtectedControl: "SiriusXM required a protected or interactive control."
+        case .playbackNetworkUnavailable: "Playback lost its network connection."
+        case .playbackBufferingUnavailable: "Playback could not recover from buffering."
+        case .playbackDecoderUnavailable: "macOS could not decode the resolved stream."
+        case .playbackRecoveryExhausted: "Playback still failed after its bounded recovery attempt."
+        case .playbackUnsupported: "This version cannot play the resolved stream contract."
+        case .metadataRefreshFailed: "Current program information could not be refreshed."
+        case .metadataUnavailable: "Current program information was unavailable."
+        }
+    }
+
+    var suggestedAction: String {
+        switch self {
+        case .authenticationStoredSessionUnavailable, .authenticationStoredSessionInvalid,
+             .authenticationRejected:
+            "Sign in again. Maintainers should inspect session renewal if this repeats."
+        case .authenticationChallengeRequired:
+            "Complete the challenge in the SiriusXM sign-in view; the app will not bypass it."
+        case .authenticationUnsupportedResponse:
+            "Maintainers should compare the authentication adapter with the current response contract."
+        case .authenticationWebSessionResetFailed:
+            "Quit and reopen the app, then try signing in again."
+        case .authenticationCredentialPersistenceFailed:
+            "Check Keychain access and include this report with a bug."
+        case .authenticationCleanupFailed:
+            "Quit the app before retrying sign-out or clearing the local session."
+        case .entitlementUnavailable, .catalogNotEntitled, .streamEntitlementUnavailable:
+            "Confirm the SiriusXM subscription in the official service, then sign in again."
+        case .catalogAuthenticationUnavailable, .streamAuthorizationUnavailable:
+            "Sign in again. Maintainers should inspect persisted-session renewal if this repeats."
+        case .catalogPartialLineup, .catalogPaginationIncomplete, .catalogCollectionMissing, .catalogMalformedChannel, .catalogConflictingIdentity,
+             .catalogUnsupportedResponse:
+            "Refresh once. If it repeats, submit this report so maintainers can update the catalog adapter."
+        case .catalogUnavailable, .playbackNetworkUnavailable, .playbackBufferingUnavailable,
+             .metadataRefreshFailed, .metadataUnavailable:
+            "Check the connection and retry once. Submit this report if the problem continues."
+        case .streamCatalogUnavailable:
+            "Refresh the channel lineup before trying playback again."
+        case .streamSelectionUnavailable:
+            "Select a channel from the current lineup and try again."
+        case .streamResolutionUnavailable, .playbackDecoderUnavailable,
+             .playbackRecoveryExhausted, .playbackUnsupported:
+            "Retry once. If it repeats, submit this report so maintainers can inspect playback compatibility."
+        case .streamProtectedControl:
+            "Use the official SiriusXM experience to complete any required account control; the app will not bypass it."
+        }
+    }
+}
+
+struct SupportDiagnosticEntry: Codable, Equatable, Identifiable {
+    let recordedAt: Date
+    let code: SupportDiagnosticCode
+
+    var id: String { "\(recordedAt.timeIntervalSinceReferenceDate)-\(code.rawValue)" }
+    var area: CompatibilityArea { code.area }
+    var severity: SupportDiagnosticSeverity { code.severity }
+    var summary: String { code.summary }
+    var suggestedAction: String { code.suggestedAction }
+
+    private enum CodingKeys: String, CodingKey {
+        case recordedAt
+        case area
+        case severity
+        case code
+        case summary
+        case suggestedAction
+    }
+
+    init(recordedAt: Date, code: SupportDiagnosticCode) {
+        self.recordedAt = recordedAt
+        self.code = code
+    }
+
+    init(from decoder: any Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        recordedAt = try values.decode(Date.self, forKey: .recordedAt)
+        code = try values.decode(SupportDiagnosticCode.self, forKey: .code)
+    }
+
+    func encode(to encoder: any Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(recordedAt, forKey: .recordedAt)
+        try values.encode(area, forKey: .area)
+        try values.encode(severity, forKey: .severity)
+        try values.encode(code, forKey: .code)
+        try values.encode(summary, forKey: .summary)
+        try values.encode(suggestedAction, forKey: .suggestedAction)
+    }
+}
+
+@MainActor
+@Observable
+final class SupportDiagnosticJournal {
+    static let maximumEntries = 40
+    private static let storageKey = "support-diagnostics-v1"
+    private static let authenticationStorageKey = "authentication-support-v1"
+    private static let logger = Logger(subsystem: ProductIdentity.appLogSubsystem, category: "Support")
+
+    private struct PersistedAuthenticationSupport: Codable {
+        let currentState: AuthenticationStateDiagnostic
+        let lastSuccessfulAuthenticationAt: Date?
+        let lastStoredCredentialLoad: StoredCredentialLoadDiagnostic?
+        let lastRenewalAttempt: AuthenticationRenewalAttemptDiagnostic?
+        let lastNativeAuthenticationAttempt: NativeAuthenticationAttemptDiagnostic?
+    }
+
+    private let userDefaults: UserDefaults?
+    private(set) var entries: [SupportDiagnosticEntry]
+    private(set) var authenticationSupport: AuthenticationSupportSnapshot
+
+    init(
+        entries: [SupportDiagnosticEntry] = [],
+        authenticationSupport: AuthenticationSupportSnapshot = .unknown,
+        userDefaults: UserDefaults? = nil
+    ) {
+        self.userDefaults = userDefaults
+        if let data = userDefaults?.data(forKey: Self.storageKey),
+           let restored = try? Self.decoder.decode([SupportDiagnosticEntry].self, from: data) {
+            self.entries = Array(restored.suffix(Self.maximumEntries))
+        } else {
+            self.entries = Array(entries.suffix(Self.maximumEntries))
+        }
+        if let data = userDefaults?.data(forKey: Self.authenticationStorageKey),
+           let restored = try? Self.decoder.decode(PersistedAuthenticationSupport.self, from: data) {
+            self.authenticationSupport = AuthenticationSupportSnapshot(
+                currentState: restored.currentState,
+                lastSuccessfulAuthenticationAt: restored.lastSuccessfulAuthenticationAt,
+                lastStoredCredentialLoad: restored.lastStoredCredentialLoad,
+                lastRenewalAttempt: restored.lastRenewalAttempt,
+                lastNativeAuthenticationAttempt: restored.lastNativeAuthenticationAttempt
+            )
+        } else {
+            self.authenticationSupport = authenticationSupport
+        }
+    }
+
+    static func persistent(userDefaults: UserDefaults = .standard) -> SupportDiagnosticJournal {
+        SupportDiagnosticJournal(userDefaults: userDefaults)
+    }
+
+    func record(_ code: SupportDiagnosticCode, at date: Date = Date()) {
+        if let latest = entries.last,
+           latest.code == code,
+           date.timeIntervalSince(latest.recordedAt) < 60 {
+            return
+        }
+        entries.append(SupportDiagnosticEntry(recordedAt: date, code: code))
+        entries = Array(entries.suffix(Self.maximumEntries))
+        persist()
+        Self.logger.error("Support diagnostic \(code.rawValue, privacy: .public)")
+    }
+
+    func recordAuthenticationState(_ state: String, successful: Bool, at date: Date = Date()) {
+        authenticationSupport = AuthenticationSupportSnapshot(
+            currentState: AuthenticationStateDiagnostic(recordedAt: date, state: state),
+            lastSuccessfulAuthenticationAt: successful ? date : authenticationSupport.lastSuccessfulAuthenticationAt,
+            lastStoredCredentialLoad: authenticationSupport.lastStoredCredentialLoad,
+            lastRenewalAttempt: authenticationSupport.lastRenewalAttempt,
+            lastNativeAuthenticationAttempt: authenticationSupport.lastNativeAuthenticationAttempt
+        )
+        persistAuthenticationSupport()
+    }
+
+    func recordStoredCredentialLoad(_ diagnostic: StoredCredentialLoadDiagnostic) {
+        authenticationSupport = AuthenticationSupportSnapshot(
+            currentState: authenticationSupport.currentState,
+            lastSuccessfulAuthenticationAt: authenticationSupport.lastSuccessfulAuthenticationAt,
+            lastStoredCredentialLoad: diagnostic,
+            lastRenewalAttempt: authenticationSupport.lastRenewalAttempt,
+            lastNativeAuthenticationAttempt: authenticationSupport.lastNativeAuthenticationAttempt
+        )
+        persistAuthenticationSupport()
+        Self.logger.notice(
+            "Stored authentication credential load purpose=\(diagnostic.purpose.rawValue, privacy: .public) outcome=\(diagnostic.outcome.rawValue, privacy: .public)"
+        )
+    }
+
+    func recordRenewalAttempt(_ diagnostic: AuthenticationRenewalAttemptDiagnostic) {
+        authenticationSupport = AuthenticationSupportSnapshot(
+            currentState: authenticationSupport.currentState,
+            lastSuccessfulAuthenticationAt: authenticationSupport.lastSuccessfulAuthenticationAt,
+            lastStoredCredentialLoad: authenticationSupport.lastStoredCredentialLoad,
+            lastRenewalAttempt: diagnostic,
+            lastNativeAuthenticationAttempt: authenticationSupport.lastNativeAuthenticationAttempt
+        )
+        persistAuthenticationSupport()
+        Self.logger.notice(
+            "Authentication renewal mechanism=\(diagnostic.renewalCredential.rawValue, privacy: .public) outcome=\(diagnostic.outcome.rawValue, privacy: .public)"
+        )
+    }
+
+    func recordNativeAuthenticationAttempt(_ diagnostic: NativeAuthenticationAttemptDiagnostic) {
+        authenticationSupport = AuthenticationSupportSnapshot(
+            currentState: authenticationSupport.currentState,
+            lastSuccessfulAuthenticationAt: authenticationSupport.lastSuccessfulAuthenticationAt,
+            lastStoredCredentialLoad: authenticationSupport.lastStoredCredentialLoad,
+            lastRenewalAttempt: authenticationSupport.lastRenewalAttempt,
+            lastNativeAuthenticationAttempt: diagnostic
+        )
+        persistAuthenticationSupport()
+        Self.logger.notice(
+            "Native authentication outcome=\(diagnostic.outcome.rawValue, privacy: .public)"
+        )
+    }
+
+    func clear() {
+        entries = []
+        authenticationSupport = .unknown
+        userDefaults?.removeObject(forKey: Self.storageKey)
+        userDefaults?.removeObject(forKey: Self.authenticationStorageKey)
+    }
+
+    private func persist() {
+        guard let userDefaults, let data = try? Self.encoder.encode(entries) else { return }
+        userDefaults.set(data, forKey: Self.storageKey)
+    }
+
+    private func persistAuthenticationSupport() {
+        guard let userDefaults else { return }
+        let persisted = PersistedAuthenticationSupport(
+            currentState: authenticationSupport.currentState,
+            lastSuccessfulAuthenticationAt: authenticationSupport.lastSuccessfulAuthenticationAt,
+            lastStoredCredentialLoad: authenticationSupport.lastStoredCredentialLoad,
+            lastRenewalAttempt: authenticationSupport.lastRenewalAttempt,
+            lastNativeAuthenticationAttempt: authenticationSupport.lastNativeAuthenticationAttempt
+        )
+        guard let data = try? Self.encoder.encode(persisted) else { return }
+        userDefaults.set(data, forKey: Self.authenticationStorageKey)
+    }
+
+    private static var encoder: JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
+    }
+
+    private static var decoder: JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
+    }
+}
+
 struct SupportBundle: Codable, Equatable {
-    static let schemaVersion = 1
+    static let schemaVersion = 3
 
     let schemaVersion: Int
     let product: String
@@ -88,7 +536,9 @@ struct SupportBundle: Codable, Equatable {
     let build: String
     let operatingSystem: String
     let architecture: String
+    let authentication: AuthenticationSupportSnapshot
     let compatibility: [CompatibilityFinding]
+    let diagnostics: [SupportDiagnosticEntry]
 }
 
 struct CompatibilitySnapshot: Equatable {
@@ -189,7 +639,12 @@ struct CompatibilitySnapshot: Equatable {
 }
 
 enum SupportBundleFactory {
-    static func make(snapshot: CompatibilitySnapshot, bundle: Bundle = .main) -> SupportBundle {
+    static func make(
+        snapshot: CompatibilitySnapshot,
+        authentication: AuthenticationSupportSnapshot = .unknown,
+        diagnostics: [SupportDiagnosticEntry] = [],
+        bundle: Bundle = .main
+    ) -> SupportBundle {
         SupportBundle(
             schemaVersion: SupportBundle.schemaVersion,
             product: ProductIdentity.displayName,
@@ -197,13 +652,16 @@ enum SupportBundleFactory {
             build: bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "Development",
             operatingSystem: ProcessInfo.processInfo.operatingSystemVersionString,
             architecture: architecture,
-            compatibility: snapshot.findings
+            authentication: authentication,
+            compatibility: snapshot.findings,
+            diagnostics: diagnostics
         )
     }
 
     static func encoded(_ bundle: SupportBundle) throws -> Data {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        encoder.dateEncodingStrategy = .iso8601
         return try encoder.encode(bundle)
     }
 
@@ -222,6 +680,9 @@ enum SupportBundleFactory {
 struct CompatibilitySupportView: View {
     let controller: ListeningSessionController?
     @State private var exportError: String?
+#if DEBUG
+    @State private var isShowingRenewalQualificationConfirmation = false
+#endif
 
     private var snapshot: CompatibilitySnapshot {
         guard let controller else { return .signedOut }
@@ -234,7 +695,11 @@ struct CompatibilitySupportView: View {
     }
 
     private var supportBundle: SupportBundle {
-        SupportBundleFactory.make(snapshot: snapshot)
+        SupportBundleFactory.make(
+            snapshot: snapshot,
+            authentication: controller?.supportDiagnostics.authenticationSupport ?? .unknown,
+            diagnostics: controller?.supportDiagnostics.entries ?? []
+        )
     }
 
     private var preview: String {
@@ -266,6 +731,135 @@ struct CompatibilitySupportView: View {
                 }
             }
 
+            GroupBox("Authentication details") {
+                VStack(alignment: .leading, spacing: 8) {
+                    authenticationDetail(
+                        "Current state",
+                        supportBundle.authentication.currentState.state,
+                        date: supportBundle.authentication.currentState.recordedAt
+                    )
+                    if let successfulAt = supportBundle.authentication.lastSuccessfulAuthenticationAt {
+                        authenticationDetail("Last successful verification", "succeeded", date: successfulAt)
+                    }
+                    if let load = supportBundle.authentication.lastStoredCredentialLoad {
+                        authenticationDetail(
+                            "Last stored credential load",
+                            "\(load.purpose.rawValue): \(load.outcome.rawValue)" + referenceSuffix(load.credentialReference),
+                            date: load.recordedAt
+                        )
+                    }
+                    if let nativeAttempt = supportBundle.authentication.lastNativeAuthenticationAttempt {
+                        authenticationDetail(
+                            "Last native authentication",
+                            nativeAttempt.outcome.rawValue,
+                            date: nativeAttempt.recordedAt
+                        )
+                    }
+                    if let renewal = supportBundle.authentication.lastRenewalAttempt {
+                        authenticationDetail(
+                            "Last token renewal",
+                            renewal.outcome.rawValue,
+                            date: renewal.attemptedAt
+                        )
+                        authenticationDetail(
+                            "Source access credential",
+                            renewal.sourceCredentialReference ?? "unidentified",
+                            date: renewal.accessTokenExpiresAt
+                        )
+                        authenticationDetail(
+                            "Session renewal window",
+                            "expires",
+                            date: renewal.sessionRenewalExpiresAt
+                        )
+                        authenticationDetail(
+                            "Renewal credential",
+                            renewal.renewalCredential.rawValue,
+                            date: renewal.renewalCredentialExpiresAt
+                        )
+                        if let replacementReference = renewal.replacementCredentialReference,
+                           let completedAt = renewal.completedAt {
+                            authenticationDetail(
+                                "Replacement credential",
+                                replacementReference,
+                                date: completedAt
+                            )
+                        }
+                    } else {
+                        Text("No token-renewal attempt has been recorded on this Mac.")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+#if DEBUG
+            GroupBox("Debug renewal qualification") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("This sends exactly one real session-renewal request through the active client, validates the rotated response, and saves the replacement to Keychain. It does not retry or start playback.")
+                        .foregroundStyle(.secondary)
+                    Text(controller?.authenticationRenewalQualificationState.statusText ?? "The production authentication client is unavailable in this composition.")
+                        .font(.callout.monospaced())
+                        .textSelection(.enabled)
+                    HStack {
+                        Button("Force One Session Renewal…") {
+                            isShowingRenewalQualificationConfirmation = true
+                        }
+                        .disabled(controller?.canQualifyAuthenticationRenewal != true)
+
+                        if controller?.canQualifyAuthenticationRenewal == false {
+                            Text("Sign in, wait for the channel load to finish, and stop playback first.")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .confirmationDialog(
+                "Send one live session-renewal request?",
+                isPresented: $isShowingRenewalQualificationConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Send One Renewal Request") {
+                    _ = controller?.qualifyAuthenticationRenewalOnce()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This is a deliberate live compatibility check. It uses the stored refresh cookie once, never retries, and records only redacted outcome data.")
+            }
+#endif
+
+            GroupBox("Recent diagnostics") {
+                if supportBundle.diagnostics.isEmpty {
+                    Text("No compatibility failures have been recorded on this Mac.")
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(8)
+                } else {
+                    VStack(alignment: .leading, spacing: 12) {
+                        ForEach(supportBundle.diagnostics.reversed().prefix(8)) { diagnostic in
+                            VStack(alignment: .leading, spacing: 3) {
+                                HStack {
+                                    Text(diagnostic.code.rawValue)
+                                        .font(.system(.caption, design: .monospaced).weight(.semibold))
+                                    Spacer()
+                                    Text(diagnostic.recordedAt, format: .dateTime.month().day().hour().minute().second())
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Text(diagnostic.summary)
+                                Text(diagnostic.suggestedAction)
+                                    .font(.callout)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .padding(8)
+                }
+            }
+
             GroupBox("Support bundle preview") {
                 ScrollView {
                     Text(preview)
@@ -278,16 +872,17 @@ struct CompatibilitySupportView: View {
             }
 
             HStack {
-                Text("The export contains only the version fields and classifications shown above.")
+                Text("The export contains version details, compatibility classifications, fixed-code diagnostics, and the redacted authentication details shown above. It never contains token or cookie values.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                 Spacer()
+                Button("Copy Support Report", action: copy)
                 Button("Export Support Bundle…", action: export)
                     .keyboardShortcut("e", modifiers: [.command, .shift])
             }
         }
         .padding(24)
-        .frame(minWidth: 720, minHeight: 610)
+        .frame(minWidth: 760, minHeight: 700)
         .alert("Support Bundle Wasn’t Exported", isPresented: Binding(
             get: { exportError != nil },
             set: { if !$0 { exportError = nil } }
@@ -296,6 +891,31 @@ struct CompatibilitySupportView: View {
         } message: {
             Text(exportError ?? "Try another location.")
         }
+    }
+
+    @ViewBuilder
+    private func authenticationDetail(_ label: String, _ value: String, date: Date) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(label)
+                .frame(width: 190, alignment: .leading)
+            Text(value)
+                .font(.system(.caption, design: .monospaced))
+                .textSelection(.enabled)
+            Spacer()
+            Text(date, format: .dateTime.month().day().hour().minute().second())
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func referenceSuffix(_ reference: String?) -> String {
+        reference.map { " [\($0)]" } ?? ""
+    }
+
+    private func copy() {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(preview, forType: .string)
     }
 
     private func export() {

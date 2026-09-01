@@ -32,6 +32,7 @@ enum ProductIdentity {
     enum SceneID {
         static let compact = ProductIdentity.compactSceneID
         static let library = ProductIdentity.librarySceneID
+        static let support = "\(ProductIdentity.appBundleIdentifier).support"
     }
 
     enum FrameAutosaveName {

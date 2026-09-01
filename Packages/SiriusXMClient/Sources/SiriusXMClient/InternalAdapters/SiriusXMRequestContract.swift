@@ -53,10 +53,7 @@ enum SiriusXMRequestContract: CaseIterable, Sendable {
     }
 
     var host: String {
-        switch self {
-        case .catalog: Self.publicChannelGuideHost
-        default: Self.host
-        }
+        Self.host
     }
 
     var method: String {
@@ -73,7 +70,7 @@ enum SiriusXMRequestContract: CaseIterable, Sendable {
         case .entitlement:
             "/subscription/v1/subscriptions"
         case .catalog:
-            "/v2/channelfeed/SXM_SIR_AUD_TOTAL_ACCESS"
+            "/browse/v1/pages/curated-grouping/403ab6a5-d3c9-4c2a-a722-a94a6a5fd056"
         case .tune:
             "/playback/play/v1/tuneSource"
         case .playbackKey:

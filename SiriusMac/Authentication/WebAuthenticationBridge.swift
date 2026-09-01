@@ -29,6 +29,9 @@ enum AuthenticationBridgeDiagnostic: String, CaseIterable, Equatable {
     case refreshTokenInvalid = "refresh-token-invalid"
     case refreshTokenExpiryMissing = "refresh-token-expiry-missing"
     case refreshTokenExpiryInvalid = "refresh-token-expiry-invalid"
+    case sessionRefreshCookieMissing = "session-refresh-cookie-missing"
+    case sessionRefreshCookieInvalid = "session-refresh-cookie-invalid"
+    case renewalAuthorityMissing = "renewal-authority-missing"
     case sessionTypeRejected = "session-type-rejected"
     case credentialEnvelopeEncodingFailed = "credential-envelope-encoding-failed"
     case credentialEnvelopeTooLarge = "credential-envelope-too-large"
@@ -36,7 +39,7 @@ enum AuthenticationBridgeDiagnostic: String, CaseIterable, Equatable {
     case deviceGrantAccepted = "device-grant-accepted"
     case deviceGrantDiscardedUnrecognized = "device-grant-discarded-unrecognized"
     case renewalViaRefreshToken = "renewal-via-refresh-token"
-    case renewalViaDeviceGrant = "renewal-via-device-grant"
+    case renewalViaSessionRefreshCookie = "renewal-via-session-refresh-cookie"
     case selectionCancelled = "selection-cancelled"
     case credentialAlreadyConsumed = "credential-already-consumed"
     case credentialTransferred = "credential-transferred"
@@ -51,6 +54,34 @@ enum AuthenticationBridgeDiagnostic: String, CaseIterable, Equatable {
     case webNavigationProvisionalFailed = "web-navigation-provisional-failed"
     case webNavigationFailed = "web-navigation-failed"
     case webContentProcessTerminated = "web-content-process-terminated"
+}
+
+enum BrowserSessionRenewalDriverFailure: String, Sendable, Equatable {
+    case attemptAlreadyInProgress = "attempt-already-in-progress"
+    case cookieRehydrationFailed = "cookie-rehydration-failed"
+    case navigationFailed = "navigation-failed"
+    case timedOutWaitingForCredential = "timed-out-waiting-for-credential"
+    case replacementCredentialMissing = "replacement-credential-missing"
+    case replacementCredentialAmbiguous = "replacement-credential-ambiguous"
+    case replacementCredentialMalformed = "replacement-credential-malformed"
+    case accessTokenUnchanged = "access-token-unchanged"
+    case replacementRenewalExpired = "replacement-renewal-expired"
+    case nativeRenewalAuthorityUnavailable = "native-renewal-authority-unavailable"
+    case nativeRenewalAuthorityExpired = "native-renewal-authority-expired"
+    case nativeTransportFailed = "native-transport-failed"
+    case nativeAuthorizationRejected = "native-authorization-rejected"
+    case nativeRateLimited = "native-rate-limited"
+    case nativeServerUnavailable = "native-server-unavailable"
+    case nativeRedirectRejected = "native-redirect-rejected"
+    case nativeResponseUnsupported = "native-response-unsupported"
+    case nativeReplacementUnusable = "native-replacement-unusable"
+    case cancelled
+    case configurationUnavailable = "configuration-unavailable"
+}
+
+enum BrowserSessionRenewalDriverResult: Sendable {
+    case refreshed(AuthenticationCredential)
+    case failed(BrowserSessionRenewalDriverFailure)
 }
 
 @MainActor
@@ -125,7 +156,8 @@ final class WebAuthenticationBridge {
     private let websiteSession: WebAuthenticationWebsiteSession
     private let websiteSessionRetirer: @MainActor @Sendable () async -> Bool
     private let signInRequestLoader: @MainActor (URLRequest) -> Void
-    private let browserSessionRefresher: @MainActor @Sendable (BrowserAuthenticationSessionSnapshot) async -> AuthenticationCredential?
+    private let browserSessionRefresher: @MainActor @Sendable (BrowserAuthenticationSessionSnapshot) async -> BrowserSessionRenewalDriverResult
+    private let nativeSessionRefresher: (@MainActor @Sendable (AuthenticationCredential) async -> BrowserCredentialNativeRenewalResult)?
     private let telemetry: AuthenticationBridgeTelemetry
     private let usesLiveCookieStore: Bool
     private var selectionState: CredentialSelectionState = .available
@@ -137,11 +169,13 @@ final class WebAuthenticationBridge {
     private var needsAnotherAutomaticInspection = false
     private var didNotifyAutomaticCredentialReady = false
     private var emittedAutomaticDiagnostics = Set<AuthenticationBridgeDiagnostic>()
+    private var renewalDiagnosticHandler: @MainActor (AuthenticationRenewalAttemptDiagnostic) -> Void = { _ in }
 
     init() {
         let handoff = VolatileWebCredentialHandoff()
         let websiteSession = WebAuthenticationWebsiteSession()
         let renewalDriver = WebAuthenticationRenewalDriver()
+        let nativeRenewalDriver = SiriusXMCurrentCredentialRenewalDriver()
         self.websiteSession = websiteSession
         cookieStore = WebKitAuthenticationCookieStore(cookieStore: websiteSession.configuration.websiteDataStore.httpCookieStore)
         now = Date.init
@@ -149,6 +183,7 @@ final class WebAuthenticationBridge {
         websiteSessionRetirer = { await websiteSession.removeAllWebsiteData() }
         signInRequestLoader = { request in websiteSession.makeWebView().load(request) }
         browserSessionRefresher = { snapshot in await renewalDriver.refresh(snapshot) }
+        nativeSessionRefresher = { credential in await nativeRenewalDriver.refresh(credential) }
         usesLiveCookieStore = true
         telemetry = .live
         handoffDisposer = { await handoff.discard() }
@@ -172,7 +207,10 @@ final class WebAuthenticationBridge {
         websiteSessionRetirer: @escaping @MainActor @Sendable () async -> Bool = { true },
         telemetry: AuthenticationBridgeTelemetry = .disabled,
         signInRequestLoader: @escaping @MainActor (URLRequest) -> Void = { _ in },
-        browserSessionRefresher: @escaping @MainActor @Sendable (BrowserAuthenticationSessionSnapshot) async -> AuthenticationCredential? = { _ in nil }
+        browserSessionRefresher: @escaping @MainActor @Sendable (BrowserAuthenticationSessionSnapshot) async -> BrowserSessionRenewalDriverResult = { _ in
+            .failed(.configurationUnavailable)
+        },
+        nativeSessionRefresher: (@MainActor @Sendable (AuthenticationCredential) async -> BrowserCredentialNativeRenewalResult)? = nil
     ) {
         let handoff = VolatileWebCredentialHandoff()
         websiteSession = WebAuthenticationWebsiteSession()
@@ -182,6 +220,7 @@ final class WebAuthenticationBridge {
         self.websiteSessionRetirer = websiteSessionRetirer
         self.signInRequestLoader = signInRequestLoader
         self.browserSessionRefresher = browserSessionRefresher
+        self.nativeSessionRefresher = nativeSessionRefresher
         self.telemetry = telemetry
         usesLiveCookieStore = false
         self.handoffDisposer = {
@@ -218,6 +257,12 @@ final class WebAuthenticationBridge {
         _ handler: @escaping @MainActor @Sendable () -> Void
     ) {
         automaticCredentialReadyHandler = handler
+    }
+
+    func setRenewalDiagnosticHandler(
+        _ handler: @escaping @MainActor (AuthenticationRenewalAttemptDiagnostic) -> Void
+    ) {
+        renewalDiagnosticHandler = handler
     }
 
     /// Starts the sole owner-operated authentication path without reading browser state.
@@ -444,6 +489,9 @@ private extension AuthenticationCredentialMaterialError {
         case .refreshTokenInvalid: .refreshTokenInvalid
         case .refreshTokenExpiryMissing: .refreshTokenExpiryMissing
         case .refreshTokenExpiryInvalid: .refreshTokenExpiryInvalid
+        case .sessionRefreshCookieMissing: .sessionRefreshCookieMissing
+        case .sessionRefreshCookieInvalid: .sessionRefreshCookieInvalid
+        case .renewalAuthorityMissing: .renewalAuthorityMissing
         case .sessionTypeRejected: .sessionTypeRejected
         case .envelopeEncodingFailed: .credentialEnvelopeEncodingFailed
         case .envelopeTooLarge: .credentialEnvelopeTooLarge
@@ -465,7 +513,66 @@ private extension BrowserRenewalDisposition {
     var bridgeDiagnostic: AuthenticationBridgeDiagnostic {
         switch self {
         case .refreshToken: .renewalViaRefreshToken
-        case .deviceGrant: .renewalViaDeviceGrant
+        case .sessionRefreshCookie: .renewalViaSessionRefreshCookie
+        }
+    }
+
+    var supportCredentialKind: AuthenticationRenewalCredentialKind {
+        switch self {
+        case .refreshToken: .refreshToken
+        case .sessionRefreshCookie: .sessionRefreshCookie
+        }
+    }
+}
+
+extension AuthenticationCredential {
+    var supportDiagnosticReference: String? {
+        browserSessionSnapshot()?.diagnosticCredentialIdentifier.map {
+            "credential:\($0.uuidString.lowercased())"
+        }
+    }
+}
+
+private extension BrowserSessionRenewalDriverFailure {
+    var supportOutcome: AuthenticationRenewalOutcome {
+        switch self {
+        case .attemptAlreadyInProgress: .attemptAlreadyInProgress
+        case .cookieRehydrationFailed: .cookieRehydrationFailed
+        case .navigationFailed: .navigationFailed
+        case .timedOutWaitingForCredential: .timedOutWaitingForCredential
+        case .replacementCredentialMissing: .replacementCredentialMissing
+        case .replacementCredentialAmbiguous: .replacementCredentialAmbiguous
+        case .replacementCredentialMalformed: .replacementCredentialMalformed
+        case .accessTokenUnchanged: .accessTokenUnchanged
+        case .replacementRenewalExpired: .replacementRenewalExpired
+        case .nativeRenewalAuthorityUnavailable: .nativeRenewalAuthorityUnavailable
+        case .nativeRenewalAuthorityExpired: .nativeRenewalAuthorityExpired
+        case .nativeTransportFailed: .nativeTransportFailed
+        case .nativeAuthorizationRejected: .nativeAuthorizationRejected
+        case .nativeRateLimited: .nativeRateLimited
+        case .nativeServerUnavailable: .nativeServerUnavailable
+        case .nativeRedirectRejected: .nativeRedirectRejected
+        case .nativeResponseUnsupported: .nativeResponseUnsupported
+        case .nativeReplacementUnusable: .nativeReplacementUnusable
+        case .cancelled: .cancelled
+        case .configurationUnavailable: .configurationUnavailable
+        }
+    }
+}
+
+private extension BrowserCredentialNativeRenewalFailure {
+    var bridgeFailure: BrowserSessionRenewalDriverFailure {
+        switch self {
+        case .renewalAuthorityUnavailable: .nativeRenewalAuthorityUnavailable
+        case .renewalAuthorityExpired: .nativeRenewalAuthorityExpired
+        case .transportFailed: .nativeTransportFailed
+        case .authorizationRejected: .nativeAuthorizationRejected
+        case .rateLimited: .nativeRateLimited
+        case .serverUnavailable: .nativeServerUnavailable
+        case .redirectRejected: .nativeRedirectRejected
+        case .unsupportedResponse: .nativeResponseUnsupported
+        case .replacementUnusable: .nativeReplacementUnusable
+        case .cancelled: .cancelled
         }
     }
 }
@@ -478,41 +585,166 @@ extension WebAuthenticationBridge: CredentialSource {
 }
 
 extension WebAuthenticationBridge: CredentialRefresher {
-    /// Rehydrates only the two approved first-party cookies into an isolated WebKit
-    /// session and lets SiriusXM's own browser client perform its normal renewal.
+    /// Uses the fixed current native renewal transaction when the short-lived
+    /// access credential is approaching expiry.
     func refreshedCredential(ifNeeded credential: AuthenticationCredential) async -> AuthenticationCredential? {
+        await refreshedCredential(credential, forceQualification: false)
+    }
+
+#if DEBUG
+    /// Owner-initiated qualification bypasses only the ordinary expiry gate.
+    /// Request construction, response validation, diagnostics, and rotation are
+    /// identical to the automatic path, and there is no retry.
+    func refreshedCredentialForQualification(_ credential: AuthenticationCredential) async -> AuthenticationCredential? {
+        await refreshedCredential(credential, forceQualification: true)
+    }
+#endif
+
+    private func refreshedCredential(
+        _ credential: AuthenticationCredential,
+        forceQualification: Bool
+    ) async -> AuthenticationCredential? {
         guard let snapshot = credential.browserSessionSnapshot() else {
             return nil
         }
 
         let currentTime = now()
-        guard snapshot.accessTokenExpiresAt <= currentTime.addingTimeInterval(300) else {
+        guard forceQualification || snapshot.accessTokenExpiresAt <= currentTime.addingTimeInterval(300) else {
             return credential
         }
-        guard snapshot.refreshTokenExpiresAt > currentTime,
-              snapshot.deviceRefreshGrantExpiresAt.map({ $0 > currentTime }) ?? true else {
+
+        let attemptID = UUID()
+        let renewalCredential = snapshot.renewalDisposition.supportCredentialKind
+        let renewalCredentialExpiresAt = switch snapshot.renewalDisposition {
+        case .refreshToken:
+            snapshot.refreshTokenExpiresAt
+        case .sessionRefreshCookie:
+            snapshot.refreshTokenExpiresAt
+        }
+        recordRenewalAttempt(
+            id: attemptID,
+            attemptedAt: currentTime,
+            completedAt: nil,
+            snapshot: snapshot,
+            renewalCredential: renewalCredential,
+            renewalCredentialExpiresAt: renewalCredentialExpiresAt,
+            outcome: .inProgress,
+            replacementCredentialReference: nil
+        )
+
+        guard snapshot.refreshTokenExpiresAt > currentTime else {
             telemetry.record(.browserSessionRefreshFailed)
+            recordRenewalAttempt(
+                id: attemptID,
+                attemptedAt: currentTime,
+                completedAt: now(),
+                snapshot: snapshot,
+                renewalCredential: renewalCredential,
+                renewalCredentialExpiresAt: renewalCredentialExpiresAt,
+                outcome: .renewalCredentialExpired,
+                replacementCredentialReference: nil
+            )
+            return nil
+        }
+        telemetry.record(.browserSessionRefreshStarted)
+        let result: BrowserSessionRenewalDriverResult
+        if let nativeSessionRefresher {
+            switch await nativeSessionRefresher(credential) {
+            case let .refreshed(refreshed):
+                result = .refreshed(refreshed)
+            case let .failed(failure):
+                result = .failed(failure.bridgeFailure)
+            }
+        } else if snapshot.renewalDisposition == .sessionRefreshCookie {
+            result = .failed(.configurationUnavailable)
+        } else {
+            result = await browserSessionRefresher(snapshot)
+        }
+        guard case let .refreshed(refreshed) = result else {
+            telemetry.record(.browserSessionRefreshFailed)
+            if case let .failed(failure) = result {
+                recordRenewalAttempt(
+                    id: attemptID,
+                    attemptedAt: currentTime,
+                    completedAt: now(),
+                    snapshot: snapshot,
+                    renewalCredential: renewalCredential,
+                    renewalCredentialExpiresAt: renewalCredentialExpiresAt,
+                    outcome: failure.supportOutcome,
+                    replacementCredentialReference: nil
+                )
+            }
             return nil
         }
 
-        telemetry.record(.browserSessionRefreshStarted)
-        guard let refreshed = await browserSessionRefresher(snapshot) else {
+        guard let refreshedSnapshot = refreshed.browserSessionSnapshot(),
+              refreshedSnapshot.accessTokenExpiresAt > currentTime.addingTimeInterval(300) else {
             telemetry.record(.browserSessionRefreshFailed)
+            recordRenewalAttempt(
+                id: attemptID,
+                attemptedAt: currentTime,
+                completedAt: now(),
+                snapshot: snapshot,
+                renewalCredential: renewalCredential,
+                renewalCredentialExpiresAt: renewalCredentialExpiresAt,
+                outcome: .replacementCredentialUnusable,
+                replacementCredentialReference: refreshed.supportDiagnosticReference
+            )
             return nil
         }
         telemetry.record(.browserSessionRefreshCompleted)
+        recordRenewalAttempt(
+            id: attemptID,
+            attemptedAt: currentTime,
+            completedAt: now(),
+            snapshot: snapshot,
+            renewalCredential: renewalCredential,
+            renewalCredentialExpiresAt: renewalCredentialExpiresAt,
+            outcome: .replacementReceived,
+            replacementCredentialReference: refreshedSnapshot.diagnosticCredentialIdentifier.map {
+                "credential:\($0.uuidString.lowercased())"
+            }
+        )
         return refreshed
+    }
+
+    private func recordRenewalAttempt(
+        id: UUID,
+        attemptedAt: Date,
+        completedAt: Date?,
+        snapshot: BrowserAuthenticationSessionSnapshot,
+        renewalCredential: AuthenticationRenewalCredentialKind,
+        renewalCredentialExpiresAt: Date,
+        outcome: AuthenticationRenewalOutcome,
+        replacementCredentialReference: String?
+    ) {
+        renewalDiagnosticHandler(AuthenticationRenewalAttemptDiagnostic(
+            id: id,
+            attemptedAt: attemptedAt,
+            completedAt: completedAt,
+            sourceCredentialReference: snapshot.diagnosticCredentialIdentifier.map {
+                "credential:\($0.uuidString.lowercased())"
+            },
+            renewalCredential: renewalCredential,
+            accessTokenExpiresAt: snapshot.accessTokenExpiresAt,
+            sessionRenewalExpiresAt: snapshot.refreshTokenExpiresAt,
+            renewalCredentialExpiresAt: renewalCredentialExpiresAt,
+            deviceGrantExpiresAt: snapshot.deviceGrantExpiresAt,
+            outcome: outcome,
+            replacementCredentialReference: replacementCredentialReference
+        ))
     }
 }
 
 extension WebAuthenticationBridge: AuthenticationResidueCleaner {
-    /// Deletes only cookies selected by the same predicate used for extraction,
+    /// Deletes only cookies selected by the same predicates used for extraction,
     /// rescans that exact set, then retires the app-owned nonpersistent website session.
     func removeAuthenticationResidue() async -> AuthenticationResidueCleanupOutcome {
         let currentTime = now()
         let initialCookies = await cookieStore.allCookies()
         let initialMatches = FirstPartyTokenCookiePolicy.matchingCookies(in: initialCookies, now: currentTime) +
-            FirstPartyDeviceGrantCookiePolicy.matchingCookies(in: initialCookies, now: currentTime)
+            FirstPartyDeviceGrantCookiePolicy.matchingCookies(in: initialCookies, now: currentTime) +
+            FirstPartySessionRefreshCookiePolicy.matchingCookies(in: initialCookies, now: currentTime)
 
         var deletionFailed = false
         for cookie in initialMatches {
@@ -525,7 +757,8 @@ extension WebAuthenticationBridge: AuthenticationResidueCleaner {
 
         let remainingCookies = await cookieStore.allCookies()
         let remainingMatches = FirstPartyTokenCookiePolicy.matchingCookies(in: remainingCookies, now: currentTime) +
-            FirstPartyDeviceGrantCookiePolicy.matchingCookies(in: remainingCookies, now: currentTime)
+            FirstPartyDeviceGrantCookiePolicy.matchingCookies(in: remainingCookies, now: currentTime) +
+            FirstPartySessionRefreshCookiePolicy.matchingCookies(in: remainingCookies, now: currentTime)
         let didRetireWebsiteSession = await retireAuthenticationWebsiteSession()
         return !deletionFailed && remainingMatches.isEmpty && didRetireWebsiteSession ? .removed : .cleanupFailed
     }
@@ -706,8 +939,8 @@ private actor VolatileWebCredentialHandoff: CredentialSource {
 private final class WebAuthenticationRenewalDriver {
     private var activeAttempt: WebAuthenticationRenewalAttempt?
 
-    func refresh(_ snapshot: BrowserAuthenticationSessionSnapshot) async -> AuthenticationCredential? {
-        guard activeAttempt == nil else { return nil }
+    func refresh(_ snapshot: BrowserAuthenticationSessionSnapshot) async -> BrowserSessionRenewalDriverResult {
+        guard activeAttempt == nil else { return .failed(.attemptAlreadyInProgress) }
         let attempt = WebAuthenticationRenewalAttempt(snapshot: snapshot)
         activeAttempt = attempt
         defer { activeAttempt = nil }
@@ -720,15 +953,16 @@ private final class WebAuthenticationRenewalAttempt: NSObject, WKNavigationDeleg
     private let snapshot: BrowserAuthenticationSessionSnapshot
     private let configuration = WebAuthenticationBridge.makeConfiguration()
     private var webView: WKWebView?
-    private var continuation: CheckedContinuation<AuthenticationCredential?, Never>?
+    private var continuation: CheckedContinuation<BrowserSessionRenewalDriverResult, Never>?
     private var timeoutTask: Task<Void, Never>?
     private var completed = false
+    private var latestObservedFailure: BrowserSessionRenewalDriverFailure?
 
     init(snapshot: BrowserAuthenticationSessionSnapshot) {
         self.snapshot = snapshot
     }
 
-    func run() async -> AuthenticationCredential? {
+    func run() async -> BrowserSessionRenewalDriverResult {
         await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
                 self.continuation = continuation
@@ -737,32 +971,38 @@ private final class WebAuthenticationRenewalAttempt: NSObject, WKNavigationDeleg
                 }
             }
         } onCancel: {
-            Task { @MainActor [weak self] in self?.finish(nil) }
+            Task { @MainActor [weak self] in self?.finish(.failed(.cancelled)) }
         }
     }
 
     private func start() async {
-        guard !completed,
-              let authenticationCookie = makeCookie(
+        guard !completed else { return }
+        guard let authenticationCookie = makeCookie(
                 name: "AUTH_TOKEN",
                 value: snapshot.authenticationCookieValue,
                 expires: snapshot.refreshTokenExpiresAt
-              ),
-              let playerURL = URL(string: "https://www.siriusxm.com/player") else {
-            finish(nil)
+              ) else {
+            finish(.failed(.cookieRehydrationFailed))
+            return
+        }
+        guard let playerURL = URL(string: "https://www.siriusxm.com/player") else {
+            finish(.failed(.configurationUnavailable))
             return
         }
 
         let cookieStore = configuration.websiteDataStore.httpCookieStore
         cookieStore.add(self)
         await cookieStore.setCookie(authenticationCookie)
-        if let deviceGrantCookieValue = snapshot.deviceGrantCookieValue,
-           let deviceGrantExpiresAt = snapshot.deviceGrantExpiresAt,
-           let deviceGrantCookie = makeCookie(
-               name: "DEVICE_GRANT",
-               value: deviceGrantCookieValue,
-               expires: deviceGrantExpiresAt
-           ) {
+        if let deviceGrantCookieValue = snapshot.deviceGrantCookieValue {
+            guard let deviceGrantExpiresAt = snapshot.deviceRefreshGrantExpiresAt ?? snapshot.deviceGrantExpiresAt,
+                  let deviceGrantCookie = makeCookie(
+                      name: "DEVICE_GRANT",
+                      value: deviceGrantCookieValue,
+                      expires: deviceGrantExpiresAt
+                  ) else {
+                finish(.failed(.cookieRehydrationFailed))
+                return
+            }
             await cookieStore.setCookie(deviceGrantCookie)
         }
 
@@ -775,7 +1015,8 @@ private final class WebAuthenticationRenewalAttempt: NSObject, WKNavigationDeleg
         timeoutTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(20))
             guard !Task.isCancelled else { return }
-            self?.finish(nil)
+            guard let self else { return }
+            self.finish(.failed(self.latestObservedFailure ?? .timedOutWaitingForCredential))
         }
     }
 
@@ -792,11 +1033,11 @@ private final class WebAuthenticationRenewalAttempt: NSObject, WKNavigationDeleg
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        finish(nil)
+        finish(.failed(.navigationFailed))
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        finish(nil)
+        finish(.failed(.navigationFailed))
     }
 
     func webView(
@@ -821,16 +1062,32 @@ private final class WebAuthenticationRenewalAttempt: NSObject, WKNavigationDeleg
     private func inspect(_ cookieStore: WKHTTPCookieStore) async {
         guard !completed else { return }
         let cookies = await cookieStore.allCookies()
-        guard case let .credential(credential) = WebCredentialSelectionPolicy.select(from: cookies, now: Date()),
-              let refreshedSnapshot = credential.browserSessionSnapshot(),
-              refreshedSnapshot.accessTokenExpiresAt > snapshot.accessTokenExpiresAt.addingTimeInterval(60),
-              refreshedSnapshot.refreshTokenExpiresAt > Date() else {
-            return
+        let currentTime = Date()
+        switch WebCredentialSelectionPolicy.select(from: cookies, now: currentTime) {
+        case .missing:
+            latestObservedFailure = .replacementCredentialMissing
+        case .ambiguous:
+            latestObservedFailure = .replacementCredentialAmbiguous
+        case .malformed:
+            latestObservedFailure = .replacementCredentialMalformed
+        case let .credential(credential):
+            guard let refreshedSnapshot = credential.browserSessionSnapshot() else {
+                latestObservedFailure = .replacementCredentialMalformed
+                return
+            }
+            guard refreshedSnapshot.accessTokenExpiresAt > snapshot.accessTokenExpiresAt.addingTimeInterval(60) else {
+                latestObservedFailure = .accessTokenUnchanged
+                return
+            }
+            guard refreshedSnapshot.refreshTokenExpiresAt > currentTime else {
+                latestObservedFailure = .replacementRenewalExpired
+                return
+            }
+            finish(.refreshed(credential))
         }
-        finish(credential)
     }
 
-    private func finish(_ credential: AuthenticationCredential?) {
+    private func finish(_ result: BrowserSessionRenewalDriverResult) {
         guard !completed else { return }
         completed = true
         timeoutTask?.cancel()
@@ -839,7 +1096,7 @@ private final class WebAuthenticationRenewalAttempt: NSObject, WKNavigationDeleg
         webView?.stopLoading()
         webView?.navigationDelegate = nil
         webView = nil
-        continuation?.resume(returning: credential)
+        continuation?.resume(returning: result)
         continuation = nil
     }
 

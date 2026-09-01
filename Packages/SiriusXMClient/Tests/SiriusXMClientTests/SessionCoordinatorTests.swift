@@ -66,6 +66,179 @@ struct SessionCoordinatorTests {
         #expect(await store.saveCount == 2)
     }
 
+#if DEBUG
+    @Test("qualification renews a fresh active credential once and proves cookie rotation twice")
+    func qualifiesFreshCredentialAndPersistsEachRotation() async throws {
+        let initial = try browserCredential(
+            accessToken: "synthetic-current-access",
+            accessExpiresAt: Date(timeIntervalSince1970: 20_000)
+        )
+        let firstReplacement = try browserCredential(
+            accessToken: "synthetic-first-replacement",
+            accessExpiresAt: Date(timeIntervalSince1970: 30_000)
+        )
+        let secondReplacement = try browserCredential(
+            accessToken: "synthetic-second-replacement",
+            accessExpiresAt: Date(timeIntervalSince1970: 40_000)
+        )
+        let refresher = SequencedCredentialRefresher([firstReplacement, secondReplacement])
+        let store = RecordingCredentialStore()
+        let coordinator = SessionCoordinator(
+            credentialSource: RecordingCredentialSource(credential: initial),
+            authenticationVerifier: RecordingAuthenticationVerifier(response: response(body: SanitizedNativeResponseFixtures.profileV4Authenticated)),
+            entitlementVerifier: RecordingEntitlementVerifier(response: response(body: SanitizedNativeResponseFixtures.subscriptionV1Active)),
+            credentialStore: store,
+            credentialRefresher: refresher,
+            clock: FixedSessionClock(),
+            diagnostics: RecordingDiagnostics()
+        )
+
+        #expect(await coordinator.attemptSession() == .active)
+        #expect(await coordinator.qualifyCurrentCredentialRenewal() == .replacementPersisted)
+        #expect(await coordinator.qualifyCurrentCredentialRenewal() == .replacementPersisted)
+        #expect(await refresher.refreshCount == 2)
+        // Initial post-entitlement save plus one atomic save for each rotation.
+        #expect(await store.saveCount == 3)
+        guard case .active = await coordinator.snapshot else {
+            Issue.record("Qualification must preserve the active session")
+            return
+        }
+    }
+
+    @Test("qualification fails closed when renewal does not return a replacement")
+    func qualificationWithoutReplacementPreservesActiveSession() async throws {
+        let initial = try browserCredential(
+            accessToken: "synthetic-current-access",
+            accessExpiresAt: Date(timeIntervalSince1970: 20_000)
+        )
+        let refresher = RecordingCredentialRefresher(result: nil)
+        let store = RecordingCredentialStore()
+        let coordinator = SessionCoordinator(
+            credentialSource: RecordingCredentialSource(credential: initial),
+            authenticationVerifier: RecordingAuthenticationVerifier(response: response(body: SanitizedNativeResponseFixtures.profileV4Authenticated)),
+            entitlementVerifier: RecordingEntitlementVerifier(response: response(body: SanitizedNativeResponseFixtures.subscriptionV1Active)),
+            credentialStore: store,
+            credentialRefresher: refresher,
+            clock: FixedSessionClock(),
+            diagnostics: RecordingDiagnostics()
+        )
+
+        #expect(await coordinator.attemptSession() == .active)
+        #expect(await coordinator.qualifyCurrentCredentialRenewal() == .renewalUnavailable)
+        #expect(await refresher.refreshCount == 1)
+        #expect(await store.saveCount == 1)
+        guard case .active = await coordinator.snapshot else {
+            Issue.record("A closed qualification failure must preserve the active session")
+            return
+        }
+    }
+
+    @Test("qualification rejects overlap instead of joining or retrying")
+    func qualificationRejectsConcurrentAttempt() async throws {
+        let initial = try browserCredential(
+            accessToken: "synthetic-current-access",
+            accessExpiresAt: Date(timeIntervalSince1970: 20_000)
+        )
+        let replacement = try browserCredential(
+            accessToken: "synthetic-replacement-access",
+            accessExpiresAt: Date(timeIntervalSince1970: 30_000)
+        )
+        let refresher = BlockingCredentialRefresher(result: replacement)
+        let coordinator = SessionCoordinator(
+            credentialSource: RecordingCredentialSource(credential: initial),
+            authenticationVerifier: RecordingAuthenticationVerifier(response: response(body: SanitizedNativeResponseFixtures.profileV4Authenticated)),
+            entitlementVerifier: RecordingEntitlementVerifier(response: response(body: SanitizedNativeResponseFixtures.subscriptionV1Active)),
+            credentialStore: RecordingCredentialStore(),
+            credentialRefresher: refresher,
+            clock: FixedSessionClock(),
+            diagnostics: RecordingDiagnostics()
+        )
+
+        #expect(await coordinator.attemptSession() == .active)
+        let first = Task { await coordinator.qualifyCurrentCredentialRenewal() }
+        await refresher.waitUntilStarted()
+        #expect(await coordinator.qualifyCurrentCredentialRenewal() == .attemptInProgress)
+        await refresher.release()
+        #expect(await first.value == .replacementPersisted)
+        #expect(await refresher.refreshCount == 1)
+    }
+#endif
+
+    @Test("a down authentication endpoint remains a closed support-visible transport outcome")
+    func recordsAuthenticationEndpointConnectionFailure() async {
+        let diagnostics = OSLogSessionDiagnostics()
+        let coordinator = SessionCoordinator(
+            credentialSource: RecordingCredentialSource(),
+            authenticationVerifier: RecordingAuthenticationVerifier(response: NativeTransportResponse(
+                statusCode: 0,
+                contentType: nil,
+                body: Data(),
+                transportFailure: SafeTransportFailure(error: URLError(.cannotConnectToHost))
+            )),
+            entitlementVerifier: RecordingEntitlementVerifier(response: response(body: SanitizedNativeResponseFixtures.subscriptionV1Active)),
+            credentialStore: RecordingCredentialStore(),
+            clock: FixedSessionClock(),
+            diagnostics: diagnostics
+        )
+        let client = SiriusXMClient(
+            sessionCoordinator: coordinator,
+            retainedSessionDiagnostics: diagnostics
+        )
+
+        #expect(await client.authenticate() == .unsupported)
+        #expect(await client.latestAuthenticationDiagnostic() == .transportConnectionFailed)
+    }
+
+    @Test("a refreshed credential that cannot be persisted fails before endpoint verification")
+    func renewalPersistenceFailureStopsBeforeAuthentication() async throws {
+        let initial = try browserCredential(
+            accessToken: "synthetic-expired-access",
+            accessExpiresAt: Date(timeIntervalSince1970: 0)
+        )
+        let refreshed = try browserCredential(
+            accessToken: "synthetic-refreshed-access",
+            accessExpiresAt: Date(timeIntervalSince1970: 20_000)
+        )
+        let authentication = RecordingAuthenticationVerifier(
+            response: response(body: SanitizedNativeResponseFixtures.profileV4Authenticated)
+        )
+        let diagnostics = RecordingDiagnostics()
+        let coordinator = SessionCoordinator(
+            credentialSource: RecordingCredentialSource(credential: initial),
+            authenticationVerifier: authentication,
+            entitlementVerifier: RecordingEntitlementVerifier(response: response(body: SanitizedNativeResponseFixtures.subscriptionV1Active)),
+            credentialStore: FailingCredentialStore(),
+            credentialRefresher: RecordingCredentialRefresher(result: refreshed),
+            clock: FixedSessionClock(),
+            diagnostics: diagnostics
+        )
+
+        #expect(await coordinator.attemptSession() == .credentialPersistenceFailed)
+        #expect(await authentication.callCount == 0)
+        #expect(await diagnostics.events == [.credentialPersistenceFailed])
+    }
+
+    @Test("an expiring stored credential without a renewal is reported distinctly")
+    func reportsUnavailableCredentialBeforeAuthentication() async throws {
+        let expired = try browserCredential(
+            accessToken: "synthetic-expired-access",
+            accessExpiresAt: Date(timeIntervalSince1970: 0)
+        )
+        let diagnostics = RecordingDiagnostics()
+        let coordinator = SessionCoordinator(
+            credentialSource: RecordingCredentialSource(credential: expired),
+            authenticationVerifier: RecordingAuthenticationVerifier(response: response(body: SanitizedNativeResponseFixtures.profileV4Authenticated)),
+            entitlementVerifier: RecordingEntitlementVerifier(response: response(body: SanitizedNativeResponseFixtures.subscriptionV1Active)),
+            credentialStore: RecordingCredentialStore(),
+            credentialRefresher: RecordingCredentialRefresher(result: nil),
+            clock: FixedSessionClock(),
+            diagnostics: diagnostics
+        )
+
+        #expect(await coordinator.attemptSession() == .authentication(.credentialUnavailable))
+        #expect(await diagnostics.events == [.authentication(.credentialUnavailable)])
+    }
+
     @Test("overlapping active operations share one browser renewal")
     func activeOperationsSingleFlightRenewal() async throws {
         let initial = try browserCredential(
@@ -391,6 +564,27 @@ private actor RecordingCredentialRefresher: CredentialRefresher {
         return result
     }
 }
+
+#if DEBUG
+private actor SequencedCredentialRefresher: CredentialRefresher {
+    private var results: [AuthenticationCredential]
+    private(set) var refreshCount = 0
+
+    init(_ results: [AuthenticationCredential]) {
+        self.results = results
+    }
+
+    func refreshedCredential(ifNeeded credential: AuthenticationCredential) async -> AuthenticationCredential? {
+        credential
+    }
+
+    func refreshedCredentialForQualification(_: AuthenticationCredential) async -> AuthenticationCredential? {
+        refreshCount += 1
+        guard !results.isEmpty else { return nil }
+        return results.removeFirst()
+    }
+}
+#endif
 
 private actor BlockingCredentialRefresher: CredentialRefresher {
     private let result: AuthenticationCredential

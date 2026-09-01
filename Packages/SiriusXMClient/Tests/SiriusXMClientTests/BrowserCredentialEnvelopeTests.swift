@@ -16,6 +16,7 @@ struct BrowserCredentialEnvelopeTests {
 
         #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer synthetic-renewable-access")
         #expect(snapshot.accessTokenExpiresAt == Date(timeIntervalSince1970: 10_800))
+        #expect(snapshot.diagnosticCredentialIdentifier != nil)
         #expect(snapshot.renewalDisposition == .refreshToken)
         #expect(credential.description == "AuthenticationCredential(redacted)")
         #expect(credential.debugDescription == "AuthenticationCredential(redacted)")
@@ -34,11 +35,36 @@ struct BrowserCredentialEnvelopeTests {
         #expect(authenticationOnly.browserSessionSnapshot()?.deviceGrantCookieValue == nil)
         #expect(authenticationOnly.browserSessionSnapshot()?.deviceGrantDisposition == .absent)
         #expect(authenticationOnly.browserSessionSnapshot()?.renewalDisposition == .refreshToken)
+        #expect(
+            authenticationOnly.browserSessionSnapshot()?.diagnosticCredentialIdentifier !=
+                snapshot.diagnosticCredentialIdentifier
+        )
     }
 
-    @Test("the current browser session renews through DEVICE_GRANT when AUTH_TOKEN omits refreshToken")
+    @Test("legacy envelopes gain a random diagnostic identifier without changing authorization")
+    func upgradesLegacyEnvelopeForRedactedCorrelation() throws {
+        let original = try browserCredential(
+            accessToken: "synthetic-legacy-envelope-access",
+            accessExpiresAt: Date(timeIntervalSince1970: 10_800)
+        )
+        let material = original.withVolatileMaterial { $0 }
+        var object = try #require(JSONSerialization.jsonObject(with: material) as? [String: Any])
+        object.removeValue(forKey: "diagnosticIdentifier")
+        let legacyMaterial = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+        let legacy = AuthenticationCredential(volatileMaterial: legacyMaterial)
+
+        #expect(legacy.browserSessionSnapshot()?.diagnosticCredentialIdentifier == nil)
+        let upgraded = try #require(legacy.addingDiagnosticIdentifierIfMissing())
+        #expect(upgraded.browserSessionSnapshot()?.diagnosticCredentialIdentifier != nil)
+        #expect(upgraded.addingDiagnosticIdentifierIfMissing() == nil)
+        let request = try SiriusXMRequestContract.makeRequest(for: .authentication, using: upgraded)
+        #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer synthetic-legacy-envelope-access")
+    }
+
+    @Test("the current browser session requires the scoped refresh cookie when AUTH_TOKEN omits refreshToken")
     func acceptsCurrentSplitRenewalContract() throws {
         let authenticationCookie = encodedCookie([
+            "identityGrant": ["grant": "synthetic-identity-grant", "identityId": "synthetic-identity"],
             "session": [
                 "accessToken": "synthetic-current-access",
                 "accessTokenExpiresAt": providerDate(Date(timeIntervalSince1970: 10_800)),
@@ -56,12 +82,13 @@ struct BrowserCredentialEnvelopeTests {
 
         let credential = try AuthenticationCredential(
             browserAuthenticationCookieValue: authenticationCookie,
-            browserDeviceGrantCookieValue: deviceGrantCookie
+            browserDeviceGrantCookieValue: deviceGrantCookie,
+            browserSessionRefreshCookieValue: "synthetic-session-refresh-cookie"
         )
         let snapshot = try #require(credential.browserSessionSnapshot())
         let request = try SiriusXMRequestContract.makeRequest(for: .authentication, using: credential)
 
-        #expect(snapshot.renewalDisposition == .deviceGrant)
+        #expect(snapshot.renewalDisposition == .sessionRefreshCookie)
         #expect(snapshot.deviceGrantDisposition == .accepted)
         #expect(snapshot.deviceGrantCookieValue != nil)
         #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer synthetic-current-access")
@@ -69,11 +96,11 @@ struct BrowserCredentialEnvelopeTests {
         do {
             _ = try AuthenticationCredential(
                 browserAuthenticationCookieValue: authenticationCookie,
-                browserDeviceGrantCookieValue: nil
+                browserDeviceGrantCookieValue: deviceGrantCookie
             )
-            Issue.record("Expected an access-token-only credential to fail closed")
+            Issue.record("Expected a current credential without its refresh cookie to fail closed")
         } catch let error as AuthenticationCredentialMaterialError {
-            #expect(error == .refreshTokenMissing)
+            #expect(error == .sessionRefreshCookieMissing)
         } catch {
             Issue.record("Expected the closed material error vocabulary")
         }
@@ -176,7 +203,7 @@ struct BrowserCredentialEnvelopeTests {
             (encodedCookie(["session": [
                 "accessToken": "access",
                 "accessTokenExpiresAt": expiry,
-            ]]), .refreshTokenMissing),
+            ]]), .refreshTokenExpiryMissing),
             (encodedCookie(["session": [
                 "accessToken": "access",
                 "accessTokenExpiresAt": expiry,

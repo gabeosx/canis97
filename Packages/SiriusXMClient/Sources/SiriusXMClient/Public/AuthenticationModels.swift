@@ -22,13 +22,16 @@ public struct AuthenticationCredential: Sendable, CustomStringConvertible, Custo
     @_spi(AppIntegration)
     public init(
         browserAuthenticationCookieValue: String,
-        browserDeviceGrantCookieValue: String?
+        browserDeviceGrantCookieValue: String?,
+        browserSessionRefreshCookieValue: String? = nil
     ) throws {
         let envelope = BrowserCredentialEnvelope(
             format: BrowserCredentialEnvelope.expectedFormat,
             version: BrowserCredentialEnvelope.currentVersion,
+            diagnosticIdentifier: UUID(),
             authenticationCookieValue: browserAuthenticationCookieValue,
-            deviceGrantCookieValue: browserDeviceGrantCookieValue
+            deviceGrantCookieValue: browserDeviceGrantCookieValue,
+            sessionRefreshCookieValue: browserSessionRefreshCookieValue
         )
         _ = try Self.parseBrowserCredential(from: envelope)
         let encoded: Data
@@ -60,6 +63,31 @@ public struct AuthenticationCredential: Sendable, CustomStringConvertible, Custo
     public func browserSessionSnapshot() -> BrowserAuthenticationSessionSnapshot? {
         guard let envelope = Self.decodeEnvelope(from: material) else { return nil }
         return Self.parsedBrowserCredential(from: envelope)?.snapshot
+    }
+
+    /// Upgrades an older supported envelope with a random, non-secret identifier
+    /// that lets support reports correlate one stored credential with one renewal
+    /// attempt without hashing or exposing any token material.
+    @_spi(AppIntegration)
+    public func addingDiagnosticIdentifierIfMissing() -> AuthenticationCredential? {
+        guard let envelope = Self.decodeEnvelope(from: material),
+              envelope.diagnosticIdentifier == nil else {
+            return nil
+        }
+        let upgradedEnvelope = BrowserCredentialEnvelope(
+            format: envelope.format,
+            version: envelope.version,
+            diagnosticIdentifier: UUID(),
+            authenticationCookieValue: envelope.authenticationCookieValue,
+            deviceGrantCookieValue: envelope.deviceGrantCookieValue,
+            sessionRefreshCookieValue: envelope.sessionRefreshCookieValue
+        )
+        guard let encoded = try? JSONEncoder().encode(upgradedEnvelope),
+              encoded.count <= Self.maximumEnvelopeSize,
+              Self.parsedBrowserCredential(from: upgradedEnvelope) != nil else {
+            return nil
+        }
+        return AuthenticationCredential(volatileMaterial: encoded)
     }
 
     /// Performs app-integration work with only the current access token, never the
@@ -95,11 +123,72 @@ public struct AuthenticationCredential: Sendable, CustomStringConvertible, Custo
         return parsed.snapshot.accessTokenExpiresAt <= date.addingTimeInterval(leeway)
     }
 
+    func sessionRenewalMaterial(at date: Date) -> SessionRenewalPreparation {
+        guard let envelope = Self.decodeEnvelope(from: material),
+              let parsed = Self.parsedBrowserCredential(from: envelope)
+        else {
+            return .unsupported
+        }
+        guard parsed.snapshot.refreshTokenExpiresAt > date else { return .expired }
+        switch parsed.snapshot.renewalDisposition {
+        case .refreshToken:
+            guard let authenticationJSON = Self.decodedCookieJSON(envelope.authenticationCookieValue),
+                  let session = authenticationJSON["session"] as? [String: Any],
+                  let refreshToken = Self.boundedSecret(session["refreshToken"]) else {
+                return .unsupported
+            }
+            return .ready(.bearerRefreshToken(refreshToken))
+        case .sessionRefreshCookie:
+            guard let refreshCookie = Self.boundedCookieSecret(envelope.sessionRefreshCookieValue) else {
+                return .unsupported
+            }
+            return .ready(.sessionRefreshCookie(refreshCookie))
+        }
+    }
+
+    func replacingBrowserSession(
+        with responseBody: Data,
+        sessionRefreshCookieValue: String,
+        at date: Date
+    ) -> AuthenticationCredential? {
+        guard responseBody.count <= Self.maximumEnvelopeSize,
+              Self.boundedCookieSecret(sessionRefreshCookieValue) != nil,
+              let replacement = try? JSONSerialization.jsonObject(with: responseBody) as? [String: Any],
+              Self.boundedSecret(replacement["accessToken"]) != nil,
+              let accessTokenExpiresAt = Self.providerDate(replacement["accessTokenExpiresAt"]),
+              accessTokenExpiresAt > date.addingTimeInterval(300),
+              let renewalExpiresAt = Self.providerDate(replacement["refreshTokenExpiresAt"]),
+              renewalExpiresAt > date,
+              (replacement["sessionType"] as? String) == "authenticated",
+              let envelope = Self.decodeEnvelope(from: material),
+              var authenticationJSON = Self.decodedCookieJSON(envelope.authenticationCookieValue)
+        else {
+            return nil
+        }
+
+        authenticationJSON["session"] = replacement
+        guard JSONSerialization.isValidJSONObject(authenticationJSON),
+              let encodedJSON = try? JSONSerialization.data(
+                  withJSONObject: authenticationJSON,
+                  options: [.sortedKeys]
+              ),
+              let JSONString = String(data: encodedJSON, encoding: .utf8),
+              let cookieValue = JSONString.addingPercentEncoding(withAllowedCharacters: .alphanumerics)
+        else {
+            return nil
+        }
+        return try? AuthenticationCredential(
+            browserAuthenticationCookieValue: cookieValue,
+            browserDeviceGrantCookieValue: envelope.deviceGrantCookieValue,
+            browserSessionRefreshCookieValue: sessionRefreshCookieValue
+        )
+    }
+
     private static func decodeEnvelope(from material: Data) -> BrowserCredentialEnvelope? {
         guard material.count <= maximumEnvelopeSize,
               let envelope = try? JSONDecoder().decode(BrowserCredentialEnvelope.self, from: material),
               envelope.format == BrowserCredentialEnvelope.expectedFormat,
-              envelope.version == BrowserCredentialEnvelope.currentVersion else {
+              BrowserCredentialEnvelope.supportedVersions.contains(envelope.version) else {
             return nil
         }
         return envelope
@@ -155,24 +244,18 @@ public struct AuthenticationCredential: Sendable, CustomStringConvertible, Custo
             deviceGrantDisposition = .absent
         }
 
-        // SiriusXM 7.131.0 no longer serializes refreshToken in an authenticated
-        // AUTH_TOKEN. Its browser client retains renewable authority across the
-        // paired DEVICE_GRANT instead. Preserve the older direct-refresh variant,
-        // but require one complete renewal path before accepting persistent
-        // material; an access token alone remains insufficient.
+        // SiriusXM Web 7.131.0 stores the current long-lived renewal credential
+        // in the HttpOnly `sxm-refresh-token` cookie. Older captured sessions may
+        // instead serialize `refreshToken` inside AUTH_TOKEN. Identity and device
+        // grants are not accepted as substitutes for either session credential.
         let refreshToken: String?
-        let renewalDisposition: BrowserRenewalDisposition
         if let refreshTokenValue = session["refreshToken"] {
             guard let parsedRefreshToken = boundedSecret(refreshTokenValue) else {
                 throw AuthenticationCredentialMaterialError.refreshTokenInvalid
             }
             refreshToken = parsedRefreshToken
-            renewalDisposition = .refreshToken
-        } else if deviceGrant != nil {
-            refreshToken = nil
-            renewalDisposition = .deviceGrant
         } else {
-            throw AuthenticationCredentialMaterialError.refreshTokenMissing
+            refreshToken = nil
         }
         guard let refreshTokenExpiryValue = session["refreshTokenExpiresAt"] else {
             throw AuthenticationCredentialMaterialError.refreshTokenExpiryMissing
@@ -181,10 +264,22 @@ public struct AuthenticationCredential: Sendable, CustomStringConvertible, Custo
             throw AuthenticationCredentialMaterialError.refreshTokenExpiryInvalid
         }
 
+        let renewalDisposition: BrowserRenewalDisposition
+        if refreshToken != nil {
+            renewalDisposition = .refreshToken
+        } else if envelope.sessionRefreshCookieValue == nil {
+            throw AuthenticationCredentialMaterialError.sessionRefreshCookieMissing
+        } else if boundedCookieSecret(envelope.sessionRefreshCookieValue) != nil {
+            renewalDisposition = .sessionRefreshCookie
+        } else {
+            throw AuthenticationCredentialMaterialError.sessionRefreshCookieInvalid
+        }
+
         _ = refreshToken
         return ParsedBrowserCredential(
             accessToken: accessToken,
             snapshot: BrowserAuthenticationSessionSnapshot(
+                diagnosticCredentialIdentifier: envelope.diagnosticIdentifier,
                 authenticationCookieValue: envelope.authenticationCookieValue,
                 deviceGrantCookieValue: deviceGrant?.cookieValue,
                 accessTokenExpiresAt: accessTokenExpiresAt,
@@ -244,6 +339,14 @@ public struct AuthenticationCredential: Sendable, CustomStringConvertible, Custo
         return value
     }
 
+    private static func boundedCookieSecret(_ value: String?) -> String? {
+        guard let value = boundedSecret(value),
+              !value.contains(";") else {
+            return nil
+        }
+        return value
+    }
+
     private static func providerDate(_ value: Any?) -> Date? {
         if let value = value as? String {
             let fractionalFormatter = ISO8601DateFormatter()
@@ -289,6 +392,9 @@ private enum JSONDictionary {
 
 @_spi(AppIntegration)
 public struct BrowserAuthenticationSessionSnapshot: Sendable {
+    /// A random app-generated identifier stored beside the credential. This is
+    /// safe for support reports and has no mathematical relationship to a token.
+    public let diagnosticCredentialIdentifier: UUID?
     public let authenticationCookieValue: String
     public let deviceGrantCookieValue: String?
     public let accessTokenExpiresAt: Date
@@ -312,7 +418,7 @@ public enum BrowserDeviceGrantDisposition: String, Sendable, Equatable {
 @_spi(AppIntegration)
 public enum BrowserRenewalDisposition: String, Sendable, Equatable {
     case refreshToken = "refresh-token"
-    case deviceGrant = "device-grant"
+    case sessionRefreshCookie = "session-refresh-cookie"
 }
 
 /// Redacted structural reason that browser material could not become a reusable
@@ -332,6 +438,9 @@ public enum AuthenticationCredentialMaterialError: String, Error, Sendable, Equa
     case refreshTokenInvalid = "refresh-token-invalid"
     case refreshTokenExpiryMissing = "refresh-token-expiry-missing"
     case refreshTokenExpiryInvalid = "refresh-token-expiry-invalid"
+    case sessionRefreshCookieMissing = "session-refresh-cookie-missing"
+    case sessionRefreshCookieInvalid = "session-refresh-cookie-invalid"
+    case renewalAuthorityMissing = "renewal-authority-missing"
     case sessionTypeRejected = "session-type-rejected"
     case envelopeEncodingFailed = "envelope-encoding-failed"
     case envelopeTooLarge = "envelope-too-large"
@@ -339,12 +448,15 @@ public enum AuthenticationCredentialMaterialError: String, Error, Sendable, Equa
 
 private struct BrowserCredentialEnvelope: Codable {
     static let expectedFormat = "siriusxm-browser-session"
-    static let currentVersion = 1
+    static let currentVersion = 2
+    static let supportedVersions = Set([1, currentVersion])
 
     let format: String
     let version: Int
+    let diagnosticIdentifier: UUID?
     let authenticationCookieValue: String
     let deviceGrantCookieValue: String?
+    let sessionRefreshCookieValue: String?
 }
 
 private struct ParsedBrowserCredential {
@@ -356,6 +468,17 @@ private struct ParsedDeviceGrant {
     let cookieValue: String
     let grantExpiresAt: Date
     let refreshGrantExpiresAt: Date
+}
+
+enum SessionRenewalMaterial: Sendable, Equatable {
+    case bearerRefreshToken(String)
+    case sessionRefreshCookie(String)
+}
+
+enum SessionRenewalPreparation: Sendable, Equatable {
+    case ready(SessionRenewalMaterial)
+    case expired
+    case unsupported
 }
 
 /// Supplies an opaque credential to the client without exposing integration mechanics.
@@ -372,7 +495,33 @@ public protocol CredentialStore: Sendable {
 /// Renews an expiring browser-issued credential without collecting account credentials.
 public protocol CredentialRefresher: Sendable {
     func refreshedCredential(ifNeeded credential: AuthenticationCredential) async -> AuthenticationCredential?
+
+#if DEBUG
+    /// Exercises one real renewal transaction even when the access credential
+    /// is still fresh. This exists only for an owner-initiated qualification
+    /// build and must never be used as an automatic retry path.
+    func refreshedCredentialForQualification(_ credential: AuthenticationCredential) async -> AuthenticationCredential?
+#endif
 }
+
+#if DEBUG
+public extension CredentialRefresher {
+    func refreshedCredentialForQualification(_ credential: AuthenticationCredential) async -> AuthenticationCredential? {
+        await refreshedCredential(ifNeeded: credential)
+    }
+}
+
+/// Closed result of one owner-initiated, Debug-only session-renewal proof.
+/// No credential, provider response, URL, header, or error text crosses this boundary.
+public enum AuthenticationRenewalQualificationOutcome: String, Sendable, Equatable {
+    case replacementPersisted = "replacement-persisted"
+    case sessionUnavailable = "session-unavailable"
+    case attemptInProgress = "attempt-in-progress"
+    case renewalUnavailable = "renewal-unavailable"
+    case persistenceFailed = "persistence-failed"
+    case replacementUnchanged = "replacement-unchanged"
+}
+#endif
 
 /// Removes app-owned browser residue without exposing browser APIs to the client.
 public protocol AuthenticationResidueCleaner: Sendable {
@@ -389,11 +538,46 @@ public enum AuthenticationResidueCleanupOutcome: Sendable, Equatable {
 public enum AuthenticationOutcome: Sendable, Equatable {
     case waitingForAuthenticationComposition
     case authenticatedPendingEntitlement
+    case credentialUnavailable
     case credentialPersistenceFailed
     case rejected
     case challengeRequired
     case unsupported
     case cancelled
+}
+
+/// The last closed, redacted outcome observed at the native authentication
+/// boundary. This contains no URL, status body, header, token, or account data.
+public enum AuthenticationDiagnosticOutcome: String, Codable, Sendable, Equatable {
+    case completed
+    case rejected
+    case httpUnauthorized = "http-unauthorized"
+    case httpForbidden = "http-forbidden"
+    case challengeRequired = "challenge-required"
+    case rateLimited = "rate-limited"
+    case redirectDrift = "redirect-drift"
+    case botControlDetected = "bot-control-detected"
+    case transportFailure = "transport-failure"
+    case transportTimedOut = "transport-timed-out"
+    case transportNameResolutionFailed = "transport-name-resolution-failed"
+    case transportConnectionFailed = "transport-connection-failed"
+    case transportTLSFailed = "transport-tls-failed"
+    case transportCancelled = "transport-cancelled"
+    case contentTypeMissing = "content-type-missing"
+    case contentTypeHTML = "content-type-html"
+    case unsupportedContentType = "unsupported-content-type"
+    case httpClientError = "http-client-error"
+    case httpNotFound = "http-not-found"
+    case httpServerError = "http-server-error"
+    case unsupportedHTTPStatus = "unsupported-http-status"
+    case payloadEmpty = "payload-empty"
+    case payloadMalformedJSON = "payload-malformed-json"
+    case payloadUnexpectedRoot = "payload-unexpected-root"
+    case unsupportedPayload = "unsupported-payload"
+    case unsupported
+    case cancelled
+    case credentialUnavailable = "credential-unavailable"
+    case credentialPersistenceFailed = "credential-persistence-failed"
 }
 
 /// Semantic entitlement availability for the current client state.

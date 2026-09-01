@@ -93,3 +93,44 @@ enum FirstPartyDeviceGrantCookiePolicy {
         }
     }
 }
+
+/// Exact selection for the current browser session's HttpOnly renewal cookie.
+/// This cookie is intentionally scoped to the SiriusXM refresh endpoint rather
+/// than the web-player origin.
+enum FirstPartySessionRefreshCookiePolicy {
+    static let name = "sxm-refresh-token"
+    static let domain = "api.edge-gateway.siriusxm.com"
+    static let path = "/session/v1/sessions/refresh"
+
+    static func matchingCookies(in cookies: [HTTPCookie], now: Date) -> [HTTPCookie] {
+        cookies.filter { cookie in
+            guard cookie.name == name,
+                  normalizedDomain(of: cookie) == domain,
+                  cookie.path == path,
+                  cookie.isHTTPOnly,
+                  cookie.isSecure,
+                  cookie.expiresDate.map({ $0 > now }) == true else {
+                return false
+            }
+
+            // Foundation does not consistently retain SameSite metadata when a
+            // WKHTTPCookieStore cookie crosses the bridge. When it is present,
+            // fail closed unless it matches the captured current contract.
+            if let sameSite = cookie.properties?[.sameSitePolicy] as? String {
+                return sameSite.caseInsensitiveCompare("None") == .orderedSame
+            }
+            return true
+        }
+    }
+
+    static func hasNamedCookie(in cookies: [HTTPCookie]) -> Bool {
+        cookies.contains { $0.name == name }
+    }
+
+    private static func normalizedDomain(of cookie: HTTPCookie) -> String {
+        String(cookie.domain
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .drop(while: { $0 == "." }))
+    }
+}

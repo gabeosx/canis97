@@ -79,13 +79,15 @@ struct OSLogDiagnosticSink: Sendable {
 }
 
 /// Bridges actor-owned session diagnostics to the closed production OSLog sink.
-struct OSLogSessionDiagnostics: SessionDiagnostics {
+actor OSLogSessionDiagnostics: SessionDiagnostics {
     private let sink = OSLogDiagnosticSink()
+    private var latestAuthenticationDiagnostic: AuthenticationDiagnosticOutcome?
 
     func record(_ event: SessionDiagnosticEvent) async {
         let safeEvent: SafeDiagnosticEvent
         switch event {
         case let .authentication(outcome):
+            latestAuthenticationDiagnostic = AuthenticationDiagnosticOutcome(rawValue: outcome.rawValue) ?? .unsupported
             safeEvent = SafeDiagnosticEvent(
                 operation: .nativeAuthentication,
                 outcome: outcome,
@@ -98,12 +100,14 @@ struct OSLogSessionDiagnostics: SessionDiagnostics {
                 handle: SafeDiagnosticHandle()
             )
         case .credentialPersistenceCompleted:
+            latestAuthenticationDiagnostic = .completed
             safeEvent = SafeDiagnosticEvent(
                 operation: .nativeAuthentication,
                 outcome: .completed,
                 handle: SafeDiagnosticHandle()
             )
         case .credentialPersistenceFailed:
+            latestAuthenticationDiagnostic = .credentialPersistenceFailed
             safeEvent = SafeDiagnosticEvent(
                 operation: .nativeAuthentication,
                 outcome: .credentialPersistenceFailed,
@@ -111,5 +115,9 @@ struct OSLogSessionDiagnostics: SessionDiagnostics {
             )
         }
         sink.record(safeEvent)
+    }
+
+    func latestAuthenticationOutcome() -> AuthenticationDiagnosticOutcome? {
+        latestAuthenticationDiagnostic
     }
 }

@@ -6,6 +6,18 @@ Notable user-facing changes are recorded here. This project follows
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-09-01
+
+### Changed
+
+- Existing 0.1.2 sessions require one fresh SiriusXM sign-in after upgrading because the previous release did not save the long-lived session cookie. Canis97 0.1.3 saves and rotates it for subsequent automatic restores.
+
+### Fixed
+
+- Restored automatic sign-in by renewing expired SiriusXM sessions through the current long-lived session credential and persisting each rotated replacement in Keychain.
+- Loaded the complete paginated SiriusXM channel catalog instead of silently presenting only the first subset of channels.
+- Expanded the support report with redacted credential-load, renewal-attempt, native-authentication, and partial-lineup diagnostics so authentication and catalog failures are actionable.
+
 ## [0.1.2] - 2026-08-31
 
 ### Changed
@@ -36,7 +48,8 @@ No public artifacts were published for this version.
 - GitHub Actions validation, signed/notarized release automation, checksums, and an SPDX SBOM.
 - Homebrew Cask generation and optional tap publishing.
 
-[Unreleased]: https://github.com/gabeosx/canis97/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/gabeosx/canis97/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/gabeosx/canis97/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/gabeosx/canis97/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/gabeosx/canis97/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/gabeosx/canis97/releases/tag/v0.1.0

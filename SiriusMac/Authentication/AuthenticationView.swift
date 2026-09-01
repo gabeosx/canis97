@@ -130,6 +130,9 @@ struct AuthenticationComposition {
     let flow: ComposedAuthenticationPresentationFlow
     let listeningFlow: any ListeningFlow
     let playbackCoordinator: PlaybackCoordinator
+#if DEBUG
+    let renewalQualificationClient: SiriusXMClient?
+#endif
 
     init() {
         self.init(bridge: WebAuthenticationBridge(), keychain: KeychainCredentialStore())
@@ -161,6 +164,9 @@ struct AuthenticationComposition {
             )
             self.listeningFlow = (client as? any ListeningFlow) ?? UnavailableListeningFlow()
             self.playbackCoordinator = injectedPlaybackCoordinator ?? PlaybackCoordinator(resolver: UnavailablePlaybackResolver())
+#if DEBUG
+            renewalQualificationClient = nil
+#endif
         } else {
             let composedClient = SiriusXMClient(
                 credentialSource: credentialSource,
@@ -179,6 +185,9 @@ struct AuthenticationComposition {
                 networkObserver: SystemNetworkPathObserver(),
                 workspaceObserver: SystemWorkspacePowerObserver()
             )
+#if DEBUG
+            renewalQualificationClient = composedClient
+#endif
         }
     }
 }

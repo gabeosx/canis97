@@ -130,7 +130,16 @@ final class KeychainCredentialStore: CredentialStore, @unchecked Sendable {
             return .invalid
         }
 
-        return .credential(AuthenticationCredential(volatileMaterial: storedMaterial))
+        let credential = AuthenticationCredential(volatileMaterial: storedMaterial)
+        guard let upgraded = credential.addingDiagnosticIdentifierIfMissing() else {
+            return .credential(credential)
+        }
+
+        // This migration adds only a random diagnostic identifier beside the
+        // unchanged opaque cookies. Failure to persist the identifier must not
+        // make an otherwise valid SiriusXM session unusable for this launch.
+        try? upgraded.withVolatileMaterial { try save(material: $0) }
+        return .credential(upgraded)
     }
 
     static func classify(status: OSStatus) -> StatusClassification {

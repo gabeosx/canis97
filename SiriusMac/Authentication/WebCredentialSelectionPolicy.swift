@@ -18,16 +18,25 @@ enum WebCredentialSelectionPolicy {
             return .missing(FirstPartyTokenCookiePolicy.rejectionReasons(in: cookies, now: now))
         case 1:
             let deviceGrantCandidates = FirstPartyDeviceGrantCookiePolicy.matchingCookies(in: cookies, now: now)
+            let sessionRefreshCandidates = FirstPartySessionRefreshCookiePolicy.matchingCookies(
+                in: cookies,
+                now: now
+            )
+            guard sessionRefreshCandidates.count <= 1 else { return .ambiguous }
             switch deviceGrantCandidates.count {
             case 0:
                 return browserCredential(
                     authenticationCookie: candidates[0],
-                    deviceGrantCookie: nil
+                    deviceGrantCookie: nil,
+                    sessionRefreshCookie: sessionRefreshCandidates.first,
+                    allCookies: cookies
                 )
             case 1:
                 return browserCredential(
                     authenticationCookie: candidates[0],
-                    deviceGrantCookie: deviceGrantCandidates[0]
+                    deviceGrantCookie: deviceGrantCandidates[0],
+                    sessionRefreshCookie: sessionRefreshCandidates.first,
+                    allCookies: cookies
                 )
             default:
                 return .ambiguous
@@ -39,14 +48,21 @@ enum WebCredentialSelectionPolicy {
 
     private static func browserCredential(
         authenticationCookie: HTTPCookie,
-        deviceGrantCookie: HTTPCookie?
+        deviceGrantCookie: HTTPCookie?,
+        sessionRefreshCookie: HTTPCookie?,
+        allCookies: [HTTPCookie]
     ) -> Result {
         do {
             return .credential(try AuthenticationCredential(
                 browserAuthenticationCookieValue: authenticationCookie.value,
-                browserDeviceGrantCookieValue: deviceGrantCookie?.value
+                browserDeviceGrantCookieValue: deviceGrantCookie?.value,
+                browserSessionRefreshCookieValue: sessionRefreshCookie?.value
             ))
         } catch let error as AuthenticationCredentialMaterialError {
+            if error == .sessionRefreshCookieMissing,
+               FirstPartySessionRefreshCookiePolicy.hasNamedCookie(in: allCookies) {
+                return .malformed(.sessionRefreshCookieInvalid)
+            }
             return .malformed(error)
         } catch {
             return .malformed(.envelopeEncodingFailed)

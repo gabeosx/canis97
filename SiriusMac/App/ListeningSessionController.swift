@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import OSLog
 import SiriusXMClient
 
 /// The two application scene roles that consume the one listening session.
@@ -20,6 +21,35 @@ private enum MetadataAnnouncementState: Equatable {
     case stale
     case unavailable
 }
+
+#if DEBUG
+enum AuthenticationRenewalQualificationState: Equatable {
+    case idle
+    case inProgress
+    case completed(AuthenticationRenewalQualificationOutcome, Date)
+
+    var statusText: String {
+        switch self {
+        case .idle:
+            "No forced renewal has run in this app launch."
+        case .inProgress:
+            "One renewal request is in progress. It will not retry."
+        case let .completed(.replacementPersisted, date):
+            "Replacement received and saved at \(date.formatted(date: .omitted, time: .standard))."
+        case let .completed(.sessionUnavailable, date):
+            "No active entitled session was available at \(date.formatted(date: .omitted, time: .standard))."
+        case let .completed(.attemptInProgress, date):
+            "Another authentication operation was active at \(date.formatted(date: .omitted, time: .standard))."
+        case let .completed(.renewalUnavailable, date):
+            "The one renewal attempt failed closed at \(date.formatted(date: .omitted, time: .standard))."
+        case let .completed(.persistenceFailed, date):
+            "A replacement could not be saved at \(date.formatted(date: .omitted, time: .standard))."
+        case let .completed(.replacementUnchanged, date):
+            "The endpoint did not produce a distinct replacement at \(date.formatted(date: .omitted, time: .standard))."
+        }
+    }
+}
+#endif
 
 private extension LiveListeningFailure {
     /// Recovery-capable and bookkeeping failures are intentionally quiet. The
@@ -170,12 +200,19 @@ enum FavoriteCurrentSongActionState: Equatable {
 @MainActor
 @Observable
 final class ListeningSessionController {
+#if DEBUG
+    private static let renewalQualificationLogger = Logger(
+        subsystem: ProductIdentity.appLogSubsystem,
+        category: "authentication-qualification"
+    )
+#endif
     let composition: AuthenticationComposition
     let authenticationModel: AuthenticationPresentationModel
     let bridge: WebAuthenticationBridge
     let listeningModel: ListeningPresentationModel
     let playbackCoordinator: PlaybackCoordinator
     let libraryStore: LibraryStore
+    let supportDiagnostics: SupportDiagnosticJournal
 
     private let remoteCommandCenter: any RemoteCommandCenterControlling
     private let nowPlayingPublisher: any NowPlayingInfoPublishing
@@ -186,9 +223,15 @@ final class ListeningSessionController {
     private(set) var playbackQueue: PlaybackQueue?
     private(set) var libraryRevealRequest: LibraryRevealRequest?
     private(set) var librarySearchFocusGeneration = 0
+#if DEBUG
+    private(set) var authenticationRenewalQualificationState: AuthenticationRenewalQualificationState = .idle
+    private var authenticationRenewalQualificationTask: Task<Void, Never>?
+#endif
     private var hasTriggeredAutomaticCatalogLoad = false
     private var hasShutdown = false
     private var lastObservedPlaybackState: LivePlaybackState = .idle
+    private var lastObservedAuthenticationDiagnosticState: AuthenticationPresentationState = .signedOut
+    private var lastObservedCatalogDiagnosticState: ListeningPresentationState = .idle
     private var lastObservedMetadataAnnouncementState: MetadataAnnouncementState = .unavailable
     private var announcementGeneration = 0
     private var revealGeneration = 0
@@ -197,6 +240,7 @@ final class ListeningSessionController {
         composition: AuthenticationComposition = AuthenticationComposition(),
         authenticationModel: AuthenticationPresentationModel? = nil,
         libraryStore: LibraryStore? = nil,
+        supportDiagnostics: SupportDiagnosticJournal = SupportDiagnosticJournal(),
         remoteCommandCenter: any RemoteCommandCenterControlling = SystemRemoteCommandCenterAdapter(),
         nowPlayingPublisher: any NowPlayingInfoPublishing = SystemNowPlayingInfoAdapter(),
         accessibilityAnnouncer: AccessibilityAnnouncer = AccessibilityAnnouncer()
@@ -210,13 +254,30 @@ final class ListeningSessionController {
             playbackCoordinator: composition.playbackCoordinator
         )
         self.libraryStore = libraryStore ?? LibraryStore()
+        self.supportDiagnostics = supportDiagnostics
         self.remoteCommandCenter = remoteCommandCenter
         self.nowPlayingPublisher = nowPlayingPublisher
         self.accessibilityAnnouncer = accessibilityAnnouncer
+        let supportDiagnostics = supportDiagnostics
+        bridge.setRenewalDiagnosticHandler { diagnostic in
+            supportDiagnostics.recordRenewalAttempt(diagnostic)
+        }
+        composition.credentialSource.setStoredCredentialLoadDiagnosticHandler { diagnostic in
+            supportDiagnostics.recordStoredCredentialLoad(diagnostic)
+        }
+        composition.credentialSource.setNativeAuthenticationDiagnosticHandler { diagnostic in
+            supportDiagnostics.recordNativeAuthenticationAttempt(diagnostic)
+        }
+        supportDiagnostics.recordAuthenticationState(
+            self.authenticationModel.state.supportStateLabel,
+            successful: self.authenticationModel.state.isSuccessfulForSupport
+        )
         bridge.setAutomaticCredentialReadyHandler { [weak self] in
             self?.authenticationModel.useAutomaticallyDetectedSession()
         }
         observeAuthenticationReadiness()
+        observeAuthenticationDiagnostics()
+        observeCatalogDiagnostics()
         observeConfirmedPlayback()
         observeMetadataAccessibilityState()
     }
@@ -321,6 +382,48 @@ final class ListeningSessionController {
         listeningModel.reset()
     }
 
+#if DEBUG
+    var canQualifyAuthenticationRenewal: Bool {
+        guard composition.renewalQualificationClient != nil,
+              authenticationModel.isReady,
+              authenticationRenewalQualificationTask == nil,
+              !listeningModel.isTunePending,
+              listeningModel.state != .loading
+        else { return false }
+
+        switch listeningModel.playbackState {
+        case .idle, .stopped:
+            return true
+        case .awaitingLiveContract, .playing, .paused, .unavailable:
+            return false
+        }
+    }
+
+    /// Sends one native renewal request through the active client and its real
+    /// Keychain store. The UI must make this an explicit owner action; this
+    /// method never retries or starts catalog/playback work afterward.
+    @discardableResult
+    func qualifyAuthenticationRenewalOnce() -> Task<Void, Never>? {
+        guard canQualifyAuthenticationRenewal,
+              let client = composition.renewalQualificationClient
+        else { return nil }
+
+        authenticationRenewalQualificationState = .inProgress
+        Self.renewalQualificationLogger.notice("owner-initiated renewal qualification started")
+        let task = Task { @MainActor [weak self] in
+            let outcome = await client.qualifyCurrentCredentialRenewal()
+            guard let self, !Task.isCancelled else { return }
+            self.authenticationRenewalQualificationState = .completed(outcome, Date())
+            self.authenticationRenewalQualificationTask = nil
+            Self.renewalQualificationLogger.notice(
+                "owner-initiated renewal qualification completed outcome=\(outcome.rawValue, privacy: .public)"
+            )
+        }
+        authenticationRenewalQualificationTask = task
+        return task
+    }
+#endif
+
     /// Favorite controls send their desired state through this shared route so
     /// a successful store mutation can be announced exactly once.
     func setFavorite(_ snapshot: LibraryChannelSnapshot, isFavorite: Bool) {
@@ -415,6 +518,54 @@ final class ListeningSessionController {
         }
     }
 
+    private func observeAuthenticationDiagnostics() {
+        withObservationTracking {
+            _ = authenticationModel.state
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self, !self.hasShutdown else { return }
+                self.recordAuthenticationDiagnosticIfNeeded()
+                self.observeAuthenticationDiagnostics()
+            }
+        }
+    }
+
+    private func recordAuthenticationDiagnosticIfNeeded() {
+        let state = authenticationModel.state
+        guard state != lastObservedAuthenticationDiagnosticState else { return }
+        lastObservedAuthenticationDiagnosticState = state
+        supportDiagnostics.recordAuthenticationState(
+            state.supportStateLabel,
+            successful: state.isSuccessfulForSupport
+        )
+        guard let code = state.supportDiagnosticCode else { return }
+        supportDiagnostics.record(code)
+    }
+
+    private func observeCatalogDiagnostics() {
+        withObservationTracking {
+            _ = listeningModel.state
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self, !self.hasShutdown else { return }
+                self.recordCatalogDiagnosticIfNeeded()
+                self.observeCatalogDiagnostics()
+            }
+        }
+    }
+
+    private func recordCatalogDiagnosticIfNeeded() {
+        let state = listeningModel.state
+        guard state != lastObservedCatalogDiagnosticState else { return }
+        lastObservedCatalogDiagnosticState = state
+        let failure: CatalogFailure? = switch state {
+        case let .failed(failure), let .stale(_, failure): failure
+        case .idle, .loading, .available, .empty: nil
+        }
+        guard let code = failure?.supportDiagnosticCode else { return }
+        supportDiagnostics.record(code)
+    }
+
     /// Records a recent from an actual coordinator-confirmed transition, never
     /// from a selection or command. Repeated reads of the same state are inert.
     private func observeConfirmedPlayback() {
@@ -435,6 +586,10 @@ final class ListeningSessionController {
         guard state != lastObservedPlaybackState else { return }
         let previousState = lastObservedPlaybackState
         lastObservedPlaybackState = state
+        if case let .unavailable(failure) = state,
+           let code = failure.supportDiagnosticCode {
+            supportDiagnostics.record(code)
+        }
         announceConfirmedPlaybackTransition(from: previousState, to: state)
         guard case let .playing(channelID?) = state,
               let channel = listeningModel.state.snapshot?.channels.first(where: { $0.id == channelID })
@@ -481,10 +636,14 @@ final class ListeningSessionController {
         guard current != lastObservedMetadataAnnouncementState else { return }
         switch current {
         case .stale:
+            supportDiagnostics.record(.metadataRefreshFailed)
             accessibilityAnnouncer.announce(.metadataStale(generation: nextAnnouncementGeneration()))
-        case .unavailable where lastObservedMetadataAnnouncementState != .loading:
-            accessibilityAnnouncer.announce(.metadataUnavailable(generation: nextAnnouncementGeneration()))
-        case .loading, .current, .unavailable:
+        case .unavailable:
+            supportDiagnostics.record(.metadataUnavailable)
+            if lastObservedMetadataAnnouncementState != .loading {
+                accessibilityAnnouncer.announce(.metadataUnavailable(generation: nextAnnouncementGeneration()))
+            }
+        case .loading, .current:
             break
         }
     }
@@ -701,6 +860,96 @@ final class ListeningSessionController {
         case let .playing(playingChannelID?): playingChannelID == channelID
         case .paused: true
         case .awaitingLiveContract, .idle, .playing(nil), .stopped, .unavailable: false
+        }
+    }
+}
+
+private extension AuthenticationPresentationState {
+    var supportStateLabel: String {
+        switch self {
+        case .localCredentialMissing: "local-credential-missing"
+        case .localCredentialInvalid: "local-credential-invalid"
+        case .localCredentialUnavailable: "local-credential-unavailable"
+        case .webSessionResetFailed: "web-session-reset-failed"
+        case .waitingForWebView: "waiting-for-web-sign-in"
+        case .webCredentialMissing: "web-credential-missing"
+        case .webCredentialMalformed: "web-credential-malformed"
+        case .webCredentialAmbiguous: "web-credential-ambiguous"
+        case .verifyingAuthentication: "verifying-authentication"
+        case .verifyingEntitlement: "verifying-entitlement"
+        case .authenticatedButNotEntitled: "authenticated-not-entitled"
+        case .entitled: "authenticated-entitled"
+        case .restoreCompleted: "stored-session-restored"
+        case .profileAuthorizationRejected: "profile-authorization-rejected"
+        case .entitlementAuthorizationRejected: "entitlement-authorization-rejected"
+        case .credentialNotDurable: "credential-persistence-failed"
+        case .rejected: "authentication-rejected"
+        case .challengeRequired: "challenge-required"
+        case .unsupported: "authentication-unsupported"
+        case .signedOut: "signed-out"
+        case .cleanupFailed: "cleanup-failed"
+        case .finishingCleanup: "finishing-cleanup"
+        }
+    }
+
+    var isSuccessfulForSupport: Bool {
+        switch self {
+        case .entitled, .restoreCompleted: true
+        default: false
+        }
+    }
+
+    var supportDiagnosticCode: SupportDiagnosticCode? {
+        switch self {
+        case .localCredentialUnavailable: .authenticationStoredSessionUnavailable
+        case .localCredentialInvalid: .authenticationStoredSessionInvalid
+        case .profileAuthorizationRejected, .rejected: .authenticationRejected
+        case .entitlementAuthorizationRejected, .authenticatedButNotEntitled: .entitlementUnavailable
+        case .challengeRequired: .authenticationChallengeRequired
+        case .unsupported, .webCredentialMalformed, .webCredentialAmbiguous: .authenticationUnsupportedResponse
+        case .webSessionResetFailed: .authenticationWebSessionResetFailed
+        case .credentialNotDurable: .authenticationCredentialPersistenceFailed
+        case .cleanupFailed: .authenticationCleanupFailed
+        case .localCredentialMissing, .waitingForWebView, .webCredentialMissing,
+             .verifyingAuthentication, .verifyingEntitlement, .entitled, .restoreCompleted,
+             .signedOut, .finishingCleanup:
+            nil
+        }
+    }
+}
+
+private extension CatalogFailure {
+    var supportDiagnosticCode: SupportDiagnosticCode? {
+        switch self {
+        case .unavailable: .catalogUnavailable
+        case .authenticationUnavailable: .catalogAuthenticationUnavailable
+        case .notEntitled: .catalogNotEntitled
+        case .partialLineup: .catalogPartialLineup
+        case .paginationUnavailable: .catalogPaginationIncomplete
+        case .collectionUnavailable: .catalogCollectionMissing
+        case .malformedCandidate: .catalogMalformedChannel
+        case .conflictingIdentity: .catalogConflictingIdentity
+        case .unsupportedResponse: .catalogUnsupportedResponse
+        case .cancelled: nil
+        }
+    }
+}
+
+private extension LiveListeningFailure {
+    var supportDiagnosticCode: SupportDiagnosticCode? {
+        switch self {
+        case .authorizationUnavailable: .streamAuthorizationUnavailable
+        case .entitlementUnavailable: .streamEntitlementUnavailable
+        case .catalogUnavailable: .streamCatalogUnavailable
+        case .selectionUnavailable: .streamSelectionUnavailable
+        case .resolutionUnavailable: .streamResolutionUnavailable
+        case .protectedControl: .streamProtectedControl
+        case .networkUnavailable: .playbackNetworkUnavailable
+        case .bufferingUnavailable: .playbackBufferingUnavailable
+        case .decoderUnavailable: .playbackDecoderUnavailable
+        case .recoveryExhausted: .playbackRecoveryExhausted
+        case .unsupported: .playbackUnsupported
+        case .cancelled, .superseded: nil
         }
     }
 }

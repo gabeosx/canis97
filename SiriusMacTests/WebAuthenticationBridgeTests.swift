@@ -189,6 +189,34 @@ final class WebAuthenticationBridgeTests: XCTestCase {
         XCTAssertEqual(FirstPartyTokenCookiePolicy.select(from: [unsupportedPath], now: now), .missing)
     }
 
+    func testSessionRefreshCookieRequiresTheCapturedEndpointScopeAndSecurityFlags() throws {
+        let now = Date()
+        let valid = try sessionRefreshCookie(expires: now.addingTimeInterval(60))
+        let wrongDomain = try authCookie(
+            name: FirstPartySessionRefreshCookiePolicy.name,
+            domain: "www.siriusxm.com",
+            path: FirstPartySessionRefreshCookiePolicy.path,
+            expires: now.addingTimeInterval(60)
+        )
+        let wrongPath = try authCookie(
+            name: FirstPartySessionRefreshCookiePolicy.name,
+            domain: FirstPartySessionRefreshCookiePolicy.domain,
+            path: "/",
+            expires: now.addingTimeInterval(60)
+        )
+
+        XCTAssertEqual(
+            FirstPartySessionRefreshCookiePolicy.matchingCookies(in: [valid], now: now).count,
+            1
+        )
+        XCTAssertTrue(
+            FirstPartySessionRefreshCookiePolicy.matchingCookies(
+                in: [wrongDomain, wrongPath],
+                now: now
+            ).isEmpty
+        )
+    }
+
     func testMalformedOrIncompletePayloadProducesATerminalResult() async throws {
         let now = Date()
         let malformed = try authCookie(value: "not-json", expires: now.addingTimeInterval(60))
@@ -275,7 +303,7 @@ final class WebAuthenticationBridgeTests: XCTestCase {
             credentialConsumer: { _ in },
             browserSessionRefresher: { _ in
                 refreshCount += 1
-                return replacement
+                return .refreshed(replacement)
             }
         )
 
@@ -285,6 +313,195 @@ final class WebAuthenticationBridgeTests: XCTestCase {
         XCTAssertEqual(refreshCount, 1)
         XCTAssertEqual(unchanged?.browserSessionSnapshot()?.accessTokenExpiresAt, current.browserSessionSnapshot()?.accessTokenExpiresAt)
         XCTAssertEqual(refreshed?.browserSessionSnapshot()?.accessTokenExpiresAt, replacement.browserSessionSnapshot()?.accessTokenExpiresAt)
+    }
+
+#if DEBUG
+    func testQualificationBypassesOnlyTheFreshAccessGateAndStillPublishesRedactedDiagnostics() async throws {
+        let now = Date(timeIntervalSince1970: 10_000)
+        let current = try renewableTestCredential(
+            accessToken: "qualification-source-token-must-not-appear",
+            accessExpiresAt: now.addingTimeInterval(3_600)
+        )
+        let replacement = try renewableTestCredential(
+            accessToken: "qualification-replacement-token-must-not-appear",
+            accessExpiresAt: now.addingTimeInterval(10_800)
+        )
+        var refreshCount = 0
+        var diagnostics: [AuthenticationRenewalAttemptDiagnostic] = []
+        let bridge = WebAuthenticationBridge(
+            cookieStore: TestCookieStore(cookies: []),
+            now: { now },
+            credentialConsumer: { _ in },
+            browserSessionRefresher: { _ in
+                refreshCount += 1
+                return .refreshed(replacement)
+            }
+        )
+        bridge.setRenewalDiagnosticHandler { diagnostics.append($0) }
+
+        let refreshed = await bridge.refreshedCredentialForQualification(current)
+
+        XCTAssertEqual(refreshCount, 1)
+        XCTAssertEqual(
+            refreshed?.browserSessionSnapshot()?.accessTokenExpiresAt,
+            replacement.browserSessionSnapshot()?.accessTokenExpiresAt
+        )
+        XCTAssertEqual(diagnostics.map(\.outcome), [.inProgress, .replacementReceived])
+        let encoded = String(decoding: try JSONEncoder().encode(diagnostics), as: UTF8.self)
+        XCTAssertFalse(encoded.contains("qualification-source-token-must-not-appear"))
+        XCTAssertFalse(encoded.contains("qualification-replacement-token-must-not-appear"))
+    }
+#endif
+
+    func testBrowserRenewalPublishesRedactedStartAndOutcomeDiagnostics() async throws {
+        let now = Date(timeIntervalSince1970: 10_000)
+        let expired = try renewableTestCredential(
+            accessToken: "source-token-must-not-appear",
+            accessExpiresAt: now.addingTimeInterval(-60)
+        )
+        let replacement = try renewableTestCredential(
+            accessToken: "replacement-token-must-not-appear",
+            accessExpiresAt: now.addingTimeInterval(10_800)
+        )
+        var diagnostics: [AuthenticationRenewalAttemptDiagnostic] = []
+        let bridge = WebAuthenticationBridge(
+            cookieStore: TestCookieStore(cookies: []),
+            now: { now },
+            credentialConsumer: { _ in },
+            browserSessionRefresher: { _ in .refreshed(replacement) }
+        )
+        bridge.setRenewalDiagnosticHandler { diagnostics.append($0) }
+
+        _ = await bridge.refreshedCredential(ifNeeded: expired)
+
+        XCTAssertEqual(diagnostics.map(\.outcome), [.inProgress, .replacementReceived])
+        XCTAssertEqual(diagnostics.last?.renewalCredential, .refreshToken)
+        XCTAssertEqual(diagnostics.first?.id, diagnostics.last?.id)
+        XCTAssertNotEqual(
+            diagnostics.last?.sourceCredentialReference,
+            diagnostics.last?.replacementCredentialReference
+        )
+        let encoded = String(decoding: try JSONEncoder().encode(diagnostics), as: UTF8.self)
+        XCTAssertFalse(encoded.contains("source-token-must-not-appear"))
+        XCTAssertFalse(encoded.contains("replacement-token-must-not-appear"))
+    }
+
+    func testBrowserRenewalRecordsClosedDriverFailure() async throws {
+        let now = Date(timeIntervalSince1970: 10_000)
+        let expired = try renewableTestCredential(
+            accessToken: "failed-token-must-not-appear",
+            accessExpiresAt: now.addingTimeInterval(-60)
+        )
+        var diagnostics: [AuthenticationRenewalAttemptDiagnostic] = []
+        let bridge = WebAuthenticationBridge(
+            cookieStore: TestCookieStore(cookies: []),
+            now: { now },
+            credentialConsumer: { _ in },
+            browserSessionRefresher: { _ in .failed(.accessTokenUnchanged) }
+        )
+        bridge.setRenewalDiagnosticHandler { diagnostics.append($0) }
+
+        let refreshed = await bridge.refreshedCredential(ifNeeded: expired)
+        XCTAssertNil(refreshed)
+
+        XCTAssertEqual(diagnostics.map(\.outcome), [.inProgress, .accessTokenUnchanged])
+        let encoded = String(decoding: try JSONEncoder().encode(diagnostics), as: UTF8.self)
+        XCTAssertFalse(encoded.contains("failed-token-must-not-appear"))
+    }
+
+    func testBrowserRenewalFaultMatrixDistinguishesEndpointFailureAndTimeout() async throws {
+        let now = Date(timeIntervalSince1970: 10_000)
+        let scenarios: [(BrowserSessionRenewalDriverFailure, AuthenticationRenewalOutcome)] = [
+            (.navigationFailed, .navigationFailed),
+            (.timedOutWaitingForCredential, .timedOutWaitingForCredential),
+            (.replacementCredentialMissing, .replacementCredentialMissing),
+            (.replacementCredentialMalformed, .replacementCredentialMalformed),
+        ]
+
+        for (driverFailure, expectedOutcome) in scenarios {
+            let expired = try renewableTestCredential(
+                accessToken: "fault-token-must-not-appear",
+                accessExpiresAt: now.addingTimeInterval(-60)
+            )
+            var diagnostics: [AuthenticationRenewalAttemptDiagnostic] = []
+            let bridge = WebAuthenticationBridge(
+                cookieStore: TestCookieStore(cookies: []),
+                now: { now },
+                credentialConsumer: { _ in },
+                browserSessionRefresher: { _ in .failed(driverFailure) }
+            )
+            bridge.setRenewalDiagnosticHandler { diagnostics.append($0) }
+
+            let refreshed = await bridge.refreshedCredential(ifNeeded: expired)
+
+            XCTAssertNil(refreshed)
+            XCTAssertEqual(diagnostics.map(\.outcome), [.inProgress, expectedOutcome])
+            XCTAssertFalse(
+                String(decoding: try JSONEncoder().encode(diagnostics), as: UTF8.self)
+                    .contains("fault-token-must-not-appear")
+            )
+        }
+    }
+
+    func testExpiredRenewalAuthorityFailsBeforeStartingBrowserDriver() async throws {
+        let now = Date(timeIntervalSince1970: 10_000)
+        let expired = try renewableTestCredential(
+            accessToken: "expired-authority-token-must-not-appear",
+            accessExpiresAt: now.addingTimeInterval(-60),
+            refreshExpiresAt: now.addingTimeInterval(-1)
+        )
+        var driverCallCount = 0
+        var diagnostics: [AuthenticationRenewalAttemptDiagnostic] = []
+        let bridge = WebAuthenticationBridge(
+            cookieStore: TestCookieStore(cookies: []),
+            now: { now },
+            credentialConsumer: { _ in },
+            browserSessionRefresher: { _ in
+                driverCallCount += 1
+                return .failed(.configurationUnavailable)
+            }
+        )
+        bridge.setRenewalDiagnosticHandler { diagnostics.append($0) }
+
+        let refreshed = await bridge.refreshedCredential(ifNeeded: expired)
+
+        XCTAssertNil(refreshed)
+        XCTAssertEqual(driverCallCount, 0)
+        XCTAssertEqual(diagnostics.map(\.outcome), [.inProgress, .renewalCredentialExpired])
+    }
+
+    func testExpiredDeviceRefreshGrantDoesNotReplaceSessionRefreshCookieClassification() async throws {
+        let now = Date(timeIntervalSince1970: 10_000)
+        let credential = try AuthenticationCredential(
+            browserAuthenticationCookieValue: currentAuthenticationCookieValue(
+                expires: now.addingTimeInterval(-60),
+                refreshExpiresAt: now.addingTimeInterval(7_776_000)
+            ),
+            browserDeviceGrantCookieValue: deviceGrantCookieValue(
+                grantExpiresAt: now.addingTimeInterval(-30),
+                refreshGrantExpiresAt: now.addingTimeInterval(-1)
+            ),
+            browserSessionRefreshCookieValue: "synthetic-session-refresh-cookie"
+        )
+        var driverCallCount = 0
+        var diagnostics: [AuthenticationRenewalAttemptDiagnostic] = []
+        let bridge = WebAuthenticationBridge(
+            cookieStore: TestCookieStore(cookies: []),
+            now: { now },
+            credentialConsumer: { _ in },
+            nativeSessionRefresher: { _ in
+                driverCallCount += 1
+                return .failed(.transportFailed)
+            }
+        )
+        bridge.setRenewalDiagnosticHandler { diagnostics.append($0) }
+
+        let refreshed = await bridge.refreshedCredential(ifNeeded: credential)
+
+        XCTAssertNil(refreshed)
+        XCTAssertEqual(driverCallCount, 1)
+        XCTAssertEqual(diagnostics.last?.renewalCredential, .sessionRefreshCookie)
+        XCTAssertEqual(diagnostics.map(\.outcome), [.inProgress, .nativeTransportFailed])
     }
 
     func testTelemetryIdentifiesSafeCredentialSelectionOutcomesWithoutPayloads() async throws {
@@ -392,12 +609,13 @@ final class WebAuthenticationBridgeTests: XCTestCase {
             value: deviceGrantCookieValue(),
             expires: now.addingTimeInterval(2_592_000)
         )
-        store.replaceCookies(with: [authentication, deviceGrant])
+        let sessionRefresh = try sessionRefreshCookie(expires: now.addingTimeInterval(7_776_000))
+        store.replaceCookies(with: [authentication, deviceGrant, sessionRefresh])
         store.signalChange()
         await settleMainActorTasks()
 
         XCTAssertEqual(readyCount, 1)
-        XCTAssertTrue(events.contains(.renewalViaDeviceGrant))
+        XCTAssertTrue(events.contains(.renewalViaSessionRefreshCookie))
         XCTAssertTrue(events.contains(.deviceGrantAccepted))
         XCTAssertTrue(events.contains(.automaticCredentialReady))
         let transfer = await bridge.useLoggedInSession()
@@ -429,6 +647,7 @@ final class WebAuthenticationBridgeTests: XCTestCase {
                 value: deviceGrantCookieValue(),
                 expires: now.addingTimeInterval(2_592_000)
             ),
+            try sessionRefreshCookie(expires: now.addingTimeInterval(7_776_000)),
         ])
 
         bridge.webPageStateDidChange()
@@ -437,7 +656,7 @@ final class WebAuthenticationBridgeTests: XCTestCase {
         XCTAssertEqual(readyCount, 1)
         XCTAssertTrue(events.contains(.webPageStateChangeObserved))
         XCTAssertTrue(events.contains(.automaticCredentialInspectionStarted))
-        XCTAssertTrue(events.contains(.renewalViaDeviceGrant))
+        XCTAssertTrue(events.contains(.renewalViaSessionRefreshCookie))
         XCTAssertTrue(events.contains(.automaticCredentialReady))
     }
 
@@ -620,6 +839,7 @@ final class WebAuthenticationBridgeTests: XCTestCase {
             try authCookie(domain: "siriusxm.com", expires: now.addingTimeInterval(60)),
             try authCookie(domain: "www.siriusxm.com", expires: now.addingTimeInterval(60)),
             try authCookie(domain: "player.siriusxm.com", expires: now.addingTimeInterval(60), secure: false),
+            try sessionRefreshCookie(expires: now.addingTimeInterval(7_776_000)),
             try authCookie(domain: "evil-siriusxm.com", expires: now.addingTimeInterval(60)),
         ])
         let bridge = WebAuthenticationBridge(cookieStore: store, now: { now }, credentialConsumer: { _ in })
@@ -628,8 +848,11 @@ final class WebAuthenticationBridgeTests: XCTestCase {
         let remainingCookies = await store.allCookies()
 
         XCTAssertEqual(result, .removed)
-        XCTAssertEqual(store.deletedCount, 3)
+        XCTAssertEqual(store.deletedCount, 4)
         XCTAssertEqual(FirstPartyTokenCookiePolicy.select(from: remainingCookies, now: now), .missing)
+        XCTAssertTrue(
+            FirstPartySessionRefreshCookiePolicy.matchingCookies(in: remainingCookies, now: now).isEmpty
+        )
     }
 
     func testSignOutFailsClosedWhenDeletionFailsOrAMatchingCookieRemains() async throws {
@@ -798,6 +1021,21 @@ final class WebAuthenticationBridgeTests: XCTestCase {
         return try XCTUnwrap(HTTPCookie(properties: properties))
     }
 
+    private func sessionRefreshCookie(
+        value: String = "synthetic-session-refresh-cookie",
+        expires: Date
+    ) throws -> HTTPCookie {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss 'GMT'"
+        let header = "sxm-refresh-token=\(value); Domain=api.edge-gateway.siriusxm.com; Path=/session/v1/sessions/refresh; Expires=\(formatter.string(from: expires)); HttpOnly; Secure; SameSite=None"
+        let url = try XCTUnwrap(URL(string: "https://api.edge-gateway.siriusxm.com/session/v1/sessions/refresh"))
+        return try XCTUnwrap(
+            HTTPCookie.cookies(withResponseHeaderFields: ["Set-Cookie": header], for: url).first
+        )
+    }
+
     private func settleMainActorTasks() async {
         for _ in 0..<12 { await Task.yield() }
     }
@@ -820,13 +1058,17 @@ private func authenticationCookieValue(expires: Date) -> String {
     return String(data: data, encoding: .utf8)!
 }
 
-private func currentAuthenticationCookieValue(expires: Date) -> String {
+private func currentAuthenticationCookieValue(
+    expires: Date,
+    refreshExpiresAt: Date = Date(timeIntervalSinceNow: 7_776_000)
+) -> String {
     let formatter = ISO8601DateFormatter()
     let object: [String: Any] = [
+        "identityGrant": ["grant": "synthetic-identity-grant", "identityId": "synthetic-identity"],
         "session": [
             "accessToken": "synthetic-current-access-token",
             "accessTokenExpiresAt": formatter.string(from: expires),
-            "refreshTokenExpiresAt": formatter.string(from: Date(timeIntervalSinceNow: 7_776_000)),
+            "refreshTokenExpiresAt": formatter.string(from: refreshExpiresAt),
             "sessionType": "authenticated",
         ],
     ]
@@ -834,15 +1076,19 @@ private func currentAuthenticationCookieValue(expires: Date) -> String {
     return String(data: data, encoding: .utf8)!
 }
 
-private func deviceGrantCookieValue(secretCanary: String = "synthetic-device-refresh-grant") -> String {
+private func deviceGrantCookieValue(
+    secretCanary: String = "synthetic-device-refresh-grant",
+    grantExpiresAt: Date = Date(timeIntervalSinceNow: 2_592_000),
+    refreshGrantExpiresAt: Date = Date(timeIntervalSinceNow: 15_552_000)
+) -> String {
     let formatter = ISO8601DateFormatter()
     let object: [String: Any] = [
         "deviceId": "synthetic-device",
         "grant": "synthetic-device-grant",
-        "grantExpiresAt": formatter.string(from: Date(timeIntervalSinceNow: 2_592_000)),
+        "grantExpiresAt": formatter.string(from: grantExpiresAt),
         "grantVersion": "v2",
         "refreshGrant": secretCanary,
-        "refreshGrantExpiresAt": formatter.string(from: Date(timeIntervalSinceNow: 15_552_000)),
+        "refreshGrantExpiresAt": formatter.string(from: refreshGrantExpiresAt),
     ]
     let data = try! JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
     return String(data: data, encoding: .utf8)!
