@@ -127,8 +127,8 @@ enum ClosedAuthenticationOracle {
             )
         case .localCredentialUnavailable:
             AuthenticationPresentationCopy(
-                title: "Saved sign-in cannot be accessed",
-                message: "\(ProductIdentity.displayName) could not access Keychain and did not delete anything. Open SiriusXM's sign-in page to continue.",
+                title: "Saved sign-in unavailable",
+                message: "The saved sign-in expired, could not be refreshed, or could not be read from Keychain. Nothing was deleted. Sign in to SiriusXM again to continue.",
                 iconName: "exclamationmark.triangle",
                 statusLabel: "local-credential-unavailable",
                 isReady: false,

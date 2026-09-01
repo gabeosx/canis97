@@ -239,6 +239,8 @@ public enum CatalogFailure: Sendable, Equatable {
     case unavailable
     case authenticationUnavailable
     case notEntitled
+    case partialLineup
+    case paginationUnavailable
     case collectionUnavailable
     case malformedCandidate
     case conflictingIdentity

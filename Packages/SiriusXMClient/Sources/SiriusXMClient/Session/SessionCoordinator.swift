@@ -44,6 +44,9 @@ actor SessionCoordinator {
     private var cleanupTask: Task<SignOutOutcome, Never>?
     private var credentialGeneration = 0
     private var credentialRefreshLease: CredentialRefreshLease?
+#if DEBUG
+    private var isRenewalQualificationInProgress = false
+#endif
 
     init(
         credentialSource: any CredentialSource,
@@ -105,7 +108,7 @@ actor SessionCoordinator {
 
         guard var credential = await credentialSource.credential(), isCurrent(lease) else {
             await diagnostics.record(.authentication(.credentialUnavailable))
-            return .authentication(.cancelled)
+            return .authentication(.credentialUnavailable)
         }
         transientCredential = credential
         credentialGeneration &+= 1
@@ -116,7 +119,7 @@ actor SessionCoordinator {
             transientCredential = preparedCredential
         case .unavailable:
             await diagnostics.record(.authentication(.credentialUnavailable))
-            return .authentication(.cancelled)
+            return .authentication(.credentialUnavailable)
         case .persistenceFailed:
             await diagnostics.record(.credentialPersistenceFailed)
             return .credentialPersistenceFailed
@@ -190,7 +193,8 @@ actor SessionCoordinator {
     ) async -> CurrentEntitledOperationResult<Value> {
         guard case let .active(activeSession) = state,
               lastEntitlement == .entitled,
-              transientCredential != nil
+              transientCredential != nil,
+              permitsCurrentOperations
         else {
             return .failed(.authenticationUnavailable)
         }
@@ -250,7 +254,8 @@ actor SessionCoordinator {
     ) async -> CurrentCatalogOperationResult<Value> {
         guard case let .active(activeSession) = state,
               lastEntitlement == .entitled,
-              transientCredential != nil
+              transientCredential != nil,
+              permitsCurrentOperations
         else {
             return state == .signedOut ? .authenticationUnavailable : .notEntitled
         }
@@ -319,9 +324,17 @@ actor SessionCoordinator {
         attemptLease?.id == lease.id
     }
 
-    private func prepareCurrentCredentialIfNeeded() async -> CredentialPreparation {
+    private var permitsCurrentOperations: Bool {
+#if DEBUG
+        !isRenewalQualificationInProgress
+#else
+        true
+#endif
+    }
+
+    private func prepareCurrentCredentialIfNeeded(forceQualification: Bool = false) async -> CredentialPreparation {
         guard let credential = transientCredential else { return .unavailable }
-        guard credential.requiresBrowserRefresh(at: clock.now()) else { return .ready(credential) }
+        guard forceQualification || credential.requiresBrowserRefresh(at: clock.now()) else { return .ready(credential) }
 
         let generation = credentialGeneration
         let refreshLease: CredentialRefreshLease
@@ -332,8 +345,18 @@ actor SessionCoordinator {
             let store = credentialStore
             let refreshReferenceDate = clock.now()
             let task = Task<CredentialPreparation, Never> {
-                guard !Task.isCancelled,
-                      let refreshed = await refresher.refreshedCredential(ifNeeded: credential),
+                guard !Task.isCancelled else { return .unavailable }
+                let refreshed: AuthenticationCredential?
+#if DEBUG
+                if forceQualification {
+                    refreshed = await refresher.refreshedCredentialForQualification(credential)
+                } else {
+                    refreshed = await refresher.refreshedCredential(ifNeeded: credential)
+                }
+#else
+                refreshed = await refresher.refreshedCredential(ifNeeded: credential)
+#endif
+                guard let refreshed,
                       !refreshed.requiresBrowserRefresh(at: refreshReferenceDate),
                       !Task.isCancelled else {
                     return .unavailable
@@ -366,6 +389,44 @@ actor SessionCoordinator {
         }
         return result
     }
+
+#if DEBUG
+    /// Performs one explicit renewal through the same actor-owned refresh and
+    /// persistence path used at expiry. It does not verify entitlement, load a
+    /// catalog, resolve playback, retry, or expose credential material.
+    func qualifyCurrentCredentialRenewal() async -> AuthenticationRenewalQualificationOutcome {
+        guard cleanupTask == nil,
+              attemptLease == nil,
+              credentialRefreshLease == nil
+        else {
+            return .attemptInProgress
+        }
+        guard case .active = state,
+              lastEntitlement == .entitled,
+              let sourceCredential = transientCredential
+        else {
+            return .sessionUnavailable
+        }
+
+        isRenewalQualificationInProgress = true
+        defer { isRenewalQualificationInProgress = false }
+        let sourceReference = sourceCredential.browserSessionSnapshot()?.diagnosticCredentialIdentifier
+        switch await prepareCurrentCredentialIfNeeded(forceQualification: true) {
+        case let .ready(replacement):
+            let replacementReference = replacement.browserSessionSnapshot()?.diagnosticCredentialIdentifier
+            guard sourceReference != nil,
+                  replacementReference != nil,
+                  sourceReference != replacementReference else {
+                return .replacementUnchanged
+            }
+            return .replacementPersisted
+        case .unavailable:
+            return .renewalUnavailable
+        case .persistenceFailed:
+            return .persistenceFailed
+        }
+    }
+#endif
 }
 
 private struct NoopResidueCleaner: AuthenticationResidueCleaner {

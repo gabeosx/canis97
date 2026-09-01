@@ -290,8 +290,13 @@ extension AuthenticationPresentationFlow {
 
 protocol ClientAuthenticationFlow: Sendable {
     func authenticate() async -> AuthenticationOutcome
+    func latestAuthenticationDiagnostic() async -> AuthenticationDiagnosticOutcome?
     func entitlementAvailability() async -> EntitlementAvailability
     func signOut() async -> SignOutOutcome
+}
+
+extension ClientAuthenticationFlow {
+    func latestAuthenticationDiagnostic() async -> AuthenticationDiagnosticOutcome? { nil }
 }
 
 extension SiriusXMClient: ClientAuthenticationFlow {
@@ -413,10 +418,16 @@ struct ComposedAuthenticationPresentationFlow: AuthenticationPresentationFlow {
         onEntitlementVerification: @MainActor @escaping @Sendable () -> Void
     ) async -> AuthenticationPresentationState {
         let state: AuthenticationPresentationState
-        switch await client.authenticate() {
+        let authenticationOutcome = await client.authenticate()
+        if let diagnostic = await client.latestAuthenticationDiagnostic() {
+            credentialSource?.recordNativeAuthenticationDiagnostic(diagnostic)
+        }
+        switch authenticationOutcome {
         case .authenticatedPendingEntitlement:
             onEntitlementVerification()
             state = presentationState(for: await client.entitlementAvailability())
+        case .credentialUnavailable:
+            state = isAutomaticRestore ? .localCredentialUnavailable : .webCredentialMissing
         case .waitingForAuthenticationComposition, .unsupported, .cancelled:
             state = .unsupported
         case .credentialPersistenceFailed:

@@ -257,6 +257,7 @@ struct LibraryView: View {
     let onTune: (@MainActor (LiveChannelID, [LiveChannelID]) -> Bool)?
     let songFavoriteClipboardWriter: any SongFavoriteClipboardWriting
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.openWindow) private var openWindow
     @State private var tab: LibraryTab
     @State private var query = ""
     @State private var showsClearRecentsConfirmation = false
@@ -429,6 +430,11 @@ struct LibraryView: View {
                     Text(failureCopy(failure))
                 } actions: {
                     Button(recoveryTitle(for: failure)) { recover(from: failure) }
+                    if controller != nil {
+                        Button("Open Support Report") {
+                            openWindow(id: ProductIdentity.SceneID.support)
+                        }
+                    }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             default:
@@ -840,16 +846,33 @@ struct LibraryView: View {
 
     private func failureCopy(_ failure: CatalogFailure) -> String {
         switch failure {
-        case .authenticationUnavailable: "Sign in again to refresh channels."
-        case .notEntitled: "This account is not currently entitled to listen."
-        default: "The channel lineup could not be refreshed safely."
+        case .authenticationUnavailable:
+            "Your saved sign-in expired or could not be refreshed. Sign in again to reload channels."
+        case .notEntitled:
+            "Canis97 could not confirm that this account is currently entitled to listen."
+        case .partialLineup:
+            "SiriusXM returned only part of the channel lineup. Canis97 did not mark missing channels as unavailable."
+        case .paginationUnavailable:
+            "SiriusXM stopped the channel lineup before all pages were received. Canis97 kept the previous lineup instead of publishing an incomplete one."
+        case .collectionUnavailable:
+            "SiriusXM responded without a supported channel collection. Its channel service may have changed."
+        case .malformedCandidate:
+            "SiriusXM returned a channel record this version could not safely interpret."
+        case .conflictingIdentity:
+            "SiriusXM returned conflicting channel identities, so Canis97 stopped rather than selecting the wrong channel."
+        case .unsupportedResponse:
+            "SiriusXM returned a catalog response this version does not recognize. Its channel service may have changed."
+        case .unavailable:
+            "The SiriusXM channel service is currently unavailable."
+        case .cancelled:
+            "The channel refresh was interrupted before it completed."
         }
     }
 
     private func recoveryTitle(for failure: CatalogFailure) -> String {
         switch failure {
         case .authenticationUnavailable, .notEntitled: "Sign In Again"
-        case .unavailable, .collectionUnavailable, .malformedCandidate,
+        case .unavailable, .partialLineup, .paginationUnavailable, .collectionUnavailable, .malformedCandidate,
              .conflictingIdentity, .unsupportedResponse, .cancelled:
             "Refresh Library"
         }
@@ -863,7 +886,7 @@ struct LibraryView: View {
             } else {
                 _ = model.refresh()
             }
-        case .unavailable, .collectionUnavailable, .malformedCandidate,
+        case .unavailable, .partialLineup, .paginationUnavailable, .collectionUnavailable, .malformedCandidate,
              .conflictingIdentity, .unsupportedResponse, .cancelled:
             _ = model.refresh()
         }

@@ -69,7 +69,9 @@ struct Canis97App: App {
         guard !OfflineReviewLaunchMode.isUnitTestHost(environment: environment),
               !OfflineReviewLaunchMode.isOfflineReviewRequested(environment: environment)
         else { return nil }
-        return ListeningSessionController()
+        return ListeningSessionController(
+            supportDiagnostics: SupportDiagnosticJournal.persistent()
+        )
     }
 
     var body: some Scene {
@@ -110,7 +112,7 @@ struct Canis97App: App {
         .defaultSize(width: 520, height: 420)
         .windowResizability(.contentSize)
 
-        Window("Compatibility & Support", id: ProductSceneID.support) {
+        Window("Compatibility & Support", id: ProductIdentity.SceneID.support) {
             CompatibilitySupportView(controller: sessionController)
         }
         .defaultSize(width: 760, height: 650)
@@ -447,7 +449,7 @@ private struct ListeningCommands: Commands {
 
         CommandGroup(after: .help) {
             Button("Compatibility & Support…") {
-                openWindow(id: ProductSceneID.support)
+                openWindow(id: ProductIdentity.SceneID.support)
             }
         }
 
@@ -467,7 +469,6 @@ private struct LibraryRoot: View {
 private enum ProductSceneID {
     static let audioOutput = "\(ProductIdentity.appBundleIdentifier).audio-output"
     static let about = "\(ProductIdentity.appBundleIdentifier).about"
-    static let support = "\(ProductIdentity.appBundleIdentifier).support"
 }
 
 /// The unit-test bundle uses the app executable as its host. Keep that host

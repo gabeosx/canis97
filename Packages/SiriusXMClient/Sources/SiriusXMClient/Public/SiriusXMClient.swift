@@ -6,6 +6,7 @@ public typealias AuthenticationAvailability = AuthenticationOutcome
 /// A semantic client for the supported SiriusXM subscriber experience.
 public actor SiriusXMClient {
     private let sessionCoordinator: SessionCoordinator?
+    private let retainedSessionDiagnostics: OSLogSessionDiagnostics?
     private let catalogRefresher: any CatalogRefreshing
     private let liveStreamResolver: any LiveStreamResolving
     private let metadataFetcher: any LiveMetadataFetching
@@ -15,6 +16,7 @@ public actor SiriusXMClient {
 
     public init() {
         self.sessionCoordinator = nil
+        self.retainedSessionDiagnostics = nil
         self.catalogRefresher = UnavailableCatalogRefresher()
         self.liveStreamResolver = UnavailableLiveStreamResolver()
         self.metadataFetcher = UnavailableMetadataFetcher()
@@ -22,6 +24,7 @@ public actor SiriusXMClient {
 
     init(metadataFetcher: any LiveMetadataFetching) {
         self.sessionCoordinator = nil
+        self.retainedSessionDiagnostics = nil
         self.catalogRefresher = UnavailableCatalogRefresher()
         self.liveStreamResolver = UnavailableLiveStreamResolver()
         self.metadataFetcher = metadataFetcher
@@ -33,9 +36,11 @@ public actor SiriusXMClient {
         catalogTransport: (any FixedCatalogTransporting)? = nil,
         liveStreamResolver: (any LiveStreamResolving)? = nil,
         fixedLiveTransport: (any FixedLiveTransporting)? = nil,
-        metadataFetcher: (any LiveMetadataFetching)? = nil
+        metadataFetcher: (any LiveMetadataFetching)? = nil,
+        retainedSessionDiagnostics: OSLogSessionDiagnostics? = nil
     ) {
         self.sessionCoordinator = sessionCoordinator
+        self.retainedSessionDiagnostics = retainedSessionDiagnostics
         self.catalogRefresher = catalogRefresher ?? CurrentSessionCatalogRefresher(
             sessionCoordinator: sessionCoordinator,
             transport: catalogTransport ?? FixedCatalogURLSessionTransport()
@@ -73,6 +78,7 @@ public actor SiriusXMClient {
             diagnostics: diagnostics
         )
         sessionCoordinator = coordinator
+        retainedSessionDiagnostics = diagnostics
         catalogRefresher = CurrentSessionCatalogRefresher(
             sessionCoordinator: coordinator,
             transport: FixedCatalogURLSessionTransport()
@@ -110,6 +116,21 @@ public actor SiriusXMClient {
             return .waitingForAuthenticationComposition
         }
     }
+
+    /// Returns only the latest closed native-authentication classification.
+    /// Provider material and transport error text are discarded before this point.
+    public func latestAuthenticationDiagnostic() async -> AuthenticationDiagnosticOutcome? {
+        await retainedSessionDiagnostics?.latestAuthenticationOutcome()
+    }
+
+#if DEBUG
+    /// Runs one owner-initiated renewal transaction through the production
+    /// session actor and credential store. The operation never retries.
+    public func qualifyCurrentCredentialRenewal() async -> AuthenticationRenewalQualificationOutcome {
+        guard let sessionCoordinator else { return .sessionUnavailable }
+        return await sessionCoordinator.qualifyCurrentCredentialRenewal()
+    }
+#endif
 
     /// Reports the entitlement derived from the most recent native transaction.
     public func entitlement() async -> EntitlementAvailability {

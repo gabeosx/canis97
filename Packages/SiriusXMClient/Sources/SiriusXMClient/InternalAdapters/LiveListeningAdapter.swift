@@ -205,6 +205,15 @@ enum LiveListeningAdapter {
         )
     }
 
+    static func mediaImageArtworkReference(from value: Any?) -> ChannelArtworkReference? {
+        guard let reference = value as? String else { return nil }
+        return fixedArtworkReference(
+            reference,
+            origin: .mediaImage,
+            allowedExtensions: nil
+        )
+    }
+
     private static func fixedArtworkReference(
         _ value: String,
         origin: ChannelArtworkReference.FixedOrigin,
@@ -724,6 +733,30 @@ private struct CatalogSchemaEvidence {
             return
         }
 
+        if let container = root["container"] as? [String: Any],
+           let sets = container["sets"] as? [[String: Any]] {
+            let items = sets.flatMap { $0["items"] as? [[String: Any]] ?? [] }
+            let paginationClasses = sets.map { set -> String in
+                guard let pagination = set["pagination"] as? [String: Any],
+                      let offset = pagination["offset"] as? [String: Any],
+                      let size = offset["size"] as? NSNumber,
+                      let start = offset["offset"] as? NSNumber,
+                      let pageItems = set["items"] as? [Any]
+                else { return "invalid" }
+                return start.intValue + pageItems.count < size.intValue ? "partial" : "complete"
+            }
+            let paginationClass = Set(paginationClasses).count == 1 ? paginationClasses.first ?? "absent" : "mixed"
+            rendered = [
+                "stage=catalog",
+                "root=object",
+                "container=object",
+                "container.sets=\(CompatibilitySchemaCardinality(sets).rawValue)",
+                "item-count=\(boundedCount(items.count))",
+                "pagination=\(paginationClass)"
+            ].joined(separator: " ")
+            return
+        }
+
         guard let page = root["page"] as? [String: Any],
               let containers = page["containers"] as? [[String: Any]]
         else {
@@ -877,56 +910,170 @@ private func boundedCount(_ count: Int) -> String {
     }
 }
 
-/// Internal transport seam for the one fixed catalog refresh. It accepts no
-/// arbitrary host, path, query, request body, or caller-provided headers.
-protocol FixedCatalogTransporting: Sendable {
-    func catalog(using credential: AuthenticationCredential) async -> NativeTransportResponse
+/// The continuation state admitted from SiriusXM's fixed Channels page. IDs are
+/// provider-issued opaque path segments and are validated before reuse.
+struct FixedCatalogPageCursor: Sendable, Equatable {
+    let containerID: String
+    let setID: String
+    let nextOffset: Int
+    let totalCount: Int
 }
 
-/// Concrete fixed request for SiriusXM's public, comprehensive channel guide.
-/// The current-session gate is enforced by `CurrentSessionCatalogRefresher`,
-/// but subscriber authorization is deliberately not sent to this public host.
-enum FixedCatalogRequestFactory {
-    private static let scheme = "https"
-    private static let host = SiriusXMRequestContract.publicChannelGuideHost
-    private static let path = "/v2/channelfeed/SXM_SIR_AUD_TOTAL_ACCESS"
+/// Internal transport seam for the fixed Channels page and its bounded
+/// continuation pages. It accepts no caller-provided host, headers, or body.
+protocol FixedCatalogTransporting: Sendable {
+    func initialCatalog(using credential: AuthenticationCredential) async -> NativeTransportResponse
+    func catalogPage(
+        using credential: AuthenticationCredential,
+        cursor: FixedCatalogPageCursor
+    ) async -> NativeTransportResponse
+}
 
-    static func makeRequest(using _: AuthenticationCredential) -> URLRequest? {
-        guard let url = URL(string: "\(scheme)://\(host)\(path)") else { return nil }
+/// Exact authenticated Browse requests observed from SiriusXM Web 7.131.0.
+/// The initial page supplies 30 channels and an opaque container/set cursor;
+/// continuation requests retrieve the remaining lineup in batches of 50.
+enum FixedCatalogRequestFactory {
+    static let pageID = "403ab6a5-d3c9-4c2a-a722-a94a6a5fd056"
+    static let initialItemLimit = 30
+    static let continuationItemLimit = 50
+
+    private static let scheme = "https"
+    private static let host = SiriusXMRequestContract.host
+    private static let pagePath = "/browse/v1/pages/curated-grouping/\(pageID)"
+    private static let maximumOffset = 2_000
+    private static let supportedEntityTypes = [
+        "artist-station", "brand", "channel-linear", "channel-xtra", "container",
+        "curated-grouping", "episode-audio", "episode-linear", "episode-podcast",
+        "episode-video", "event", "experience", "genre", "league", "show",
+        "show-podcast", "tag-topic", "talent", "team", "user-signal",
+    ]
+
+    static func makeInitialRequest(
+        using credential: AuthenticationCredential,
+        clock: String
+    ) -> URLRequest? {
+        let object: [String: Any] = [
+            "pagination": ["offset": [
+                "containerLimit": 5,
+                "containerOffset": 0,
+                "setItemsLimit": initialItemLimit,
+            ]],
+            "deviceCapabilities": ["supportsDownloads": false],
+            "containerConfiguration": [:],
+            "constraints": ["supportedEntityTypes": supportedEntityTypes],
+            "locale": "en-US",
+        ]
+        guard let query = encodedQuery(object) else { return nil }
+        return makeRequest(path: pagePath, query: query, credential: credential, clock: clock)
+    }
+
+    static func makePageRequest(
+        using credential: AuthenticationCredential,
+        cursor: FixedCatalogPageCursor,
+        clock: String
+    ) -> URLRequest? {
+        guard isSafeOpaqueID(cursor.containerID),
+              isSafeOpaqueID(cursor.setID),
+              (0 ... maximumOffset).contains(cursor.nextOffset),
+              cursor.nextOffset < cursor.totalCount,
+              cursor.totalCount <= maximumOffset
+        else { return nil }
+
+        let object: [String: Any] = [
+            "pagination": ["offset": ["setItemsLimit": continuationItemLimit]],
+            "deviceCapabilities": ["supportsDownloads": false],
+            "sets": [cursor.setID: [
+                "sort": ["sortId": "CHANNEL_NUMBER_ASC"],
+                "pagination": ["offset": [
+                    "setItemsLimit": continuationItemLimit,
+                    "setItemsOffset": cursor.nextOffset,
+                ]],
+            ]],
+            "constraints": ["supportedEntityTypes": supportedEntityTypes],
+            "locale": "en-US",
+            "filter": ["one": ["filterId": "all"]],
+        ]
+        guard let query = encodedQuery(object) else { return nil }
+        return makeRequest(
+            path: "\(pagePath)/containers/\(cursor.containerID)",
+            query: query,
+            credential: credential,
+            clock: clock
+        )
+    }
+
+    private static func makeRequest(
+        path: String,
+        query: String,
+        credential: AuthenticationCredential,
+        clock: String
+    ) -> URLRequest? {
+        guard !clock.isEmpty,
+              let authorization = credential.accessToken()
+        else { return nil }
+        var components = URLComponents()
+        components.scheme = scheme
+        components.host = host
+        components.path = path
+        components.percentEncodedQuery = "q=\(query)"
+        guard let url = components.url else { return nil }
+
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        return isExact(request) ? request : nil
+        request.setValue("Bearer \(authorization)", forHTTPHeaderField: "Authorization")
+        request.setValue(clock, forHTTPHeaderField: "x-sxm-clock")
+        return request
     }
 
-    static func isExact(credential: AuthenticationCredential) -> Bool {
-        guard let request = makeRequest(using: credential) else { return false }
-        return isExact(request)
+    private static func encodedQuery(_ object: [String: Any]) -> String? {
+        guard JSONSerialization.isValidJSONObject(object),
+              let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+        else { return nil }
+        let encoded = data.base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+        return "1.\(encoded)"
     }
 
-    private static func isExact(_ request: URLRequest) -> Bool {
-        request.url?.scheme == scheme &&
-            request.url?.host == host &&
-            request.url?.path == path &&
-            request.url?.query == nil &&
-            request.url?.fragment == nil &&
-            request.httpMethod == "GET" &&
-            request.httpBody == nil &&
-            request.value(forHTTPHeaderField: "Accept") == "application/json" &&
-            request.value(forHTTPHeaderField: "Authorization") == nil
+    static func isSafeOpaqueID(_ value: String) -> Bool {
+        (1 ... 64).contains(value.utf8.count) && value.unicodeScalars.allSatisfy {
+            (0x30 ... 0x39).contains($0.value) ||
+                (0x41 ... 0x5A).contains($0.value) ||
+                (0x61 ... 0x7A).contains($0.value)
+        }
     }
 }
 
-/// Ephemeral production transport for one fixed catalog request. Redirects
+/// Ephemeral production transport for the fixed catalog sequence. Redirects
 /// are cancelled and neither redirect targets nor transport errors escape.
 final class FixedCatalogURLSessionTransport: FixedCatalogTransporting, @unchecked Sendable {
+    private let clock = FixedLiveLogicalClock()
     private lazy var session = URLSession(configuration: Self.makeConfiguration())
 
-    func catalog(using credential: AuthenticationCredential) async -> NativeTransportResponse {
-        guard let request = FixedCatalogRequestFactory.makeRequest(using: credential) else {
-            return Self.failedResponse
-        }
+    func initialCatalog(using credential: AuthenticationCredential) async -> NativeTransportResponse {
+        guard let request = FixedCatalogRequestFactory.makeInitialRequest(
+            using: credential,
+            clock: clock.next()
+        ) else { return Self.failedResponse }
+        return await send(request)
+    }
+
+    func catalogPage(
+        using credential: AuthenticationCredential,
+        cursor: FixedCatalogPageCursor
+    ) async -> NativeTransportResponse {
+        guard let request = FixedCatalogRequestFactory.makePageRequest(
+            using: credential,
+            cursor: cursor,
+            clock: clock.next()
+        ) else { return Self.failedResponse }
+        return await send(request)
+    }
+
+    private func send(_ request: URLRequest) async -> NativeTransportResponse {
         let redirectDelegate = PerRequestRedirectDelegate()
         do {
             let (body, response) = try await session.data(for: request, delegate: redirectDelegate)
@@ -960,157 +1107,130 @@ final class FixedCatalogURLSessionTransport: FixedCatalogTransporting, @unchecke
         configuration.httpShouldSetCookies = false
         configuration.urlCredentialStorage = nil
         configuration.timeoutIntervalForRequest = 15
-        configuration.timeoutIntervalForResource = 15
+        configuration.timeoutIntervalForResource = 30
         return configuration
     }
 }
 
-/// Decodes SiriusXM's bounded public channel feed. The prior authenticated page
-/// graph remains accepted for compatibility fixtures, but production uses the
-/// comprehensive guide because the old page represents only one content rail.
+struct FixedCatalogDecodedSegment: Sendable {
+    let candidates: [LiveCatalogCandidate]
+    let cursor: FixedCatalogPageCursor?
+}
+
+struct FixedCatalogSegmentResult: Sendable {
+    let segment: FixedCatalogDecodedSegment?
+    let failure: CatalogFailure?
+}
+
+/// Strictly decodes the observed Channels page and container continuation
+/// envelopes. Partial pages never publish as a complete lineup.
 enum FixedCatalogResponseDecoder {
     private static let maximumBodyBytes = 8 * 1_024 * 1_024
-    private static let maximumTraversalDepth = 12
     private static let maximumCandidateItems = 2_000
 
     static func decode(_ response: NativeTransportResponse) -> LiveCatalogSnapshotResult {
-        guard response.transportFailure == nil,
-              response.redirectLocation == nil,
-              (200 ... 299).contains(response.statusCode),
-              response.body.count <= maximumBodyBytes,
-              response.contentType?.lowercased().hasPrefix("application/json") == true
-        else {
-            return LiveCatalogSnapshotResult(snapshot: nil, failure: .unsupportedResponse)
+        let result = decodeInitial(response)
+        guard let segment = result.segment else {
+            return LiveCatalogSnapshotResult(snapshot: nil, failure: result.failure)
         }
+        guard segment.cursor == nil else {
+            return LiveCatalogSnapshotResult(snapshot: nil, failure: .partialLineup)
+        }
+        return LiveCatalogAdapter.snapshot(from: segment.candidates)
+    }
 
-        CompatibilitySchemaDiagnostics.recordCatalog(body: response.body)
-        guard !containsProtectedControl(response.body),
-              let root = try? JSONSerialization.jsonObject(with: response.body) as? [String: Any]
-        else {
-            return LiveCatalogSnapshotResult(snapshot: nil, failure: .unsupportedResponse)
-        }
+    static func decodeInitial(_ response: NativeTransportResponse) -> FixedCatalogSegmentResult {
+        guard let root = rootObject(response),
+              let page = root["page"] as? [String: Any],
+              page["id"] as? String == FixedCatalogRequestFactory.pageID,
+              let containers = page["containers"] as? [[String: Any]],
+              containers.count == 1,
+              let container = containers.first,
+              let containerID = container["id"] as? String,
+              FixedCatalogRequestFactory.isSafeOpaqueID(containerID),
+              let sets = container["sets"] as? [[String: Any]],
+              sets.count == 1,
+              let set = sets.first,
+              let setID = set["id"] as? String,
+              FixedCatalogRequestFactory.isSafeOpaqueID(setID)
+        else { return failed(.collectionUnavailable) }
+        return decodeSet(
+            set,
+            containerID: containerID,
+            setID: setID,
+            expectedOffset: 0,
+            expectedTotal: nil,
+            expectedLimit: FixedCatalogRequestFactory.initialItemLimit
+        )
+    }
 
-        if root["channels"] != nil {
-            return decodePublicChannelFeed(root)
-        }
-        guard let page = root["page"] as? [String: Any] else {
-            return LiveCatalogSnapshotResult(snapshot: nil, failure: .unsupportedResponse)
-        }
+    static func decodeContinuation(
+        _ response: NativeTransportResponse,
+        expected cursor: FixedCatalogPageCursor
+    ) -> FixedCatalogSegmentResult {
+        guard let root = rootObject(response),
+              let container = root["container"] as? [String: Any],
+              container["id"] as? String == cursor.containerID,
+              let sets = container["sets"] as? [[String: Any]],
+              sets.count == 1,
+              let set = sets.first,
+              set["id"] as? String == cursor.setID
+        else { return failed(.paginationUnavailable) }
+        return decodeSet(
+            set,
+            containerID: cursor.containerID,
+            setID: cursor.setID,
+            expectedOffset: cursor.nextOffset,
+            expectedTotal: cursor.totalCount,
+            expectedLimit: FixedCatalogRequestFactory.continuationItemLimit
+        )
+    }
 
-        let search = catalogItems(in: page)
-        guard search.sawItemsCollection, !search.exceededBounds else {
-            return LiveCatalogSnapshotResult(snapshot: nil, failure: .collectionUnavailable)
-        }
+    private static func decodeSet(
+        _ set: [String: Any],
+        containerID: String,
+        setID: String,
+        expectedOffset: Int,
+        expectedTotal: Int?,
+        expectedLimit: Int
+    ) -> FixedCatalogSegmentResult {
+        guard let items = set["items"] as? [[String: Any]],
+              let pagination = set["pagination"] as? [String: Any],
+              let offset = pagination["offset"] as? [String: Any],
+              let totalCount = integer(offset["size"]),
+              let limit = integer(offset["limit"]),
+              let actualOffset = integer(offset["offset"]),
+              totalCount > 0,
+              totalCount <= maximumCandidateItems,
+              expectedTotal.map({ $0 == totalCount }) ?? true,
+              actualOffset == expectedOffset,
+              limit == expectedLimit,
+              !items.isEmpty,
+              items.count <= limit,
+              actualOffset + items.count <= totalCount,
+              items.count == min(limit, totalCount - actualOffset)
+        else { return failed(expectedTotal == nil ? .collectionUnavailable : .paginationUnavailable) }
 
         var candidates: [LiveCatalogCandidate] = []
-        for item in search.candidateItems {
+        candidates.reserveCapacity(items.count)
+        for item in items {
             guard let candidate = candidate(from: item) else {
-                return LiveCatalogSnapshotResult(snapshot: nil, failure: .malformedCandidate)
+                return failed(.malformedCandidate)
             }
             candidates.append(candidate)
         }
-        return LiveCatalogAdapter.snapshot(from: candidates)
-    }
 
-    private static func decodePublicChannelFeed(_ root: [String: Any]) -> LiveCatalogSnapshotResult {
-        guard let channels = root["channels"] as? [[String: Any]],
-              channels.count <= maximumCandidateItems
-        else {
-            return LiveCatalogSnapshotResult(snapshot: nil, failure: .collectionUnavailable)
-        }
-
-        var candidates: [LiveCatalogCandidate] = []
-        candidates.reserveCapacity(channels.count)
-        for channel in channels {
-            guard let type = channel["channel_type"] as? String else {
-                return LiveCatalogSnapshotResult(snapshot: nil, failure: .malformedCandidate)
-            }
-            if type == "Xtra" { continue }
-            guard type == "Linear" else {
-                return LiveCatalogSnapshotResult(snapshot: nil, failure: .malformedCandidate)
-            }
-
-            guard let deliveryTypes = channel["deliveryTypes"] as? [String] else {
-                return LiveCatalogSnapshotResult(snapshot: nil, failure: .malformedCandidate)
-            }
-            guard deliveryTypes.contains("ip") else { continue }
-            guard channel["availableToPackage"] as? Bool == true,
-                  let identity = channel["uuid"] as? String,
-                  UUID(uuidString: identity) != nil,
-                  let number = number(from: channel["streamingChannelNumber"]),
-                  let name = channel["displayName"] as? String,
-                  !name.isEmpty
-            else {
-                return LiveCatalogSnapshotResult(snapshot: nil, failure: .malformedCandidate)
-            }
-
-            candidates.append(LiveCatalogCandidate(
-                identity: identity,
-                displayNumber: number,
-                name: name,
-                description: channel["shortDescription"] as? String,
-                category: channel["genreTitle"] as? String,
-                artwork: LiveListeningAdapter.publicChannelArtworkReference(from: channel["colorLogo"]),
-                entity: .channelLinear,
-                entitlement: deliveryTypes.contains("satellite") ? .guideStandard : .guideAppOnly
-            ))
-        }
-        return LiveCatalogAdapter.snapshot(from: candidates)
-    }
-
-    private struct CatalogItemSearch {
-        var candidateItems: [[String: Any]] = []
-        var sawItemsCollection = false
-        var exceededBounds = false
-    }
-
-    /// Walks only bounded JSON containers and collects item dictionaries that
-    /// explicitly identify a supported or deliberately excluded channel type.
-    /// Other browse tiles are scaffolding, not malformed channel candidates.
-    private static func catalogItems(in page: [String: Any]) -> CatalogItemSearch {
-        var search = CatalogItemSearch()
-
-        func visit(_ value: Any, depth: Int) {
-            guard !search.exceededBounds else { return }
-            guard depth <= maximumTraversalDepth else {
-                if let object = value as? [String: Any] {
-                    let entityType = (object["entity"] as? [String: Any])?["type"] as? String
-                    if object["items"] != nil || entityType == "channel-linear" || entityType == "channel-xtra" {
-                        search.exceededBounds = true
-                    }
-                }
-                return
-            }
-
-            if let object = value as? [String: Any] {
-                if let rawItems = object["items"] {
-                    guard let items = rawItems as? [Any] else {
-                        search.exceededBounds = true
-                        return
-                    }
-                    search.sawItemsCollection = true
-                    for case let item as [String: Any] in items {
-                        let type = (item["entity"] as? [String: Any])?["type"] as? String
-                        guard type == "channel-linear" || type == "channel-xtra" else { continue }
-                        guard search.candidateItems.count < maximumCandidateItems else {
-                            search.exceededBounds = true
-                            return
-                        }
-                        search.candidateItems.append(item)
-                    }
-                }
-                for child in object.values {
-                    visit(child, depth: depth + 1)
-                }
-            } else if let values = value as? [Any] {
-                for child in values {
-                    visit(child, depth: depth + 1)
-                }
-            }
-        }
-
-        visit(page, depth: 0)
-        return search
+        let nextOffset = actualOffset + items.count
+        let cursor = nextOffset < totalCount ? FixedCatalogPageCursor(
+            containerID: containerID,
+            setID: setID,
+            nextOffset: nextOffset,
+            totalCount: totalCount
+        ) : nil
+        return FixedCatalogSegmentResult(
+            segment: FixedCatalogDecodedSegment(candidates: candidates, cursor: cursor),
+            failure: nil
+        )
     }
 
     private static func candidate(from item: [String: Any]) -> LiveCatalogCandidate? {
@@ -1127,35 +1247,51 @@ enum FixedCatalogResponseDecoder {
             )
         }
         guard type == "channel-linear",
+              UUID(uuidString: identity) != nil,
               let decorations = item["decorations"] as? [String: Any],
-              let connectivity = decorations["connectivity"] as? String,
-              let entitlement = entitlement(for: connectivity),
               decorations["contentTypeLabel"] as? String == "CHANNEL",
+              let connectivity = decorations["connectivity"] as? String,
+              let isUnentitled = decorations["unentitled"] as? Bool,
               let number = number(from: decorations["channelNumber"]),
-              matchingPlayCapability(item["actions"], entityType: type, identity: identity)
+              matchingPlayCapability(item["actions"], entityType: type, identity: identity),
+              let texts = entity["texts"] as? [String: Any],
+              let title = texts["title"] as? [String: Any],
+              let name = title["default"] as? String,
+              !name.isEmpty
         else { return nil }
 
-        let texts = entity["texts"] as? [String: Any]
-        let title = (texts?["title"] as? [String: Any])?["default"] as? String
-        let description = (texts?["description"] as? [String: Any])?["default"] as? String
+        let entitlement: ChannelEntitlement
+        if isUnentitled {
+            entitlement = .notEntitled
+        } else {
+            switch connectivity {
+            case "ip-and-sat": entitlement = .entitledStandard
+            case "ip": entitlement = .entitledAppOnly
+            default: return nil
+            }
+        }
+        let description = (texts["description"] as? [String: Any])?["default"] as? String
         return LiveCatalogCandidate(
             identity: identity,
             displayNumber: number,
-            name: title,
+            name: name,
             description: description,
             category: decorations["genre"] as? String,
-            artwork: nil,
+            artwork: artwork(from: entity),
             entity: .channelLinear,
             entitlement: entitlement
         )
     }
 
-    private static func entitlement(for connectivity: String) -> ChannelEntitlement? {
-        switch connectivity {
-        case "ip-and-sat": .entitledStandard
-        case "ip": .entitledAppOnly
-        default: nil
-        }
+    private static func artwork(from entity: [String: Any]) -> ChannelArtworkReference? {
+        let images = entity["images"] as? [String: Any]
+        let tile = images?["tile"] as? [String: Any]
+        let aspect = tile?["aspect_1x1"] as? [String: Any]
+        let preferred = aspect?["preferred"] as? [String: Any]
+        let fallback = aspect?["default"] as? [String: Any]
+        return LiveListeningAdapter.mediaImageArtworkReference(
+            from: preferred?["url"] ?? fallback?["url"]
+        )
     }
 
     private static func matchingPlayCapability(_ actions: Any?, entityType: String, identity: String) -> Bool {
@@ -1169,6 +1305,26 @@ enum FixedCatalogResponseDecoder {
         }
     }
 
+    private static func rootObject(_ response: NativeTransportResponse) -> [String: Any]? {
+        guard response.transportFailure == nil,
+              response.redirectLocation == nil,
+              (200 ... 299).contains(response.statusCode),
+              response.body.count <= maximumBodyBytes,
+              response.contentType?.lowercased().hasPrefix("application/json") == true,
+              !containsProtectedControl(response.body)
+        else { return nil }
+        CompatibilitySchemaDiagnostics.recordCatalog(body: response.body)
+        return try? JSONSerialization.jsonObject(with: response.body) as? [String: Any]
+    }
+
+    private static func integer(_ value: Any?) -> Int? {
+        guard let number = value as? NSNumber,
+              CFGetTypeID(number) != CFBooleanGetTypeID(),
+              let integer = Int(exactly: number.doubleValue)
+        else { return nil }
+        return integer
+    }
+
     private static func number(from value: Any?) -> Double? {
         guard let number = value as? NSNumber,
               CFGetTypeID(number) != CFBooleanGetTypeID(),
@@ -1176,6 +1332,10 @@ enum FixedCatalogResponseDecoder {
               Int(exactly: number.doubleValue) != nil
         else { return nil }
         return number.doubleValue
+    }
+
+    private static func failed(_ failure: CatalogFailure) -> FixedCatalogSegmentResult {
+        FixedCatalogSegmentResult(segment: nil, failure: failure)
     }
 
     private static func containsProtectedControl(_ body: Data) -> Bool {
@@ -1187,6 +1347,7 @@ enum FixedCatalogResponseDecoder {
 }
 
 actor CurrentSessionCatalogRefresher: CatalogRefreshing {
+    private static let maximumRequests = 24
     private let sessionCoordinator: SessionCoordinator
     private let transport: any FixedCatalogTransporting
 
@@ -1197,10 +1358,35 @@ actor CurrentSessionCatalogRefresher: CatalogRefreshing {
 
     func refresh() async -> LiveCatalogSnapshotResult {
         switch await sessionCoordinator.withCurrentCatalogCredential({ [transport] credential in
-            await transport.catalog(using: credential)
+            let initial = FixedCatalogResponseDecoder.decodeInitial(
+                await transport.initialCatalog(using: credential)
+            )
+            guard let firstSegment = initial.segment else {
+                return LiveCatalogSnapshotResult(snapshot: nil, failure: initial.failure)
+            }
+
+            var candidates = firstSegment.candidates
+            var cursor = firstSegment.cursor
+            var requestCount = 1
+            while let current = cursor {
+                guard requestCount < Self.maximumRequests else {
+                    return LiveCatalogSnapshotResult(snapshot: nil, failure: .paginationUnavailable)
+                }
+                let page = FixedCatalogResponseDecoder.decodeContinuation(
+                    await transport.catalogPage(using: credential, cursor: current),
+                    expected: current
+                )
+                guard let segment = page.segment else {
+                    return LiveCatalogSnapshotResult(snapshot: nil, failure: page.failure ?? .paginationUnavailable)
+                }
+                candidates.append(contentsOf: segment.candidates)
+                cursor = segment.cursor
+                requestCount += 1
+            }
+            return LiveCatalogAdapter.snapshot(from: candidates)
         }) {
-        case let .completed(response):
-            FixedCatalogResponseDecoder.decode(response)
+        case let .completed(result):
+            result
         case .authenticationUnavailable:
             LiveCatalogSnapshotResult(snapshot: nil, failure: .authenticationUnavailable)
         case .notEntitled:
