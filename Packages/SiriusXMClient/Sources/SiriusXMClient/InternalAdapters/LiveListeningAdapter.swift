@@ -143,16 +143,42 @@ enum LiveListeningAdapter {
     private static func currentProgramArtworkReference(from cut: [String: Any]) -> ChannelArtworkReference? {
         guard let image = cut["image"] as? [String: Any],
               let key = image["url"] as? String,
-              imageServiceKeyIsSafe(key),
-              let resize = imageServiceResize(for: image),
-              let payload = try? JSONSerialization.data(
-                  withJSONObject: [
-                      "key": key,
-                      "edits": [["resize": ["width": resize.width, "height": resize.height]]],
-                  ],
-                  options: [.sortedKeys]
-              )
+              let resize = imageServiceResize(for: image)
         else { return nil }
+
+        return imageServiceArtworkReference(key: key, resize: resize)
+    }
+
+    /// Browse image `url` values are image-service keys, despite the field
+    /// name. Mirror the first-party client by encoding the key with bounded
+    /// edits before sending it to the one fixed image host. Request PNG so the
+    /// validated native decoder never depends on browser-only image formats.
+    static func mediaImageArtworkReference(from value: Any?) -> ChannelArtworkReference? {
+        guard let key = value as? String else { return nil }
+        return imageServiceArtworkReference(
+            key: key,
+            resize: (1_080, 1_080),
+            format: "png"
+        )
+    }
+
+    private static func imageServiceArtworkReference(
+        key: String,
+        resize: (width: Int, height: Int),
+        format: String? = nil
+    ) -> ChannelArtworkReference? {
+        guard imageServiceKeyIsSafe(key) else { return nil }
+
+        var edits: [[String: Any]] = [
+            ["resize": ["width": resize.width, "height": resize.height]],
+        ]
+        if let format {
+            edits.append(["format": ["type": format]])
+        }
+        guard let payload = try? JSONSerialization.data(
+            withJSONObject: ["key": key, "edits": edits],
+            options: [.sortedKeys]
+        ) else { return nil }
 
         return ChannelArtworkReference(
             relativeReference: "/\(payload.base64EncodedString())",
@@ -202,15 +228,6 @@ enum LiveListeningAdapter {
             reference,
             origin: .publicWebsite,
             allowedExtensions: ["jpeg", "jpg", "png", "svg"]
-        )
-    }
-
-    static func mediaImageArtworkReference(from value: Any?) -> ChannelArtworkReference? {
-        guard let reference = value as? String else { return nil }
-        return fixedArtworkReference(
-            reference,
-            origin: .mediaImage,
-            allowedExtensions: nil
         )
     }
 

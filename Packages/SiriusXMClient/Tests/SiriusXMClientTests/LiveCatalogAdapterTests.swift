@@ -394,6 +394,28 @@ struct FixedCatalogRefreshTests {
         let request = try #require(FixedMetadataURLSessionTransport.artworkRequest(for: reference))
         #expect(request.url?.host == "imgsrv-sxm-prod-device.streaming.siriusxm.com")
         #expect(request.value(forHTTPHeaderField: "Authorization") == nil)
+
+        let encodedPayload = String(try #require(request.url?.path.dropFirst()))
+        let decodedPayload = try #require(Data(base64Encoded: encodedPayload))
+        let object = try #require(JSONSerialization.jsonObject(with: decodedPayload) as? [String: Any])
+        #expect(object["key"] as? String == "if/channel/fixture-image-key")
+        let edits = try #require(object["edits"] as? [[String: Any]])
+        let resize = try #require(edits.first?["resize"] as? [String: Any])
+        #expect((resize["width"] as? NSNumber)?.intValue == 1_080)
+        #expect((resize["height"] as? NSNumber)?.intValue == 1_080)
+        let format = try #require(edits.last?["format"] as? [String: Any])
+        #expect(format["type"] as? String == "png")
+    }
+
+    @Test("browse artwork admits only opaque image-service keys")
+    func browseArtworkRejectsURLAndTraversalMaterial() {
+        #expect(LiveListeningAdapter.mediaImageArtworkReference(from: "if/channel/safe-key") != nil)
+        #expect(LiveListeningAdapter.mediaImageArtworkReference(from: "/relative-path") == nil)
+        #expect(LiveListeningAdapter.mediaImageArtworkReference(from: "../traversal") == nil)
+        #expect(LiveListeningAdapter.mediaImageArtworkReference(
+            from: "https://imgsrv-sxm-prod-device.streaming.siriusxm.com/already-materialized"
+        ) == nil)
+        #expect(LiveListeningAdapter.mediaImageArtworkReference(from: "if/channel/key?query=unsafe") == nil)
     }
 
     @Test("an initial 30-item page exposes a bounded continuation instead of publishing a partial lineup")
@@ -743,7 +765,7 @@ struct FixedCatalogRefreshTests {
                     "tile": [
                         "aspect_1x1": [
                             "preferred": [
-                                "url": "https://imgsrv-sxm-prod-device.streaming.siriusxm.com/fixture-image-key",
+                                "url": "if/channel/fixture-image-key",
                             ],
                         ],
                     ],
