@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 4,
+  "identifier": "orbit-deck",
+  "displayName": "Orbit Deck",
+  "playerBackground": "#1A2238", "metadataPanel": "#27365C", "accent": "#9CE6FF", "destructive": "#FF718B",
+  "foregroundScheme": "dark", "layoutVariant": "discConsole", "silhouette": "discPod", "size": "console384x320",
+  "typography": { "display": "systemMonospaced", "body": "systemDefault", "label": "systemMonospaced" },
+  "slots": [
+    { "semantic": "artwork", "frame": { "x": 32, "y": 28, "width": 88, "height": 88 } },
+    { "semantic": "channelIdentity", "frame": { "x": 140, "y": 32, "width": 160, "height": 24 } },
+    { "semantic": "metadata", "frame": { "x": 136, "y": 56, "width": 168, "height": 48 } },
+    { "semantic": "favorite", "frame": { "x": 312, "y": 28, "width": 40, "height": 40 } },
+    { "semantic": "status", "frame": { "x": 32, "y": 116, "width": 88, "height": 32 } },
+    { "semantic": "transport", "frame": { "x": 200, "y": 112, "width": 136, "height": 56 } },
+    { "semantic": "library", "frame": { "x": 28, "y": 252, "width": 88, "height": 40 } },
+    { "semantic": "overflowMenu", "frame": { "x": 308, "y": 252, "width": 40, "height": 40 } }
+  ],
+  "dragRegions": [{ "x": 16, "y": 4, "width": 224, "height": 20 }],
+  "decorations": { "backdrop": null, "chromeFrame": null, "displayPlate": null, "ornaments": [] },
+  "motion": {
+    "format": "canis97", "document": "OrbitDeck.motion.json", "staticPose": "OrbitDeck.json",
+    "states": { "idle": { "startFrame": 0, "endFrame": 0 }, "loading": { "startFrame": 0, "endFrame": 16 }, "playing": { "startFrame": 0, "endFrame": 48 }, "paused": { "startFrame": 0, "endFrame": 0 }, "error": { "startFrame": 0, "endFrame": 0 } },
+    "events": { "channelChanged": { "startFrame": 0, "endFrame": 16 }, "favoriteChanged": { "startFrame": 16, "endFrame": 32 }, "recovered": { "startFrame": 32, "endFrame": 48 } }
+  }
+}

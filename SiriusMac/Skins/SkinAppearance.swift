@@ -1,3 +1,4 @@
+import Canis97MotionSafety
 import Foundation
 import Observation
 
@@ -133,6 +134,7 @@ enum CompactSkinLayoutVariant: String, Codable, CaseIterable, Sendable {
     case desktopUtility
     case discConsole
     case aquaPod
+    case cinemaDeck
 }
 
 enum CompactSkinSilhouetteVariant: String, Codable, CaseIterable, Sendable {
@@ -140,6 +142,7 @@ enum CompactSkinSilhouetteVariant: String, Codable, CaseIterable, Sendable {
     case pixelNotched
     case discPod
     case bubbleCapsule
+    case wideCinema
 }
 
 enum CompactSkinSizeVariant: String, Codable, CaseIterable, Sendable {
@@ -147,6 +150,8 @@ enum CompactSkinSizeVariant: String, Codable, CaseIterable, Sendable {
     case desktop432x304
     case console384x320
     case capsule448x304
+    case cinema448x304
+    case cinema448x360
 
     var contentSize: CGSize {
         switch self {
@@ -154,7 +159,19 @@ enum CompactSkinSizeVariant: String, Codable, CaseIterable, Sendable {
         case .desktop432x304: CGSize(width: 432, height: 304)
         case .console384x320: CGSize(width: 384, height: 320)
         case .capsule448x304: CGSize(width: 448, height: 304)
+        case .cinema448x304: CGSize(width: 448, height: 304)
+        case .cinema448x360: CGSize(width: 448, height: 360)
         }
+    }
+
+    /// Fixed, app-owned presentation policy; skins cannot supply arbitrary zoom.
+    /// Artwork and motion use logical points. Semantic slots are projected to
+    /// presentation points so native text and controls render at final-pixel
+    /// resolution instead of being raster-magnified with the faceplate.
+    var presentationScale: CGFloat { self == .cinema448x360 ? 1.5 : 1 }
+
+    var presentationSize: CGSize {
+        CGSize(width: contentSize.width * presentationScale, height: contentSize.height * presentationScale)
     }
 }
 
@@ -210,6 +227,19 @@ struct CompactSkinLayoutPlan: Equatable, Sendable {
     let decorations: CompactSkinDecorationReferences
 
     var contentSize: CGSize { size.contentSize }
+    var presentationScale: CGFloat { size.presentationScale }
+    var presentationSize: CGSize { size.presentationSize }
+
+    /// The two finite Quartz receiver layouts share optical control geometry.
+    /// Keep the original contract valid for previously imported packages.
+    var usesQuartzReceiverGeometry: Bool {
+        let offset = size == .cinema448x360 ? 56 : 0
+        return layoutVariant == .cinemaDeck &&
+            slotFrames[.artwork] == .init(x: 24, y: 240 + offset, width: 48, height: 48) &&
+            slotFrames[.metadata] == .init(x: 92, y: 260 + offset, width: 156, height: 40) &&
+            slotFrames[.favorite] == .init(x: 216, y: 228 + offset, width: 32, height: 32) &&
+            slotFrames[.transport] == .init(x: 264, y: 260 + offset, width: 128, height: 40)
+    }
     var isLegacy: Bool { layoutVariant == .legacyStack }
     var decorationPaths: [String] {
         [decorations.backdrop, decorations.chromeFrame, decorations.displayPlate]
@@ -246,6 +276,146 @@ private struct SkinManifestVersion3: Codable, Sendable {
     let decorations: CompactSkinDecorationReferences
 }
 
+/// Schema 4's imported motion descriptor is deliberately closed. It names
+/// local files and app-owned semantic ranges; it never describes behavior.
+enum SkinMotionFormat: String, Codable, CaseIterable, Sendable {
+    case lottie
+    case canis97
+}
+
+enum SkinMotionState: String, Codable, CaseIterable, Hashable, Sendable {
+    case idle
+    case loading
+    case playing
+    case paused
+    case error
+}
+
+enum SkinMotionEvent: String, Codable, CaseIterable, Hashable, Sendable {
+    case channelChanged
+    case favoriteChanged
+    case channelFavoriteAdded
+    case channelFavoriteRemoved
+    case songFavoriteAdded
+    case songFavoriteRemoved
+    case recovered
+}
+
+struct SkinMotionRange: Codable, Equatable, Sendable {
+    let startFrame: Int
+    let endFrame: Int
+}
+
+struct SkinMotionManifest: Decodable, Sendable {
+    let format: SkinMotionFormat
+    let document: String
+    let staticPose: String
+    let spriteScene: String?
+    let spriteAssets: [String]?
+    let states: [SkinMotionState: SkinMotionRange]
+    let events: [SkinMotionEvent: SkinMotionRange]?
+
+    private enum CodingKeys: String, CodingKey {
+        case format
+        case document
+        case staticPose
+        case spriteScene
+        case spriteAssets
+        case states
+        case events
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        format = try container.decode(SkinMotionFormat.self, forKey: .format)
+        document = try container.decode(String.self, forKey: .document)
+        staticPose = try container.decode(String.self, forKey: .staticPose)
+        spriteScene = try container.decodeIfPresent(String.self, forKey: .spriteScene)
+        spriteAssets = try container.decodeIfPresent([String].self, forKey: .spriteAssets)
+        states = try Self.decodeEnumDictionary(
+            container.decode([String: SkinMotionRange].self, forKey: .states),
+            codingPath: container.codingPath + [CodingKeys.states],
+            kind: "motion state"
+        )
+        if let rawEvents = try container.decodeIfPresent([String: SkinMotionRange].self, forKey: .events) {
+            events = try Self.decodeEnumDictionary(
+                rawEvents,
+                codingPath: container.codingPath + [CodingKeys.events],
+                kind: "motion event"
+            )
+        } else {
+            events = nil
+        }
+    }
+
+    private static func decodeEnumDictionary<Key>(
+        _ rawValues: [String: SkinMotionRange],
+        codingPath: [any CodingKey],
+        kind: String
+    ) throws -> [Key: SkinMotionRange]
+    where Key: RawRepresentable & Hashable, Key.RawValue == String {
+        try Dictionary(uniqueKeysWithValues: rawValues.map { rawKey, range in
+            guard let key = Key(rawValue: rawKey) else {
+                throw DecodingError.dataCorrupted(.init(
+                    codingPath: codingPath,
+                    debugDescription: "Unknown \(kind) key: \(rawKey)"
+                ))
+            }
+            return (key, range)
+        })
+    }
+}
+
+private struct SkinManifestVersion4: Decodable, Sendable {
+    struct Slot: Codable, Sendable { let semantic: CompactSkinSemanticSlot; let frame: CompactSkinRect }
+    let schemaVersion: Int
+    let identifier: SkinIdentifier
+    let displayName: String
+    let playerBackground: String
+    let metadataPanel: String
+    let accent: String
+    let destructive: String
+    let foregroundScheme: SkinManifest.ForegroundScheme
+    let layoutVariant: CompactSkinLayoutVariant
+    let silhouette: CompactSkinSilhouetteVariant
+    let size: CompactSkinSizeVariant
+    let typography: CompactSkinTypography
+    let slots: [Slot]
+    let dragRegions: [CompactSkinRect]
+    let decorations: CompactSkinDecorationReferences
+    let motion: SkinMotionManifest
+
+    var schemaThreeLayout: SkinManifestVersion3 {
+        .init(
+            schemaVersion: 3,
+            identifier: identifier,
+            displayName: displayName,
+            playerBackground: playerBackground,
+            metadataPanel: metadataPanel,
+            accent: accent,
+            destructive: destructive,
+            foregroundScheme: foregroundScheme,
+            layoutVariant: layoutVariant,
+            silhouette: silhouette,
+            size: size,
+            typography: typography,
+            slots: slots.map { .init(semantic: $0.semantic, frame: $0.frame) },
+            dragRegions: dragRegions,
+            decorations: decorations
+        )
+    }
+}
+
+struct ValidatedSkinMotion: Equatable, Sendable {
+    let format: SkinMotionFormat
+    let documentURL: URL
+    let staticPoseURL: URL
+    let spriteSceneURL: URL?
+    let spriteAssetURLs: [String: URL]
+    let states: [SkinMotionState: SkinMotionRange]
+    let events: [SkinMotionEvent: SkinMotionRange]?
+}
+
 struct ValidatedSkinAppearance: Identifiable, Equatable, Sendable {
     let reference: SkinSelectionReference
     let displayName: String
@@ -257,6 +427,7 @@ struct ValidatedSkinAppearance: Identifiable, Equatable, Sendable {
     let displayGlowHex: String
     let layoutPlan: CompactSkinLayoutPlan
     let decorationAssetURLs: [URL]
+    let motion: ValidatedSkinMotion?
 
     init(
         reference: SkinSelectionReference,
@@ -268,7 +439,8 @@ struct ValidatedSkinAppearance: Identifiable, Equatable, Sendable {
         chromeHighlightHex: String? = nil,
         displayGlowHex: String? = nil,
         layoutPlan: CompactSkinLayoutPlan = .legacy,
-        decorationAssetURLs: [URL] = []
+        decorationAssetURLs: [URL] = [],
+        motion: ValidatedSkinMotion? = nil
     ) {
         self.reference = reference
         self.displayName = displayName
@@ -280,6 +452,7 @@ struct ValidatedSkinAppearance: Identifiable, Equatable, Sendable {
         self.displayGlowHex = displayGlowHex ?? style.secondaryHex
         self.layoutPlan = layoutPlan
         self.decorationAssetURLs = decorationAssetURLs
+        self.motion = motion
     }
 
     var id: SkinSelectionReference { reference }
@@ -400,6 +573,12 @@ enum SkinManifestValidator {
         "schemaVersion", "identifier", "displayName", "playerBackground", "metadataPanel", "accent", "destructive", "foregroundScheme",
         "layoutVariant", "silhouette", "size", "typography", "slots", "dragRegions", "decorations"
     ]
+    private static let version4Keys = version3Keys.union(["motion"])
+    private static let version4MotionRequiredKeys: Set<String> = [
+        "format", "document", "staticPose", "states", "events",
+    ]
+    private static let version4MotionOptionalKeys: Set<String> = ["spriteScene", "spriteAssets"]
+    private static let maximumMotionFrame = Int(MotionSafetyLimits.production.maximumFrameRate * MotionSafetyLimits.production.maximumDuration)
 
     static func validate(
         _ data: Data,
@@ -422,6 +601,8 @@ enum SkinManifestValidator {
             return try validateVersion2(data, classification: classification, assetResolver: assetResolver)
         case 3:
             return try validateVersion3(data, dictionary: dictionary, classification: classification, assetResolver: assetResolver)
+        case 4:
+            return try validateVersion4(data, dictionary: dictionary, classification: classification, assetResolver: assetResolver)
         default:
             throw SkinManifestValidationError.unsupportedSchema
         }
@@ -444,6 +625,17 @@ enum SkinManifestValidator {
                   let manifest = try? JSONDecoder().decode(SkinManifestVersion3.self, from: data)
             else { throw SkinManifestValidationError.unknownOrMissingKeys }
             return Set(manifestDecorationPaths(manifest))
+        case 4:
+            guard Set(dictionary.keys) == version4Keys,
+                  validVersion4MotionKeys(dictionary),
+                  let manifest = try? JSONDecoder().decode(SkinManifestVersion4.self, from: data)
+            else { throw SkinManifestValidationError.unknownOrMissingKeys }
+            return Set(
+                manifestDecorationPaths(manifest.schemaThreeLayout) +
+                    [manifest.motion.document, manifest.motion.staticPose] +
+                    [manifest.motion.spriteScene].compactMap { $0 } +
+                    (manifest.motion.spriteAssets ?? [])
+            )
         default:
             throw SkinManifestValidationError.unsupportedSchema
         }
@@ -460,6 +652,41 @@ enum SkinManifestValidator {
               manifest.schemaVersion == 3
         else { throw SkinManifestValidationError.unknownOrMissingKeys }
 
+        return try validatedSchemaThreeAppearance(
+            manifest,
+            classification: classification,
+            assetResolver: assetResolver,
+            motion: nil
+        )
+    }
+
+    private static func validateVersion4(
+        _ data: Data,
+        dictionary: [String: Any],
+        classification: SkinClassification,
+        assetResolver: AssetResolver
+    ) throws -> ValidatedSkinAppearance {
+        guard Set(dictionary.keys) == version4Keys,
+              validVersion4MotionKeys(dictionary),
+              let manifest = try? JSONDecoder().decode(SkinManifestVersion4.self, from: data),
+              manifest.schemaVersion == 4
+        else { throw SkinManifestValidationError.unknownOrMissingKeys }
+
+        let motion = try validatedMotion(manifest.motion, assetResolver: assetResolver)
+        return try validatedSchemaThreeAppearance(
+            manifest.schemaThreeLayout,
+            classification: classification,
+            assetResolver: assetResolver,
+            motion: motion
+        )
+    }
+
+    private static func validatedSchemaThreeAppearance(
+        _ manifest: SkinManifestVersion3,
+        classification: SkinClassification,
+        assetResolver: AssetResolver,
+        motion: ValidatedSkinMotion?
+    ) throws -> ValidatedSkinAppearance {
         let plan = try validateLayout(manifest)
         let colors = [manifest.playerBackground, manifest.metadataPanel, manifest.accent, manifest.destructive]
         guard colors.allSatisfy(isSixDigitRGB) else { throw SkinManifestValidationError.invalidColor }
@@ -491,13 +718,76 @@ enum SkinManifestValidator {
             chromeHighlightHex: manifest.accent,
             displayGlowHex: manifest.metadataPanel,
             layoutPlan: plan,
-            decorationAssetURLs: decorationURLs
+            decorationAssetURLs: decorationURLs,
+            motion: motion
         )
+    }
+
+    private static func validatedMotion(
+        _ motion: SkinMotionManifest,
+        assetResolver: AssetResolver
+    ) throws -> ValidatedSkinMotion {
+        let spriteAssets = motion.spriteAssets ?? []
+        let hasSpriteScene = motion.spriteScene != nil
+        let hasSpriteAssets = !spriteAssets.isEmpty
+        guard isCanonicalLocalAssetPath(motion.document),
+              isCanonicalLocalAssetPath(motion.staticPose),
+              motion.document != motion.staticPose,
+              hasSpriteScene == hasSpriteAssets,
+              motion.spriteScene.map(isCanonicalLocalAssetPath) ?? true,
+              motion.spriteScene != motion.document,
+              motion.spriteScene != motion.staticPose,
+              spriteAssets.count <= 24,
+              Set(spriteAssets).count == spriteAssets.count,
+              spriteAssets.allSatisfy(isCanonicalLocalAssetPath),
+              !spriteAssets.contains(motion.document),
+              !spriteAssets.contains(motion.staticPose),
+              !spriteAssets.contains(motion.spriteScene ?? ""),
+              Set(motion.states.keys) == Set(SkinMotionState.allCases),
+              motion.events.map({ !$0.isEmpty && Set($0.keys).isSubset(of: Set(SkinMotionEvent.allCases)) }) ?? true,
+              motion.states.values.allSatisfy(validMotionRange),
+              motion.events?.values.allSatisfy(validMotionRange) ?? true,
+              let documentURL = assetResolver(motion.document),
+              let staticPoseURL = assetResolver(motion.staticPose)
+        else { throw SkinManifestValidationError.unresolvedAsset }
+
+        let spriteSceneURL: URL?
+        if let path = motion.spriteScene {
+            guard let url = assetResolver(path) else { throw SkinManifestValidationError.unresolvedAsset }
+            spriteSceneURL = url
+        } else {
+            spriteSceneURL = nil
+        }
+        var spriteAssetURLs: [String: URL] = [:]
+        for path in spriteAssets {
+            guard let url = assetResolver(path) else { throw SkinManifestValidationError.unresolvedAsset }
+            spriteAssetURLs[path] = url
+        }
+        return .init(
+            format: motion.format,
+            documentURL: documentURL,
+            staticPoseURL: staticPoseURL,
+            spriteSceneURL: spriteSceneURL,
+            spriteAssetURLs: spriteAssetURLs,
+            states: motion.states,
+            events: motion.events
+        )
+    }
+
+    private static func validMotionRange(_ range: SkinMotionRange) -> Bool {
+        range.startFrame >= 0 && range.endFrame >= range.startFrame && range.endFrame <= maximumMotionFrame
     }
 
     private static func manifestDecorationPaths(_ manifest: SkinManifestVersion3) -> [String] {
         [manifest.decorations.backdrop, manifest.decorations.chromeFrame, manifest.decorations.displayPlate]
             .compactMap { $0 } + manifest.decorations.ornaments
+    }
+
+    private static func validVersion4MotionKeys(_ dictionary: [String: Any]) -> Bool {
+        guard let motion = dictionary["motion"] as? [String: Any] else { return false }
+        let keys = Set(motion.keys)
+        return version4MotionRequiredKeys.isSubset(of: keys) &&
+            keys.isSubset(of: version4MotionRequiredKeys.union(version4MotionOptionalKeys))
     }
 
     private static func validateLayout(_ manifest: SkinManifestVersion3) throws -> CompactSkinLayoutPlan {
@@ -506,8 +796,10 @@ enum SkinManifestValidator {
         case .desktopUtility: (.desktopUtility, .pixelNotched, .desktop432x304)
         case .discConsole: (.discConsole, .discPod, .console384x320)
         case .aquaPod: (.aquaPod, .bubbleCapsule, .capsule448x304)
+        case .cinemaDeck: (.cinemaDeck, .wideCinema, .cinema448x304)
         }
-        guard manifest.silhouette == expected.1, manifest.size == expected.2,
+        let isLargeCinema = manifest.layoutVariant == .cinemaDeck && manifest.size == .cinema448x360
+        guard manifest.silhouette == expected.1, (manifest.size == expected.2 || isLargeCinema),
               manifest.decorations.ornaments.count <= 3,
               Set(manifest.slots.map(\.semantic)) == Set(CompactSkinSemanticSlot.allCases),
               manifest.slots.count == CompactSkinSemanticSlot.allCases.count
@@ -786,6 +1078,11 @@ struct SkinAppearanceCatalog: Sendable {
         "PocketDisc",
         "AquaVista",
         "VintageCassetteDeck",
+        "OrbitDeck",
+        "SignalGarden",
+        "Exit97",
+        "QuartzDeck",
+        "Abyssal97",
     ]
     private static let bundledResourceNames = ["SignalGlow", "TapeDeck"] + expressiveBundledResourceNames
 

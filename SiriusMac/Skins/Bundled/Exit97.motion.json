@@ -1,0 +1,161 @@
+{
+  "formatVersion": 1,
+  "canvas": {
+    "width": 448,
+    "height": 360
+  },
+  "frameRate": 24,
+  "duration": 10,
+  "layers": [
+    {
+      "identifier": "road_glow",
+      "kind": "shape",
+      "transform": {
+        "position": {
+          "x": 0,
+          "y": 0
+        },
+        "scale": {
+          "x": 1,
+          "y": 1
+        },
+        "rotation": 0
+      },
+      "opacity": 0,
+      "paths": [
+        {
+          "identifier": "asphalt_sheen",
+          "points": [
+            {
+              "x": 305,
+              "y": 132
+            },
+            {
+              "x": 448,
+              "y": 165
+            },
+            {
+              "x": 448,
+              "y": 228
+            },
+            {
+              "x": 330,
+              "y": 228
+            }
+          ],
+          "fill": {
+            "color": {
+              "red": 0.98,
+              "green": 0.48,
+              "blue": 0.24,
+              "alpha": 0.2
+            }
+          },
+          "stroke": null
+        }
+      ],
+      "masks": [],
+      "keyframes": [
+        {
+          "frame": 0,
+          "value": 0
+        },
+        {
+          "frame": 48,
+          "value": 0
+        },
+        {
+          "frame": 96,
+          "value": 0
+        },
+        {
+          "frame": 144,
+          "value": 0
+        },
+        {
+          "frame": 192,
+          "value": 0
+        },
+        {
+          "frame": 240,
+          "value": 0
+        }
+      ],
+      "precompositionID": null
+    },
+    {
+      "identifier": "motel_glow",
+      "kind": "shape",
+      "transform": {
+        "position": {
+          "x": 0,
+          "y": 0
+        },
+        "scale": {
+          "x": 1,
+          "y": 1
+        },
+        "rotation": 0
+      },
+      "opacity": 0,
+      "paths": [
+        {
+          "identifier": "sign_halo",
+          "points": [
+            {
+              "x": 365,
+              "y": 68
+            },
+            {
+              "x": 411,
+              "y": 68
+            },
+            {
+              "x": 411,
+              "y": 112
+            },
+            {
+              "x": 365,
+              "y": 112
+            }
+          ],
+          "fill": {
+            "color": {
+              "red": 0.18,
+              "green": 0.82,
+              "blue": 0.78,
+              "alpha": 0.16
+            }
+          },
+          "stroke": null
+        }
+      ],
+      "masks": [],
+      "keyframes": [
+        {
+          "frame": 0,
+          "value": 0
+        },
+        {
+          "frame": 60,
+          "value": 0
+        },
+        {
+          "frame": 120,
+          "value": 0
+        },
+        {
+          "frame": 180,
+          "value": 0
+        },
+        {
+          "frame": 240,
+          "value": 0
+        }
+      ],
+      "precompositionID": null
+    }
+  ],
+  "precompositions": [],
+  "stateBindings": []
+}

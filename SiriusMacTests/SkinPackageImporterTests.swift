@@ -10,6 +10,18 @@ final class SkinPackageImporterTests: XCTestCase {
         XCTAssertTrue(source.contains("SkinManifestValidator.referencedAssetPaths"))
         XCTAssertFalse(source.contains("JSONDecoder().decode(SkinManifest.self"))
     }
+
+    func testSchemaFourCanonicalizationUsesTheXPCBoundaryAndRemovesRawInput() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        let source = try String(contentsOf: root.appendingPathComponent("SiriusMac/Skins/SkinPackageImporter.swift"), encoding: .utf8)
+
+        XCTAssertTrue(source.contains("motionConverter: any Canis97MotionConverting"))
+        XCTAssertTrue(source.contains("try await motionConverter.convert(source)"))
+        XCTAssertTrue(source.contains("CanonicalMotionCodec.encode"))
+        XCTAssertTrue(source.contains("rewriteMotionManifest"))
+        XCTAssertTrue(source.contains("fileManager.removeItem(at: motion.documentURL)"))
+        XCTAssertTrue(source.contains("CanonicalMotionCodec.decode"))
+    }
     func testManagedRootsRemainUnderOneApplicationSupportSkinRoot() {
         let support = URL(fileURLWithPath: "/tmp/skin-import-contract", isDirectory: true)
         let store = ManagedSkinStore(applicationSupportDirectory: support)

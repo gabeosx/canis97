@@ -40,7 +40,12 @@ has an independent release cadence. Its public API still follows SemVer.
 
 3. Protect the default branch and require the `CI / validate` check.
 4. Protect tags matching `v*.*.*` so only release maintainers can create them.
-5. Create a separate `OWNER/homebrew-tap` repository containing a `Casks/`
+5. Enable GitHub **immutable releases** before the first public publication.
+   Set the protected repository variable `IMMUTABLE_RELEASES_CONFIRMED` to the
+   exact value `true` only after a release maintainer has confirmed that setting.
+   The workflow refuses to publish without it; this is an operator gate, not a
+   claim that a workflow can enable the repository setting itself.
+6. Create a separate `OWNER/homebrew-tap` repository containing a `Casks/`
    directory. Set repository variable `HOMEBREW_TAP_REPOSITORY` to that
    `owner/repository` value. Add a dedicated write-enabled SSH deploy key to
    that tap and store only its private half as the source repository secret
@@ -87,7 +92,9 @@ upload, tag, or publish Canis97.
 
 ## Publish
 
-Create and push an annotated tag from the reviewed commit:
+Create and push an annotated tag from the reviewed commit only after the
+repository immutable-release setting and protected `IMMUTABLE_RELEASES_CONFIRMED`
+variable have both been checked:
 
 ```sh
 git tag -a v0.1.0 -m 'Canis97 0.1.0'
@@ -97,18 +104,56 @@ git push origin v0.1.0
 The `Release` workflow then:
 
 1. Rejects malformed tags or a tag that differs from `MARKETING_VERSION`.
-2. Builds the exact tagged commit with Xcode 26.6 and a CI build number.
-3. Verifies the Developer ID signature and hardened runtime.
-4. Submits the app with `notarytool`, staples the accepted ticket, and validates
-   the application bundle with `stapler`, `codesign`, Gatekeeper, and
-   `syspolicy_check`.
-5. Builds the branded drag-to-Applications disk image, signs it with Developer
-   ID Application, notarizes and staples the outermost DMG, and validates it
-   with `stapler`, `codesign`, and Gatekeeper.
-6. Creates `Canis97-VERSION-arm64.dmg`, `SHA256SUMS`, and an SPDX SBOM from the
-   final stapled disk-image bytes.
-7. Publishes an immutable GitHub Release from the tag.
-8. Renders and pushes `Casks/canis97.rb` to the configured Homebrew tap.
+2. Creates (or, on a retry, reuses) only the matching draft release. A published
+   matching release is terminal: do not replace its tag or assets.
+3. Builds the exact tagged commit with Xcode 26.6 and a CI build number.
+4. Signs the embedded `Canis97MotionConverter.xpc` before `Canis97.app`, then
+   verifies both Developer ID identifiers, team, hardened runtime, secure
+   timestamp, and exact expected entitlements.
+5. Submits a notary ZIP, waits for acceptance, staples the app, and validates the
+   stapled app with `stapler`, strict `codesign`, `spctl`, and
+   `syspolicy_check distribution`.
+6. Builds the branded drag-to-Applications DMG around the stapled app, signs the
+   disk image with Developer ID Application, notarizes and staples the outermost
+   DMG, and validates it with `codesign`, `stapler`, and `spctl`.
+   The application is checked with `syspolicy_check distribution` again.
+7. Derives `SHA256SUMS`, the SPDX SBOM, and the verification manifest from the
+   final stapled DMG bytes.
+8. Attaches the final DMG, checksum, SBOM, and verification manifest to the draft,
+   downloads all four again, and verifies their hashes before publishing the draft.
+9. Renders and pushes `Casks/canis97.rb` to the configured Homebrew tap only after
+   the verified draft is published.
+
+Never publish an unsigned, unstapled, unnotarized, or policy-rejected substitute.
+Do not instruct users to bypass Gatekeeper.
+
+## Homebrew lifecycle verification
+
+GitHub Releases remains the canonical channel; Homebrew is an optional mirror of
+the same final disk image. The cask URL is always the immutable
+`vVERSION/Canis97-VERSION-arm64.dmg` asset and its lower-case SHA-256 is the
+digest of that final stapled DMG, never a pre-notary or `latest` asset.
+
+Before public publication, an owner may run the separately authorized local
+integration verifier with two immutable local archives. There is no earlier
+public Canis97 release, so its `--prior-archive` is deliberately a synthetic
+older archive used only to prove the first upgrade transition. The verifier uses
+a new explicit work directory, temporary app/cache/tap paths, performs clean
+install → upgrade → repeated upgrade → uninstall, and writes a residue report.
+It never launches Canis97, uses credentials or Keychain, contacts SiriusXM,
+modifies `/Applications`, or pushes a tap.
+
+```sh
+CANIS97_RUN_HOMEBREW_INTEGRATION=true \
+  script/verify_homebrew_release.sh \
+  --cask-fqn gabeosx/homebrew-tap/canis97 \
+  --prior-archive /absolute/path/Canis97-0.0.1-arm64.dmg \
+  --current-archive /absolute/path/Canis97-0.1.0-arm64.dmg \
+  --work-dir /absolute/path/new-canis97-homebrew-check
+```
+
+The command is gated intentionally: do not run it in ordinary CI or without an
+owner-authorized release verification environment.
 
 The app embeds the triggering `owner/repository` in its Info.plist. Its update
 checker calls only GitHub's public latest-release API and opens the canonical
@@ -116,26 +161,29 @@ release page; it never downloads or installs an update.
 
 ## Verify after publishing
 
-1. On a clean current-macOS machine, download the GitHub DMG and compare
-   it with `SHA256SUMS`.
+1. Confirm the published release has exactly the final DMG, `SHA256SUMS`, SPDX
+   SBOM, and verification manifest attached; download the DMG and compare it
+   with `SHA256SUMS`.
 2. Open the DMG, drag Canis97 into Applications, and launch it through Finder so
    Gatekeeper evaluates the downloaded path.
 3. Confirm About shows the intended version and CI build number.
 4. Choose **Canis97 > Check for Updates…** and confirm the current version is
    reported as up to date.
-5. Test the tap:
+5. Test the cask with the one fully-qualified item form; do not pre-trust the
+   whole third-party tap:
 
    ```sh
-   brew tap OWNER/tap
-   brew install --cask canis97
-   brew uninstall --cask canis97
+   brew install --cask gabeosx/homebrew-tap/canis97
+   brew upgrade --cask gabeosx/homebrew-tap/canis97
+   brew uninstall --cask gabeosx/homebrew-tap/canis97
    ```
 
 ## Recovery and rollback
 
-- If notarization, signing, or validation fails, do not publish an unsigned
-  substitute. Fix the workflow or certificate and create a new build/tag only
-  when the source commit or version changes.
+- If draft creation, notarization, signing, attachment verification, or policy
+  validation fails, do not publish an unsigned substitute. Preserve the failed
+  tag/draft for diagnosis and fix forward with a new patch version; do not
+  replace a tag or release asset.
 - If a release is unsafe, mark the GitHub Release as withdrawn, remove its cask
   version from the tap, and publish a fixed patch version. Do not reuse the old
   tag or asset URL.

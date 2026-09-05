@@ -11,15 +11,26 @@ struct CompactPlayerView: View {
     let onAlwaysOnTopChanged: @MainActor (Bool) -> Void
     let onAppearanceRecovery: @MainActor () -> Void
     let audioRoutingPlayer: AVPlayer?
+    let animationBudgetState: AnimatedSkinBudgetState
+    let animationReduceMotionOverride: Bool?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showsNativeAppearanceRecoveryStatus = false
     @State private var marqueeCycleOrigin = Date.now
+    @State private var marqueeIsVisible = false
     @State private var showsAudioOutputSelector = false
+    @State private var animatedSkinEvent: AnimatedSkinEventTrigger?
+    @State private var animatedSkinEventSequence: UInt64 = 0
 
-    private var renderingAppearance: ValidatedSkinAppearance {
-        appearance.renderableAppearance { NSImage(contentsOf: $0) != nil }
-    }
+    // Resolve each decoration once per input snapshot, outside all animation ticks.
+    private let renderingAppearance: ValidatedSkinAppearance
+    private let decorationImages: [URL: NSImage]
     private var style: CompactSkinStyle { renderingAppearance.style }
+    /// A finite, geometry-derived contract for the approved Quartz Link
+    /// receiver. It avoids identifier-specific behavior while letting native
+    /// controls use the optical centers of this exact validated faceplate.
+    private var usesQuartzReceiverGeometry: Bool {
+        renderingAppearance.layoutPlan.usesQuartzReceiverGeometry
+    }
     private var needsNativeAppearanceRecovery: Bool {
         appearance.reference != .native && renderingAppearance.reference == .native
     }
@@ -28,6 +39,12 @@ struct CompactPlayerView: View {
     /// all interactive content remains in the fixed semantic-slot registry.
     private var hasExpressiveFaceplate: Bool {
         !renderingAppearance.layoutPlan.isLegacy && !renderingAppearance.decorationAssetURLs.isEmpty
+    }
+    private var presentationScale: CGFloat {
+        renderingAppearance.layoutPlan.presentationScale
+    }
+    private var semanticPresentationScale: CGFloat {
+        renderingAppearance.layoutPlan.isLegacy ? 1 : presentationScale
     }
 
     init(
@@ -38,44 +55,91 @@ struct CompactPlayerView: View {
         isAlwaysOnTop: Bool = false,
         onAlwaysOnTopChanged: @escaping @MainActor (Bool) -> Void = { _ in },
         onAppearanceRecovery: @escaping @MainActor () -> Void = {},
-        audioRoutingPlayer: AVPlayer? = nil
+        audioRoutingPlayer: AVPlayer? = nil,
+        animationBudgetState: AnimatedSkinBudgetState = .withinBudget,
+        animationReduceMotionOverride: Bool? = nil
     ) {
         self.presentation = presentation
         self.appearance = appearance
+        var images: [URL: NSImage] = [:]
+        self.renderingAppearance = appearance.renderableAppearance { url in
+            if images[url] != nil { return true }
+            guard let image = NSImage(contentsOf: url) else { return false }
+            images[url] = image
+            return true
+        }
+        self.decorationImages = images
         self.favoriteSongActionState = favoriteSongActionState
         self.onAction = onAction
         self.isAlwaysOnTop = isAlwaysOnTop
         self.onAlwaysOnTopChanged = onAlwaysOnTopChanged
         self.onAppearanceRecovery = onAppearanceRecovery
         self.audioRoutingPlayer = audioRoutingPlayer
+        self.animationBudgetState = animationBudgetState
+        self.animationReduceMotionOverride = animationReduceMotionOverride
     }
 
-    var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: reduceMotion)) { timeline in
+    private var playerCanvas: some View {
+        Group {
             ZStack(alignment: .topLeading) {
-                decorativeImage(at: renderingAppearance.backgroundAssetURL)
-                expressiveFaceplateLayer
-                if !hasExpressiveFaceplate {
-                    appOwnedDecorativeSurfaces
+                ZStack(alignment: .topLeading) {
+                    decorativeImage(at: renderingAppearance.backgroundAssetURL)
+                    expressiveFaceplateLayer
+                    if !hasExpressiveFaceplate {
+                        appOwnedDecorativeSurfaces
+                    }
+                    AnimatedSkinHost(
+                        motion: renderingAppearance.motion,
+                        state: animatedSkinState,
+                        event: animatedSkinEvent,
+                        isSongFavorite: favoriteSongActionState.isFavorite,
+                        isChannelFavorite: presentation.isFavorite,
+                        reduceMotion: effectiveReduceMotion,
+                        budgetState: animationBudgetState
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
                 }
+                .frame(
+                    width: renderingAppearance.layoutPlan.contentSize.width,
+                    height: renderingAppearance.layoutPlan.contentSize.height,
+                    alignment: .topLeading
+                )
+                .scaleEffect(presentationScale, anchor: .topLeading)
+                .frame(
+                    width: renderingAppearance.layoutPlan.presentationSize.width,
+                    height: renderingAppearance.layoutPlan.presentationSize.height,
+                    alignment: .topLeading
+                )
                 if renderingAppearance.layoutPlan.isLegacy {
                     VStack(alignment: .leading, spacing: style.sectionSpacing) {
                         if let channel = presentation.channelIdentity {
-                            populatedContent(channel, at: timeline.date)
+                            populatedContent(channel, at: Date.now)
                         } else {
-                            emptyContent(at: timeline.date)
+                            emptyContent(at: Date.now)
                         }
                     }
                     .padding(style.padding)
                 } else {
-                    expressiveContent(at: timeline.date)
+                    expressiveContent(at: Date.now)
                 }
             }
         }
-        .frame(width: style.contentSize.width, height: style.contentSize.height, alignment: .topLeading)
+    }
+
+    private var decoratedPlayer: some View {
+        playerCanvas
+        .frame(
+            width: renderingAppearance.layoutPlan.presentationSize.width,
+            height: renderingAppearance.layoutPlan.presentationSize.height,
+            alignment: .topLeading
+        )
         .background {
             ZStack {
-                surfaceBackground(.canvas)
+                if !usesQuartzReceiverGeometry {
+                    surfaceBackground(.canvas)
+                }
                 Color.clear
                     .contentShape(.rect)
                     .gesture(WindowDragGesture())
@@ -85,9 +149,13 @@ struct CompactPlayerView: View {
         }
         .tint(surfaceTint(.interactiveAccent))
         .mask {
-            if hasExpressiveFaceplate {
-                RoundedRectangle(cornerRadius: expressiveFaceplateCornerRadius, style: .continuous)
-                    .padding(4)
+            if usesQuartzReceiverGeometry {
+                // Quartz supplies its own RGBA silhouette, including the gap
+                // between units. An inset rounded mask would crop the receiver.
+                Rectangle()
+            } else if hasExpressiveFaceplate {
+                RoundedRectangle(cornerRadius: presentationFaceplateCornerRadius, style: .continuous)
+                    .padding(presentationFaceplateInset)
             } else {
                 CompactSkinSilhouetteShape(
                     variant: renderingAppearance.layoutPlan.silhouette,
@@ -102,7 +170,12 @@ struct CompactPlayerView: View {
         .accessibilityIdentifier("compact.canvas")
         .id(renderingAppearance.reference)
         .transition(.opacity)
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: renderingAppearance.reference)
+        .animation(effectiveReduceMotion ? nil : .easeInOut(duration: 0.15), value: renderingAppearance.reference)
+    }
+
+    var body: some View {
+        decoratedPlayer
+        .background(CompactPlayerVisibilityProbe { marqueeIsVisible = $0 })
         .onChange(of: needsNativeAppearanceRecovery, initial: true) { _, needsRecovery in
             guard needsRecovery else { return }
             showsNativeAppearanceRecoveryStatus = true
@@ -110,11 +183,28 @@ struct CompactPlayerView: View {
         }
         .onChange(of: appearance.reference) { _, reference in
             marqueeCycleOrigin = .now
+            animatedSkinEvent = nil
             guard reference != .native, !needsNativeAppearanceRecovery else { return }
             showsNativeAppearanceRecoveryStatus = false
         }
         .onChange(of: marqueeContentIdentity) { _, _ in
             marqueeCycleOrigin = .now
+        }
+        .onChange(of: presentation.channelIdentity) { oldValue, newValue in
+            guard oldValue != nil, newValue != nil, oldValue != newValue else { return }
+            emitAnimatedSkinEvent(.channelChanged)
+        }
+        .onChange(of: presentation.isFavorite) { oldValue, newValue in
+            guard presentation.channelIdentity != nil, oldValue != newValue else { return }
+            emitAnimatedSkinEvent(newValue ? .channelFavoriteAdded : .channelFavoriteRemoved)
+        }
+        .onChange(of: favoriteSongActionState.isFavorite) { oldValue, newValue in
+            guard favoriteSongActionState.isEnabled, oldValue != newValue else { return }
+            emitAnimatedSkinEvent(newValue ? .songFavoriteAdded : .songFavoriteRemoved)
+        }
+        .onChange(of: presentation.status) { oldValue, newValue in
+            guard oldValue?.isAnimatedSkinFailure == true, newValue == .playing else { return }
+            emitAnimatedSkinEvent(.recovered)
         }
     }
 
@@ -129,6 +219,25 @@ struct CompactPlayerView: View {
         .joined(separator: "\u{1F}")
     }
 
+    private var effectiveReduceMotion: Bool {
+        animationReduceMotionOverride ?? reduceMotion
+    }
+
+    private var animatedSkinState: SkinMotionState {
+        switch presentation.status {
+        case .pending: .loading
+        case .playing: .playing
+        case .paused: .paused
+        case .unavailable: .error
+        case .stopped, .none: .idle
+        }
+    }
+
+    private func emitAnimatedSkinEvent(_ event: SkinMotionEvent) {
+        animatedSkinEventSequence &+= 1
+        animatedSkinEvent = AnimatedSkinEventTrigger(event: event, sequence: animatedSkinEventSequence)
+    }
+
     /// Generated faceplates already draw their own device silhouette. This
     /// shallow, inset mask removes only the opaque source-image corners while
     /// preserving the authored bezel, glow, and every semantic control well.
@@ -136,8 +245,17 @@ struct CompactPlayerView: View {
         switch renderingAppearance.layoutPlan.silhouette {
         case .discPod: 30
         case .bubbleCapsule: 28
+        case .wideCinema: 18
         default: renderingAppearance.cornerRadius
         }
+    }
+
+    private var presentationFaceplateCornerRadius: CGFloat {
+        expressiveFaceplateCornerRadius * presentationScale
+    }
+
+    private var presentationFaceplateInset: CGFloat {
+        4 * presentationScale
     }
 
     private var contentColorScheme: ColorScheme {
@@ -156,43 +274,54 @@ struct CompactPlayerView: View {
             if !hasExpressiveFaceplate {
                 expressiveMaterialLayer
             }
-            expressiveSlot(.artwork) { artwork }
+            expressiveSlot(.artwork) {
+                expressiveArtwork
+            }
             expressiveSlot(.channelIdentity) {
                 let channelText = presentation.channelIdentity?.displayText ?? "Nothing Playing"
                 BoundedMarqueeText(
                     channelText,
                     font: skinFont(plan.typography.display, size: 18, weight: .semibold),
                     timestamp: marqueeDate,
-                    cycleOrigin: marqueeCycleOrigin
+                    cycleOrigin: marqueeCycleOrigin,
+                    motionScale: semanticPresentationScale,
+                    reduceMotionOverride: effectiveReduceMotion,
+                    animates: marqueeIsVisible
                 )
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 2)
+                    .padding(.horizontal, semanticMetric(8))
+                    .padding(.vertical, semanticMetric(2))
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                     .clipped()
                     .help(channelText)
                     .accessibilityLabel("Channel \(channelText)")
                     .accessibilityValue(channelText)
             }
-            expressiveSlot(.metadata) { metadata(at: marqueeDate) }
+            expressiveSlot(.metadata) { expressiveMetadata(at: marqueeDate) }
             expressiveSlot(.favorite) {
                 channelFavoriteButton
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                    .offset(y: semanticMetric(usesQuartzReceiverGeometry ? 4 : 0))
             }
             expressiveSlot(.status) { statusAndRecovery(at: marqueeDate) }
             expressiveSlot(.transport) { transport }
             expressiveSlot(.library) { libraryButton }
             expressiveSlot(.overflowMenu) { overflowMenu }
         }
+        // Offset semantic slots do not enlarge a ZStack's layout bounds.
+        // Size this container before attaching the foreground drag surface so
+        // artwork outside the controls' intrinsic bounds still receives input.
+        .frame(width: plan.presentationSize.width, height: plan.presentationSize.height, alignment: .topLeading)
         .overlay(alignment: .topLeading) {
             ForEach(Array(plan.dragRegions.enumerated()), id: \.offset) { _, drag in
-                Color.clear
-                    .contentShape(.rect)
-                    .frame(width: CGFloat(drag.width), height: CGFloat(drag.height))
-                    .offset(x: CGFloat(drag.x), y: CGFloat(drag.y))
-                    .gesture(WindowDragGesture())
-                    .allowsWindowActivationEvents(true)
+                // A fully clear layer is omitted from native hit testing in
+                // this transparent window. This subpixel alpha is visually
+                // imperceptible but keeps the validated drag region tangible.
+                CompactWindowDragRegion()
+                    .background(Color.white.opacity(0.001))
+                    .frame(width: semanticMetric(CGFloat(drag.width)), height: semanticMetric(CGFloat(drag.height)))
                     .allowsHitTesting(true)
                     .accessibilityHidden(true)
+                    .offset(x: semanticMetric(CGFloat(drag.x)), y: semanticMetric(CGFloat(drag.y)))
             }
         }
     }
@@ -205,13 +334,13 @@ struct CompactPlayerView: View {
         return AnyView(
             content()
                 .frame(
-                    width: CGFloat(frame.width),
-                    height: CGFloat(frame.height),
+                    width: semanticMetric(CGFloat(frame.width)),
+                    height: semanticMetric(CGFloat(frame.height)),
                     alignment: expressiveSlotAlignment(slot)
                 )
                 .offset(
-                    x: CGFloat(frame.x),
-                    y: CGFloat(frame.y)
+                    x: semanticMetric(CGFloat(frame.x)),
+                    y: semanticMetric(CGFloat(frame.y))
                 )
         )
     }
@@ -224,11 +353,65 @@ struct CompactPlayerView: View {
     }
 
     private func skinFont(_ token: CompactSkinTypographyToken, size: CGFloat, weight: Font.Weight = .regular) -> Font {
-        switch token {
-        case .systemDefault: .system(size: size, weight: weight)
-        case .systemRounded: .system(size: size, weight: weight, design: .rounded)
-        case .systemMonospaced: .system(size: size, weight: weight, design: .monospaced)
+        let renderedSize = semanticMetric(size)
+        return switch token {
+        case .systemDefault: Font.system(size: renderedSize, weight: weight)
+        case .systemRounded: Font.system(size: renderedSize, weight: weight, design: .rounded)
+        case .systemMonospaced: Font.system(size: renderedSize, weight: weight, design: .monospaced)
         }
+    }
+
+    private func semanticMetric(_ value: CGFloat) -> CGFloat {
+        value * semanticPresentationScale
+    }
+
+    @ViewBuilder
+    private func expressiveMetadata(at marqueeDate: Date) -> some View {
+        if usesQuartzReceiverGeometry {
+            quartzReceiverMetadata(at: marqueeDate)
+        } else {
+            metadata(at: marqueeDate)
+        }
+    }
+
+    /// Quartz Link has one physical song LCD and a separate heart well. The
+    /// real title/artist values share one bounded marquee inside the glass;
+    /// the native heart keeps its own 24-point hit target at the measured
+    /// painted center, relative to the metadata slot, at (140,21).
+    private func quartzReceiverMetadata(at marqueeDate: Date) -> some View {
+        ZStack(alignment: .topLeading) {
+            if let songText = quartzReceiverSongText {
+                BoundedMarqueeText(
+                    songText,
+                    font: skinFont(renderingAppearance.layoutPlan.typography.body, size: 13, weight: .semibold),
+                    timestamp: marqueeDate,
+                    cycleOrigin: marqueeCycleOrigin,
+                    motionScale: semanticPresentationScale,
+                    reduceMotionOverride: effectiveReduceMotion,
+                    animates: marqueeIsVisible
+                )
+                .frame(width: semanticMetric(104), height: semanticMetric(17))
+                .position(x: semanticMetric(60), y: semanticMetric(18))
+                .help(songText)
+                .accessibilityLabel("Current song: \(songText)")
+                .accessibilityValue(songText)
+                .accessibilitySortPriority(55)
+            }
+
+            songFavoriteButton
+                .position(x: semanticMetric(140), y: semanticMetric(21))
+        }
+        .frame(width: semanticMetric(156), height: semanticMetric(40), alignment: .topLeading)
+        .clipped()
+    }
+
+    private var quartzReceiverSongText: String? {
+        let values = [presentation.primaryMetadata, presentation.secondaryMetadata]
+            .compactMap { value in
+                value?.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            .filter { !$0.isEmpty }
+        return values.isEmpty ? nil : values.joined(separator: " — ")
     }
 
     @ViewBuilder
@@ -259,33 +442,57 @@ struct CompactPlayerView: View {
         footer
     }
 
-    private var artwork: some View {
-        Group {
-            switch presentation.artwork {
-            case let .data(artwork):
-                NativeArtworkImage(artwork: artwork)
-            case .placeholder, .none:
-                Image(systemName: "music.note")
-                    .resizable()
-                    .scaledToFit()
-                    .padding(20)
-                    .foregroundStyle(.secondary)
-            }
+    @ViewBuilder
+    private var artworkImage: some View {
+        switch presentation.artwork {
+        case let .data(artwork):
+            NativeArtworkImage(artwork: artwork)
+        case .placeholder, .none:
+            Image(systemName: "music.note")
+                .resizable()
+                .scaledToFit()
+                .padding(semanticMetric(20))
+                .foregroundStyle(.secondary)
         }
-        .frame(width: 72, height: 72)
+    }
+
+    private var artworkAccessibilityLabel: String {
+        presentation.primaryMetadata.map { "Artwork for \($0)" }
+            ?? presentation.channelIdentity.map { "Artwork for channel \($0.displayText)" }
+            ?? "Artwork"
+    }
+
+    private var artwork: some View {
+        artworkImage
+            .frame(width: 72, height: 72)
+            .background(surfaceBackground(.metadata).opacity(hasExpressiveFaceplate ? 0 : 1))
+            .clipShape(.rect(cornerRadius: renderingAppearance.cornerRadius))
+            .accessibilityLabel(artworkAccessibilityLabel)
+            .accessibilitySortPriority(60)
+            .padding(CompactPlayerPresentation.focusClearance)
+    }
+
+    /// Expressive artwork is bounded by its validated semantic slot. The
+    /// legacy 72-point artwork view includes focus padding and must not be
+    /// dropped into a 48-point faceplate well, where it visibly spills into
+    /// adjacent metadata.
+    private var expressiveArtwork: some View {
+        Group {
+            artworkImage
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(surfaceBackground(.metadata).opacity(hasExpressiveFaceplate ? 0 : 1))
-        .clipShape(.rect(cornerRadius: renderingAppearance.cornerRadius))
-        .accessibilityLabel(presentation.primaryMetadata.map { "Artwork for \($0)" } ?? presentation.channelIdentity.map { "Artwork for channel \($0.displayText)" } ?? "Artwork")
+        .clipShape(.rect(cornerRadius: renderingAppearance.cornerRadius * semanticPresentationScale))
+        .accessibilityLabel(artworkAccessibilityLabel)
         .accessibilitySortPriority(60)
-        .padding(CompactPlayerPresentation.focusClearance)
     }
 
     private var channelFavoriteButton: some View {
         Button(action: { onAction(.toggleFavorite) }) {
             if hasExpressiveFaceplate {
                 FaceplateGlyphView(glyph: .favorite, isFilled: presentation.isFavorite)
-                    .frame(width: 15, height: 15)
-                    .frame(width: CompactPlayerPresentation.transportControlSize, height: CompactPlayerPresentation.transportControlSize)
+                    .frame(width: semanticMetric(15), height: semanticMetric(15))
+                    .frame(width: semanticMetric(CompactPlayerPresentation.transportControlSize), height: semanticMetric(CompactPlayerPresentation.transportControlSize))
                     .contentShape(.rect)
             } else {
                 Image(systemName: presentation.isFavorite ? "star.fill" : "star")
@@ -308,8 +515,8 @@ struct CompactPlayerView: View {
         return Button(action: { onAction(.toggleSongFavorite) }) {
             if hasExpressiveFaceplate {
                 FaceplateGlyphView(glyph: .songFavorite, isFilled: isFavorite)
-                    .frame(width: 13, height: 13)
-                    .frame(width: CompactPlayerPresentation.metadataActionSize, height: CompactPlayerPresentation.metadataActionSize)
+                    .frame(width: semanticMetric(13), height: semanticMetric(13))
+                    .frame(width: semanticMetric(CompactPlayerPresentation.metadataActionSize), height: semanticMetric(CompactPlayerPresentation.metadataActionSize))
                     .contentShape(.rect)
             } else {
                 Image(systemName: isFavorite ? "heart.fill" : "heart")
@@ -331,7 +538,7 @@ struct CompactPlayerView: View {
 
     @ViewBuilder
     private func metadata(at marqueeDate: Date) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: semanticMetric(2)) {
             if let primary = presentation.primaryMetadata {
                 currentSongMetadataRow(primary, at: marqueeDate)
             }
@@ -341,30 +548,36 @@ struct CompactPlayerView: View {
                     font: skinFont(renderingAppearance.layoutPlan.typography.body, size: 13),
                     tone: .secondary,
                     timestamp: marqueeDate,
-                    cycleOrigin: marqueeCycleOrigin
+                    cycleOrigin: marqueeCycleOrigin,
+                    motionScale: semanticPresentationScale,
+                    reduceMotionOverride: effectiveReduceMotion,
+                    animates: marqueeIsVisible
                 )
-                    .frame(height: 16)
+                    .frame(height: semanticMetric(16))
                     .help(secondary)
                     .accessibilityLabel("Artist: \(secondary)")
                     .accessibilityValue(secondary)
                     .accessibilitySortPriority(54)
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, hasExpressiveFaceplate ? 2 : 4)
+        .padding(.horizontal, semanticMetric(8))
+        .padding(.vertical, semanticMetric(hasExpressiveFaceplate ? 2 : 4))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .clipped()
     }
 
     private func currentSongMetadataRow(_ primary: String, at marqueeDate: Date) -> some View {
-        HStack(spacing: 4) {
+        HStack(spacing: semanticMetric(4)) {
             BoundedMarqueeText(
                 primary,
                 font: skinFont(renderingAppearance.layoutPlan.typography.body, size: 14, weight: .semibold),
                 timestamp: marqueeDate,
-                cycleOrigin: marqueeCycleOrigin
+                cycleOrigin: marqueeCycleOrigin,
+                motionScale: semanticPresentationScale,
+                    reduceMotionOverride: effectiveReduceMotion,
+                    animates: marqueeIsVisible
             )
-            .frame(height: 17)
+            .frame(height: semanticMetric(17))
             .help(primary)
             .accessibilityLabel("Current program: \(primary)")
             .accessibilityValue(primary)
@@ -373,12 +586,12 @@ struct CompactPlayerView: View {
             songFavoriteButton
                 .fixedSize()
         }
-        .frame(height: CompactPlayerPresentation.metadataActionSize)
+        .frame(height: semanticMetric(CompactPlayerPresentation.metadataActionSize))
     }
 
     @ViewBuilder
     private func statusAndRecovery(at marqueeDate: Date) -> some View {
-        VStack(alignment: hasExpressiveFaceplate ? .center : .leading, spacing: 2) {
+        VStack(alignment: hasExpressiveFaceplate ? .center : .leading, spacing: semanticMetric(2)) {
             if let status = presentation.status {
                 playbackStatus(status)
             } else if let emptyBody = presentation.emptyBody {
@@ -388,9 +601,12 @@ struct CompactPlayerView: View {
                         font: skinFont(renderingAppearance.layoutPlan.typography.label, size: 12, weight: .medium),
                         tone: .secondary,
                         timestamp: marqueeDate,
-                        cycleOrigin: marqueeCycleOrigin
+                        cycleOrigin: marqueeCycleOrigin,
+                        motionScale: semanticPresentationScale,
+                    reduceMotionOverride: effectiveReduceMotion,
+                    animates: marqueeIsVisible
                     )
-                    .frame(height: 16)
+                    .frame(height: semanticMetric(16))
                     .help(emptyBody)
                     .accessibilityLabel(emptyBody)
                     .accessibilityValue(emptyBody)
@@ -433,11 +649,11 @@ struct CompactPlayerView: View {
     @ViewBuilder
     private func playbackStatus(_ status: CompactPlayerPresentation.Status) -> some View {
         let surface = statusSurface(for: status)
-        HStack(spacing: 4) {
+        HStack(spacing: semanticMetric(usesQuartzReceiverGeometry ? 2 : 4)) {
             switch status {
             case .pending:
                 ProgressView().controlSize(.small)
-                Text("Loading playback")
+                Text(usesQuartzReceiverGeometry ? "Loading" : "Loading playback")
             case .playing:
                 playbackStatusLabel("Playing", glyph: .play, systemImage: "play.fill")
             case .paused:
@@ -445,8 +661,14 @@ struct CompactPlayerView: View {
             case .stopped:
                 playbackStatusLabel("Stopped", glyph: .stop, systemImage: "stop.fill")
             case let .unavailable(recovery):
-                Text("Playback couldn’t start.")
-                Button(recovery.title) { onAction(recovery.compactAction) }
+                if hasExpressiveFaceplate {
+                    Text("Error")
+                    Button("Retry") { onAction(recovery.compactAction) }
+                        .accessibilityLabel(recovery.title)
+                } else {
+                    Text("Playback couldn’t start.")
+                    Button(recovery.title) { onAction(recovery.compactAction) }
+                }
             }
         }
         .font(skinFont(renderingAppearance.layoutPlan.typography.label, size: 12, weight: .medium))
@@ -454,8 +676,8 @@ struct CompactPlayerView: View {
         .lineLimit(1)
         .minimumScaleFactor(0.8)
         .allowsTightening(true)
-        .padding(.horizontal, 6)
-        .padding(.vertical, 3)
+        .padding(.horizontal, semanticMetric(usesQuartzReceiverGeometry ? 4 : 6))
+        .padding(.vertical, semanticMetric(3))
         .fixedSize(horizontal: hasExpressiveFaceplate, vertical: true)
         .multilineTextAlignment(hasExpressiveFaceplate ? .center : .leading)
         .background(surfaceBackground(surface).opacity(hasExpressiveFaceplate ? 0 : 1))
@@ -468,9 +690,9 @@ struct CompactPlayerView: View {
     @ViewBuilder
     private func playbackStatusLabel(_ title: String, glyph: FaceplateGlyph, systemImage: String) -> some View {
         if hasExpressiveFaceplate {
-            HStack(spacing: 4) {
+            HStack(spacing: semanticMetric(4)) {
                 FaceplateGlyphView(glyph: glyph)
-                    .frame(width: 9, height: 9)
+                    .frame(width: semanticMetric(9), height: semanticMetric(9))
                 Text(title)
             }
         } else {
@@ -512,12 +734,22 @@ struct CompactPlayerView: View {
     private var expressiveTransportControlCenters: [CGPoint]? {
         switch renderingAppearance.layoutPlan.layoutVariant {
         case .discConsole:
-            [CGPoint(x: 30, y: 23), CGPoint(x: 65, y: 23), CGPoint(x: 100, y: 23)]
+            scaledPoints([CGPoint(x: 30, y: 23), CGPoint(x: 65, y: 23), CGPoint(x: 100, y: 23)])
         case .aquaPod:
-            [CGPoint(x: 32, y: 34), CGPoint(x: 80, y: 34), CGPoint(x: 128, y: 34)]
+            scaledPoints([CGPoint(x: 32, y: 34), CGPoint(x: 80, y: 34), CGPoint(x: 128, y: 34)])
+        case .cinemaDeck:
+            if usesQuartzReceiverGeometry {
+                scaledPoints([CGPoint(x: 17, y: 21), CGPoint(x: 54, y: 21), CGPoint(x: 91, y: 21)])
+            } else {
+                scaledPoints([CGPoint(x: 24, y: 24), CGPoint(x: 68, y: 24), CGPoint(x: 112, y: 24)])
+            }
         case .legacyStack, .desktopUtility:
             nil
         }
+    }
+
+    private func scaledPoints(_ points: [CGPoint]) -> [CGPoint] {
+        points.map { CGPoint(x: semanticMetric($0.x), y: semanticMetric($0.y)) }
     }
 
     @ViewBuilder
@@ -525,8 +757,8 @@ struct CompactPlayerView: View {
         let button = Button(action: { onAction(action) }) {
             if hasExpressiveFaceplate {
                 FaceplateGlyphView(glyph: glyph)
-                    .frame(width: 14, height: 14)
-                    .frame(width: CompactPlayerPresentation.transportControlSize, height: CompactPlayerPresentation.transportControlSize)
+                    .frame(width: semanticMetric(14), height: semanticMetric(14))
+                    .frame(width: semanticMetric(CompactPlayerPresentation.transportControlSize), height: semanticMetric(CompactPlayerPresentation.transportControlSize))
                     .contentShape(.rect)
             } else {
                 Image(systemName: systemImage)
@@ -569,8 +801,8 @@ struct CompactPlayerView: View {
                 onAction(.showLibrary)
             } label: {
                 FaceplateGlyphView(glyph: .library)
-                    .frame(width: 15, height: 15)
-                    .frame(width: CompactPlayerPresentation.transportControlSize, height: CompactPlayerPresentation.transportControlSize)
+                    .frame(width: semanticMetric(15), height: semanticMetric(15))
+                    .frame(width: semanticMetric(CompactPlayerPresentation.transportControlSize), height: semanticMetric(CompactPlayerPresentation.transportControlSize))
                     .contentShape(.rect)
             }
             .buttonStyle(.plain)
@@ -600,8 +832,8 @@ struct CompactPlayerView: View {
                     overflowMenuActions
                 } label: {
                     FaceplateGlyphView(glyph: .overflow)
-                        .frame(width: 15, height: 15)
-                        .frame(width: CompactPlayerPresentation.transportControlSize, height: CompactPlayerPresentation.transportControlSize)
+                        .frame(width: semanticMetric(15), height: semanticMetric(15))
+                        .frame(width: semanticMetric(CompactPlayerPresentation.transportControlSize), height: semanticMetric(CompactPlayerPresentation.transportControlSize))
                         .contentShape(.rect)
                         .accessibilityLabel("More")
                 }
@@ -791,6 +1023,16 @@ struct CompactPlayerView: View {
                     for bubble in [CGRect(x: 32, y: 176, width: 12, height: 12), CGRect(x: 72, y: 204, width: 8, height: 8), CGRect(x: size.width - 64, y: 172, width: 16, height: 16), CGRect(x: size.width - 92, y: 204, width: 8, height: 8)] {
                         context.stroke(Path(ellipseIn: bubble), with: .color(surfaceTint(.chromeHighlight).opacity(0.58)), lineWidth: 1)
                     }
+                case .wideCinema:
+                    context.fill(
+                        Path(roundedRect: CGRect(x: 4, y: 4, width: size.width - 8, height: size.height - 8), cornerRadius: 18),
+                        with: .color(surfaceTint(.metadata).opacity(0.36))
+                    )
+                    context.stroke(
+                        Path(roundedRect: CGRect(x: 6, y: 6, width: size.width - 12, height: size.height - 12), cornerRadius: 16),
+                        with: .color(surfaceTint(.chromeHighlight).opacity(0.54)),
+                        lineWidth: 1
+                    )
                 case .nativeRect:
                     break
                 }
@@ -802,12 +1044,64 @@ struct CompactPlayerView: View {
 
     @ViewBuilder
     private func decorativeImage(at url: URL?) -> some View {
-        if let url, let image = NSImage(contentsOf: url) {
+        if let url, let image = decorationImages[url] {
             Image(nsImage: image)
                 .resizable()
                 .scaledToFill()
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
+        }
+    }
+}
+
+/// Text animation follows the same visible-window policy as the native ocean.
+/// Observes lifecycle changes only; no polling or foreground-app requirement.
+private struct CompactPlayerVisibilityProbe: NSViewRepresentable {
+    let onChange: (Bool) -> Void
+    func makeNSView(context: Context) -> VisibilityView { VisibilityView(onChange: onChange) }
+    func updateNSView(_ view: VisibilityView, context: Context) { view.onChange = onChange }
+    static func dismantleNSView(_ view: VisibilityView, coordinator: ()) { view.stopObserving() }
+
+    final class VisibilityView: NSView {
+        var onChange: (Bool) -> Void
+        private var observers: [NSObjectProtocol] = []
+        private var lastValue: Bool?
+        init(onChange: @escaping (Bool) -> Void) {
+            self.onChange = onChange
+            super.init(frame: .zero)
+        }
+        required init?(coder: NSCoder) { nil }
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            stopObserving()
+            guard let window else { publish(false); return }
+            let events: [(Notification.Name, Any?)] = [
+                (NSWindow.didMiniaturizeNotification, window),
+                (NSWindow.didDeminiaturizeNotification, window),
+                (NSWindow.didChangeOcclusionStateNotification, window),
+                (NSApplication.didHideNotification, NSApp),
+                (NSApplication.didUnhideNotification, NSApp)
+            ]
+            observers = events.map { name, object in
+                NotificationCenter.default.addObserver(forName: name, object: object, queue: .main) { [weak self] _ in
+                    Task { @MainActor [weak self] in self?.refresh() }
+                }
+            }
+            Task { @MainActor [weak self] in self?.refresh() }
+        }
+        func stopObserving() {
+            observers.forEach(NotificationCenter.default.removeObserver)
+            observers.removeAll()
+        }
+        private func refresh() {
+            guard let window else { publish(false); return }
+            publish(window.isVisible && !window.isMiniaturized && window.occlusionState.contains(.visible) && !NSApp.isHidden)
+        }
+        private func publish(_ value: Bool) {
+            guard value != lastValue else { return }
+            lastValue = value
+            onChange(value)
         }
     }
 }
@@ -960,7 +1254,12 @@ private struct BoundedMarqueeText: View {
     let tone: MarqueeTextTone
     let timestamp: Date
     let cycleOrigin: Date
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let motionScale: CGFloat
+    private let reduceMotionOverride: Bool
+    private let animates: Bool
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    private var reduceMotion: Bool { systemReduceMotion || reduceMotionOverride }
+    @Environment(\.displayScale) private var displayScale
     @State private var measuredTextWidth: CGFloat = 0
 
     init(
@@ -968,13 +1267,19 @@ private struct BoundedMarqueeText: View {
         font: Font,
         tone: MarqueeTextTone = .primary,
         timestamp: Date,
-        cycleOrigin: Date
+        cycleOrigin: Date,
+        motionScale: CGFloat = 1,
+        reduceMotionOverride: Bool = false,
+        animates: Bool = true
     ) {
         self.text = text
         self.font = font
         self.tone = tone
         self.timestamp = timestamp
         self.cycleOrigin = cycleOrigin
+        self.motionScale = motionScale
+        self.reduceMotionOverride = reduceMotionOverride
+        self.animates = animates
     }
 
     var body: some View {
@@ -984,12 +1289,16 @@ private struct BoundedMarqueeText: View {
 
             ZStack(alignment: .leading) {
                 if overflows && !reduceMotion {
-                    HStack(spacing: Self.gap) {
-                        fixedText
-                        fixedText.accessibilityHidden(true)
+                    // Only overflowing text ticks. Rebuilding the entire player
+                    // here repeatedly loaded images and starved the native scene.
+                    TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: !animates)) { context in
+                        HStack(spacing: Self.gap * motionScale) {
+                            fixedText
+                            fixedText.accessibilityHidden(true)
+                        }
+                        .compositingGroup()
+                        .offset(x: marqueeOffset(textWidth: measuredTextWidth, at: context.date))
                     }
-                    .compositingGroup()
-                    .offset(x: marqueeOffset(textWidth: measuredTextWidth))
                 } else if overflows {
                     Text(text)
                         .font(font)
@@ -1025,14 +1334,16 @@ private struct BoundedMarqueeText: View {
             .fixedSize(horizontal: true, vertical: true)
     }
 
-    private func marqueeOffset(textWidth: CGFloat) -> CGFloat {
-        let travelDistance = textWidth + Self.gap
+    private func marqueeOffset(textWidth: CGFloat, at date: Date) -> CGFloat {
+        let travelDistance = textWidth + Self.gap * motionScale
         guard travelDistance > 0 else { return 0 }
-        let travelDuration = TimeInterval(travelDistance / Self.speed)
+        let travelDuration = TimeInterval(travelDistance / (Self.speed * motionScale))
         let cycleDuration = Self.leadingPause + travelDuration
-        let elapsed = max(0, timestamp.timeIntervalSince(cycleOrigin)).truncatingRemainder(dividingBy: cycleDuration)
+        let elapsed = max(0, date.timeIntervalSince(cycleOrigin)).truncatingRemainder(dividingBy: cycleDuration)
         guard elapsed > Self.leadingPause else { return 0 }
-        return -min(travelDistance, CGFloat(elapsed - Self.leadingPause) * Self.speed)
+        let rawOffset = -min(travelDistance, CGFloat(elapsed - Self.leadingPause) * Self.speed * motionScale)
+        let pixelScale = max(displayScale, 1)
+        return (rawOffset * pixelScale).rounded() / pixelScale
     }
 }
 
@@ -1047,6 +1358,11 @@ private extension CompactRecoveryAction {
 }
 
 private extension CompactPlayerPresentation.Status {
+    var isAnimatedSkinFailure: Bool {
+        if case .unavailable = self { return true }
+        return false
+    }
+
     var accessibilityValue: String {
         switch self {
         case .pending: "Playback pending"
@@ -1090,6 +1406,8 @@ private struct CompactSkinSilhouetteShape: Shape {
             return Path(roundedRect: rect.insetBy(dx: 2, dy: 2), cornerRadius: min(rect.width, rect.height) / 2)
         case .bubbleCapsule:
             return Path(roundedRect: rect, cornerRadius: min(rect.width, rect.height) / 3)
+        case .wideCinema:
+            return Path(roundedRect: rect, cornerRadius: 18)
         }
     }
 }
@@ -1118,4 +1436,23 @@ private struct CompactSkinSilhouetteShape: Shape {
 
 #Preview("Playback Error") {
     CompactPlayerView(presentation: .empty(status: .unavailable(.tryAgain)), onAction: { _ in })
+}
+
+/// Native drag handling for validated decorative regions. Semantic controls
+/// never overlap these rectangles, and skin data cannot supply event handlers.
+private struct CompactWindowDragRegion: NSViewRepresentable {
+    func makeNSView(context: Context) -> DragView { DragView() }
+    func updateNSView(_ view: DragView, context: Context) { }
+
+    final class DragView: NSView {
+        override var mouseDownCanMoveWindow: Bool { false }
+        override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+        override func mouseDown(with event: NSEvent) {
+            NSApp.activate()
+            window?.makeKeyAndOrderFront(nil)
+            window?.performDrag(with: event)
+        }
+        override func accessibilityHitTest(_ point: NSPoint) -> Any? { nil }
+        override func isAccessibilityElement() -> Bool { false }
+    }
 }

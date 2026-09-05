@@ -30,7 +30,8 @@ jobs:
           script/validate_release_version.sh
           bash -n script/*.sh script/lib/*.sh script/tests/*.sh
           script/tests/visual_dmg_contract_tests.sh
-          script/tests/dmg_release_contract_tests.sh
+          script/tests/release_pipeline_contract_tests.sh
+          script/tests/homebrew_release_tests.sh
           test "$(xcodebuild -version | sed -n '1p')" = "Xcode 26.6"
 
       - name: Test SiriusXMClient
@@ -38,6 +39,16 @@ jobs:
           swift test \
             --package-path Packages/SiriusXMClient \
             --scratch-path "$RUNNER_TEMP/siriusxmclient-tests"
+
+      - name: Validate bundled animation and offline runtime contracts
+        run: |
+          bash script/test_animation_source_contracts.sh
+          bash script/test_offline_review_launch_mode.sh
+          bash script/test_scene_performance_director.sh
+          bash script/test_sprite_atlas_geometry.sh
+          python3 script/test_abyssal97_bundle.py
+          python3 script/tests/scene_format2_tests.py
+          swift test --package-path Packages/Canis97MotionSafety --scratch-path "$RUNNER_TEMP/motion-safety-tests"
 
       - name: Compile app and app tests without launching them
         run: |

@@ -1,8 +1,15 @@
 import CryptoKit
+import Canis97MotionSafety
 import Foundation
 import ImageIO
 import UniformTypeIdentifiers
 import ZIPFoundation
+
+protocol Canis97MotionConverting: Sendable {
+    func convert(_ request: Data) async throws -> CanonicalMotionDocument
+}
+
+extension Canis97MotionConverterClient: Canis97MotionConverting {}
 
 struct SkinImportResult: Sendable {
     enum StorageOutcome: Sendable {
@@ -305,6 +312,9 @@ struct ManagedSkinStore: @unchecked Sendable {
 }
 
 struct SkinPackageImporter: @unchecked Sendable {
+    private static let maximumMotionSourceBytes = 6 * 1_024 * 1_024
+
+    private let motionConverter: any Canis97MotionConverting
     private let limits: SkinPackageLimits
     private let store: ManagedSkinStore
     private let fileManager: FileManager
@@ -314,6 +324,7 @@ struct SkinPackageImporter: @unchecked Sendable {
         limits: SkinPackageLimits = .standard,
         store: ManagedSkinStore = ManagedSkinStore(),
         fileManager: FileManager = .default,
+        motionConverter: any Canis97MotionConverting = Canis97MotionConverterClient(),
         nowNanoseconds: @escaping @Sendable () -> UInt64 = {
             DispatchTime.now().uptimeNanoseconds
         }
@@ -321,10 +332,11 @@ struct SkinPackageImporter: @unchecked Sendable {
         self.limits = limits
         self.store = store
         self.fileManager = fileManager
+        self.motionConverter = motionConverter
         self.nowNanoseconds = nowNanoseconds
     }
 
-    func importPackage(at sourceURL: URL) throws -> (ManagedSkinStore.PromotionOutcome, ValidatedSkinAppearance) {
+    func importPackage(at sourceURL: URL) async throws -> (ManagedSkinStore.PromotionOutcome, ValidatedSkinAppearance) {
         let startedAccess = sourceURL.startAccessingSecurityScopedResource()
         defer {
             if startedAccess { sourceURL.stopAccessingSecurityScopedResource() }
@@ -438,9 +450,13 @@ struct SkinPackageImporter: @unchecked Sendable {
             try checkProcessing(start: start)
         }
 
-        let candidate = try validateCandidate(at: stagingURL, extractedFiles: Set(preflight.files))
+        let initialFiles = Set(preflight.files)
+        let initialCandidate = try validateCandidate(at: stagingURL, extractedFiles: initialFiles)
+        try await canonicalizeMotionIfNeeded(initialCandidate, in: stagingURL)
         try checkProcessing(start: start)
-        let digest = try contentDigest(root: stagingURL, files: preflight.files)
+        let stagedFiles = try regularPackageFiles(at: stagingURL)
+        let candidate = try validateCandidate(at: stagingURL, extractedFiles: Set(stagedFiles))
+        let digest = try contentDigest(root: stagingURL, files: stagedFiles)
         let promotion = try store.preparePromotion(
             stagingURL: stagingURL,
             identifier: candidate.reference.identifier,
@@ -515,9 +531,83 @@ struct SkinPackageImporter: @unchecked Sendable {
         let allowed = referenced.union([manifestPath])
         guard extractedFiles == allowed else { throw SkinPackageRejection.unexpectedFile }
         for asset in referenced {
-            try validateImage(at: containedDestination(for: asset, beneath: root), path: asset)
+            let url = try containedDestination(for: asset, beneath: root)
+            if url != appearance.motion?.documentURL,
+               url != appearance.motion?.spriteSceneURL
+            {
+                try validateImage(at: url, path: asset)
+            }
+        }
+        if let motion = appearance.motion, motion.format == .canis97 {
+            do {
+                _ = try CanonicalMotionCodec.decode(Data(contentsOf: motion.documentURL, options: [.mappedIfSafe]))
+            } catch {
+                throw SkinPackageRejection.invalidManifest
+            }
+        }
+        if let motion = appearance.motion,
+           let sceneURL = motion.spriteSceneURL
+        {
+            do {
+                let scene = try SpriteMotionSceneCodec.decode(
+                    Data(contentsOf: sceneURL, options: [.mappedIfSafe]),
+                    allowedAssets: Set(motion.spriteAssetURLs.keys)
+                )
+                try SpriteMotionSceneCodec.validateAtlasDimensions(scene, assets: motion.spriteAssetURLs)
+            } catch {
+                throw SkinPackageRejection.invalidManifest
+            }
         }
         return appearance
+    }
+
+    private func canonicalizeMotionIfNeeded(
+        _ appearance: ValidatedSkinAppearance,
+        in stagingURL: URL
+    ) async throws {
+        guard let motion = appearance.motion, motion.format == .lottie else { return }
+        guard !Task.isCancelled else { throw SkinPackageRejection.cancelled }
+        let source: Data
+        do {
+            source = try Data(contentsOf: motion.documentURL, options: [.mappedIfSafe])
+        } catch {
+            throw SkinPackageRejection.invalidManifest
+        }
+        guard source.count <= Self.maximumMotionSourceBytes else {
+            throw SkinPackageRejection.invalidManifest
+        }
+        let canonical: Data
+        do {
+            canonical = try CanonicalMotionCodec.encode(try await motionConverter.convert(source))
+        } catch {
+            throw SkinPackageRejection.invalidManifest
+        }
+        guard !Task.isCancelled else { throw SkinPackageRejection.cancelled }
+
+        let managedPath = "motion/canonical.c97motion"
+        let managedURL: URL
+        do {
+            let path = try CanonicalSkinPath(managedPath, kind: .file, limits: limits)
+            managedURL = try containedDestination(for: path, beneath: stagingURL)
+            try fileManager.createDirectory(at: managedURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try canonical.write(to: managedURL, options: .atomic)
+            try rewriteMotionManifest(at: stagingURL.appendingPathComponent("manifest.json"), document: managedPath)
+            try fileManager.removeItem(at: motion.documentURL)
+        } catch {
+            throw SkinPackageRejection.storageFailed
+        }
+    }
+
+    private func rewriteMotionManifest(at manifestURL: URL, document: String) throws {
+        let data = try Data(contentsOf: manifestURL, options: [.mappedIfSafe])
+        guard var manifest = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              var motion = manifest["motion"] as? [String: Any]
+        else { throw SkinPackageRejection.invalidManifest }
+        motion["format"] = SkinMotionFormat.canis97.rawValue
+        motion["document"] = document
+        manifest["motion"] = motion
+        let rewritten = try JSONSerialization.data(withJSONObject: manifest, options: [.sortedKeys, .withoutEscapingSlashes])
+        try rewritten.write(to: manifestURL, options: .atomic)
     }
 
     private func validateManagedCandidate(at root: URL) throws -> ValidatedSkinAppearance {
@@ -756,7 +846,7 @@ private enum ZIPCentralDirectoryInspector {
 }
 
 actor SkinImportCoordinator {
-    typealias ImportOperation = @Sendable (URL) throws -> (
+    typealias ImportOperation = @Sendable (URL) async throws -> (
         ManagedSkinStore.PromotionOutcome,
         ValidatedSkinAppearance
     )
@@ -773,7 +863,7 @@ actor SkinImportCoordinator {
         appearanceController: SkinAppearanceController
     ) {
         importOperation = { sourceURL in
-            try importer.importPackage(at: sourceURL)
+            try await importer.importPackage(at: sourceURL)
         }
         self.appearanceController = appearanceController
     }
@@ -794,7 +884,7 @@ actor SkinImportCoordinator {
         defer { releaseTransaction() }
         guard !Task.isCancelled else { throw SkinPackageRejection.cancelled }
 
-        let (promotion, appearance) = try importOperation(sourceURL)
+        let (promotion, appearance) = try await importOperation(sourceURL)
         let selected: Bool
         if generation == requestGeneration, !Task.isCancelled {
             let authority = await appearanceController.beginImportedSelection(generation: generation)

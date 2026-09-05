@@ -255,7 +255,7 @@ final class CompactWindowController {
         guard policy.role == .compact else { return }
         let window = window ?? attachedWindow
         guard let window else { return }
-        let size = appearance.layoutPlan.size.contentSize
+        let size = appearance.layoutPlan.presentationSize
         window.isOpaque = false
         window.backgroundColor = .clear
         window.contentMinSize = size
@@ -337,13 +337,19 @@ final class CompactWindowController {
     /// titled style that otherwise reserves visible title-bar geometry.
     private func configureChrome(in window: NSWindow) {
         if policy.usesCompactChrome {
-            window.styleMask.insert(.closable)
+            // A transparent borderless SwiftUI window may have no hit-testable
+            // view under decorative pixels. Keep background mouse-down owned
+            // by the window so it cannot fall through to another application.
+            window.isMovable = true
+            window.isMovableByWindowBackground = true
+            window.styleMask.insert([.closable, .miniaturizable])
             window.styleMask.remove([.titled, .fullSizeContentView])
             window.titleVisibility = .hidden
             window.titlebarAppearsTransparent = false
             window.titlebarSeparatorStyle = .none
             setStandardWindowButtons(hidden: true, in: window)
         } else {
+            window.isMovableByWindowBackground = false
             window.styleMask.insert([.titled, .closable, .miniaturizable])
             window.styleMask.remove(.fullSizeContentView)
             window.titleVisibility = .visible

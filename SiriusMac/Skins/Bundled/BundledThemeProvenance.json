@@ -5,9 +5,16 @@
       "identifier": "pixel-desk",
       "displayName": "Pixel Desk",
       "source": "original-app-drawn",
-      "rendererLayers": ["pixel-bevel-frame", "pixel-dither-cells", "pixel-display-plate"],
+      "rendererLayers": [
+        "pixel-bevel-frame",
+        "pixel-dither-cells",
+        "pixel-display-plate"
+      ],
       "assetFiles": [],
-      "fontTokens": ["systemMonospaced", "systemDefault"],
+      "fontTokens": [
+        "systemMonospaced",
+        "systemDefault"
+      ],
       "fontFiles": [],
       "externalAssetURLs": []
     },
@@ -15,9 +22,19 @@
       "identifier": "pocket-disc",
       "displayName": "Pocket Disc",
       "source": "original-generated-faceplate",
-      "rendererLayers": ["faceplate-backdrop", "disc-molded-plane", "disc-screw-set", "disc-segment-bars"],
-      "assetFiles": ["PocketDiscFaceplate@2x.png"],
-      "fontTokens": ["systemMonospaced", "systemDefault"],
+      "rendererLayers": [
+        "faceplate-backdrop",
+        "disc-molded-plane",
+        "disc-screw-set",
+        "disc-segment-bars"
+      ],
+      "assetFiles": [
+        "PocketDiscFaceplate@2x.png"
+      ],
+      "fontTokens": [
+        "systemMonospaced",
+        "systemDefault"
+      ],
       "fontFiles": [],
       "externalAssetURLs": []
     },
@@ -25,9 +42,19 @@
       "identifier": "aqua-vista",
       "displayName": "Aqua Vista",
       "source": "original-generated-faceplate",
-      "rendererLayers": ["faceplate-backdrop", "aqua-color-planes", "aqua-bubble-set", "aqua-glass-highlights"],
-      "assetFiles": ["AquaVistaFaceplate@2x.png"],
-      "fontTokens": ["systemRounded", "systemDefault"],
+      "rendererLayers": [
+        "faceplate-backdrop",
+        "aqua-color-planes",
+        "aqua-bubble-set",
+        "aqua-glass-highlights"
+      ],
+      "assetFiles": [
+        "AquaVistaFaceplate@2x.png"
+      ],
+      "fontTokens": [
+        "systemRounded",
+        "systemDefault"
+      ],
       "fontFiles": [],
       "externalAssetURLs": []
     },
@@ -35,9 +62,121 @@
       "identifier": "com.gabeosx.vintage-cassette-deck",
       "displayName": "Vintage Cassette Deck",
       "source": "original-generated-faceplate",
-      "rendererLayers": ["faceplate-backdrop", "wood-side-panels", "cassette-window", "metal-control-wells"],
-      "assetFiles": ["VintageCassetteFaceplate@2x.png"],
-      "fontTokens": ["systemMonospaced", "systemDefault"],
+      "rendererLayers": [
+        "faceplate-backdrop",
+        "wood-side-panels",
+        "cassette-window",
+        "metal-control-wells"
+      ],
+      "assetFiles": [
+        "VintageCassetteFaceplate@2x.png"
+      ],
+      "fontTokens": [
+        "systemMonospaced",
+        "systemDefault"
+      ],
+      "fontFiles": [],
+      "externalAssetURLs": []
+    },
+    {
+      "identifier": "quartz-deck-link",
+      "displayName": "Quartz Deck + Quartz Link",
+      "source": "original-generated-and-deterministically-separated-faceplate",
+      "rendererLayers": [
+        "faceplate-backdrop",
+        "rotating-paper-label",
+        "song-heart-pilot",
+        "channel-star-pilot",
+        "el-afterglow"
+      ],
+      "assetFiles": [
+        "QuartzDeckFaceplate@2x.png",
+        "QuartzDeckSceneLabel@2x.png",
+        "QuartzDeckHeartGlow@2x.png",
+        "QuartzDeckStarGlow@2x.png"
+      ],
+      "fontTokens": [
+        "systemMonospaced"
+      ],
+      "fontFiles": [],
+      "externalAssetURLs": []
+    },
+    {
+      "identifier": "com.gabeosx.abyssal97",
+      "displayName": "Abyssal 97 \u2014 Living Ocean",
+      "source": "original-generated-and-deterministically-rigged-artwork",
+      "rendererLayers": [
+        "fixed-brass-station",
+        "fixed-lighting",
+        "layered-manta-rigs",
+        "finite-creature-atlases",
+        "foreground-occluders",
+        "song-specimen-jar",
+        "channel-beacon"
+      ],
+      "assetFiles": [
+        "Abyssal97BeaconSaved@3x.png",
+        "Abyssal97Crevice@3x.png",
+        "Abyssal97Current@3x.png",
+        "Abyssal97CuttlefishPoses.png",
+        "Abyssal97EelPoses.png",
+        "Abyssal97FishPoses.png",
+        "Abyssal97FrameOccluder@3x.png",
+        "Abyssal97GoldEcho@3x.png",
+        "Abyssal97JarSaved@3x.png",
+        "Abyssal97JellyPoses.png",
+        "Abyssal97MantaBody@3x.png",
+        "Abyssal97MantaFarFin@3x.png",
+        "Abyssal97MantaNearFin@3x.png",
+        "Abyssal97RoseEcho@3x.png",
+        "Abyssal97SharkPoses.png",
+        "Abyssal97ShrimpPoses.png",
+        "Abyssal97Static@3x.png",
+        "Abyssal97SurveyProbe@3x.png",
+        "Abyssal97Terrain@3x.png",
+        "Abyssal97VesselOccluder@3x.png"
+      ],
+      "fontTokens": [
+        "systemMonospaced"
+      ],
+      "fontFiles": [],
+      "externalAssetURLs": []
+    },
+    {
+      "identifier": "exit-97",
+      "displayName": "Exit 97",
+      "source": "original-generated-and-deterministically-rigged-artwork",
+      "rendererLayers": [
+        "registered-painted-world",
+        "fixed-perspective-wheel-phases",
+        "articulated-cockpit-poses",
+        "articulated-skywhale",
+        "deterministic-encounters",
+        "persistent-song-heart",
+        "persistent-channel-star"
+      ],
+      "assetFiles": [
+        "Exit97CruiseRig.png",
+        "Exit97EncounterCattle@2x.png",
+        "Exit97EncounterComet@2x.png",
+        "Exit97EncounterMoon@2x.png",
+        "Exit97EncounterService@2x.png",
+        "Exit97Environment@2x.png",
+        "Exit97EventRig.png",
+        "Exit97Faceplate@2x.png",
+        "Exit97HeartCharm@2x.png",
+        "Exit97Reflector@2x.png",
+        "Exit97SkywhaleRig.png",
+        "Exit97StarHood@2x.png",
+        "Exit97Vehicle@2x.png",
+        "Exit97WheelPhase0@2x.png",
+        "Exit97WheelPhase1@2x.png",
+        "Exit97WheelPhase2@2x.png",
+        "Exit97WheelPhase3@2x.png"
+      ],
+      "fontTokens": [
+        "systemMonospaced"
+      ],
       "fontFiles": [],
       "externalAssetURLs": []
     }
