@@ -11,6 +11,14 @@ if [[ -z "$VERSION" || -z "$OUTPUT_PATH" || ! -f "$ARCHIVE_PATH" ]]; then
   echo "usage: RELEASE_ARCHIVE_PATH=artifact.dmg $0 VERSION OUTPUT.spdx" >&2
   exit 2
 fi
+if [[ ! "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+  echo "VERSION must be MAJOR.MINOR.PATCH" >&2
+  exit 2
+fi
+if [[ ! "${GITHUB_REPOSITORY:-}" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+  echo "GITHUB_REPOSITORY must be OWNER/REPOSITORY" >&2
+  exit 2
+fi
 
 ARCHIVE_SHA="$(shasum -a 256 "$ARCHIVE_PATH" | awk '{print $1}')"
 CREATED="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
@@ -39,17 +47,34 @@ DOCUMENT_NAMESPACE="https://github.com/${GITHUB_REPOSITORY}/releases/tag/v${VERS
 /usr/bin/ruby -rjson -e '
   resolved_path, output_path = ARGV
   pins = JSON.parse(File.read(resolved_path)).fetch("pins", [])
+  lottie = pins.find { |pin| pin.fetch("identity") == "lottie-ios" }
+  abort "Lottie dependency missing" unless lottie
+  abort "Lottie must remain exactly 4.6.1" unless lottie.fetch("state").fetch("version") == "4.6.1"
   File.open(output_path, "a") do |output|
     pins.each do |pin|
       identity = pin.fetch("identity")
       state = pin.fetch("state", {})
       version = state["version"] || state["revision"] || "NOASSERTION"
+      name = identity == "lottie-ios" ? "Lottie" : identity
       spdx_id = "SPDXRef-Package-" + identity.gsub(/[^A-Za-z0-9.-]/, "-")
       output.puts
-      output.puts "PackageName: #{identity}"
+      output.puts "PackageName: #{name}"
       output.puts "SPDXID: #{spdx_id}"
       output.puts "PackageVersion: #{version}"
       output.puts "PackageDownloadLocation: #{pin["location"] || "NOASSERTION"}"
+      output.puts "FilesAnalyzed: false"
+      output.puts "PackageSupplier: NOASSERTION"
+      output.puts "PackageCopyrightText: NOASSERTION"
+      output.puts
+      output.puts "Relationship: SPDXRef-Package-Canis97 DEPENDS_ON #{spdx_id}"
+    end
+    %w[SiriusXMClient Canis97MotionSafety].each do |identity|
+      spdx_id = "SPDXRef-Package-#{identity}"
+      output.puts
+      output.puts "PackageName: #{identity}"
+      output.puts "SPDXID: #{spdx_id}"
+      output.puts "PackageVersion: NOASSERTION"
+      output.puts "PackageDownloadLocation: NOASSERTION"
       output.puts "FilesAnalyzed: false"
       output.puts "PackageSupplier: NOASSERTION"
       output.puts "PackageCopyrightText: NOASSERTION"

@@ -1,0 +1,181 @@
+{
+  "schemaVersion": 4,
+  "identifier": "com.gabeosx.abyssal97",
+  "displayName": "Abyssal 97 \u2014 Living Ocean",
+  "playerBackground": "#07141C",
+  "metadataPanel": "#091820",
+  "accent": "#E1B872",
+  "destructive": "#D77989",
+  "layoutVariant": "cinemaDeck",
+  "silhouette": "wideCinema",
+  "size": "cinema448x360",
+  "foregroundScheme": "dark",
+  "typography": {
+    "display": "systemMonospaced",
+    "body": "systemDefault",
+    "label": "systemMonospaced"
+  },
+  "slots": [
+    {
+      "semantic": "artwork",
+      "frame": {
+        "x": 16,
+        "y": 292,
+        "width": 48,
+        "height": 48
+      }
+    },
+    {
+      "semantic": "channelIdentity",
+      "frame": {
+        "x": 76,
+        "y": 284,
+        "width": 140,
+        "height": 24
+      }
+    },
+    {
+      "semantic": "metadata",
+      "frame": {
+        "x": 76,
+        "y": 308,
+        "width": 176,
+        "height": 48
+      }
+    },
+    {
+      "semantic": "favorite",
+      "frame": {
+        "x": 220,
+        "y": 276,
+        "width": 32,
+        "height": 32
+      }
+    },
+    {
+      "semantic": "status",
+      "frame": {
+        "x": 272,
+        "y": 284,
+        "width": 112,
+        "height": 24
+      }
+    },
+    {
+      "semantic": "transport",
+      "frame": {
+        "x": 264,
+        "y": 316,
+        "width": 128,
+        "height": 40
+      }
+    },
+    {
+      "semantic": "library",
+      "frame": {
+        "x": 400,
+        "y": 284,
+        "width": 32,
+        "height": 32
+      }
+    },
+    {
+      "semantic": "overflowMenu",
+      "frame": {
+        "x": 400,
+        "y": 324,
+        "width": 32,
+        "height": 32
+      }
+    }
+  ],
+  "dragRegions": [
+    {
+      "x": 8,
+      "y": 8,
+      "width": 432,
+      "height": 268
+    }
+  ],
+  "decorations": {
+    "backdrop": "Abyssal97Static@3x.png",
+    "chromeFrame": null,
+    "displayPlate": null,
+    "ornaments": []
+  },
+  "motion": {
+    "format": "canis97",
+    "document": "Abyssal97.motion.json",
+    "staticPose": "Abyssal97Static@3x.png",
+    "spriteScene": "Abyssal97.scene.json",
+    "spriteAssets": [
+      "Abyssal97BeaconSaved@3x.png",
+      "Abyssal97Crevice@3x.png",
+      "Abyssal97Current@3x.png",
+      "Abyssal97FrameOccluder@3x.png",
+      "Abyssal97GoldEcho@3x.png",
+      "Abyssal97JarSaved@3x.png",
+      "Abyssal97MantaBody@3x.png",
+      "Abyssal97MantaFarFin@3x.png",
+      "Abyssal97MantaNearFin@3x.png",
+      "Abyssal97RoseEcho@3x.png",
+      "Abyssal97SurveyProbe@3x.png",
+      "Abyssal97Terrain@3x.png",
+      "Abyssal97VesselOccluder@3x.png",
+      "Abyssal97CuttlefishPoses.png",
+      "Abyssal97EelPoses.png",
+      "Abyssal97FishPoses.png",
+      "Abyssal97JellyPoses.png",
+      "Abyssal97SharkPoses.png",
+      "Abyssal97ShrimpPoses.png"
+    ],
+    "states": {
+      "idle": {
+        "startFrame": 0,
+        "endFrame": 0
+      },
+      "loading": {
+        "startFrame": 0,
+        "endFrame": 0
+      },
+      "playing": {
+        "startFrame": 0,
+        "endFrame": 300
+      },
+      "paused": {
+        "startFrame": 0,
+        "endFrame": 0
+      },
+      "error": {
+        "startFrame": 0,
+        "endFrame": 0
+      }
+    },
+    "events": {
+      "channelChanged": {
+        "startFrame": 0,
+        "endFrame": 96
+      },
+      "songFavoriteAdded": {
+        "startFrame": 0,
+        "endFrame": 63
+      },
+      "songFavoriteRemoved": {
+        "startFrame": 0,
+        "endFrame": 75
+      },
+      "channelFavoriteAdded": {
+        "startFrame": 0,
+        "endFrame": 51
+      },
+      "channelFavoriteRemoved": {
+        "startFrame": 0,
+        "endFrame": 66
+      },
+      "recovered": {
+        "startFrame": 0,
+        "endFrame": 1
+      }
+    }
+  }
+}

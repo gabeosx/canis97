@@ -1,0 +1,103 @@
+{
+  "formatVersion": 1,
+  "canvas": { "width": 448, "height": 360 },
+  "layers": [
+    {
+      "identifier": "record_label",
+      "asset": "QuartzDeckSceneLabel@2x.png",
+      "frame": { "x": 133, "y": 84, "width": 97, "height": 97 },
+      "zIndex": 20,
+      "role": "subject",
+      "timeline": [
+        { "time": 0, "x": 0, "y": 0, "scaleX": 1, "scaleY": 1, "rotation": 0, "opacity": 1, "easing": "linear" },
+        { "time": 0.45, "x": 0, "y": 0, "scaleX": 1, "scaleY": 1, "rotation": -90, "opacity": 1, "easing": "linear" },
+        { "time": 0.9, "x": 0, "y": 0, "scaleX": 1, "scaleY": 1, "rotation": -180, "opacity": 1, "easing": "linear" },
+        { "time": 1.35, "x": 0, "y": 0, "scaleX": 1, "scaleY": 1, "rotation": 90, "opacity": 1, "easing": "linear" },
+        { "time": 1.8, "x": 0, "y": 0, "scaleX": 1, "scaleY": 1, "rotation": 0, "opacity": 1, "easing": "linear" }
+      ],
+      "event": null,
+      "group": null
+    },
+    {
+      "identifier": "song_heart_persistent",
+      "asset": "QuartzDeckHeartGlow@2x.png",
+      "frame": { "x": 212, "y": 317, "width": 40, "height": 40 },
+      "zIndex": 30,
+      "role": "persistentSongFavorite",
+      "timeline": null,
+      "event": null,
+      "group": null
+    },
+    {
+      "identifier": "channel_star_persistent",
+      "asset": "QuartzDeckStarGlow@2x.png",
+      "frame": { "x": 212, "y": 284, "width": 40, "height": 40 },
+      "zIndex": 30,
+      "role": "persistentChannelFavorite",
+      "timeline": null,
+      "event": null,
+      "group": null
+    },
+    {
+      "identifier": "song_heart_add",
+      "asset": "QuartzDeckHeartGlow@2x.png",
+      "frame": { "x": 212, "y": 317, "width": 40, "height": 40 },
+      "zIndex": 31,
+      "role": "event",
+      "timeline": [
+        { "time": 0, "x": 0, "y": 0, "scaleX": 0.88, "scaleY": 0.88, "rotation": 0, "opacity": 0, "easing": "easeOut" },
+        { "time": 0.12, "x": 0, "y": 0, "scaleX": 0.96, "scaleY": 0.96, "rotation": 0, "opacity": 0.9, "easing": "easeOut" },
+        { "time": 0.36, "x": 0, "y": 0, "scaleX": 1.05, "scaleY": 1.05, "rotation": 0, "opacity": 0.72, "easing": "easeOut" },
+        { "time": 0.72, "x": 0, "y": 0, "scaleX": 1, "scaleY": 1, "rotation": 0, "opacity": 0, "easing": "easeIn" }
+      ],
+      "event": "songFavoriteAdded",
+      "group": null
+    },
+    {
+      "identifier": "song_heart_remove",
+      "asset": "QuartzDeckHeartGlow@2x.png",
+      "frame": { "x": 212, "y": 317, "width": 40, "height": 40 },
+      "zIndex": 31,
+      "role": "event",
+      "timeline": [
+        { "time": 0, "x": 0, "y": 0, "scaleX": 1, "scaleY": 1, "rotation": 0, "opacity": 1, "easing": "easeOut" },
+        { "time": 0.12, "x": 0, "y": 0, "scaleX": 0.96, "scaleY": 0.96, "rotation": 0, "opacity": 0.72, "easing": "easeOut" },
+        { "time": 0.34, "x": 0, "y": 0, "scaleX": 0.82, "scaleY": 0.82, "rotation": 0, "opacity": 0, "easing": "easeIn" },
+        { "time": 0.5, "x": 0, "y": 0, "scaleX": 0.82, "scaleY": 0.82, "rotation": 0, "opacity": 0, "easing": "linear" }
+      ],
+      "event": "songFavoriteRemoved",
+      "group": null
+    },
+    {
+      "identifier": "channel_star_add",
+      "asset": "QuartzDeckStarGlow@2x.png",
+      "frame": { "x": 212, "y": 284, "width": 40, "height": 40 },
+      "zIndex": 31,
+      "role": "event",
+      "timeline": [
+        { "time": 0, "x": 0, "y": 0, "scaleX": 0.9, "scaleY": 0.9, "rotation": 0, "opacity": 0, "easing": "easeOut" },
+        { "time": 0.14, "x": 0, "y": 0, "scaleX": 0.97, "scaleY": 0.97, "rotation": 0, "opacity": 0.95, "easing": "easeOut" },
+        { "time": 0.46, "x": 0, "y": 0, "scaleX": 1.06, "scaleY": 1.06, "rotation": 0, "opacity": 0.65, "easing": "easeInOut" },
+        { "time": 0.9, "x": 0, "y": 0, "scaleX": 1, "scaleY": 1, "rotation": 0, "opacity": 0, "easing": "easeIn" }
+      ],
+      "event": "channelFavoriteAdded",
+      "group": null
+    },
+    {
+      "identifier": "channel_star_remove",
+      "asset": "QuartzDeckStarGlow@2x.png",
+      "frame": { "x": 212, "y": 284, "width": 40, "height": 40 },
+      "zIndex": 31,
+      "role": "event",
+      "timeline": [
+        { "time": 0, "x": 0, "y": 0, "scaleX": 1, "scaleY": 1, "rotation": 0, "opacity": 1, "easing": "easeOut" },
+        { "time": 0.14, "x": 0, "y": 0, "scaleX": 0.97, "scaleY": 0.97, "rotation": 0, "opacity": 0.8, "easing": "easeOut" },
+        { "time": 0.42, "x": 0, "y": 0, "scaleX": 0.82, "scaleY": 0.82, "rotation": 0, "opacity": 0, "easing": "easeIn" },
+        { "time": 0.7, "x": 0, "y": 0, "scaleX": 0.82, "scaleY": 0.82, "rotation": 0, "opacity": 0, "easing": "linear" }
+      ],
+      "event": "channelFavoriteRemoved",
+      "group": null
+    }
+  ],
+  "encounterGroups": []
+}

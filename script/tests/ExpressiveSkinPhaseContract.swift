@@ -55,11 +55,11 @@ enum ExpressiveSkinPhaseContract {
         ] {
             try require(player.contains(copy) || presentation.contains(copy) || management.contains(copy), "missing app-owned copy: \(copy)")
         }
-        try require(player.contains("duration: 0.15") && player.contains("reduceMotion ? nil"), "motion policy must remain a 150ms optional app-owned treatment")
+        try require(player.contains("duration: 0.15") && player.contains("effectiveReduceMotion ? nil"), "motion policy must remain a 150ms optional app-owned treatment")
         try require(player.contains("expressiveFaceplateLayer") && player.contains("hasExpressiveFaceplate"), "validated faceplates must render behind semantic slots")
         try require(player.contains("expressiveSlotAlignment") && player.contains("expressiveTransportControlCenters") && player.contains("FaceplateGlyphView") && player.contains("menuIndicator(.hidden)"), "expressive controls must remain on app-owned, centered geometry")
         try require(player.contains("BoundedMarqueeText") && player.contains(".compositingGroup()") && player.contains("accessibilityReduceMotion") && player.contains(".clipped()"), "bounded expressive text must move precomposited text layers with a reduced-motion fallback")
-        try require(player.components(separatedBy: "TimelineView(.animation").count == 2, "all marquee lines must share one animation clock")
+        try require(player.components(separatedBy: "TimelineView(.animation").count == 2, "only the bounded marquee component may own an animation clock")
         try require(player.contains("compact.overflow.use-native-appearance"), "compact Native recovery route is missing")
         try require(app.contains("Button(\"Use Native Appearance\")") && app.contains("restoreNativeAppearance()"), "Player-menu Native recovery route is missing")
         try require(importer.contains("SkinManifestValidator.referencedAssetPaths"), "importer must use the closed asset accessor")

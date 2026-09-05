@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 4,
+  "identifier": "quartz-deck-link",
+  "displayName": "Quartz Deck + Quartz Link",
+  "playerBackground": "#08090B",
+  "metadataPanel": "#0A1727",
+  "accent": "#E2B35A",
+  "destructive": "#D84C59",
+  "foregroundScheme": "dark",
+  "layoutVariant": "cinemaDeck",
+  "silhouette": "wideCinema",
+  "size": "cinema448x360",
+  "typography": {
+    "display": "systemMonospaced",
+    "body": "systemMonospaced",
+    "label": "systemMonospaced"
+  },
+  "slots": [
+    { "semantic": "artwork", "frame": { "x": 24, "y": 296, "width": 48, "height": 48 } },
+    { "semantic": "channelIdentity", "frame": { "x": 92, "y": 288, "width": 120, "height": 28 } },
+    { "semantic": "metadata", "frame": { "x": 92, "y": 316, "width": 156, "height": 40 } },
+    { "semantic": "favorite", "frame": { "x": 216, "y": 284, "width": 32, "height": 32 } },
+    { "semantic": "status", "frame": { "x": 272, "y": 288, "width": 88, "height": 28 } },
+    { "semantic": "transport", "frame": { "x": 264, "y": 316, "width": 128, "height": 40 } },
+    { "semantic": "library", "frame": { "x": 396, "y": 288, "width": 32, "height": 32 } },
+    { "semantic": "overflowMenu", "frame": { "x": 396, "y": 324, "width": 32, "height": 32 } }
+  ],
+  "dragRegions": [
+    { "x": 8, "y": 4, "width": 432, "height": 276 }
+  ],
+  "decorations": {
+    "backdrop": "QuartzDeckFaceplate@2x.png",
+    "chromeFrame": null,
+    "displayPlate": null,
+    "ornaments": []
+  },
+  "motion": {
+    "format": "canis97",
+    "document": "QuartzDeck.motion.json",
+    "staticPose": "QuartzDeckFaceplate@2x.png",
+    "spriteScene": "QuartzDeck.scene.json",
+    "spriteAssets": [
+      "QuartzDeckSceneLabel@2x.png",
+      "QuartzDeckHeartGlow@2x.png",
+      "QuartzDeckStarGlow@2x.png"
+    ],
+    "states": {
+      "idle": { "startFrame": 0, "endFrame": 0 },
+      "loading": { "startFrame": 0, "endFrame": 36 },
+      "playing": { "startFrame": 0, "endFrame": 270 },
+      "paused": { "startFrame": 0, "endFrame": 0 },
+      "error": { "startFrame": 0, "endFrame": 0 }
+    },
+    "events": {
+      "channelChanged": { "startFrame": 0, "endFrame": 18 },
+      "favoriteChanged": { "startFrame": 0, "endFrame": 18 },
+      "channelFavoriteAdded": { "startFrame": 0, "endFrame": 24 },
+      "channelFavoriteRemoved": { "startFrame": 0, "endFrame": 24 },
+      "songFavoriteAdded": { "startFrame": 0, "endFrame": 24 },
+      "songFavoriteRemoved": { "startFrame": 0, "endFrame": 24 },
+      "recovered": { "startFrame": 0, "endFrame": 27 }
+    }
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 4,
+  "identifier": "signal-garden",
+  "displayName": "Signal Garden",
+  "playerBackground": "#19342B", "metadataPanel": "#285445", "accent": "#C7F59B", "destructive": "#FF7C83",
+  "foregroundScheme": "dark", "layoutVariant": "aquaPod", "silhouette": "bubbleCapsule", "size": "capsule448x304",
+  "typography": { "display": "systemRounded", "body": "systemDefault", "label": "systemDefault" },
+  "slots": [
+    { "semantic": "artwork", "frame": { "x": 32, "y": 40, "width": 112, "height": 104 } },
+    { "semantic": "channelIdentity", "frame": { "x": 156, "y": 44, "width": 208, "height": 32 } },
+    { "semantic": "metadata", "frame": { "x": 156, "y": 80, "width": 208, "height": 56 } },
+    { "semantic": "favorite", "frame": { "x": 376, "y": 36, "width": 48, "height": 48 } },
+    { "semantic": "status", "frame": { "x": 28, "y": 156, "width": 152, "height": 36 } },
+    { "semantic": "transport", "frame": { "x": 188, "y": 216, "width": 176, "height": 56 } },
+    { "semantic": "library", "frame": { "x": 28, "y": 244, "width": 112, "height": 40 } },
+    { "semantic": "overflowMenu", "frame": { "x": 376, "y": 228, "width": 48, "height": 52 } }
+  ],
+  "dragRegions": [{ "x": 16, "y": 8, "width": 280, "height": 20 }],
+  "decorations": { "backdrop": null, "chromeFrame": null, "displayPlate": null, "ornaments": [] },
+  "motion": {
+    "format": "canis97", "document": "SignalGarden.motion.json", "staticPose": "SignalGarden.json",
+    "states": { "idle": { "startFrame": 0, "endFrame": 0 }, "loading": { "startFrame": 0, "endFrame": 12 }, "playing": { "startFrame": 0, "endFrame": 36 }, "paused": { "startFrame": 0, "endFrame": 0 }, "error": { "startFrame": 0, "endFrame": 0 } },
+    "events": { "channelChanged": { "startFrame": 0, "endFrame": 12 }, "favoriteChanged": { "startFrame": 12, "endFrame": 24 }, "recovered": { "startFrame": 24, "endFrame": 36 } }
+  }
+}

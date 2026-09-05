@@ -11,25 +11,26 @@ struct Canis97App: App {
     private let skinImportCoordinator: SkinImportCoordinator
     private let updateChecker: UpdateChecker
     private let terminationObserver: ApplicationTerminationObserver?
-#if DEBUG
+#if DEBUG || CANIS97_ANIMATION_ACCEPTANCE
     private let offlineReviewHarness: OfflineReviewHarness?
 #endif
 
     init() {
         let environment = ProcessInfo.processInfo.environment
         updateChecker = UpdateChecker()
-#if DEBUG
+#if DEBUG || CANIS97_ANIMATION_ACCEPTANCE
         if OfflineReviewLaunchMode.isOfflineReviewMode(environment: environment) {
-            let offlineAppearanceController = SkinAppearanceController(
+            let harness = OfflineReviewHarness.makeIfRequested(environment: environment)
+            let offlineAppearanceController = harness?.appearanceController ?? SkinAppearanceController(
                 catalog: .phaseOne,
                 selectionStore: nil
             )
             appearanceController = offlineAppearanceController
-            skinImportCoordinator = SkinImportCoordinator(
-                importer: SkinPackageImporter(),
+            skinImportCoordinator = harness?.skinImportCoordinator ?? SkinImportCoordinator(
+                importer: OfflineReviewHarness.makeReviewImporter(),
                 appearanceController: offlineAppearanceController
             )
-            offlineReviewHarness = OfflineReviewHarness.makeIfRequested(environment: environment)
+            offlineReviewHarness = harness
             sessionController = nil
             terminationObserver = nil
             return
@@ -76,8 +77,12 @@ struct Canis97App: App {
 
     var body: some Scene {
         WindowGroup(ProductIdentity.displayName, id: ProductIdentity.SceneID.compact) {
-            compactSceneContent
-                .softwareUpdatePresentation(checker: updateChecker)
+            if OfflineReviewLaunchMode.isOfflineReviewRequested() {
+                compactSceneContent
+            } else {
+                compactSceneContent
+                    .softwareUpdatePresentation(checker: updateChecker)
+            }
         }
         .defaultSize(width: 760, height: 760)
         // The primary scene changes from a resizable authentication surface to
@@ -136,7 +141,7 @@ struct Canis97App: App {
 
     @ViewBuilder
     private var compactSceneContent: some View {
-#if DEBUG
+#if DEBUG || CANIS97_ANIMATION_ACCEPTANCE
         if let offlineReviewHarness {
             OfflineReviewCompactRoot(harness: offlineReviewHarness)
         } else if OfflineReviewLaunchMode.isOfflineReviewMode() {
@@ -167,7 +172,7 @@ struct Canis97App: App {
 
     @ViewBuilder
     private var librarySceneContent: some View {
-#if DEBUG
+#if DEBUG || CANIS97_ANIMATION_ACCEPTANCE
         if let offlineReviewHarness {
             OfflineReviewLibraryRoot(harness: offlineReviewHarness)
         } else if OfflineReviewLaunchMode.isOfflineReviewMode() {
@@ -444,7 +449,7 @@ private struct ListeningCommands: Commands {
             Button(updateChecker.isChecking ? "Checking for Updates…" : "Check for Updates…") {
                 Task { await updateChecker.check(manual: true) }
             }
-            .disabled(updateChecker.isChecking)
+            .disabled(updateChecker.isChecking || OfflineReviewLaunchMode.isOfflineReviewRequested())
         }
 
         CommandGroup(after: .help) {
@@ -482,7 +487,13 @@ enum OfflineReviewLaunchMode {
     static func isOfflineReviewRequested(
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> Bool {
+#if CANIS97_ANIMATION_ACCEPTANCE
+        // Acceptance products remain credential-free even when LaunchServices
+        // reopens them without the original environment (for example via UI tools).
+        true
+#else
         environment[reviewModeEnvironmentKey] == "1"
+#endif
     }
 
     static func isUnitTestHost(
@@ -494,7 +505,7 @@ enum OfflineReviewLaunchMode {
     static func isOfflineReviewMode(
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> Bool {
-#if DEBUG
+#if DEBUG || CANIS97_ANIMATION_ACCEPTANCE
         isOfflineReviewRequested(environment: environment)
 #else
         false

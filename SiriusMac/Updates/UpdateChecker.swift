@@ -166,6 +166,7 @@ final class UpdateChecker {
     }
 
     func checkAutomaticallyIfNeeded() async {
+        guard !OfflineReviewLaunchMode.isOfflineReviewRequested() else { return }
         guard configuration.repository != nil,
               configuration.currentVersion != nil,
               !isChecking,
@@ -175,6 +176,7 @@ final class UpdateChecker {
     }
 
     func check(manual: Bool) async {
+        guard !OfflineReviewLaunchMode.isOfflineReviewRequested() else { return }
         guard !isChecking else { return }
         guard let repository = configuration.repository,
               let currentVersion = configuration.currentVersion

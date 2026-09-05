@@ -1,0 +1,182 @@
+{
+  "schemaVersion": 4,
+  "identifier": "exit-97",
+  "displayName": "Exit 97",
+  "playerBackground": "#070A12",
+  "metadataPanel": "#15161C",
+  "accent": "#E9BA64",
+  "destructive": "#EF6B67",
+  "foregroundScheme": "dark",
+  "layoutVariant": "cinemaDeck",
+  "silhouette": "wideCinema",
+  "size": "cinema448x360",
+  "typography": {
+    "display": "systemMonospaced",
+    "body": "systemDefault",
+    "label": "systemMonospaced"
+  },
+  "slots": [
+    {
+      "semantic": "artwork",
+      "frame": {
+        "x": 4,
+        "y": 256,
+        "width": 48,
+        "height": 48
+      }
+    },
+    {
+      "semantic": "channelIdentity",
+      "frame": {
+        "x": 60,
+        "y": 256,
+        "width": 124,
+        "height": 24
+      }
+    },
+    {
+      "semantic": "metadata",
+      "frame": {
+        "x": 60,
+        "y": 280,
+        "width": 164,
+        "height": 48
+      }
+    },
+    {
+      "semantic": "favorite",
+      "frame": {
+        "x": 188,
+        "y": 248,
+        "width": 32,
+        "height": 32
+      }
+    },
+    {
+      "semantic": "status",
+      "frame": {
+        "x": 264,
+        "y": 256,
+        "width": 136,
+        "height": 24
+      }
+    },
+    {
+      "semantic": "transport",
+      "frame": {
+        "x": 264,
+        "y": 280,
+        "width": 136,
+        "height": 48
+      }
+    },
+    {
+      "semantic": "library",
+      "frame": {
+        "x": 404,
+        "y": 256,
+        "width": 40,
+        "height": 40
+      }
+    },
+    {
+      "semantic": "overflowMenu",
+      "frame": {
+        "x": 404,
+        "y": 296,
+        "width": 40,
+        "height": 32
+      }
+    }
+  ],
+  "dragRegions": [
+    {
+      "x": 4,
+      "y": 4,
+      "width": 320,
+      "height": 20
+    }
+  ],
+  "decorations": {
+    "backdrop": "Exit97Faceplate@2x.png",
+    "chromeFrame": null,
+    "displayPlate": null,
+    "ornaments": []
+  },
+  "motion": {
+    "format": "canis97",
+    "document": "Exit97.motion.json",
+    "staticPose": "Exit97Faceplate@2x.png",
+    "spriteScene": "Exit97.scene.json",
+    "spriteAssets": [
+      "Exit97CruiseRig.png",
+      "Exit97EncounterCattle@2x.png",
+      "Exit97EncounterComet@2x.png",
+      "Exit97EncounterMoon@2x.png",
+      "Exit97EncounterService@2x.png",
+      "Exit97Environment@2x.png",
+      "Exit97EventRig.png",
+      "Exit97HeartCharm@2x.png",
+      "Exit97Reflector@2x.png",
+      "Exit97SkywhaleRig.png",
+      "Exit97StarHood@2x.png",
+      "Exit97Vehicle@2x.png",
+      "Exit97WheelPhase0@2x.png",
+      "Exit97WheelPhase1@2x.png",
+      "Exit97WheelPhase2@2x.png",
+      "Exit97WheelPhase3@2x.png"
+    ],
+    "states": {
+      "idle": {
+        "startFrame": 0,
+        "endFrame": 0
+      },
+      "loading": {
+        "startFrame": 0,
+        "endFrame": 24
+      },
+      "playing": {
+        "startFrame": 0,
+        "endFrame": 240
+      },
+      "paused": {
+        "startFrame": 0,
+        "endFrame": 0
+      },
+      "error": {
+        "startFrame": 0,
+        "endFrame": 0
+      }
+    },
+    "events": {
+      "channelChanged": {
+        "startFrame": 0,
+        "endFrame": 24
+      },
+      "favoriteChanged": {
+        "startFrame": 24,
+        "endFrame": 48
+      },
+      "channelFavoriteAdded": {
+        "startFrame": 48,
+        "endFrame": 72
+      },
+      "channelFavoriteRemoved": {
+        "startFrame": 72,
+        "endFrame": 96
+      },
+      "songFavoriteAdded": {
+        "startFrame": 96,
+        "endFrame": 120
+      },
+      "songFavoriteRemoved": {
+        "startFrame": 120,
+        "endFrame": 144
+      },
+      "recovered": {
+        "startFrame": 144,
+        "endFrame": 168
+      }
+    }
+  }
+}

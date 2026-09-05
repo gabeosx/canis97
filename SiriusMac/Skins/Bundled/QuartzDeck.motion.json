@@ -1,0 +1,47 @@
+{
+  "formatVersion": 1,
+  "canvas": { "width": 448, "height": 360 },
+  "frameRate": 30,
+  "duration": 9,
+  "layers": [
+    {
+      "identifier": "el_afterglow",
+      "kind": "shape",
+      "transform": {
+        "position": { "x": 0, "y": 56 },
+        "scale": { "x": 1, "y": 1 },
+        "rotation": 0
+      },
+      "opacity": 0.08,
+      "paths": [
+        {
+          "identifier": "station_glass",
+          "points": [
+            { "x": 92, "y": 232 }, { "x": 212, "y": 232 },
+            { "x": 212, "y": 260 }, { "x": 92, "y": 260 }
+          ],
+          "fill": { "color": { "red": 0.12, "green": 0.52, "blue": 0.92, "alpha": 0.18 } },
+          "stroke": null
+        },
+        {
+          "identifier": "song_glass",
+          "points": [
+            { "x": 92, "y": 264 }, { "x": 212, "y": 264 },
+            { "x": 212, "y": 292 }, { "x": 92, "y": 292 }
+          ],
+          "fill": { "color": { "red": 0.12, "green": 0.52, "blue": 0.92, "alpha": 0.18 } },
+          "stroke": null
+        }
+      ],
+      "masks": [],
+      "keyframes": [
+        { "frame": 0, "value": 0.03 },
+        { "frame": 135, "value": 0.07 },
+        { "frame": 270, "value": 0.03 }
+      ],
+      "precompositionID": null
+    }
+  ],
+  "precompositions": [],
+  "stateBindings": []
+}

@@ -1,4 +1,5 @@
-#if DEBUG
+#if DEBUG || CANIS97_ANIMATION_ACCEPTANCE
+import AppKit
 import SwiftData
 import SwiftUI
 import SiriusXMClient
@@ -38,9 +39,12 @@ final class OfflineReviewHarness {
         ) else { return nil }
         libraryStore = LibraryStore(modelContainer: container)
         listeningModel = ListeningPresentationModel(flow: UITestCatalogFlow())
-        let importer = SkinPackageImporter()
+        let importer = Self.makeReviewImporter()
+        let catalog = SkinAppearanceCatalog.phaseOne.inserting(OfflineReviewAppearanceFixture.legacySchema1Appearance)
+        let initialAppearanceName = reviewAppearance.displayName
         appearanceController = SkinAppearanceController(
-            catalog: .phaseOne.inserting(OfflineReviewAppearanceFixture.legacySchema1Appearance),
+            catalog: catalog,
+            initialReference: catalog.appearances.first(where: { $0.displayName == initialAppearanceName })?.reference ?? .native,
             selectionStore: nil
         )
         skinImportCoordinator = SkinImportCoordinator(
@@ -48,6 +52,19 @@ final class OfflineReviewHarness {
             appearanceController: appearanceController
         )
         _ = listeningModel.refresh()
+    }
+
+    /// Review imports can only promote into a process-specific temporary store.
+    static func makeReviewImporter() -> SkinPackageImporter {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("canis97-offline-review-\(ProcessInfo.processInfo.processIdentifier)", isDirectory: true)
+        return SkinPackageImporter(store: ManagedSkinStore(applicationSupportDirectory: root))
+    }
+
+    func importReviewPackage(at url: URL) async throws -> ValidatedSkinAppearance {
+        let result = try await skinImportCoordinator.importAndSelect(url)
+        print("OFFLINE-IMPORT: \(result.appearance.displayName), selected=\(result.selected)")
+        return result.appearance
     }
 
     func tune(channelID: LiveChannelID, originIDs: [LiveChannelID]) -> Bool {
@@ -74,6 +91,15 @@ final class OfflineReviewHarness {
 }
 
 enum OfflineReviewSurface: String, CaseIterable, Identifiable {
+    private static var defaultSurface: Self {
+#if CANIS97_ANIMATION_ACCEPTANCE
+        .compactHitTesting
+#else
+        .authenticationOutcomes
+#endif
+    }
+
+    case compactHitTesting
     case authenticationOutcomes
     case compactEmpty
     case compactPopulated
@@ -90,11 +116,12 @@ enum OfflineReviewSurface: String, CaseIterable, Identifiable {
 
     init(environment: [String: String]) {
         self = environment[OfflineReviewLaunchMode.reviewSurfaceEnvironmentKey]
-            .flatMap(Self.init(rawValue:)) ?? .authenticationOutcomes
+            .flatMap(Self.init(rawValue:)) ?? Self.defaultSurface
     }
 
     var title: String {
         switch self {
+        case .compactHitTesting: "Compact native hit testing"
         case .authenticationOutcomes: "Authentication outcomes"
         case .compactEmpty: "Compact empty"
         case .compactPopulated: "Compact populated"
@@ -111,6 +138,14 @@ enum OfflineReviewSurface: String, CaseIterable, Identifiable {
 }
 
 enum OfflineReviewAppearanceFixture: String, CaseIterable, Identifiable {
+    private static var defaultAppearance: Self {
+#if CANIS97_ANIMATION_ACCEPTANCE
+        .abyssal97
+#else
+        .native
+#endif
+    }
+
     case native
     case legacySchema1
     case signalGlow
@@ -118,12 +153,17 @@ enum OfflineReviewAppearanceFixture: String, CaseIterable, Identifiable {
     case pixelDesk
     case pocketDisc
     case aquaVista
+    case orbitDeck
+    case signalGarden
+    case exit97
+    case quartzDeck
+    case abyssal97
 
     var id: String { rawValue }
 
     init(environment: [String: String]) {
         self = environment[OfflineReviewLaunchMode.reviewAppearanceEnvironmentKey]
-            .flatMap(Self.init(rawValue:)) ?? .native
+            .flatMap(Self.init(rawValue:)) ?? Self.defaultAppearance
     }
 
     var title: String {
@@ -135,6 +175,11 @@ enum OfflineReviewAppearanceFixture: String, CaseIterable, Identifiable {
         case .pixelDesk: "Pixel Desk"
         case .pocketDisc: "Pocket Disc"
         case .aquaVista: "Aqua Vista"
+        case .orbitDeck: "Orbit Deck"
+        case .signalGarden: "Signal Garden"
+        case .exit97: "Exit 97"
+        case .quartzDeck: "Quartz Deck + Quartz Link"
+        case .abyssal97: "Abyssal 97 — Living Ocean"
         }
     }
 
@@ -181,6 +226,14 @@ struct OfflineReviewCompactRoot: View {
     @Environment(\.openWindow) private var openWindow
     @State private var selectedSurface: OfflineReviewSurface
     @State private var selectedAppearance: OfflineReviewAppearanceFixture = .native
+    @State private var animationReduceMotion = false
+    @State private var animationIsPlaying = true
+    @State private var animationBudgetState: AnimatedSkinBudgetState = .withinBudget
+    @State private var animationHostPresent = true
+    @State private var localReviewAppearance: ValidatedSkinAppearance?
+    @State private var localReviewFailure = false
+    private let localReviewPath = ProcessInfo.processInfo.environment["CANIS97_OFFLINE_REVIEW_PACKAGE"]
+        ?? Bundle.main.url(forResource: "OfflineReview", withExtension: "canis97skin")?.path
 
     init(harness: OfflineReviewHarness) {
         self.harness = harness
@@ -189,6 +242,31 @@ struct OfflineReviewCompactRoot: View {
     }
 
     var body: some View {
+        if let localReviewPath {
+            Group {
+                if let localReviewAppearance {
+                    OfflineHitTestingReview(appearance: localReviewAppearance)
+                } else {
+                    Text(localReviewFailure ? "Offline package validation failed" : "Validating offline package…")
+                }
+            }
+            .task {
+                guard localReviewAppearance == nil, !localReviewFailure else { return }
+                do {
+                    localReviewAppearance = try await harness.importReviewPackage(at: URL(fileURLWithPath: localReviewPath))
+                } catch {
+                    localReviewFailure = true
+                    print("OFFLINE-IMPORT: rejected \(String(describing: type(of: error)))")
+                }
+            }
+        } else if harness.reviewSurface == .compactHitTesting {
+            OfflineHitTestingReview(appearance: harness.appearanceController.selectedAppearance)
+        } else {
+            dashboardBody
+        }
+    }
+
+    private var dashboardBody: some View {
         VStack(spacing: 12) {
             Picker("Offline review surface", selection: $selectedSurface) {
                 ForEach(OfflineReviewSurface.allCases) { surface in
@@ -229,16 +307,30 @@ struct OfflineReviewCompactRoot: View {
     @ViewBuilder
     private var reviewContent: some View {
         switch selectedSurface {
+        case .compactHitTesting:
+            EmptyView()
         case .authenticationOutcomes:
             OfflineAuthenticationOutcomesView()
         case .compactEmpty, .compactPopulated, .compactPending, .compactError,
              .compactLongText, .compactAppearanceFailure:
-            CompactPlayerView(
-                presentation: compactPresentation,
-                appearance: reviewAppearance,
-                onAction: { _ in },
-                onAppearanceRecovery: { selectedAppearance = .native }
-            )
+            VStack(spacing: 8) {
+                animationAcceptanceControls
+                if animationHostPresent {
+                    CompactPlayerView(
+                        presentation: compactPresentation,
+                        appearance: reviewAppearance,
+                        onAction: { action in
+                            if action == .playPause { animationIsPlaying.toggle() }
+                        },
+                        onAppearanceRecovery: { selectedAppearance = .native },
+                        animationBudgetState: animationBudgetState,
+                        animationReduceMotionOverride: animationReduceMotion
+                    )
+                } else {
+                    Text("Animated host removed for offline review")
+                        .accessibilityIdentifier("offline-review.animation.host-removed")
+                }
+            }
         case .libraryCollections:
             OfflineReviewLibraryRoot(harness: harness)
         case .libraryEmpty:
@@ -283,11 +375,30 @@ struct OfflineReviewCompactRoot: View {
                 artwork: .placeholder,
                 primaryMetadata: "Offline fixture",
                 secondaryMetadata: "No provider access",
-                playback: .playing,
+                playback: animationIsPlaying ? .playing : .paused,
                 isFavorite: false,
                 queueAvailability: .none
             )
         }
+    }
+
+    private var animationAcceptanceControls: some View {
+        HStack(spacing: 8) {
+            Toggle("Reduce Motion", isOn: $animationReduceMotion)
+                .accessibilityIdentifier("offline-review.animation.reduce-motion")
+            Button(animationIsPlaying ? "Pause animation" : "Play animation") {
+                animationIsPlaying.toggle()
+            }
+            .accessibilityIdentifier("offline-review.animation.play-pause")
+            Button(animationBudgetState == .withinBudget ? "Exceed budget" : "Restore budget") {
+                animationBudgetState = animationBudgetState == .withinBudget ? .exceeded : .withinBudget
+            }
+            .accessibilityIdentifier("offline-review.animation.budget")
+            Toggle("Animated host present", isOn: $animationHostPresent)
+                .accessibilityIdentifier("offline-review.animation.host-present")
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("offline-review.animation.controls")
     }
 
     private var reviewAppearance: ValidatedSkinAppearance {
@@ -348,6 +459,192 @@ struct OfflineReviewUnavailableView: View {
             Text("The synthetic review fixture could not start. No production session was created.")
         }
         .accessibilityIdentifier("offline-review.unavailable")
+    }
+}
+
+/// Uses the shipping player and window bridge, with no dashboard chrome that
+/// could supply its own opaque background or change the player's hit regions.
+private struct OfflineHitTestingReview: View {
+    let appearance: ValidatedSkinAppearance
+    @State private var isPlaying = true
+    @State private var songFavorite = false
+    @State private var channelFavorite = false
+    @State private var probe = OfflineClickThroughProbe()
+    @State private var channelNumber = 97
+    @State private var reduceMotion = false
+    @State private var budgetExceeded = false
+    @State private var longMetadata = false
+    @State private var artworkTone = 0
+    @State private var forcedStatus: CompactPlayerPresentation.Status?
+    @State private var topmost = false
+    @State private var reviewControlsVisible = false
+
+    private var reviewArtwork: CompactPlayerPresentation.Artwork {
+        guard artworkTone != 0 else { return .placeholder }
+        let image = NSImage(size: NSSize(width: 96, height: 96))
+        image.lockFocus()
+        (artworkTone == 1 ? NSColor.white : NSColor.black).setFill()
+        NSRect(x: 0, y: 0, width: 96, height: 96).fill()
+        image.unlockFocus()
+        guard let tiff = image.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff),
+              let png = bitmap.representation(using: .png, properties: [:]) else { return .placeholder }
+        return .data(ArtworkData(bytes: png, mediaType: .png))
+    }
+
+    var body: some View {
+        CompactPlayerView(
+            presentation: .confirmed(
+                channel: .init(number: channelNumber, name: "Offline ocean"),
+                artwork: reviewArtwork,
+                primaryMetadata: longMetadata ? "A long ocean transmission — 音楽と星空のためのライブ・ラジオ・セッション" : "The Quiet Between",
+                secondaryMetadata: "No provider access",
+                playback: forcedStatus ?? (isPlaying ? .playing : .paused),
+                isFavorite: channelFavorite,
+                queueAvailability: .both
+            ),
+            appearance: appearance,
+            favoriteSongActionState: .enabled(isFavorite: songFavorite),
+            onAction: { action in
+                probe.recordAction(action)
+                switch action {
+                case .playPause: isPlaying.toggle()
+                case .toggleSongFavorite: songFavorite.toggle()
+                case .toggleFavorite: channelFavorite.toggle()
+                case .next: channelNumber += 1
+                case .previous: channelNumber -= 1
+                case .showLibrary: reviewControlsVisible = true
+                default: break
+                }
+                print("OFFLINE-STATE: playing=\(isPlaying) song=\(songFavorite) channel=\(channelFavorite) number=\(channelNumber)")
+            },
+            isAlwaysOnTop: topmost,
+            onAlwaysOnTopChanged: { topmost = $0 },
+            animationBudgetState: budgetExceeded ? .exceeded : .withinBudget,
+            animationReduceMotionOverride: reduceMotion
+        )
+        .popover(isPresented: $reviewControlsVisible) {
+            VStack(alignment: .leading, spacing: 12) {
+            Toggle("Review: Reduce Motion", isOn: $reduceMotion)
+            Toggle("Review: Exceed budget", isOn: $budgetExceeded)
+            Toggle("Review: Long metadata", isOn: $longMetadata)
+            Button("Review: Cycle artwork") { artworkTone = (artworkTone + 1) % 3 }
+            Button("Review: Minimize") { reviewControlsVisible = false; NSApp.keyWindow?.miniaturize(nil) }
+            Button("Review: Loading") { forcedStatus = .pending }
+            Button("Review: Error") { forcedStatus = .unavailable(.tryAgain) }
+            Button("Review: Idle") { forcedStatus = .stopped }
+            Button("Review: Recover") { forcedStatus = nil; isPlaying = true }
+                Button("Done") { reviewControlsVisible = false }
+            }
+            .padding(16)
+            .frame(width: 250)
+        }
+        .background(WindowAttachmentView(
+            role: .compact,
+            alwaysOnTop: topmost,
+            appearance: appearance,
+            restoresPersistedFrame: false
+        ))
+        .background(OfflineClickThroughProbeAttachment(probe: probe))
+        .accessibilityValue(probe.summary)
+    }
+}
+
+/// A separate, inert native window catches real WindowServer click-through.
+/// No synthesized events, global event monitors, account data, or disk writes.
+@MainActor
+@Observable
+private final class OfflineClickThroughProbe {
+    private(set) var summary = "Detector pending"
+    private var backdrop: NSWindow?
+    private weak var player: NSWindow?
+    private let report = NSTextField(labelWithString: "")
+    private var clickCount = 0
+    private var actionCount = 0
+    private var moveObserver: NSObjectProtocol?
+
+    func attach(to player: NSWindow) {
+        guard backdrop == nil else { return }
+        self.player = player
+        let window = NSWindow(
+            contentRect: player.frame.insetBy(dx: -36, dy: -64),
+            styleMask: [.titled, .closable], backing: .buffered, defer: false
+        )
+        window.title = "Offline click-through detector"
+        window.isReleasedWhenClosed = false
+        let catchView = OfflineClickCatcher()
+        catchView.onClick = { [weak self] in
+            self?.clickCount += 1
+            self?.updateReport()
+        }
+        window.contentView = catchView
+        report.frame = NSRect(x: 12, y: 12, width: window.frame.width - 24, height: 42)
+        report.autoresizingMask = [.width]
+        report.textColor = .white
+        report.maximumNumberOfLines = 2
+        report.setAccessibilityIdentifier("offline-review.hit-testing.report")
+        catchView.addSubview(report)
+        backdrop = window
+        moveObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didMoveNotification, object: player, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.updateReport() }
+        }
+        updateReport()
+        window.orderFront(nil)
+        player.makeKeyAndOrderFront(nil)
+        updateReport()
+    }
+
+    func recordAction(_ action: CompactPlayerAction) {
+        actionCount += 1
+        updateReport(lastAction: String(describing: action))
+    }
+
+    private func updateReport(lastAction: String = "none") {
+        // Keep the detector directly behind the current player frame, including
+        // the initial asynchronous import/resize and subsequent drag checks.
+        if let player, let backdrop {
+            let frame = player.frame.insetBy(dx: -36, dy: -64)
+            if backdrop.frame != frame { backdrop.setFrame(frame, display: true) }
+            backdrop.order(.below, relativeTo: player.windowNumber)
+        }
+        let origin = player?.frame.origin ?? .zero
+        report.stringValue = "Behind clicks: \(clickCount) | Control actions: \(actionCount) | Last: \(lastAction)\nPlayer origin: \(Int(origin.x)), \(Int(origin.y))"
+        summary = "\(report.stringValue) | Detector visible: \(backdrop?.isVisible == true) | Can key: \(player?.canBecomeKey == true) | Key: \(player?.isKeyWindow == true) | Frame: \(player?.frame.size ?? .zero) | Content: \(player?.contentView?.frame.size ?? .zero)"
+        print("HIT-TEST: \(summary)")
+    }
+
+    func close() {
+        if let moveObserver { NotificationCenter.default.removeObserver(moveObserver) }
+        moveObserver = nil
+        backdrop?.close()
+        backdrop = nil
+    }
+}
+
+private final class OfflineClickCatcher: NSView {
+    var onClick: (() -> Void)?
+    override var isOpaque: Bool { true }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor(calibratedRed: 0.12, green: 0.23, blue: 0.31, alpha: 1).setFill()
+        dirtyRect.fill()
+    }
+    override func mouseDown(with event: NSEvent) { onClick?() }
+}
+
+private struct OfflineClickThroughProbeAttachment: NSViewRepresentable {
+    let probe: OfflineClickThroughProbe
+    func makeCoordinator() -> OfflineClickThroughProbe { probe }
+    func makeNSView(context: Context) -> NSView { NSView(frame: .zero) }
+    func updateNSView(_ view: NSView, context: Context) {
+        DispatchQueue.main.async {
+            guard let window = view.window else { return }
+            probe.attach(to: window)
+        }
+    }
+    static func dismantleNSView(_ view: NSView, coordinator: OfflineClickThroughProbe) {
+        coordinator.close()
     }
 }
 
