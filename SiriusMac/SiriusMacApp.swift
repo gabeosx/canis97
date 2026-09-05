@@ -104,6 +104,8 @@ struct Canis97App: App {
         .defaultSize(width: 980, height: 700)
         .windowResizability(.contentMinSize)
 
+        SoftwareUpdateScene(checker: updateChecker)
+
         Settings {
             SkinManagementView(
                 appearanceController: appearanceController,

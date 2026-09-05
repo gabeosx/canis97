@@ -42,6 +42,7 @@ jobs:
 
       - name: Validate bundled animation and offline runtime contracts
         run: |
+          bash script/test_update_download_contracts.sh
           bash script/test_animation_source_contracts.sh
           bash script/test_offline_review_launch_mode.sh
           bash script/test_scene_performance_director.sh

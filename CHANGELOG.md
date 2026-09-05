@@ -6,6 +6,13 @@ Notable user-facing changes are recorded here. This project follows
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-05
+
+### Fixed
+
+- Update notices use a separate native window so their buttons and keyboard controls work independently of the borderless, always-on-top player.
+- Download Update opens the matching disk image in the browser and provides clear replacement instructions, with separate Homebrew guidance. Missing or unexpected download links lead to the installation page.
+
 ## [0.2.0] - 2026-09-05
 
 ### Added
@@ -68,7 +75,8 @@ No public artifacts were published for this version.
 - GitHub Actions validation, signed/notarized release automation, checksums, and an SPDX SBOM.
 - Homebrew Cask generation and optional tap publishing.
 
-[Unreleased]: https://github.com/gabeosx/canis97/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/gabeosx/canis97/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/gabeosx/canis97/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/gabeosx/canis97/releases/tag/v0.2.0
 [0.1.4]: https://github.com/gabeosx/canis97/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/gabeosx/canis97/compare/v0.1.2...v0.1.3
