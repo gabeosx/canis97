@@ -15,7 +15,7 @@ test -x "$VERIFY_SCRIPT" || fail 'Homebrew lifecycle verifier is missing or not 
 cask_output="$(bash "$RENDER_SCRIPT" 1.2.3 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa gabeosx/canis97)"
 grep -Fq 'url "https://github.com/gabeosx/canis97/releases/download/v#{version}/Canis97-#{version}-arm64.dmg"' <<<"$cask_output" || fail 'cask URL is not immutable and versioned'
 grep -Fq 'depends_on arch: :arm64' <<<"$cask_output" || fail 'cask omitted arm64 requirement'
-grep -Fq 'depends_on macos: ">= :tahoe"' <<<"$cask_output" || fail 'cask omitted current macOS requirement'
+grep -Fq 'depends_on macos: :tahoe' <<<"$cask_output" || fail 'cask omitted current macOS requirement'
 grep -Fq 'app "Canis97.app"' <<<"$cask_output" || fail 'cask omitted app stanza'
 grep -Fq 'zap trash:' <<<"$cask_output" || fail 'cask omitted cleanup stanza'
 bash "$RENDER_SCRIPT" 1.2.3 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA gabeosx/canis97 >/dev/null 2>&1 && fail 'renderer accepted uppercase SHA-256'

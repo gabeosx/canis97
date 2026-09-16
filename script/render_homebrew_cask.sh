@@ -29,7 +29,7 @@ printf '%s\n' \
   "  homepage \"https://github.com/$GITHUB_REPOSITORY\"" \
   '' \
   '  depends_on arch: :arm64' \
-  '  depends_on macos: ">= :tahoe"' \
+  '  depends_on macos: :tahoe' \
   '' \
   '  app "Canis97.app"' \
   '' \

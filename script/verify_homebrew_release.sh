@@ -50,7 +50,7 @@ render_local_cask() {
     puts "  url \"#{uri}\""
     puts "  name \"Canis97\""
     puts "  depends_on arch: :arm64"
-    puts "  depends_on macos: \">= :tahoe\""
+    puts "  depends_on macos: :tahoe"
     puts
     puts "  app \"Canis97.app\""
     puts "end"
