@@ -86,4 +86,18 @@ struct RedactionTests {
             try DiagnosticRedactor.promoteSyntheticFixture(unsafeFixture)
         }
     }
+
+    @Test("device and media-key structures are rejected before fixture promotion")
+    func deviceAndMediaKeyStructuresCannotBecomeFixtures() {
+        let unsafeFixtures = [
+            Data(#"{"nested":{"deviceIdentifier":"synthetic-device"}}"#.utf8),
+            Data(#"{"records":[{"mediaKey":"synthetic-media-key"}]}"#.utf8),
+        ]
+
+        for unsafeFixture in unsafeFixtures {
+            #expect(throws: DiagnosticRedactionError.self) {
+                try DiagnosticRedactor.promoteSyntheticFixture(unsafeFixture)
+            }
+        }
+    }
 }

@@ -28,11 +28,13 @@ jobs:
         env:
           MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
           MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_APP_PROVISIONING_PROFILE: ${{ secrets.MACOS_APP_PROVISIONING_PROFILE }}
+          MACOS_WIDGET_PROVISIONING_PROFILE: ${{ secrets.MACOS_WIDGET_PROVISIONING_PROFILE }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
         run: |
-          for required_name in MACOS_CERTIFICATE_P12 MACOS_CERTIFICATE_PASSWORD APPLE_TEAM_ID APPLE_ID APPLE_APP_SPECIFIC_PASSWORD; do
+          for required_name in MACOS_CERTIFICATE_P12 MACOS_CERTIFICATE_PASSWORD MACOS_APP_PROVISIONING_PROFILE MACOS_WIDGET_PROVISIONING_PROFILE APPLE_TEAM_ID APPLE_ID APPLE_APP_SPECIFIC_PASSWORD; do
             test -n "${!required_name}" || { echo "$required_name is not configured" >&2; exit 1; }
           done
 
@@ -83,12 +85,30 @@ jobs:
 
           IDENTITY_COUNT="$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | awk '/Developer ID Application:/ { count++ } END { print count + 0 }')"
           test "$IDENTITY_COUNT" -eq 1 || { echo "Expected exactly one Developer ID Application identity; found $IDENTITY_COUNT" >&2; exit 1; }
+          IDENTITY_SHA1="$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | awk '/Developer ID Application:/ { print $2 }')"
+          echo "CANIS97_DEVELOPER_ID_SHA1=$IDENTITY_SHA1" >> "$GITHUB_ENV"
 
           xcrun notarytool history \
             --apple-id "$APPLE_ID" \
             --team-id "$APPLE_TEAM_ID" \
             --password "$APPLE_APP_SPECIFIC_PASSWORD" \
             >/dev/null
+
+      - name: Validate Developer ID provisioning profiles
+        env:
+          MACOS_APP_PROVISIONING_PROFILE: ${{ secrets.MACOS_APP_PROVISIONING_PROFILE }}
+          MACOS_WIDGET_PROVISIONING_PROFILE: ${{ secrets.MACOS_WIDGET_PROVISIONING_PROFILE }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          APP_PROFILE_PATH="$RUNNER_TEMP/canis97-app.provisionprofile"
+          WIDGET_PROFILE_PATH="$RUNNER_TEMP/canis97-widget.provisionprofile"
+          umask 077
+          printf '%s' "$MACOS_APP_PROVISIONING_PROFILE" | /usr/bin/base64 -D > "$APP_PROFILE_PATH"
+          printf '%s' "$MACOS_WIDGET_PROVISIONING_PROFILE" | /usr/bin/base64 -D > "$WIDGET_PROFILE_PATH"
+          script/validate_developer_id_profile.sh "$APP_PROFILE_PATH" "$APPLE_TEAM_ID" \
+            com.canis97.player group.com.canis97.player "$CANIS97_DEVELOPER_ID_SHA1"
+          script/validate_developer_id_profile.sh "$WIDGET_PROFILE_PATH" "$APPLE_TEAM_ID" \
+            com.canis97.player.widget group.com.canis97.player "$CANIS97_DEVELOPER_ID_SHA1"
 
       - name: Remove ephemeral signing keychain
         if: always()
@@ -98,4 +118,6 @@ jobs:
             "$RUNNER_TEMP/developer-id.p12" \
             "$RUNNER_TEMP/developer-id-cert.pem" \
             "$RUNNER_TEMP/developer-id-key.pem" \
-            "$RUNNER_TEMP/developer-id-keychain-compatible.p12"
+            "$RUNNER_TEMP/developer-id-keychain-compatible.p12" \
+            "$RUNNER_TEMP/canis97-app.provisionprofile" \
+            "$RUNNER_TEMP/canis97-widget.provisionprofile"

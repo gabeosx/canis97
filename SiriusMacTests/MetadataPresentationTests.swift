@@ -223,14 +223,14 @@ final class MetadataPresentationTests: XCTestCase {
         model.select(channel)
         await flow.waitForMetadataRequests(count: 1)
         await sleeper.waitForSleep(duration: 90)
-        await sleeper.waitForSleep(duration: 30)
+        await sleeper.waitForSleep(duration: 10)
 
         clock.advance(by: 90)
         await sleeper.releaseSleep(duration: 90)
         await settleTasks()
         XCTAssertEqual(model.state.text, .stale("Current title"))
 
-        await sleeper.releaseSleep(duration: 30)
+        await sleeper.releaseSleep(duration: 10)
         await flow.waitForMetadataRequests(count: 2)
         await sleeper.waitForSleep(duration: 210)
         clock.advance(by: 210)
@@ -257,14 +257,46 @@ final class MetadataPresentationTests: XCTestCase {
 
         model.select(channel)
         await flow.waitForMetadataRequests(count: 1)
-        await sleeper.waitForSleep(duration: 30)
-        await sleeper.releaseSleep(duration: 30)
+        await sleeper.waitForSleep(duration: 10)
+        await sleeper.releaseSleep(duration: 10)
         await flow.waitForMetadataRequests(count: 2)
         await settleTasks()
 
         XCTAssertEqual(model.availability, .unavailable)
         XCTAssertEqual(model.state.text, .stale("Current title"))
         XCTAssertEqual(model.nowPlayingSemanticMetadata.currentProgram, "Current title")
+        model.clear()
+    }
+
+    func testUnchangedProgramArtworkSurvivesPollingWithoutASecondImageRequest() async {
+        let channel = LiveChannelID("fixture-stable-artwork")
+        let reference = ChannelArtworkReference()
+        let artwork = ArtworkData(bytes: Data([0xFF, 0xD8, 0xFF, 0xD9]), mediaType: .jpeg)
+        let snapshot = MetadataSnapshot(
+            channelID: channel,
+            program: LiveProgramMetadata(title: "Stable title", artist: "Stable artist", artwork: reference)
+        )
+        let sleeper = ControllableMetadataSleeper()
+        let flow = SequentialMetadataFlow(
+            results: [.current(snapshot), .current(snapshot)],
+            artwork: .current(artwork)
+        )
+        let model = MetadataPresentationModel(flow: flow, sleeper: sleeper)
+
+        model.select(channel)
+        await flow.waitForMetadataRequests(count: 1)
+        await flow.waitForArtworkRequests(count: 1)
+        await settleTasks()
+        XCTAssertEqual(model.state.artwork, .current(artwork))
+
+        await sleeper.waitForSleep(duration: 10)
+        await sleeper.releaseSleep(duration: 10)
+        await flow.waitForMetadataRequests(count: 2)
+        await settleTasks()
+
+        XCTAssertEqual(model.state.artwork, .current(artwork))
+        let artworkRequests = await flow.artworkRequestCount()
+        XCTAssertEqual(artworkRequests, 1)
         model.clear()
     }
 
@@ -297,7 +329,7 @@ final class MetadataPresentationTests: XCTestCase {
     }
 
     func testPolicyUsesDocumentedFixedCeilings() {
-        XCTAssertEqual(MetadataRefreshPolicy.default.pollInterval, 30)
+        XCTAssertEqual(MetadataRefreshPolicy.default.pollInterval, 10)
         XCTAssertEqual(MetadataRefreshPolicy.default.staleAfter, 90)
         XCTAssertEqual(MetadataRefreshPolicy.default.unavailableAfter, 300)
     }
@@ -517,10 +549,16 @@ private actor BlockingRefreshMetadataFlow: MetadataFlow {
 
 private actor SequentialMetadataFlow: MetadataFlow {
     private var results: [MetadataAvailability]
+    private let artworkResult: ArtworkAvailability
     private var metadataRequests = 0
     private var requestWaiters: [CheckedContinuation<Void, Never>] = []
+    private var artworkRequests = 0
+    private var artworkWaiters: [CheckedContinuation<Void, Never>] = []
 
-    init(results: [MetadataAvailability]) { self.results = results }
+    init(results: [MetadataAvailability], artwork: ArtworkAvailability = .unavailable) {
+        self.results = results
+        artworkResult = artwork
+    }
 
     func metadata(for _: LiveChannelID) async -> MetadataAvailability {
         metadataRequests += 1
@@ -529,10 +567,22 @@ private actor SequentialMetadataFlow: MetadataFlow {
         return results.isEmpty ? .unavailable : results.removeFirst()
     }
 
-    func artwork(for _: ChannelArtworkReference) async -> ArtworkAvailability { .unavailable }
+    func artwork(for _: ChannelArtworkReference) async -> ArtworkAvailability {
+        artworkRequests += 1
+        artworkWaiters.forEach { $0.resume() }
+        artworkWaiters.removeAll()
+        return artworkResult
+    }
 
     func waitForMetadataRequests(count: Int) async {
         if metadataRequests >= count { return }
         await withCheckedContinuation { requestWaiters.append($0) }
+    }
+
+    func artworkRequestCount() -> Int { artworkRequests }
+
+    func waitForArtworkRequests(count: Int) async {
+        if artworkRequests >= count { return }
+        await withCheckedContinuation { artworkWaiters.append($0) }
     }
 }

@@ -11,6 +11,8 @@ import SiriusXMClient
 @Observable
 final class OfflineReviewHarness {
     let listeningModel: ListeningPresentationModel
+    private let liveMetadataFlow: LiveMetadataReviewFlow?
+    private(set) var liveMetadataScenario: String
     let libraryStore: LibraryStore
     private(set) var tuneCount = 0
     private(set) var confirmedChannelID: LiveChannelID?
@@ -34,11 +36,26 @@ final class OfflineReviewHarness {
             for: FavoriteRecord.self,
             FavoriteSongRecord.self,
             RecentRecord.self,
+            ListeningHistoryRecord.self,
             PlayerPreferenceRecord.self,
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
         ) else { return nil }
         libraryStore = LibraryStore(modelContainer: container)
-        listeningModel = ListeningPresentationModel(flow: UITestCatalogFlow())
+        let initialLiveMetadataScenario = environment["CANIS97_LIVE_METADATA_REVIEW_STATE"] ?? "current"
+        liveMetadataScenario = initialLiveMetadataScenario
+        if reviewSurface == .libraryCollections {
+            let flow = LiveMetadataReviewFlow(scenario: initialLiveMetadataScenario)
+            liveMetadataFlow = flow
+            listeningModel = ListeningPresentationModel(flow: flow)
+            let channels = LiveMetadataReviewFlow.channels
+            libraryStore.setFavorite(LibraryChannelSnapshot(channels[0]), isFavorite: true)
+            libraryStore.setFavorite(LibraryChannelSnapshot(channels[4]), isFavorite: true)
+            libraryStore.recordConfirmedPlayback(LibraryChannelSnapshot(channels[5]))
+            libraryStore.recordConfirmedPlayback(LibraryChannelSnapshot(channels[1]))
+        } else {
+            liveMetadataFlow = nil
+            listeningModel = ListeningPresentationModel(flow: UITestCatalogFlow())
+        }
         let importer = Self.makeReviewImporter()
         let catalog = SkinAppearanceCatalog.phaseOne.inserting(OfflineReviewAppearanceFixture.legacySchema1Appearance)
         let initialAppearanceName = reviewAppearance.displayName
@@ -52,6 +69,16 @@ final class OfflineReviewHarness {
             appearanceController: appearanceController
         )
         _ = listeningModel.refresh()
+    }
+
+    func setLiveMetadataScenario(_ scenario: String) {
+        guard let liveMetadataFlow else { return }
+        liveMetadataScenario = scenario
+        Task { @MainActor in
+            await liveMetadataFlow.setScenario(scenario)
+            listeningModel.liveNow?.reset()
+            listeningModel.setLibraryMetadataVisible(true)
+        }
     }
 
     /// Review imports can only promote into a process-specific temporary store.
@@ -92,7 +119,9 @@ final class OfflineReviewHarness {
 
 enum OfflineReviewSurface: String, CaseIterable, Identifiable {
     private static var defaultSurface: Self {
-#if CANIS97_ANIMATION_ACCEPTANCE
+#if CANIS97_LIVE_METADATA_REVIEW
+        .libraryCollections
+#elseif CANIS97_ANIMATION_ACCEPTANCE
         .compactHitTesting
 #else
         .authenticationOutcomes
@@ -424,6 +453,21 @@ struct OfflineReviewLibraryRoot: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            if harness.reviewSurface == .libraryCollections {
+                HStack {
+                    Label("Synthetic live metadata", systemImage: "testtube.2").fontWeight(.semibold)
+                    Picker("Scenario", selection: Binding(get: { harness.liveMetadataScenario }, set: { harness.setLiveMetadataScenario($0) })) {
+                        Text("Current").tag("current")
+                        Text("Stale").tag("stale")
+                        Text("No metadata").tag("empty")
+                        Text("Failure").tag("failure")
+                    }.frame(width: 240)
+                    Spacer()
+                    Text("\(harness.tuneCount) simulated tunes · No audio or live requests")
+                        .font(.caption).foregroundStyle(.secondary)
+                }.padding(12)
+                Divider()
+            }
             LibraryView(
                 model: harness.listeningModel,
                 libraryStore: harness.libraryStore,

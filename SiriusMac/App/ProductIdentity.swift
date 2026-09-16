@@ -6,6 +6,8 @@ enum ProductIdentity {
     static let moduleName = "Canis97"
     static let executableName = "Canis97"
     static let appBundleIdentifier = "com.canis97.player"
+    static let widgetBundleIdentifier = "com.canis97.player.widget"
+    static let appGroupIdentifier = "group.com.canis97.player"
     static let unitTestTargetName = "Canis97Tests"
     static let unitTestBundleIdentifier = "com.canis97.player.tests"
     static let uiTestTargetName = "Canis97UITests"
@@ -33,6 +35,8 @@ enum ProductIdentity {
         static let compact = ProductIdentity.compactSceneID
         static let library = ProductIdentity.librarySceneID
         static let support = "\(ProductIdentity.appBundleIdentifier).support"
+        static let tune = "\(ProductIdentity.appBundleIdentifier).tune"
+        static let history = "\(ProductIdentity.appBundleIdentifier).listening-history"
     }
 
     enum FrameAutosaveName {

@@ -6,6 +6,25 @@ Notable user-facing changes are recorded here. This project follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-16
+
+### Added
+
+- Current-program metadata across Channels, Categories, Favorites, and Recents, sourced from one shared batch refresh rather than one request per channel.
+- Native Shortcuts and Siri commands, Spotlight channel search, and a stale-aware desktop widget backed by the existing authenticated listening session.
+- Widget controls for play or pause, previous and next channel, and direct favorite-channel tuning.
+
+### Changed
+
+- Consolidated live discovery into the existing library surfaces instead of maintaining a separate Radar destination.
+- Library search supports Command-K focus and keyboard movement through its results.
+
+### Fixed
+
+- Live metadata now selects the newest eligible cut from unordered history, ignores future cuts, and fails closed on conflicting current entries.
+- Missing Lookaround coverage is shown as unavailable per channel without discarding the rest of a valid snapshot.
+- Widget actions now reach the active listening session and have a credential-free offline command harness for safe verification.
+
 ## [0.2.1] - 2026-09-05
 
 ### Fixed
@@ -75,7 +94,8 @@ No public artifacts were published for this version.
 - GitHub Actions validation, signed/notarized release automation, checksums, and an SPDX SBOM.
 - Homebrew Cask generation and optional tap publishing.
 
-[Unreleased]: https://github.com/gabeosx/canis97/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/gabeosx/canis97/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/gabeosx/canis97/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/gabeosx/canis97/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/gabeosx/canis97/releases/tag/v0.2.0
 [0.1.4]: https://github.com/gabeosx/canis97/compare/v0.1.3...v0.1.4

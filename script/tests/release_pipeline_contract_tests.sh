@@ -6,6 +6,7 @@ WORKFLOW="$ROOT_DIR/.github/workflows/release.yml"
 ARTIFACT_SCRIPT="$ROOT_DIR/script/create_release_artifacts.sh"
 SBOM_SCRIPT="$ROOT_DIR/script/generate_release_sbom.sh"
 PREFLIGHT_WORKFLOW="$ROOT_DIR/.github/workflows/release-preflight.yml"
+CI_WORKFLOW="$ROOT_DIR/.github/workflows/ci.yml"
 
 fail() {
   echo "FAIL: $*" >&2
@@ -38,7 +39,19 @@ require_literal 'DeveloperIDG2CA.cer' "$WORKFLOW"
 require_literal 'PBE-SHA1-3DES' "$WORKFLOW"
 require_literal 'DeveloperIDG2CA.cer' "$PREFLIGHT_WORKFLOW"
 require_literal 'PBE-SHA1-3DES' "$PREFLIGHT_WORKFLOW"
+require_literal 'MACOS_APP_PROVISIONING_PROFILE' "$WORKFLOW"
+require_literal 'MACOS_WIDGET_PROVISIONING_PROFILE' "$WORKFLOW"
+require_literal 'validate_developer_id_profile.sh' "$WORKFLOW"
+require_literal 'MACOS_APP_PROVISIONING_PROFILE' "$PREFLIGHT_WORKFLOW"
+require_literal 'MACOS_WIDGET_PROVISIONING_PROFILE' "$PREFLIGHT_WORKFLOW"
+require_literal 'Validate the unsigned Release archive graph' "$CI_WORKFLOW"
+require_literal "-configuration Release" "$CI_WORKFLOW"
+require_literal 'Canis97Widget.appex' "$CI_WORKFLOW"
 reject_literal 'gh release create "$RELEASE_TAG" \\' "$WORKFLOW"
+
+artifact_build_line="$(grep -n 'Build, sign, notarize, and verify artifacts' "$WORKFLOW" | cut -d: -f1)"
+draft_create_line="$(grep -n 'Create or reuse the exact draft release' "$WORKFLOW" | cut -d: -f1)"
+[[ "$artifact_build_line" -lt "$draft_create_line" ]] || fail 'draft release must not be created before signed artifacts pass'
 
 draft_verify_line="$(grep -n 'Verify draft asset set before publication' "$WORKFLOW" | cut -d: -f1)"
 publish_line="$(grep -n 'Publish the verified immutable draft' "$WORKFLOW" | cut -d: -f1)"
@@ -46,6 +59,7 @@ tap_update_line="$(grep -n 'Update the Homebrew tap' "$WORKFLOW" | cut -d: -f1)"
 [[ "$draft_verify_line" -lt "$publish_line" && "$publish_line" -lt "$tap_update_line" ]] || fail 'publish/tap ordering is not fail-closed'
 
 require_literal 'XPC_SERVICE_PATH=' "$ARTIFACT_SCRIPT"
+require_literal 'WIDGET_PATH=' "$ARTIFACT_SCRIPT"
 require_literal 'SIGNING_IDENTITY=' "$ARTIFACT_SCRIPT"
 require_literal 'NOTARY_ARCHIVE=' "$ARTIFACT_SCRIPT"
 require_literal 'FINAL_ARCHIVE=' "$ARTIFACT_SCRIPT"
@@ -53,6 +67,12 @@ require_literal 'CREATE_DMG_BIN=' "$ARTIFACT_SCRIPT"
 require_literal 'DMG_IDENTIFIER=' "$ARTIFACT_SCRIPT"
 require_literal 'VERIFICATION_MANIFEST=' "$ARTIFACT_SCRIPT"
 require_literal 'SYSPOLICY_CHECK_BIN=' "$ARTIFACT_SCRIPT"
+require_literal 'APP_PROVISIONING_PROFILE_PATH=' "$ARTIFACT_SCRIPT"
+require_literal 'WIDGET_PROVISIONING_PROFILE_PATH=' "$ARTIFACT_SCRIPT"
+require_literal 'PROFILE_VALIDATOR_BIN=' "$ARTIFACT_SCRIPT"
+require_literal 'SIGNING_CERTIFICATE_SHA1=' "$ARTIFACT_SCRIPT"
+require_literal 'embedded.provisionprofile' "$ARTIFACT_SCRIPT"
+require_literal 'CODE_SIGNING_ALLOWED=NO' "$ARTIFACT_SCRIPT"
 require_literal 'distribution "$APP_PATH"' "$ARTIFACT_SCRIPT"
 require_literal 'check_signed_product' "$ARTIFACT_SCRIPT"
 require_literal 'write_verification_manifest' "$ARTIFACT_SCRIPT"
@@ -82,6 +102,7 @@ fake_xcodebuild() {
     [[ "$argument" == '-archivePath' ]] && next_is_archive=1
   done
   mkdir -p "$archive_path/Products/Applications/Canis97.app/Contents/XPCServices/Canis97MotionConverter.xpc"
+  mkdir -p "$archive_path/Products/Applications/Canis97.app/Contents/PlugIns/Canis97Widget.appex/Contents"
 }
 
 fake_codesign() {
@@ -93,15 +114,31 @@ fake_codesign() {
       return 1
     }
   fi
+  if [[ "$*" == *'--force'* && "$target" == *Canis97Widget.appex ]]; then
+    [[ "$*" == *'--entitlements '*'/Canis97Widget/Canis97Widget.entitlements'* ]] || {
+      echo 'widget signing must explicitly retain sandbox and App Group entitlements' >&2
+      return 1
+    }
+  fi
+  if [[ "$*" == *'--force'* && "$target" == *Canis97.app ]]; then
+    [[ "$*" == *'--entitlements '*'/SiriusMac/Canis97.entitlements'* ]] || {
+      echo 'app signing must explicitly retain its App Group entitlement' >&2
+      return 1
+    }
+  fi
   if [[ "$*" == *'--entitlements :-'* ]]; then
     if [[ "$target" == *Canis97MotionConverter.xpc ]]; then
       printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict><key>com.apple.security.app-sandbox</key><true/></dict></plist>'
+    elif [[ "$target" == *Canis97Widget.appex ]]; then
+      printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict><key>com.apple.security.app-sandbox</key><true/><key>com.apple.security.application-groups</key><array><string>group.com.canis97.player</string></array></dict></plist>'
     else
-      : # codesign emits no bytes when a signature has no entitlements.
+      printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict><key>com.apple.security.application-groups</key><array><string>group.com.canis97.player</string></array></dict></plist>'
     fi
   elif [[ "$*" == *'--verbose=4'* ]]; then
     if [[ "$target" == *Canis97MotionConverter.xpc ]]; then
       printf '%s\n' 'Identifier=com.canis97.player.motion-converter' 'TeamIdentifier=TEAM12345' 'Authority=Developer ID Application: Example' 'Runtime Version=26.0.0' 'Timestamp=2026-08-30'
+    elif [[ "$target" == *Canis97Widget.appex ]]; then
+      printf '%s\n' 'Identifier=com.canis97.player.widget' 'TeamIdentifier=TEAM12345' 'Authority=Developer ID Application: Example' 'Runtime Version=26.0.0' 'Timestamp=2026-08-30'
     elif [[ "$target" == *.dmg ]]; then
       printf '%s\n' 'Identifier=com.canis97.player.dmg' 'TeamIdentifier=TEAM12345' 'Authority=Developer ID Application: Example' 'Timestamp=2026-08-30'
     else
@@ -141,13 +178,22 @@ fake_create_dmg() {
   : > "$target"
 }
 
-export -f fake_log fake_xcodebuild fake_codesign fake_xcrun fake_spctl fake_syspolicy_check fake_rejecting_policy fake_ditto fake_create_dmg
+fake_profile_validator() {
+  fake_log "validate_profile $*"
+}
+
+export -f fake_log fake_xcodebuild fake_codesign fake_xcrun fake_spctl fake_syspolicy_check fake_rejecting_policy fake_ditto fake_create_dmg fake_profile_validator
+: > "$TEMP_ROOT/app.provisionprofile"
+: > "$TEMP_ROOT/widget.provisionprofile"
 RELEASE_COMMAND_LOG="$COMMAND_LOG" \
 BUILD_NUMBER=1 \
 GITHUB_REPOSITORY=gabeosx/canis97 \
 APPLE_TEAM_ID=TEAM12345 \
 APPLE_ID=release@example.invalid \
 APPLE_APP_SPECIFIC_PASSWORD=fake-password \
+CANIS97_DEVELOPER_ID_SHA1=0123456789ABCDEF0123456789ABCDEF01234567 \
+CANIS97_APP_PROVISIONING_PROFILE_PATH="$TEMP_ROOT/app.provisionprofile" \
+CANIS97_WIDGET_PROVISIONING_PROFILE_PATH="$TEMP_ROOT/widget.provisionprofile" \
 RELEASE_OUTPUT_DIR="$TEMP_ROOT/output" \
 RELEASE_WORK_DIR="$TEMP_ROOT/work" \
 RELEASE_XCODEBUILD_BIN=fake_xcodebuild \
@@ -157,6 +203,7 @@ RELEASE_SPCTL_BIN=fake_spctl \
 RELEASE_SYSPOLICY_CHECK_BIN=fake_syspolicy_check \
 RELEASE_DITTO_BIN=fake_ditto \
 RELEASE_CREATE_DMG_BIN=fake_create_dmg \
+RELEASE_PROFILE_VALIDATOR_BIN=fake_profile_validator \
 bash "$ARTIFACT_SCRIPT" 1.2.3 >/dev/null
 
 test -f "$TEMP_ROOT/work/Canis97-notary-submission.zip" || fail 'fake notary archive missing'
@@ -168,10 +215,12 @@ grep -Fq 'PackageName: SiriusXMClient' "$TEMP_ROOT/output/Canis97-1.2.3.spdx" ||
 grep -Fq 'PackageName: Canis97MotionSafety' "$TEMP_ROOT/output/Canis97-1.2.3.spdx" || fail 'SBOM omitted local motion identity'
 
 xpc_sign_line="$(grep -n -- '--sign Developer ID Application .*Canis97MotionConverter.xpc' "$COMMAND_LOG" | head -1 | cut -d: -f1)"
+widget_sign_line="$(grep -n -- '--sign Developer ID Application .*Canis97Widget.appex' "$COMMAND_LOG" | head -1 | cut -d: -f1)"
 app_sign_line="$(grep -n -- '--sign Developer ID Application .*Canis97.app$' "$COMMAND_LOG" | head -1 | cut -d: -f1)"
 notary_line="$(grep -n 'notarytool submit' "$COMMAND_LOG" | head -1 | cut -d: -f1)"
 final_archive_line="$(grep -n 'create_visual_dmg .*Canis97-1.2.3-arm64.dmg' "$COMMAND_LOG" | head -1 | cut -d: -f1)"
 [[ -n "$xpc_sign_line" && -n "$app_sign_line" && "$xpc_sign_line" -lt "$app_sign_line" ]] || fail 'nested service must sign before app'
+[[ -n "$widget_sign_line" && -n "$app_sign_line" && "$widget_sign_line" -lt "$app_sign_line" ]] || fail 'widget must sign before app'
 [[ -n "$notary_line" && -n "$final_archive_line" && "$notary_line" -lt "$final_archive_line" ]] || fail 'final archive must follow notarization'
 test "$(grep -Fc 'notarytool submit' "$COMMAND_LOG")" -eq 2 || fail 'app and final DMG must both be submitted for notarization'
 grep -Fq 'spctl --assess --type open --context context:primary-signature' "$COMMAND_LOG" || fail 'DMG Gatekeeper assessment was skipped'
@@ -184,6 +233,9 @@ if RELEASE_COMMAND_LOG="$COMMAND_LOG" \
   APPLE_TEAM_ID=TEAM12345 \
   APPLE_ID=release@example.invalid \
   APPLE_APP_SPECIFIC_PASSWORD=fake-password \
+  CANIS97_DEVELOPER_ID_SHA1=0123456789ABCDEF0123456789ABCDEF01234567 \
+  CANIS97_APP_PROVISIONING_PROFILE_PATH="$TEMP_ROOT/app.provisionprofile" \
+  CANIS97_WIDGET_PROVISIONING_PROFILE_PATH="$TEMP_ROOT/widget.provisionprofile" \
   RELEASE_OUTPUT_DIR="$TEMP_ROOT/rejected-output" \
   RELEASE_WORK_DIR="$TEMP_ROOT/rejected-work" \
   RELEASE_XCODEBUILD_BIN=fake_xcodebuild \
@@ -193,6 +245,7 @@ if RELEASE_COMMAND_LOG="$COMMAND_LOG" \
   RELEASE_SYSPOLICY_CHECK_BIN=fake_rejecting_policy \
   RELEASE_DITTO_BIN=fake_ditto \
   RELEASE_CREATE_DMG_BIN=fake_create_dmg \
+  RELEASE_PROFILE_VALIDATOR_BIN=fake_profile_validator \
   bash "$ARTIFACT_SCRIPT" 1.2.4 >/dev/null 2>&1; then
   fail 'policy rejection unexpectedly produced a releasable artifact'
 fi

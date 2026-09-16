@@ -40,11 +40,22 @@ struct GitHubReleaseClient: GitHubReleaseFetching, Sendable {
               data.count <= 1_048_576
         else { throw UpdateCheckError.invalidResponse }
 
-        return try Self.decodeLatestRelease(data, repository: repository)
+        return try Self.decodeLatestStableRelease(
+            data,
+            statusCode: httpResponse.statusCode,
+            repository: repository
+        )
     }
 
-    static func decodeLatestRelease(_ data: Data, repository: GitHubRepository) throws -> GitHubReleaseInfo {
-        guard data.count <= 1_048_576 else { throw UpdateCheckError.invalidResponse }
+    static func decodeLatestStableRelease(
+        _ data: Data,
+        statusCode: Int,
+        repository: GitHubRepository
+    ) throws -> GitHubReleaseInfo {
+        guard statusCode == 200, data.count <= 1_048_576 else {
+            throw UpdateCheckError.invalidResponse
+        }
+
         let payload: LatestReleasePayload
         do {
             payload = try JSONDecoder().decode(LatestReleasePayload.self, from: data)
@@ -56,8 +67,7 @@ struct GitHubReleaseClient: GitHubReleaseFetching, Sendable {
               !payload.prerelease,
               let version = StableSemanticVersion(payload.tagName),
               let pageURL = URL(string: payload.htmlURL),
-              [version.description, "v\(version)"].contains(payload.tagName),
-              pageURL.absoluteString == "https://github.com/\(repository.value)/releases/tag/\(payload.tagName)"
+              Self.isExpectedReleaseURL(pageURL, repository: repository, tagName: payload.tagName)
         else { throw UpdateCheckError.invalidRelease }
 
         let filename = "Canis97-\(version)-arm64.dmg"
@@ -68,6 +78,13 @@ struct GitHubReleaseClient: GitHubReleaseFetching, Sendable {
         return GitHubReleaseInfo(version: version, pageURL: pageURL, downloadURL: downloadURL)
     }
 
+    static func decodeLatestRelease(
+        _ data: Data,
+        repository: GitHubRepository
+    ) throws -> GitHubReleaseInfo {
+        try decodeLatestStableRelease(data, statusCode: 200, repository: repository)
+    }
+
     private static func makeSession() -> URLSession {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.urlCache = nil
@@ -75,6 +92,21 @@ struct GitHubReleaseClient: GitHubReleaseFetching, Sendable {
         configuration.httpShouldSetCookies = false
         configuration.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
         return URLSession(configuration: configuration)
+    }
+
+    private static func isExpectedReleaseURL(
+        _ url: URL,
+        repository: GitHubRepository,
+        tagName: String
+    ) -> Bool {
+        url.scheme == "https"
+            && url.host?.lowercased() == "github.com"
+            && url.port == nil
+            && url.user == nil
+            && url.password == nil
+            && url.query == nil
+            && url.fragment == nil
+            && url.path == "/\(repository.owner)/\(repository.name)/releases/tag/\(tagName)"
     }
 }
 
@@ -88,6 +120,7 @@ private struct LatestReleasePayload: Decodable {
     struct ReleaseAsset: Decodable {
         let name: String
         let browserDownloadURL: String
+
         enum CodingKeys: String, CodingKey {
             case name
             case browserDownloadURL = "browser_download_url"
@@ -182,6 +215,8 @@ final class UpdateChecker {
     private let now: @MainActor @Sendable () -> Date
     private let automaticCheckInterval: TimeInterval
     private let lastAttemptKey = "com.canis97.player.update-check.last-attempt.v1"
+    private var activeGeneration = 0
+    private var manualPresentationRequested = false
 
     init(
         configuration: UpdateCheckConfiguration = .bundled(),
@@ -209,7 +244,6 @@ final class UpdateChecker {
 
     func check(manual: Bool) async {
         guard !OfflineReviewLaunchMode.isOfflineReviewRequested() else { return }
-        guard !isChecking else { return }
         guard let repository = configuration.repository,
               let currentVersion = configuration.currentVersion
         else {
@@ -217,19 +251,29 @@ final class UpdateChecker {
             return
         }
 
+        guard !isChecking else {
+            if manual { manualPresentationRequested = true }
+            return
+        }
+
         isChecking = true
+        activeGeneration &+= 1
+        let generation = activeGeneration
+        manualPresentationRequested = manual
         defer { isChecking = false }
         defaults.set(now(), forKey: lastAttemptKey)
 
         do {
             let release = try await client.latestStableRelease(in: repository)
+            guard activeGeneration == generation else { return }
             if currentVersion < release.version {
                 alert = .available(current: currentVersion, release: release)
-            } else if manual {
+            } else if manualPresentationRequested {
                 alert = .upToDate(current: currentVersion)
             }
         } catch {
-            if manual { alert = .failed }
+            guard activeGeneration == generation else { return }
+            if manualPresentationRequested { alert = .failed }
         }
     }
 
@@ -239,8 +283,8 @@ final class UpdateChecker {
     }
 }
 
-/// Keep update controls outside the compact player's borderless, floating
-/// window and its custom drag/hit-testing behavior.
+/// Keeps update controls outside the compact player's borderless, floating
+/// window and its custom drag and hit-testing behavior.
 struct SoftwareUpdateScene: Scene {
     let checker: UpdateChecker
     var openURL: @MainActor (URL) -> Bool = { NSWorkspace.shared.open($0) }
@@ -284,35 +328,44 @@ struct SoftwareUpdateView: View {
                             Text("brew upgrade --cask gabeosx/homebrew-tap/canis97")
                                 .font(.system(.caption, design: .monospaced))
                                 .textSelection(.enabled)
-                        }.padding(.top, 8)
+                        }
+                        .padding(.top, 8)
                     }
                     if let browserStatus {
-                        Text(browserStatus).font(.callout).foregroundStyle(.secondary)
+                        Text(browserStatus)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
                     }
                     HStack {
                         if let releaseURL = alert.releaseURL {
                             Link("What’s New", destination: releaseURL)
                         }
                         Spacer()
-                        Button("Not Now", action: close).keyboardShortcut(.cancelAction)
+                        Button("Not Now", action: close)
+                            .keyboardShortcut(.cancelAction)
                         Button(alert.actionTitle) {
                             browserStatus = openURL(updateURL)
                                 ? "Opened in your browser. Follow the steps above to finish updating."
                                 : "Your browser could not be opened. Visit canis97.com to download the update."
-                        }.keyboardShortcut(.defaultAction)
+                        }
+                        .keyboardShortcut(.defaultAction)
                     }
                 } else {
                     HStack {
                         Spacer()
-                        Button("OK", action: close).keyboardShortcut(.defaultAction)
+                        Button("OK", action: close)
+                            .keyboardShortcut(.defaultAction)
                     }
                 }
             } else {
-                Label("Software Update", systemImage: "arrow.down.app").font(.title2.bold())
-                Text("Check for the latest version of Canis97.").foregroundStyle(.secondary)
+                Label("Software Update", systemImage: "arrow.down.app")
+                    .font(.title2.bold())
+                Text("Check for the latest version of Canis97.")
+                    .foregroundStyle(.secondary)
                 HStack {
                     Spacer()
-                    Button("Close", action: close).keyboardShortcut(.cancelAction)
+                    Button("Close", action: close)
+                        .keyboardShortcut(.cancelAction)
                     Button(checker.isChecking ? "Checking…" : "Check for Updates") {
                         Task { await checker.check(manual: true) }
                     }
@@ -354,7 +407,9 @@ private struct SoftwareUpdatePresentationModifier: ViewModifier {
         content
             .task { await checker.checkAutomaticallyIfNeeded() }
             .onChange(of: checker.alert, initial: true) {
-                if checker.alert != nil { openWindow(id: SoftwareUpdateView.sceneID) }
+                if checker.alert != nil {
+                    openWindow(id: SoftwareUpdateView.sceneID)
+                }
             }
     }
 }

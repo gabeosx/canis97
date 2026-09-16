@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Observation
 import OSLog
@@ -213,6 +214,7 @@ final class ListeningSessionController {
     let playbackCoordinator: PlaybackCoordinator
     let libraryStore: LibraryStore
     let supportDiagnostics: SupportDiagnosticJournal
+    let sleepTimer: SleepTimerController
 
     private let remoteCommandCenter: any RemoteCommandCenterControlling
     private let nowPlayingPublisher: any NowPlayingInfoPublishing
@@ -235,6 +237,8 @@ final class ListeningSessionController {
     private var lastObservedMetadataAnnouncementState: MetadataAnnouncementState = .unavailable
     private var announcementGeneration = 0
     private var revealGeneration = 0
+    private var channelReturnTracker = ChannelReturnTracker()
+    private var activeHistoryObservation: ActiveListeningHistoryObservation?
 
     init(
         composition: AuthenticationComposition = AuthenticationComposition(),
@@ -255,9 +259,13 @@ final class ListeningSessionController {
         )
         self.libraryStore = libraryStore ?? LibraryStore()
         self.supportDiagnostics = supportDiagnostics
+        sleepTimer = SleepTimerController()
         self.remoteCommandCenter = remoteCommandCenter
         self.nowPlayingPublisher = nowPlayingPublisher
         self.accessibilityAnnouncer = accessibilityAnnouncer
+        sleepTimer.setExpirationHandler { [weak self] in
+            _ = self?.listeningModel.stopPlayback()
+        }
         let supportDiagnostics = supportDiagnostics
         bridge.setRenewalDiagnosticHandler { diagnostic in
             supportDiagnostics.recordRenewalAttempt(diagnostic)
@@ -378,7 +386,33 @@ final class ListeningSessionController {
         navigate(.next)
     }
 
+    var canReturnToPreviousChannel: Bool {
+        !listeningModel.isTunePending && channelReturnTracker.candidate(among: currentCatalogIDs) != nil
+    }
+
+    /// Returns to the last coordinator-confirmed channel. The tracker changes
+    /// only after that tune is itself confirmed, so failed attempts are inert.
+    @discardableResult
+    func returnToPreviousChannel() -> ListeningTuneRequest? {
+        guard !listeningModel.isTunePending,
+              let channelID = channelReturnTracker.candidate(among: currentCatalogIDs),
+              let tune = tune(channelID: channelID, originIDs: currentCatalogIDs)
+        else { return nil }
+        revealGeneration &+= 1
+        libraryRevealRequest = LibraryRevealRequest(channelID: channelID, generation: revealGeneration)
+        return tune
+    }
+
+    func copyWhatDidIJustHear() {
+        guard let text = libraryStore.listeningHistory.first?.copyText else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+    }
+
     func resetListeningBeforeAuthenticationCleanup() {
+        closeListeningHistoryObservation(at: Date())
+        sleepTimer.cancel()
+        channelReturnTracker.reset()
         listeningModel.reset()
     }
 
@@ -486,6 +520,8 @@ final class ListeningSessionController {
     func shutdown() {
         guard !hasShutdown else { return }
         hasShutdown = true
+        closeListeningHistoryObservation(at: Date())
+        sleepTimer.cancel()
         systemMediaController?.shutdown()
         accessibilityAnnouncer.shutdown()
         listeningModel.reset()
@@ -593,8 +629,13 @@ final class ListeningSessionController {
         announceConfirmedPlaybackTransition(from: previousState, to: state)
         guard case let .playing(channelID?) = state,
               let channel = listeningModel.state.snapshot?.channels.first(where: { $0.id == channelID })
-        else { return }
+        else {
+            syncListeningHistory(at: Date())
+            return
+        }
+        channelReturnTracker.observeConfirmed(channelID)
         libraryStore.recordConfirmedPlayback(LibraryChannelSnapshot(channel))
+        syncListeningHistory(at: Date())
     }
 
     private func announceConfirmedPlaybackTransition(from previous: LivePlaybackState, to current: LivePlaybackState) {
@@ -621,10 +662,12 @@ final class ListeningSessionController {
         withObservationTracking {
             _ = listeningModel.metadataPresentation.availability
             _ = listeningModel.metadataPresentation.state
+            _ = listeningModel.metadataPresentation.currentLiveProgram
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self, !self.hasShutdown else { return }
                 self.announceMetadataAccessibilityTransitionIfNeeded()
+                self.syncListeningHistory(at: Date())
                 self.observeMetadataAccessibilityState()
             }
         }
@@ -739,6 +782,44 @@ final class ListeningSessionController {
 
     private var currentCatalogIDs: [LiveChannelID] {
         listeningModel.state.snapshot?.channels.map(\.id) ?? []
+    }
+
+    private func syncListeningHistory(at observationTime: Date) {
+        let next: ActiveListeningHistoryObservation? = {
+            guard case let .playing(channelID?) = listeningModel.playbackState,
+                  listeningModel.confirmedChannelID == channelID,
+                  listeningModel.metadataPresentation.availability == .current,
+                  let program = listeningModel.metadataPresentation.currentLiveProgram,
+                  let channel = listeningModel.state.snapshot?.channels.first(where: { $0.id == channelID })
+            else { return nil }
+            return ActiveListeningHistoryObservation(
+                channel: LibraryChannelSnapshot(channel),
+                program: program,
+                beganAt: observationTime
+            )
+        }()
+
+        if activeHistoryObservation?.identity == next?.identity { return }
+        closeListeningHistoryObservation(at: observationTime)
+        guard let next else { return }
+        activeHistoryObservation = next
+        libraryStore.recordListeningHistory(
+            channel: next.channel,
+            program: next.program,
+            heardAt: observationTime,
+            duration: 0
+        )
+    }
+
+    private func closeListeningHistoryObservation(at observationTime: Date) {
+        guard let activeHistoryObservation else { return }
+        self.activeHistoryObservation = nil
+        libraryStore.recordListeningHistory(
+            channel: activeHistoryObservation.channel,
+            program: activeHistoryObservation.program,
+            heardAt: observationTime,
+            duration: max(0, observationTime.timeIntervalSince(activeHistoryObservation.beganAt))
+        )
     }
 
     private func navigate(_ direction: QueueDirection) -> ListeningTuneRequest? {

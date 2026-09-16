@@ -13,7 +13,10 @@ struct MetadataRefreshPolicy: Sendable, Equatable {
     let pollInterval: TimeInterval
     let staleAfter: TimeInterval
     let unavailableAfter: TimeInterval
-    static let `default` = Self(pollInterval: 30, staleAfter: 90, unavailableAfter: 300)
+    /// Ten seconds keeps the compact player within one short glance of a
+    /// provider-side track transition without turning metadata into a hot
+    /// loop. Staleness and terminal fallback remain deliberately conservative.
+    static let `default` = Self(pollInterval: 10, staleAfter: 90, unavailableAfter: 300)
 }
 
 protocol MetadataClock: Sendable {
@@ -66,10 +69,15 @@ final class MetadataPresentationModel {
     private var pollTask: Task<Void, Never>?
     private var expiryTask: Task<Void, Never>?
     private var generation = 0
+    private var displayedArtworkReference: ChannelArtworkReference?
+    private var requestedArtworkReference: ChannelArtworkReference?
     private(set) var state: LiveMetadataState
     private(set) var availability: MetadataPresentationAvailability = .unavailable
     private(set) var programTitle: String?
     private(set) var programArtist: String?
+    /// The current semantic item from the shared full snapshot. This retains
+    /// no provider structure or playback authority.
+    private(set) var currentLiveProgram: LiveNowProgram?
 
     var nowPlayingSemanticMetadata: NowPlayingSemanticMetadata {
         let currentProgram: String? = switch state.text {
@@ -102,7 +110,7 @@ final class MetadataPresentationModel {
         state = LiveMetadataState(channelID: channelID, text: .channelFallback(channelID), artwork: .unavailable, refreshedAt: nil)
     }
 
-    func select(_ channelID: LiveChannelID) {
+    func select(_ channelID: LiveChannelID, automaticallyRefresh: Bool = true) {
         generation &+= 1
         metadataTask?.cancel()
         artworkTask?.cancel()
@@ -112,9 +120,57 @@ final class MetadataPresentationModel {
         availability = .loading
         programTitle = nil
         programArtist = nil
+        currentLiveProgram = nil
+        displayedArtworkReference = nil
+        requestedArtworkReference = nil
+        guard automaticallyRefresh else { return }
         let expected = generation
         metadataTask = Task { [weak self] in await self?.refresh(channelID: channelID, generation: expected) }
         pollTask = Task { [weak self] in await self?.poll(channelID: channelID, generation: expected) }
+    }
+
+    /// Compact text shares the library's live observation. Channel artwork remains a
+    /// separate catalog concern; this path issues no selected-channel poll.
+    func applyLiveNow(_ snapshot: LiveNowSnapshot?, failure: LiveNowFailure?) {
+        let recoverableFailure: Bool = switch failure {
+        case .networkUnavailable, .rateLimited, .superseded: true
+        default: false
+        }
+        guard let snapshot, failure == nil || recoverableFailure,
+              let channel = snapshot.channels.first(where: { $0.channelID == state.channelID }) else {
+            expiryTask?.cancel()
+            state = LiveMetadataState(channelID: state.channelID, text: .channelFallback(state.channelID), artwork: .unavailable, refreshedAt: nil)
+            availability = failure == nil ? .unavailable : .failed
+            programTitle = nil
+            programArtist = nil
+            currentLiveProgram = nil
+            return
+        }
+        guard case let .current(program) = channel.state else {
+            expiryTask?.cancel()
+            state = LiveMetadataState(channelID: state.channelID, text: .channelFallback(state.channelID), artwork: .unavailable, refreshedAt: snapshot.observedAt)
+            availability = .unavailable
+            programTitle = nil
+            programArtist = nil
+            currentLiveProgram = nil
+            return
+        }
+        programTitle = failure == nil ? program.title : nil
+        programArtist = failure == nil ? program.artist : nil
+        currentLiveProgram = failure == nil ? program : nil
+        let text = presentationText(for: LiveProgramMetadata(title: program.title, artist: program.artist), channelID: state.channelID)
+        let age = clock.now().timeIntervalSince(snapshot.observedAt)
+        guard age >= 0, age < policy.unavailableAfter else {
+            state = LiveMetadataState(channelID: state.channelID, text: .channelFallback(state.channelID), artwork: .unavailable, refreshedAt: nil)
+            availability = .unavailable
+            programTitle = nil
+            programArtist = nil
+            currentLiveProgram = nil
+            return
+        }
+        state = LiveMetadataState(channelID: state.channelID, text: failure != nil || age >= policy.staleAfter ? stale(text) : text, artwork: .unavailable, refreshedAt: snapshot.observedAt)
+        availability = failure == nil ? .current : .failed
+        scheduleExpiry(channelID: state.channelID, generation: generation, refreshedAt: snapshot.observedAt)
     }
 
     func clear() {
@@ -132,6 +188,9 @@ final class MetadataPresentationModel {
         availability = .unavailable
         programTitle = nil
         programArtist = nil
+        currentLiveProgram = nil
+        displayedArtworkReference = nil
+        requestedArtworkReference = nil
     }
 
     private func poll(channelID: LiveChannelID, generation expected: Int) async {
@@ -154,12 +213,30 @@ final class MetadataPresentationModel {
             let program = snapshot.program
             let text = presentationText(for: program, channelID: channelID)
             let refreshedAt = clock.now()
+            let artworkReference = program?.artwork
+            let retainsArtwork = artworkReference != nil && artworkReference == displayedArtworkReference
+            let retainedArtwork = retainsArtwork
+                ? current(state.artwork)
+                : .unavailable
+            if !retainsArtwork {
+                displayedArtworkReference = nil
+            }
             programTitle = program?.title.nonEmptyTrimmed
             programArtist = program?.artist?.nonEmptyTrimmed
+            currentLiveProgram = nil
             availability = programTitle == nil ? .unavailable : .current
-            state = LiveMetadataState(channelID: channelID, text: text, artwork: .unavailable, refreshedAt: refreshedAt)
-            if let reference = program?.artwork {
-                startArtworkFetch(for: reference, channelID: channelID, generation: expected, refreshedAt: refreshedAt)
+            state = LiveMetadataState(channelID: channelID, text: text, artwork: retainedArtwork, refreshedAt: refreshedAt)
+
+            if let artworkReference {
+                if artworkReference != displayedArtworkReference,
+                   artworkReference != requestedArtworkReference {
+                    startArtworkFetch(for: artworkReference, channelID: channelID, generation: expected)
+                }
+            } else {
+                artworkTask?.cancel()
+                artworkTask = nil
+                displayedArtworkReference = nil
+                requestedArtworkReference = nil
             }
             scheduleExpiry(channelID: channelID, generation: expected, refreshedAt: refreshedAt)
         case .unavailable:
@@ -167,11 +244,13 @@ final class MetadataPresentationModel {
             availability = .unavailable
             programTitle = nil
             programArtist = nil
+            currentLiveProgram = nil
         case .failed:
             markRetainedMetadataStale()
             availability = .failed
             programTitle = nil
             programArtist = nil
+            currentLiveProgram = nil
         }
     }
 
@@ -180,6 +259,8 @@ final class MetadataPresentationModel {
     /// original expiry task remains responsible for the eventual fallback.
     private func markRetainedMetadataStale() {
         artworkTask?.cancel()
+        artworkTask = nil
+        requestedArtworkReference = nil
         state = LiveMetadataState(
             channelID: state.channelID,
             text: stale(state.text),
@@ -190,6 +271,7 @@ final class MetadataPresentationModel {
 
     private func stale(_ text: LiveMetadataText) -> LiveMetadataText { if case let .current(value) = text { return .stale(value) }; return text }
     private func stale(_ artwork: LiveMetadataArtwork) -> LiveMetadataArtwork { if case let .current(value) = artwork { return .stale(value) }; return artwork }
+    private func current(_ artwork: LiveMetadataArtwork) -> LiveMetadataArtwork { if case let .stale(value) = artwork { return .current(value) }; return artwork }
 
     private func presentationText(for program: LiveProgramMetadata?, channelID: LiveChannelID) -> LiveMetadataText {
         guard let program, !program.title.isEmpty else { return .channelFallback(channelID) }
@@ -202,17 +284,24 @@ final class MetadataPresentationModel {
     private func startArtworkFetch(
         for reference: ChannelArtworkReference,
         channelID: LiveChannelID,
-        generation expected: Int,
-        refreshedAt: Date
+        generation expected: Int
     ) {
         artworkTask?.cancel()
+        requestedArtworkReference = reference
         let flow = flow
         artworkTask = Task { [weak self] in
             let result = await flow.artwork(for: reference)
-            guard let self, !Task.isCancelled, self.generation == expected, self.state.channelID == channelID, self.state.refreshedAt == refreshedAt else { return }
-            guard case let .current(artwork) = result else { return }
+            guard let self, !Task.isCancelled, self.generation == expected,
+                  self.state.channelID == channelID,
+                  self.requestedArtworkReference == reference
+            else { return }
+            self.requestedArtworkReference = nil
+            guard case let .current(artwork) = result,
+                  let refreshedAt = self.state.refreshedAt
+            else { return }
             let age = self.clock.now().timeIntervalSince(refreshedAt)
             guard age < self.policy.unavailableAfter else { return }
+            self.displayedArtworkReference = reference
             self.state = LiveMetadataState(
                 channelID: channelID,
                 text: self.state.text,
@@ -227,7 +316,7 @@ final class MetadataPresentationModel {
         expiryTask = Task { [weak self] in
             guard let self else { return }
             do {
-                try await self.sleeper.sleep(for: self.policy.staleAfter)
+                try await self.sleeper.sleep(for: max(0, self.policy.staleAfter - self.clock.now().timeIntervalSince(refreshedAt)))
             } catch {
                 return
             }
@@ -240,7 +329,7 @@ final class MetadataPresentationModel {
             )
 
             do {
-                try await self.sleeper.sleep(for: self.policy.unavailableAfter - self.policy.staleAfter)
+                try await self.sleeper.sleep(for: max(0, self.policy.unavailableAfter - self.clock.now().timeIntervalSince(refreshedAt)))
             } catch {
                 return
             }
@@ -251,9 +340,14 @@ final class MetadataPresentationModel {
                 artwork: .unavailable,
                 refreshedAt: nil
             )
+            self.artworkTask?.cancel()
+            self.artworkTask = nil
+            self.displayedArtworkReference = nil
+            self.requestedArtworkReference = nil
             self.availability = .unavailable
             self.programTitle = nil
             self.programArtist = nil
+            self.currentLiveProgram = nil
         }
     }
 }

@@ -5,6 +5,9 @@
       <BuildActionEntry buildForTesting="YES" buildForRunning="YES" buildForProfiling="YES" buildForArchiving="YES" buildForAnalyzing="YES">
         <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="A00100050000000000000001" BuildableName="Canis97.app" BlueprintName="Canis97" ReferencedContainer="container:SiriusMac.xcodeproj"/>
       </BuildActionEntry>
+      <BuildActionEntry buildForTesting="YES" buildForRunning="YES" buildForProfiling="YES" buildForArchiving="YES" buildForAnalyzing="YES">
+        <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="090100050000000000000001" BuildableName="Canis97Widget.appex" BlueprintName="Canis97Widget" ReferencedContainer="container:SiriusMac.xcodeproj"/>
+      </BuildActionEntry>
       <BuildActionEntry buildForTesting="YES" buildForRunning="NO" buildForProfiling="NO" buildForArchiving="NO" buildForAnalyzing="NO">
         <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="E1E1E1E1E1E1E1E1E1E1E1E1" BuildableName="Canis97Tests.xctest" BlueprintName="Canis97Tests" ReferencedContainer="container:SiriusMac.xcodeproj"/>
       </BuildActionEntry>

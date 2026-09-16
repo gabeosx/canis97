@@ -49,10 +49,18 @@ forbid_region() {
   fi
 }
 
-require_region "Lottie must remain pinned to exact 4.6.1" 'repositoryURL = "https://github\.com/airbnb/lottie-ios\.git"; requirement = \{[[:space:]]*kind = exactVersion; version = 4\.6\.1;' "$project"
-require_region "acceptance build must define its isolated compilation condition" 'SWIFT_ACTIVE_COMPILATION_CONDITIONS = CANIS97_ANIMATION_ACCEPTANCE;.*SWIFT_OPTIMIZATION_LEVEL = "-O";.*name = AnimationAcceptance;' "$project"
-require_region "public Release must remain free of the acceptance condition" 'A00100080000000000000004.*name = Release;' "$project"
-if LC_ALL=C grep -Eq 'A00100080000000000000004.*CANIS97_ANIMATION_ACCEPTANCE' <<< "$(executable_region "$project")"; then
+lottie_reference="$(sed -n '/XCRemoteSwiftPackageReference "lottie-ios".*= {/,/^[[:space:]]*};/p' "$project")"
+grep -Fq 'repositoryURL = "https://github.com/airbnb/lottie-ios.git";' <<<"$lottie_reference" &&
+  grep -Fq 'kind = exactVersion;' <<<"$lottie_reference" &&
+  grep -Fq 'version = 4.6.1;' <<<"$lottie_reference" ||
+  fail "Lottie must remain pinned to exact 4.6.1"
+acceptance_config="$(awk '/050500080000000000000001 .*AnimationAcceptance.* = \{/{capture=1} capture{print} capture && /name = AnimationAcceptance;/{exit}' "$project" | tr '\n' ' ')"
+release_config="$(awk '/A00100080000000000000004 .*Release.* = \{/{capture=1} capture{print} capture && /name = Release;/{exit}' "$project" | tr '\n' ' ')"
+LC_ALL=C grep -Eq 'SWIFT_ACTIVE_COMPILATION_CONDITIONS = CANIS97_ANIMATION_ACCEPTANCE;.*SWIFT_OPTIMIZATION_LEVEL = "-O";.*name = AnimationAcceptance;' <<<"$acceptance_config" ||
+  fail "acceptance build must define its isolated compilation condition"
+LC_ALL=C grep -Eq 'A00100080000000000000004.*name = Release;' <<<"$release_config" ||
+  fail "public Release must remain free of the acceptance condition"
+if LC_ALL=C grep -Eq 'CANIS97_ANIMATION_ACCEPTANCE' <<<"$release_config"; then
   fail "public Release must not expose the offline acceptance condition"
 fi
 require_region "offline review must compile in acceptance builds" '#if DEBUG \|\| CANIS97_ANIMATION_ACCEPTANCE' "$app_source"

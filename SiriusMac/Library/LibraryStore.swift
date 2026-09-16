@@ -52,6 +52,11 @@ enum LibraryStorePersistence: Equatable {
     case inMemoryFallback
 }
 
+enum FavoriteMoveDirection: Equatable {
+    case earlier
+    case later
+}
+
 /// A volatile, stable-ID queue captured from the collection that explicitly
 /// began playback. It deliberately knows nothing about media, sessions, or
 /// catalog records; callers reconcile it with the current available guide IDs.
@@ -131,18 +136,20 @@ struct LibraryRevealRequest: Equatable {
 
 @Model
 final class FavoriteRecord {
-    static let persistedPropertyNames = ["channelID", "name", "displayNumber", "category"]
+    static let persistedPropertyNames = ["channelID", "name", "displayNumber", "category", "rank"]
 
     @Attribute(.unique) var channelID: String
     var name: String?
     var displayNumber: Int?
     var category: String?
+    var rank: Int = 0
 
-    init(snapshot: LibraryChannelSnapshot) {
+    init(snapshot: LibraryChannelSnapshot, rank: Int = 0) {
         channelID = snapshot.id.rawValue
         name = snapshot.name
         displayNumber = snapshot.displayNumber
         category = snapshot.category
+        self.rank = rank
     }
 
     func apply(_ snapshot: LibraryChannelSnapshot) {
@@ -154,6 +161,104 @@ final class FavoriteRecord {
     var snapshot: LibraryChannelSnapshot? {
         guard !channelID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         return LibraryChannelSnapshot(id: LiveChannelID(channelID), name: name, displayNumber: displayNumber, category: category)
+    }
+}
+
+/// One provider-neutral listening-history item. It contains display metadata
+/// and observation times only; it can neither identify nor authorize media.
+struct ListeningHistoryEntry: Identifiable, Equatable {
+    let id: String
+    let channel: LibraryChannelSnapshot
+    let title: String
+    let artist: String?
+    let kind: LiveNowContentKind
+    let programStartedAt: Date
+    let firstHeardAt: Date
+    let lastHeardAt: Date
+    let heardDuration: TimeInterval
+
+    var copyText: String {
+        let program = artist.map { "\($0) — \(title)" } ?? title
+        let channelName = channel.name ?? channel.displayNumber.map { "Channel \($0)" } ?? "Saved channel"
+        return "\(program) on \(channelName)"
+    }
+}
+
+@Model
+final class ListeningHistoryRecord {
+    static let persistedPropertyNames = [
+        "storageKey", "channelID", "channelName", "channelDisplayNumber", "channelCategory",
+        "title", "artist", "kind", "programStartedAt", "firstHeardAt", "lastHeardAt", "heardDuration",
+    ]
+
+    @Attribute(.unique) var storageKey: String
+    var channelID: String
+    var channelName: String?
+    var channelDisplayNumber: Int?
+    var channelCategory: String?
+    var title: String
+    var artist: String?
+    var kind: String
+    var programStartedAt: Date
+    var firstHeardAt: Date
+    var lastHeardAt: Date
+    var heardDuration: TimeInterval
+
+    init(channel: LibraryChannelSnapshot, program: LiveNowProgram, heardAt: Date, duration: TimeInterval) {
+        storageKey = Self.key(channelID: channel.id, program: program)
+        channelID = channel.id.rawValue
+        channelName = channel.name
+        channelDisplayNumber = channel.displayNumber
+        channelCategory = channel.category
+        title = program.title
+        artist = program.artist
+        kind = program.kind == .show ? "show" : "item"
+        programStartedAt = program.startedAt
+        firstHeardAt = heardAt
+        lastHeardAt = heardAt
+        heardDuration = max(0, duration)
+    }
+
+    func record(channel: LibraryChannelSnapshot, heardAt: Date, duration: TimeInterval) {
+        channelName = channel.name
+        channelDisplayNumber = channel.displayNumber
+        channelCategory = channel.category
+        lastHeardAt = max(lastHeardAt, heardAt)
+        heardDuration += max(0, duration)
+    }
+
+    var entry: ListeningHistoryEntry? {
+        guard !channelID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let semanticKind = kind == "show" ? LiveNowContentKind.show : kind == "item" ? .item : nil
+        else { return nil }
+        return ListeningHistoryEntry(
+            id: storageKey,
+            channel: LibraryChannelSnapshot(
+                id: LiveChannelID(channelID),
+                name: channelName,
+                displayNumber: channelDisplayNumber,
+                category: channelCategory
+            ),
+            title: title,
+            artist: artist,
+            kind: semanticKind,
+            programStartedAt: programStartedAt,
+            firstHeardAt: firstHeardAt,
+            lastHeardAt: lastHeardAt,
+            heardDuration: heardDuration
+        )
+    }
+
+    static func key(channelID: LiveChannelID, program: LiveNowProgram) -> String {
+        let parts = [
+            channelID.rawValue,
+            program.kind == .show ? "show" : "item",
+            String(program.startedAt.timeIntervalSinceReferenceDate.bitPattern),
+            program.title,
+            program.artist ?? "",
+        ]
+        return parts.map { "\($0.utf8.count):\($0)" }.joined(separator: "|")
     }
 }
 
@@ -290,6 +395,7 @@ final class LibraryStore {
     private(set) var favoriteChannelIDs: [LiveChannelID] = []
     private(set) var favoriteSongs: [FavoriteSongSnapshot] = []
     private(set) var recents: [LibraryChannelSnapshot] = []
+    private(set) var listeningHistory: [ListeningHistoryEntry] = []
     private(set) var selectedLibraryTab = "channels"
     private(set) var alwaysOnTop = false
     private(set) var lastLoadFailed = false
@@ -308,6 +414,7 @@ final class LibraryStore {
         publishFavorites()
         publishFavoriteSongs()
         publishRecents()
+        publishListeningHistory()
         publishPlayerPreferences()
     }
 
@@ -334,7 +441,8 @@ final class LibraryStore {
                 for duplicate in matches.dropFirst() { modelContext.delete(duplicate) }
                 didMutate = changedSnapshot || matches.count > 1
             } else {
-                modelContext.insert(FavoriteRecord(snapshot: snapshot))
+                let nextRank = (records.map(\.rank).max() ?? -1) + 1
+                modelContext.insert(FavoriteRecord(snapshot: snapshot, rank: nextRank))
                 didMutate = true
             }
         } else {
@@ -344,6 +452,26 @@ final class LibraryStore {
 
         saveIfNeeded(didMutate)
         publishFavorites()
+    }
+
+    func canMoveFavorite(_ channelID: LiveChannelID, direction: FavoriteMoveDirection) -> Bool {
+        guard let index = favoriteChannelIDs.firstIndex(of: channelID) else { return false }
+        return direction == .earlier ? index > 0 : index + 1 < favoriteChannelIDs.count
+    }
+
+    @discardableResult
+    func moveFavorite(_ channelID: LiveChannelID, direction: FavoriteMoveDirection) -> Bool {
+        guard persistence == .durable,
+              var records = normalizedFavoriteRecords(),
+              let index = records.firstIndex(where: { $0.channelID == channelID.rawValue })
+        else { return false }
+        let target = direction == .earlier ? index - 1 : index + 1
+        guard records.indices.contains(target) else { return false }
+        records.swapAt(index, target)
+        for (rank, record) in records.enumerated() { record.rank = rank }
+        guard saveIfNeeded(true) else { return false }
+        publishFavorites()
+        return true
     }
 
     func isFavoriteSong(_ snapshot: FavoriteSongSnapshot) -> Bool {
@@ -439,6 +567,48 @@ final class LibraryStore {
         publishRecents()
     }
 
+    /// Records one locally observed semantic program. Repeated observations of
+    /// the same channel/program identity accumulate instead of creating noise.
+    func recordListeningHistory(
+        channel: LibraryChannelSnapshot,
+        program: LiveNowProgram,
+        heardAt: Date,
+        duration: TimeInterval
+    ) {
+        guard persistence == .durable else {
+            lastSaveFailed = true
+            return
+        }
+        guard let records = listeningHistoryRecords() else { return }
+        let key = ListeningHistoryRecord.key(channelID: channel.id, program: program)
+        if let record = records.first(where: { $0.storageKey == key }) {
+            record.record(channel: channel, heardAt: heardAt, duration: duration)
+        } else {
+            modelContext.insert(ListeningHistoryRecord(
+                channel: channel,
+                program: program,
+                heardAt: heardAt,
+                duration: duration
+            ))
+        }
+        guard let allRecords = listeningHistoryRecords() else { return }
+        let ordered = allRecords.sorted { $0.lastHeardAt > $1.lastHeardAt }
+        for record in ordered.dropFirst(500) { modelContext.delete(record) }
+        guard saveIfNeeded(true) else { return }
+        publishListeningHistory()
+    }
+
+    func clearListeningHistory() {
+        guard persistence == .durable else {
+            lastSaveFailed = true
+            return
+        }
+        guard let records = listeningHistoryRecords() else { return }
+        for record in records { modelContext.delete(record) }
+        guard saveIfNeeded(!records.isEmpty) else { return }
+        publishListeningHistory()
+    }
+
     func setSelectedLibraryTab(_ tab: String) {
         guard persistence == .durable else {
             selectedLibraryTab = tab
@@ -522,6 +692,15 @@ final class LibraryStore {
         }
     }
 
+    private func listeningHistoryRecords() -> [ListeningHistoryRecord]? {
+        do {
+            return try modelContext.fetch(FetchDescriptor<ListeningHistoryRecord>())
+        } catch {
+            lastLoadFailed = true
+            return nil
+        }
+    }
+
     private func playerPreferenceRecords() -> [PlayerPreferenceRecord]? {
         do {
             return try modelContext.fetch(FetchDescriptor<PlayerPreferenceRecord>())
@@ -557,17 +736,28 @@ final class LibraryStore {
         }
     }
 
+    private func normalizedFavoriteRecords() -> [FavoriteRecord]? {
+        guard let records = favoriteRecords() else { return nil }
+        var seen = Set<LiveChannelID>()
+        return records
+            .filter { $0.snapshot != nil }
+            .sorted { lhs, rhs in
+                if lhs.rank != rhs.rank { return lhs.rank < rhs.rank }
+                let left = lhs.snapshot?.name ?? lhs.channelID
+                let right = rhs.snapshot?.name ?? rhs.channelID
+                return left == right ? lhs.channelID < rhs.channelID : left.localizedStandardCompare(right) == .orderedAscending
+            }
+            .filter { record in
+                guard let id = record.snapshot?.id else { return false }
+                if seen.insert(id).inserted { return true }
+                modelContext.delete(record)
+                return false
+            }
+    }
+
     private func publishFavorites() {
-        guard let records = favoriteRecords() else { return }
-        let unique = Dictionary(
-            records.compactMap { record in record.snapshot.map { ($0.id, $0) } },
-            uniquingKeysWith: { first, _ in first }
-        )
-        let projected = unique.values.sorted { lhs, rhs in
-            let lhsName = lhs.name ?? lhs.id.rawValue
-            let rhsName = rhs.name ?? rhs.id.rawValue
-            return lhsName == rhsName ? lhs.id.rawValue < rhs.id.rawValue : lhsName < rhsName
-        }
+        guard let records = normalizedFavoriteRecords() else { return }
+        let projected = records.compactMap(\.snapshot)
         favorites = projected
         favoriteChannelIDs = projected.map(\.id)
     }
@@ -604,6 +794,18 @@ final class LibraryStore {
             .map { $0 }
     }
 
+    private func publishListeningHistory() {
+        guard let records = listeningHistoryRecords() else { return }
+        listeningHistory = records
+            .compactMap(\.entry)
+            .sorted { lhs, rhs in
+                if lhs.lastHeardAt != rhs.lastHeardAt { return lhs.lastHeardAt > rhs.lastHeardAt }
+                return lhs.id < rhs.id
+            }
+            .prefix(500)
+            .map { $0 }
+    }
+
     @discardableResult
     private func saveIfNeeded(_ didMutate: Bool) -> Bool {
         guard didMutate || modelContext.hasChanges else { return true }
@@ -629,6 +831,7 @@ final class LibraryStore {
                 for: FavoriteRecord.self,
                 FavoriteSongRecord.self,
                 RecentRecord.self,
+                ListeningHistoryRecord.self,
                 PlayerPreferenceRecord.self,
                 configurations: configuration
             )
@@ -719,6 +922,7 @@ final class LibraryStore {
             for: FavoriteRecord.self,
             FavoriteSongRecord.self,
             RecentRecord.self,
+            ListeningHistoryRecord.self,
             PlayerPreferenceRecord.self,
             configurations: configuration
         )

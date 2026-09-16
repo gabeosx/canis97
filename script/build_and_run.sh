@@ -21,6 +21,7 @@ export CANIS97_KILL="${CANIS97_KILL:-/bin/kill}"
 
 TELEMETRY_PID=""
 LAUNCH_LOCK_HELD=0
+LAUNCH_LOCK_FD=9
 
 cleanup_telemetry() {
   if [[ -n "$TELEMETRY_PID" ]]; then
@@ -31,7 +32,7 @@ cleanup_telemetry() {
 cleanup_launcher() {
   cleanup_telemetry
   if (( LAUNCH_LOCK_HELD )); then
-    rmdir "$LAUNCH_LOCK_PATH" 2>/dev/null || true
+    exec 9>&-
     LAUNCH_LOCK_HELD=0
   fi
 }
@@ -44,10 +45,15 @@ report_process_stage() {
 }
 
 acquire_launch_lock() {
-  if mkdir "$LAUNCH_LOCK_PATH" 2>/dev/null; then
+  if ! exec 9>"$LAUNCH_LOCK_PATH"; then
+    report_process_stage lock-acquisition-failed
+    return 1
+  fi
+  if /usr/bin/lockf -s -t 0 "$LAUNCH_LOCK_FD"; then
     LAUNCH_LOCK_HELD=1
     return 0
   fi
+  exec 9>&-
   report_process_stage lock-acquisition-failed
   return 1
 }
@@ -88,7 +94,7 @@ build_exact_bundle() {
 start_authentication_telemetry() {
   CANIS97_TELEMETRY_FAILURE_STAGE=""
   "$CANIS97_LOG" stream --info --style compact \
-    --predicate '(subsystem == "com.canis97.player" AND (category == "authentication" OR category == "playback")) OR (subsystem == "com.siriusmac.client" AND category == "diagnostics")' &
+    --predicate '(subsystem == "com.canis97.player" AND (category == "authentication" OR category == "authentication-qualification" OR category == "playback")) OR (subsystem == "com.siriusmac.client" AND category == "diagnostics")' &
   TELEMETRY_PID=$!
   if ! "$CANIS97_KILL" -0 "$TELEMETRY_PID" 2>/dev/null; then
     CANIS97_TELEMETRY_FAILURE_STAGE="telemetry-start-failed"

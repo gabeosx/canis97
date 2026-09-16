@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import AppIntents
 import SwiftUI
 import UniformTypeIdentifiers
 import SiriusXMClient
@@ -18,6 +19,7 @@ struct Canis97App: App {
     init() {
         let environment = ProcessInfo.processInfo.environment
         updateChecker = UpdateChecker()
+        Canis97Shortcuts.updateAppShortcutParameters()
 #if DEBUG || CANIS97_ANIMATION_ACCEPTANCE
         if OfflineReviewLaunchMode.isOfflineReviewMode(environment: environment) {
             let harness = OfflineReviewHarness.makeIfRequested(environment: environment)
@@ -31,6 +33,7 @@ struct Canis97App: App {
                 appearanceController: offlineAppearanceController
             )
             offlineReviewHarness = harness
+            NativeReachRuntime.shared.installOfflineReview(environment: environment)
             sessionController = nil
             terminationObserver = nil
             return
@@ -56,10 +59,17 @@ struct Canis97App: App {
         if allowsDurableAppearance {
             Task { await appearanceController.restorePersistedSelection() }
         }
-        sessionController = Self.makeSessionController()
-        sessionController?.startSystemMediaControls()
-        terminationObserver = sessionController.map { controller in
-            ApplicationTerminationObserver { controller.shutdown() }
+        let controller = Self.makeSessionController()
+        sessionController = controller
+        controller?.startSystemMediaControls()
+        if let controller {
+            NativeReachRuntime.shared.install(controller: controller)
+        }
+        terminationObserver = controller.map { controller in
+            ApplicationTerminationObserver {
+                NativeReachRuntime.shared.uninstall()
+                controller.shutdown()
+            }
         }
     }
 
@@ -77,12 +87,15 @@ struct Canis97App: App {
 
     var body: some Scene {
         WindowGroup(ProductIdentity.displayName, id: ProductIdentity.SceneID.compact) {
-            if OfflineReviewLaunchMode.isOfflineReviewRequested() {
-                compactSceneContent
-            } else {
-                compactSceneContent
-                    .softwareUpdatePresentation(checker: updateChecker)
+            Group {
+                if OfflineReviewLaunchMode.isOfflineReviewRequested() {
+                    compactSceneContent
+                } else {
+                    compactSceneContent
+                        .softwareUpdatePresentation(checker: updateChecker)
+                }
             }
+            .modifier(NativeReachSceneBridge(runtime: .shared))
         }
         .defaultSize(width: 760, height: 760)
         // The primary scene changes from a resizable authentication surface to
@@ -103,6 +116,44 @@ struct Canis97App: App {
         }
         .defaultSize(width: 980, height: 700)
         .windowResizability(.contentMinSize)
+
+        Window("Tune", id: ProductIdentity.SceneID.tune) {
+            if let sessionController, sessionController.authenticationModel.isReady {
+                TunePaletteView(controller: sessionController)
+            } else {
+                ContentUnavailableView(
+                    "Tune Unavailable",
+                    systemImage: "radio",
+                    description: Text("Sign in and load your channels to tune.")
+                )
+            }
+        }
+        .defaultSize(width: 620, height: 520)
+        .windowResizability(.contentMinSize)
+
+        Window("Listening History", id: ProductIdentity.SceneID.history) {
+            if let sessionController, sessionController.authenticationModel.isReady {
+                ListeningHistoryView(controller: sessionController)
+            } else {
+                ContentUnavailableView(
+                    "Listening History Unavailable",
+                    systemImage: "clock.arrow.circlepath",
+                    description: Text("Sign in to view locally stored listening history.")
+                )
+            }
+        }
+        .defaultSize(width: 640, height: 520)
+        .windowResizability(.contentMinSize)
+
+        MenuBarExtra {
+            if let sessionController, sessionController.authenticationModel.isReady {
+                MenuBarTunerView(controller: sessionController)
+            } else {
+                Text("Sign in to tune channels")
+            }
+        } label: {
+            Label(ProductIdentity.displayName, systemImage: "radio")
+        }
 
         SoftwareUpdateScene(checker: updateChecker)
 
@@ -342,6 +393,7 @@ private struct ListeningCommands: Commands {
                 Button("Previous") {
                     _ = controller.previous()
                 }
+                .keyboardShortcut(.leftArrow, modifiers: [.command, .option])
                 .disabled(!controller.commandAvailability.previous)
 
                 Button(controller.commandAvailability.playPauseTitle) {
@@ -353,7 +405,14 @@ private struct ListeningCommands: Commands {
                 Button("Next") {
                     _ = controller.next()
                 }
+                .keyboardShortcut(.rightArrow, modifiers: [.command, .option])
                 .disabled(!controller.commandAvailability.next)
+
+                Button("Return to Previous Channel") {
+                    _ = controller.returnToPreviousChannel()
+                }
+                .keyboardShortcut("\\", modifiers: .command)
+                .disabled(!controller.canReturnToPreviousChannel)
 
                 Divider()
 
@@ -395,6 +454,23 @@ private struct ListeningCommands: Commands {
                     openWindow(id: ProductIdentity.SceneID.library)
                 }
                 .keyboardShortcut("f", modifiers: .command)
+
+                Button("Tune…") {
+                    openWindow(id: ProductIdentity.SceneID.tune)
+                }
+                .keyboardShortcut("k", modifiers: .command)
+
+                Button("Listening History…") {
+                    openWindow(id: ProductIdentity.SceneID.history)
+                }
+                .keyboardShortcut("h", modifiers: [.command, .shift])
+
+                Button("Copy What Did I Just Hear?") {
+                    controller.copyWhatDidIJustHear()
+                }
+                .disabled(controller.libraryStore.listeningHistory.isEmpty)
+
+                SleepTimerMenu(controller: controller)
 
                 if let channel = controller.listeningModel.confirmedChannelID.flatMap({ id in
                     controller.listeningModel.state.snapshot?.channels.first(where: { $0.id == id })
@@ -489,7 +565,7 @@ enum OfflineReviewLaunchMode {
     static func isOfflineReviewRequested(
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> Bool {
-#if CANIS97_ANIMATION_ACCEPTANCE
+#if CANIS97_ANIMATION_ACCEPTANCE || CANIS97_LIVE_METADATA_REVIEW
         // Acceptance products remain credential-free even when LaunchServices
         // reopens them without the original environment (for example via UI tools).
         true

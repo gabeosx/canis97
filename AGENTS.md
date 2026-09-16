@@ -62,7 +62,7 @@ The application is built on a first-class reusable SiriusXM client library, simi
 
 | Tool | Purpose | Notes |
 |---|---|---|
-| `swift test` + `xcodebuild test` | Package and app verification | Run strict-concurrency warnings as errors in CI. Keep live upstream compatibility probes separate, opt-in, rate-limited, and credential-free in normal PR CI. |
+| `swift test` + `xcodebuild build-for-testing`; gated `xcodebuild test` | Package and app verification | Use isolated SwiftPM tests and compile app/test targets without launching them while the local safety block is active. Run app tests only after the explicit safety review described below. Keep live upstream compatibility probes separate, opt-in, rate-limited, and credential-free in normal PR CI. |
 | DocC | SDK reference and protocol-repair documentation | Generate docs for the public package product; document supported Apple platforms, semver policy, error behavior, and the fact that SiriusXM interoperability can change without notice. |
 | GitHub Actions + GitHub Releases | CI and canonical binary releases | Use protected semver tags (`vMAJOR.MINOR.PATCH`), build from that tag, attach notarized artifacts plus checksums/SBOM, and create the GitHub Release from the same immutable commit. Pin third-party Actions to full commit SHAs, not floating tags. |
 | `codesign`, `notarytool`, `stapler`, `spctl` | Direct-distribution signing/notarization verification | Archive with Developer ID Application identity, hardened runtime, secure timestamp, notarize via `notarytool`, staple the ticket, and verify in a clean VM/runner before publishing. Keep Apple credentials in protected release-environment secrets; never package them into artifacts. |
@@ -155,7 +155,8 @@ Architecture not yet mapped. Follow existing patterns found in the codebase.
 
 ## Project Skills
 
-No project skills found. Add skills to any of: `.claude/skills/`, `.agents/skills/`, `.cursor/skills/`, `.github/skills/`, or `.codex/skills/` with a `SKILL.md` index file.
+- **Spike findings for Sirius Mac** (implementation patterns, constraints, gotchas) → `Skill("spike-findings-sirius-mac")`
+- **Canis97 safe review testing** (isolated builds, silent playback, app-scoped UI review, crash recovery, and cleanup) → `Skill("canis97-safe-review-testing")`
 <!-- GSD:skills-end -->
 
 <!-- GSD:workflow-start source:Codex-first project policy -->
@@ -213,6 +214,13 @@ After the 2026-08-22 loginwindow incident:
 - Never run `build_and_run.sh`, UI tests, app-hosted tests, or `live_compatibility_checkpoint.sh` concurrently.
 - Never parallelize authentication, Keychain, provider compatibility, catalog, tune, playback, telemetry, or other live SiriusXM checks.
 - Live activity requires explicit owner authorization, exactly one in-flight attempt, no automatic retry, and immediate stop on an unknown or unsafe state.
+
+For every Canis97 build, playback check, UI review, remote review, or crash recovery, read and follow `.agents/skills/canis97-safe-review-testing/SKILL.md`.
+
+- Give every compiler lane a unique temporary root, keep at most one review app process, and never use `open -n`.
+- Launch automated playback review with `CANIS97_MUTE_AUDIO=1`. This mutes the app's sole `AVPlayer`; do not change system volume, change the Mac's output device, or install a virtual audio driver for routine tests.
+- Keep computer-use automation scoped to Canis97 windows and menus. Do not enumerate Finder or the desktop, capture the full screen, or scan unrelated menu bar items to find a system-owned surface.
+- Pause playback between checks. At handoff or after a crash, remove only task-owned scratch artifacts and confirm no review, build, or test processes remain.
 
 Do not use blind sleep/poll jobs, duplicate agents investigating the same question, speculative abstractions, or repeated full-suite runs after small edits.
 <!-- GSD:workflow-end -->

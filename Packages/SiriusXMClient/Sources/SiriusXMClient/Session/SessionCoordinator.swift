@@ -43,6 +43,7 @@ actor SessionCoordinator {
     private var lastEntitlement: EntitlementAvailability = .unavailable
     private var cleanupTask: Task<SignOutOutcome, Never>?
     private var credentialGeneration = 0
+    private var operationGeneration = 0
     private var credentialRefreshLease: CredentialRefreshLease?
 #if DEBUG
     private var isRenewalQualificationInProgress = false
@@ -89,6 +90,7 @@ actor SessionCoordinator {
             return .attemptInProgress
         }
 
+        operationGeneration &+= 1
         let lease = AttemptLease()
         attemptLease = lease
         lastEntitlement = .unavailable
@@ -191,6 +193,8 @@ actor SessionCoordinator {
     func withCurrentEntitledCredential<Value: Sendable>(
         _ work: @Sendable (AuthenticationCredential) async -> Value
     ) async -> CurrentEntitledOperationResult<Value> {
+        guard !Task.isCancelled else { return .failed(.cancelled) }
+        let expectedGeneration = operationGeneration
         guard case let .active(activeSession) = state,
               lastEntitlement == .entitled,
               transientCredential != nil,
@@ -199,12 +203,14 @@ actor SessionCoordinator {
             return .failed(.authenticationUnavailable)
         }
 
-        guard case let .ready(credential) = await prepareCurrentCredentialIfNeeded() else {
+        let preparation = await prepareCurrentCredentialIfNeeded()
+        guard operationGeneration == expectedGeneration else { return .failed(.superseded) }
+        guard !Task.isCancelled else { return .failed(.cancelled) }
+        guard case let .ready(credential) = preparation else {
             return .failed(.authenticationUnavailable)
         }
-
         let response = await entitlementVerifier.verifyEntitlement(using: credential)
-        guard case let .active(currentSession) = state,
+        guard operationGeneration == expectedGeneration, case let .active(currentSession) = state,
               currentSession == activeSession,
               lastEntitlement == .entitled
         else {
@@ -218,9 +224,15 @@ actor SessionCoordinator {
             return .failed(.protectedControl)
         }
 
+        guard !Task.isCancelled else { return .failed(.cancelled) }
         let inspection = AuthenticationFlowAdapter.inspectEntitlement(response)
         let entitlement = inspection.result
+        if entitlement == .authenticatedButNotEntitled || entitlement == .rejected {
+            lastEntitlement = entitlement.publicOutcome
+            operationGeneration &+= 1
+        }
         await diagnostics.record(.entitlement(inspection.diagnosticOutcome))
+        guard !Task.isCancelled else { return .failed(.cancelled) }
         guard entitlement == .entitled else {
             switch entitlement {
             case .authenticatedButNotEntitled:
@@ -234,8 +246,10 @@ actor SessionCoordinator {
             }
         }
 
+        guard operationGeneration == expectedGeneration else { return .failed(.superseded) }
         let value = await work(credential)
-        guard case let .active(currentSession) = state,
+        guard !Task.isCancelled else { return .failed(.cancelled) }
+        guard operationGeneration == expectedGeneration, case let .active(currentSession) = state,
               currentSession == activeSession,
               lastEntitlement == .entitled
         else {
@@ -250,28 +264,38 @@ actor SessionCoordinator {
     /// performed the current-session entitlement check and each explicit
     /// refresh has a one-request ceiling.
     func withCurrentCatalogCredential<Value: Sendable>(
-        _ work: @Sendable (AuthenticationCredential) async -> Value
+        _ work: @Sendable (AuthenticationCredential) async -> Value,
+        authorizationLoss: @Sendable (Value) -> EntitlementAvailability? = { _ in nil }
     ) async -> CurrentCatalogOperationResult<Value> {
+        guard !Task.isCancelled else { return .superseded }
+        let expectedGeneration = operationGeneration
         guard case let .active(activeSession) = state,
               lastEntitlement == .entitled,
               transientCredential != nil,
               permitsCurrentOperations
         else {
-            return state == .signedOut ? .authenticationUnavailable : .notEntitled
+            return state == .signedOut || lastEntitlement == .unavailable ? .authenticationUnavailable : .notEntitled
         }
 
-        guard case let .ready(credential) = await prepareCurrentCredentialIfNeeded() else {
+        let preparation = await prepareCurrentCredentialIfNeeded()
+        guard operationGeneration == expectedGeneration, !Task.isCancelled else { return .superseded }
+        guard case let .ready(credential) = preparation else {
             return .authenticationUnavailable
         }
-
         let value = await work(credential)
-        guard case let .active(currentSession) = state,
+        guard operationGeneration == expectedGeneration, !Task.isCancelled, case let .active(currentSession) = state,
               currentSession == activeSession
         else {
             return .superseded
         }
         guard lastEntitlement == .entitled else {
             return .notEntitled
+        }
+        // A fixed authenticated operation may positively report revoked access.
+        // Retire sibling completions before returning that operation's closed failure.
+        if let loss = authorizationLoss(value), loss != .entitled {
+            lastEntitlement = loss
+            operationGeneration &+= 1
         }
         return .completed(value)
     }
@@ -282,6 +306,7 @@ actor SessionCoordinator {
             return await cleanupTask.value
         }
 
+        operationGeneration &+= 1
         attemptLease = nil
         credentialRefreshLease?.task.cancel()
         credentialRefreshLease = nil

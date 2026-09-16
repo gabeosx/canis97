@@ -330,6 +330,30 @@ final class CompactPlayerPresentationTests: XCTestCase {
         XCTAssertEqual(presentation.artwork, .data(channelArtwork))
     }
 
+    func testKnownProgramWithoutConfirmedArtworkDoesNotSubstituteStationArtwork() {
+        let channel = LiveChannel(id: LiveChannelID("fixture-channel"), name: "Fallback Channel", displayNumber: 7)
+        let channelArtwork = ArtworkData(bytes: Data([0x89, 0x50, 0x4E, 0x47]), mediaType: .png)
+        let metadata = LiveMetadataState(
+            channelID: LiveChannelID("fixture-channel"),
+            text: .current("Artist — Current song"),
+            artwork: .unavailable,
+            refreshedAt: Date(timeIntervalSince1970: 42)
+        )
+
+        let presentation = CompactPlayerPresentation.project(
+            channel: channel,
+            metadata: metadata,
+            channelArtwork: channelArtwork,
+            primaryMetadata: "Current song",
+            secondaryMetadata: "Artist",
+            playback: .playing(channel.id),
+            isFavorite: false,
+            queueAvailability: .both
+        )
+
+        XCTAssertEqual(presentation.artwork, CompactPlayerPresentation.Artwork.placeholder)
+    }
+
     func testLongMetadataKeepsCompleteSemanticValuesAndFixedLayoutMetrics() {
         let longTitle = "音楽と星空のためのライブ・ラジオ・セッション — a deliberately very long title"
         let presentation = CompactPlayerPresentation.confirmed(
@@ -420,6 +444,43 @@ final class CompactPlayerPresentationTests: XCTestCase {
                 XCTAssertEqual(error as? SkinManifestValidationError, .unknownOrMissingKeys)
             }
             object.removeValue(forKey: key)
+        }
+    }
+
+    func testSchemaFourExtendsTheSchemaThreeLayoutWithClosedMotion() throws {
+        let appearance = try SkinManifestValidator.validate(
+            schemaFourManifestData(format: .lottie),
+            classification: .imported,
+            assetResolver: { URL(fileURLWithPath: "/managed/\($0)") }
+        )
+
+        XCTAssertEqual(appearance.layoutPlan.slotFrames.count, CompactSkinSemanticSlot.allCases.count)
+        XCTAssertEqual(appearance.motion?.format, .lottie)
+        XCTAssertEqual(Set(appearance.motion?.states.keys ?? Dictionary<SkinMotionState, SkinMotionRange>().keys), Set(SkinMotionState.allCases))
+        XCTAssertEqual(Set(appearance.motion?.events?.keys ?? Dictionary<SkinMotionEvent, SkinMotionRange>().keys), Set(SkinMotionEvent.allCases))
+    }
+
+    func testSchemaFourRejectsUnknownMotionVocabularyAndUnsafePaths() throws {
+        var document = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: schemaFourManifestData(format: .canis97)) as? [String: Any]
+        )
+        let originalMotion = try XCTUnwrap(document["motion"] as? [String: Any])
+
+        for (key, value) in [
+            ("format", "rive"),
+            ("document", "../motion.json"),
+            ("staticPose", ""),
+            ("states", ["playing": ["startFrame": 0, "endFrame": 1]])
+        ] as [(String, Any)] {
+            var motion = originalMotion
+            motion[key] = value
+            document["motion"] = motion
+            XCTAssertThrowsError(
+                try SkinManifestValidator.validate(
+                    JSONSerialization.data(withJSONObject: document),
+                    assetResolver: { URL(fileURLWithPath: "/managed/\($0)") }
+                )
+            )
         }
     }
 
@@ -633,6 +694,28 @@ final class CompactPlayerPresentationTests: XCTestCase {
             }
             """#.utf8
         )
+    }
+
+    private func schemaFourManifestData(format: SkinMotionFormat) -> Data {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = root
+            .appendingPathComponent("SiriusMac/Skins/Bundled/PixelDesk.json")
+        var document = try! JSONSerialization.jsonObject(with: Data(contentsOf: source)) as! [String: Any]
+        document["schemaVersion"] = 4
+        document["motion"] = [
+            "format": format.rawValue,
+            "document": "motion/\(format == .lottie ? "source.json" : "canonical.c97motion")",
+            "staticPose": "decorations/static-pose.png",
+            "states": Dictionary(uniqueKeysWithValues: SkinMotionState.allCases.map {
+                ($0.rawValue, ["startFrame": 0, "endFrame": 1])
+            }),
+            "events": Dictionary(uniqueKeysWithValues: SkinMotionEvent.allCases.map {
+                ($0.rawValue, ["startFrame": 0, "endFrame": 1])
+            })
+        ]
+        return try! JSONSerialization.data(withJSONObject: document)
     }
 
     private func unavailableMetadata() -> LiveMetadataState {

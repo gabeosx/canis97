@@ -63,54 +63,15 @@ enum LiveListeningAdapter {
         return .accepted
     }
 
-    /// Decodes only the observed selected-channel lookaround shape. The first
-    /// cut is the sole admitted current program; shows are intentionally not a
-    /// replacement source.
+    /// Compatibility projection over the strict full-snapshot selection policy.
     static func decodeMetadata(
         _ response: NativeTransportResponse,
-        channelID: LiveChannelID
+        channelID: LiveChannelID,
+        observedAt: Date = Date()
     ) -> MetadataAvailability {
-        CompatibilitySchemaDiagnostics.recordLookaround(
-            body: response.body,
-            selectedChannelID: channelID
-        )
-        guard preflightFailure(for: response) == nil,
-              let root = try? JSONSerialization.jsonObject(with: response.body) as? [String: Any],
-              root["channels"] is [String: Any],
-              root["delta"] is String,
-              let channels = root["channels"] as? [String: Any],
-              let channel = channels[channelID.rawValue] as? [String: Any],
-              let cuts = channel["cuts"] as? [[String: Any]]
-        else { return .failed(.unsupportedResponse) }
-        guard let first = cuts.first else { return .unavailable }
-        guard let title = nonEmptyString(first["name"]),
-              let artist = nonEmptyString(first["artistName"]),
-              parseObservedLookaroundTimestamp(first["validFrom"]) != nil
-        else { return .failed(.unsupportedResponse) }
-        let artwork = currentProgramArtworkReference(from: first)
-        return .current(MetadataSnapshot(channelID: channelID, program: LiveProgramMetadata(title: title, artist: artist, artwork: artwork)))
-    }
-
-    /// The observed lookaround contract requires a displayable name and artist.
-    /// Whitespace-only values are not semantic metadata and must fail closed.
-    private static func nonEmptyString(_ value: Any?) -> String? {
-        guard let value = value as? String else { return nil }
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
-    }
-
-    /// The provider's observed timestamp contract is ISO-8601 with either the
-    /// default internet-date-time form or its fractional-seconds variant. No
-    /// other date representation is admitted at this compatibility boundary.
-    private static func parseObservedLookaroundTimestamp(_ value: Any?) -> Date? {
-        guard let value = value as? String else { return nil }
-        if let parsed = ISO8601DateFormatter().date(from: value) {
-            return parsed
-        }
-
-        let fractionalFormatter = ISO8601DateFormatter()
-        fractionalFormatter.formatOptions.insert(.withFractionalSeconds)
-        return fractionalFormatter.date(from: value)
+        LookaroundSnapshotDecoder.decode(
+            response, channelIDs: [channelID], observedAt: observedAt, includeArtwork: true
+        ).selectedChannel()
     }
 
     static func decodeArtwork(_ response: NativeTransportResponse) -> ArtworkAvailability {
@@ -140,7 +101,7 @@ enum LiveListeningAdapter {
     /// The observed current-song image URL is an opaque image-service key, not
     /// a fetchable URL. SiriusXM's current player Base64-encodes that key and a
     /// bounded resize edit into the fixed image-service path.
-    private static func currentProgramArtworkReference(from cut: [String: Any]) -> ChannelArtworkReference? {
+    static func currentProgramArtworkReference(from cut: [String: Any]) -> ChannelArtworkReference? {
         guard let image = cut["image"] as? [String: Any],
               let key = image["url"] as? String,
               let resize = imageServiceResize(for: image)
@@ -1423,7 +1384,7 @@ protocol FixedMetadataTransporting: Sendable {
 
 final class FixedMetadataURLSessionTransport: FixedMetadataTransporting, @unchecked Sendable {
     private let clock = FixedLiveLogicalClock()
-    private lazy var session = URLSession(configuration: Self.makeConfiguration())
+    private let session = URLSession(configuration: FixedMetadataURLSessionTransport.makeConfiguration())
 
     static func makeConfiguration() -> URLSessionConfiguration {
         let configuration = URLSessionConfiguration.ephemeral
@@ -1438,15 +1399,20 @@ final class FixedMetadataURLSessionTransport: FixedMetadataTransporting, @unchec
     }
 
     func lookaround(using credential: AuthenticationCredential) async -> NativeTransportResponse {
-        guard let url = URL(string: "https://lookaround-cache-prod.streaming.siriusxm.com/playbackservices/v1/live/lookAround?delta=") else { return Self.failed }
-        guard let authorization = credential.accessToken() else { return Self.failed }
+        guard let request = Self.lookaroundRequest(using: credential, clock: clock.next()) else { return Self.failed }
+        return await send(request)
+    }
+
+    static func lookaroundRequest(using credential: AuthenticationCredential, clock: String) -> URLRequest? {
+        guard let url = URL(string: "https://lookaround-cache-prod.streaming.siriusxm.com/playbackservices/v1/live/lookAround?delta="),
+              let authorization = credential.accessToken() else { return nil }
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("Bearer \(authorization)", forHTTPHeaderField: "Authorization")
-        request.setValue(clock.next(), forHTTPHeaderField: "x-sxm-clock")
-        return await send(request)
+        request.setValue(clock, forHTTPHeaderField: "x-sxm-clock")
+        return request
     }
 
     func artwork(for reference: ChannelArtworkReference) async -> NativeTransportResponse {
@@ -1496,43 +1462,6 @@ final class FixedMetadataURLSessionTransport: FixedMetadataTransporting, @unchec
     }
 
     private static let failed = NativeTransportResponse(statusCode: 0, contentType: nil, body: Data(), transportFailed: true)
-}
-
-actor CurrentSessionMetadataFetcher: LiveMetadataFetching {
-    private let sessionCoordinator: SessionCoordinator
-    private let transport: any FixedMetadataTransporting
-    private var generation = 0
-
-    init(sessionCoordinator: SessionCoordinator, transport: any FixedMetadataTransporting) {
-        self.sessionCoordinator = sessionCoordinator
-        self.transport = transport
-    }
-
-    func invalidate() async {
-        generation &+= 1
-    }
-
-    func metadata(for channelID: LiveChannelID) async -> MetadataAvailability {
-        generation &+= 1
-        let expected = generation
-        let authorization = await sessionCoordinator.withCurrentCatalogCredential({ [transport] credential in await transport.lookaround(using: credential) })
-        guard generation == expected else { return .failed(.superseded) }
-        switch authorization {
-        case let .completed(response):
-            return LiveListeningAdapter.decodeMetadata(response, channelID: channelID)
-        case .authenticationUnavailable: return .failed(.authenticationUnavailable)
-        case .notEntitled: return .failed(.notEntitled)
-        case .superseded: return .failed(.superseded)
-        }
-    }
-
-    func artwork(for reference: ChannelArtworkReference) async -> ArtworkAvailability {
-        let expected = generation
-        let response = await transport.artwork(for: reference)
-        CompatibilitySchemaDiagnostics.recordArtwork(response, origin: reference.fixedOrigin)
-        guard generation == expected else { return .unavailable }
-        return LiveListeningAdapter.decodeArtwork(response)
-    }
 }
 
 /// Internal transport seam for the only supported production live sequence.

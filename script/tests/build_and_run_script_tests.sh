@@ -67,4 +67,33 @@ if [[ ! -d "$LOCK_PATH" ]]; then
   exit 1
 fi
 
+rmdir "$LOCK_PATH"
+/usr/bin/lockf -k "$LOCK_PATH" /bin/sleep 5 &
+LOCK_HOLDER_PID=$!
+lock_observed=0
+for _ in {1..50}; do
+  if ! /usr/bin/lockf -k -s -t 0 "$LOCK_PATH" /usr/bin/true; then
+    lock_observed=1
+    break
+  fi
+  /bin/sleep 0.02
+done
+if (( lock_observed == 0 )); then
+  echo "FAIL: test holder did not acquire the kernel launch lock" >&2
+  exit 1
+fi
+if "$SCRIPT" run >/dev/null 2>&1; then
+  echo "FAIL: a kernel-locked launch file must reject a contender" >&2
+  exit 1
+fi
+kill "$LOCK_HOLDER_PID" >/dev/null 2>&1 || true
+wait "$LOCK_HOLDER_PID" 2>/dev/null || true
+
+"$SCRIPT" run >/dev/null
+"$SCRIPT" run >/dev/null
+if [[ ! -f "$LOCK_PATH" ]]; then
+  echo "FAIL: the reusable kernel lock file was removed" >&2
+  exit 1
+fi
+
 echo "build-and-run-lock-ownership: PASS"

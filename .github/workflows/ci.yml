@@ -30,8 +30,11 @@ jobs:
           script/validate_release_version.sh
           bash -n script/*.sh script/lib/*.sh script/tests/*.sh
           script/tests/visual_dmg_contract_tests.sh
+          script/tests/dmg_release_contract_tests.sh
           script/tests/release_pipeline_contract_tests.sh
+          script/tests/developer_id_profile_tests.sh
           script/tests/homebrew_release_tests.sh
+          script/test_update_download_contracts.sh
           test "$(xcodebuild -version | sed -n '1p')" = "Xcode 26.6"
 
       - name: Test SiriusXMClient
@@ -42,9 +45,9 @@ jobs:
 
       - name: Validate bundled animation and offline runtime contracts
         run: |
-          bash script/test_update_download_contracts.sh
           bash script/test_animation_source_contracts.sh
           bash script/test_offline_review_launch_mode.sh
+          bash script/test_native_reach_semantics.sh
           bash script/test_scene_performance_director.sh
           bash script/test_sprite_atlas_geometry.sh
           python3 script/test_abyssal97_bundle.py
@@ -62,3 +65,19 @@ jobs:
             -only-testing:Canis97Tests \
             -parallel-testing-enabled NO \
             CODE_SIGNING_ALLOWED=NO
+
+      - name: Validate the unsigned Release archive graph
+        run: |
+          xcodebuild archive \
+            -project SiriusMac.xcodeproj \
+            -scheme Canis97 \
+            -configuration Release \
+            -destination 'generic/platform=macOS' \
+            -archivePath "$RUNNER_TEMP/Canis97-unsigned.xcarchive" \
+            -derivedDataPath "$RUNNER_TEMP/canis97-release-archive" \
+            -disableAutomaticPackageResolution \
+            CODE_SIGNING_ALLOWED=NO \
+            ENABLE_HARDENED_RUNTIME=YES
+          test -d "$RUNNER_TEMP/Canis97-unsigned.xcarchive/Products/Applications/Canis97.app"
+          test -d "$RUNNER_TEMP/Canis97-unsigned.xcarchive/Products/Applications/Canis97.app/Contents/XPCServices/Canis97MotionConverter.xpc"
+          test -d "$RUNNER_TEMP/Canis97-unsigned.xcarchive/Products/Applications/Canis97.app/Contents/PlugIns/Canis97Widget.appex"
