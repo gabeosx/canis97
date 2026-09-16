@@ -25,7 +25,7 @@ printf '%s\n' \
   '' \
   "  url \"https://github.com/$GITHUB_REPOSITORY/releases/download/v#{version}/Canis97-#{version}-arm64.dmg\"" \
   '  name "Canis97"' \
-  '  desc "Native macOS SiriusXM player"' \
+  '  desc "Native SiriusXM player"' \
   "  homepage \"https://github.com/$GITHUB_REPOSITORY\"" \
   '' \
   '  depends_on arch: :arm64' \
