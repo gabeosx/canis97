@@ -6,6 +6,12 @@ Notable user-facing changes are recorded here. This project follows
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-09-16
+
+### Fixed
+
+- Release validation now applies Apple's application-bundle distribution check only to `Canis97.app`; the signed, notarized, and stapled DMG continues through its supported `codesign`, `stapler`, and Gatekeeper checks.
+
 ## [0.3.0] - 2026-09-16
 
 ### Added
@@ -94,7 +100,8 @@ No public artifacts were published for this version.
 - GitHub Actions validation, signed/notarized release automation, checksums, and an SPDX SBOM.
 - Homebrew Cask generation and optional tap publishing.
 
-[Unreleased]: https://github.com/gabeosx/canis97/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/gabeosx/canis97/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/gabeosx/canis97/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/gabeosx/canis97/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/gabeosx/canis97/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/gabeosx/canis97/releases/tag/v0.2.0

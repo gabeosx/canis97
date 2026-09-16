@@ -224,7 +224,9 @@ final_archive_line="$(grep -n 'create_visual_dmg .*Canis97-1.2.3-arm64.dmg' "$CO
 [[ -n "$notary_line" && -n "$final_archive_line" && "$notary_line" -lt "$final_archive_line" ]] || fail 'final archive must follow notarization'
 test "$(grep -Fc 'notarytool submit' "$COMMAND_LOG")" -eq 2 || fail 'app and final DMG must both be submitted for notarization'
 grep -Fq 'spctl --assess --type open --context context:primary-signature' "$COMMAND_LOG" || fail 'DMG Gatekeeper assessment was skipped'
-grep -Fq 'syspolicy_check distribution' "$COMMAND_LOG" || fail 'distribution policy gate was skipped'
+test "$(grep -Fc 'syspolicy_check distribution' "$COMMAND_LOG")" -eq 1 || fail 'distribution policy gate must run exactly once'
+grep -Eq 'syspolicy_check distribution .*/Canis97\.app$' "$COMMAND_LOG" || fail 'distribution policy gate must inspect the application bundle'
+grep -Eq 'syspolicy_check distribution .*\.dmg$' "$COMMAND_LOG" && fail 'syspolicy_check does not accept a disk image path'
 "$ROOT_DIR/script/generate_release_sbom.sh" invalid "$TEMP_ROOT/invalid.spdx" >/dev/null 2>&1 && fail 'SBOM accepted invalid invocation'
 
 if RELEASE_COMMAND_LOG="$COMMAND_LOG" \
