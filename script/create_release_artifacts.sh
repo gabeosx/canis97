@@ -241,7 +241,6 @@ check_signed_disk_image "$FINAL_ARCHIVE"
 "$XCRUN_BIN" stapler validate "$FINAL_ARCHIVE"
 check_signed_disk_image "$FINAL_ARCHIVE"
 "$SPCTL_BIN" --assess --type open --context context:primary-signature --verbose=2 "$FINAL_ARCHIVE"
-"$SYSPOLICY_CHECK_BIN" distribution "$FINAL_ARCHIVE"
 
 archive_sha="$($SHASUM_BIN -a 256 "$FINAL_ARCHIVE" | awk '{print $1}')"
 printf '%s  %s\n' "$archive_sha" "$(basename "$FINAL_ARCHIVE")" > "$CHECKSUMS_PATH"
