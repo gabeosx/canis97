@@ -9,8 +9,8 @@ enum DiagnosticRedactionError: Error, Sendable, Equatable {
 /// Validates synthetic fixtures before they can become test evidence.
 enum DiagnosticRedactor {
     private static let sensitiveTerms: Set<String> = [
-        "account", "authorization", "body", "cookie", "credential", "error", "header",
-        "password", "request", "response", "session", "token", "url",
+        "account", "authorization", "body", "cookie", "credential", "device", "error", "header",
+        "key", "password", "request", "response", "session", "token", "url",
     ]
 
     static func promoteSyntheticFixture(_ data: Data) throws -> Data {

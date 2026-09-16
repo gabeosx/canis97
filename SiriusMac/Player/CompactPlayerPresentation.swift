@@ -120,8 +120,13 @@ struct CompactPlayerPresentation: Sendable, Equatable {
             let projectedStatus = status(playback)
             return empty(status: projectedStatus)
         }
+        let hasProgramMetadata: Bool = switch metadata.text {
+        case .current, .stale: true
+        case .channelFallback, .unavailable: false
+        }
         let artwork: Artwork = switch metadata.artwork {
         case let .current(data), let .stale(data): .data(data)
+        case .unavailable where hasProgramMetadata: .placeholder
         case .unavailable: channelArtwork.map(Artwork.data) ?? .placeholder
         }
         return confirmed(

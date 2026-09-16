@@ -9,6 +9,9 @@ APPLE_TEAM_ID="${APPLE_TEAM_ID:-}"
 APPLE_ID="${APPLE_ID:-}"
 APPLE_APP_SPECIFIC_PASSWORD="${APPLE_APP_SPECIFIC_PASSWORD:-}"
 SIGNING_IDENTITY="${SIGNING_IDENTITY:-Developer ID Application}"
+SIGNING_CERTIFICATE_SHA1="${CANIS97_DEVELOPER_ID_SHA1:-}"
+APP_PROVISIONING_PROFILE_PATH="${CANIS97_APP_PROVISIONING_PROFILE_PATH:-}"
+WIDGET_PROVISIONING_PROFILE_PATH="${CANIS97_WIDGET_PROVISIONING_PROFILE_PATH:-}"
 OUTPUT_DIR="${RELEASE_OUTPUT_DIR:-$ROOT_DIR/build/release}"
 WORK_DIR="${RELEASE_WORK_DIR:-$ROOT_DIR/build/release-work}"
 XCODEBUILD_BIN="${RELEASE_XCODEBUILD_BIN:-xcodebuild}"
@@ -20,9 +23,11 @@ DITTO_BIN="${RELEASE_DITTO_BIN:-/usr/bin/ditto}"
 CREATE_DMG_BIN="${RELEASE_CREATE_DMG_BIN:-$ROOT_DIR/script/create_visual_dmg.sh}"
 SHASUM_BIN="${RELEASE_SHASUM_BIN:-shasum}"
 RUBY_BIN="${RELEASE_RUBY_BIN:-/usr/bin/ruby}"
+PROFILE_VALIDATOR_BIN="${RELEASE_PROFILE_VALIDATOR_BIN:-$ROOT_DIR/script/validate_developer_id_profile.sh}"
 ARCHIVE_PATH="$WORK_DIR/Canis97.xcarchive"
 APP_PATH="$ARCHIVE_PATH/Products/Applications/Canis97.app"
 XPC_SERVICE_PATH="$APP_PATH/Contents/XPCServices/Canis97MotionConverter.xpc"
+WIDGET_PATH="$APP_PATH/Contents/PlugIns/Canis97Widget.appex"
 NOTARY_ARCHIVE="$WORK_DIR/Canis97-notary-submission.zip"
 FINAL_ARCHIVE="$OUTPUT_DIR/Canis97-$VERSION-arm64.dmg"
 DMG_IDENTIFIER='com.canis97.player.dmg'
@@ -137,9 +142,17 @@ if [[ ! "$GITHUB_REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
   echo "GITHUB_REPOSITORY must be OWNER/REPOSITORY" >&2
   exit 2
 fi
-for required_name in APPLE_TEAM_ID APPLE_ID APPLE_APP_SPECIFIC_PASSWORD; do
+for required_name in APPLE_TEAM_ID APPLE_ID APPLE_APP_SPECIFIC_PASSWORD SIGNING_CERTIFICATE_SHA1; do
   [[ -n "${!required_name:-}" ]] || { echo "$required_name is required" >&2; exit 2; }
 done
+for required_name in APP_PROVISIONING_PROFILE_PATH WIDGET_PROVISIONING_PROFILE_PATH; do
+  [[ -n "${!required_name:-}" ]] || { echo "$required_name is required" >&2; exit 2; }
+  [[ -f "${!required_name}" ]] || { echo "$required_name does not exist" >&2; exit 2; }
+done
+"$PROFILE_VALIDATOR_BIN" "$APP_PROVISIONING_PROFILE_PATH" "$APPLE_TEAM_ID" \
+  com.canis97.player group.com.canis97.player "$SIGNING_CERTIFICATE_SHA1"
+"$PROFILE_VALIDATOR_BIN" "$WIDGET_PROVISIONING_PROFILE_PATH" "$APPLE_TEAM_ID" \
+  com.canis97.player.widget group.com.canis97.player "$SIGNING_CERTIFICATE_SHA1"
 for output_path in "$FINAL_ARCHIVE" "$CHECKSUMS_PATH" "$SBOM_PATH" "$VERIFICATION_MANIFEST"; do
   require_absent_output "$output_path"
 done
@@ -156,14 +169,24 @@ mkdir -p "$OUTPUT_DIR" "$WORK_DIR"
   MARKETING_VERSION="$VERSION" \
   CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
   CANIS97_GITHUB_REPOSITORY="$GITHUB_REPOSITORY" \
-  DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
-  CODE_SIGN_STYLE=Manual \
-  "CODE_SIGN_IDENTITY=$SIGNING_IDENTITY" \
-  'OTHER_CODE_SIGN_FLAGS=--timestamp' \
+  CODE_SIGNING_ALLOWED=NO \
   ENABLE_HARDENED_RUNTIME=YES
 
 [[ -d "$APP_PATH" ]] || fail "archive did not contain Canis97.app"
 [[ -d "$XPC_SERVICE_PATH" ]] || fail "archive did not contain Canis97MotionConverter.xpc"
+[[ -d "$WIDGET_PATH" ]] || fail "archive did not contain Canis97Widget.appex"
+
+# A group.-prefixed App Group is a provisioned macOS capability. Xcode may put
+# development profiles in an archive, so replace them with explicit Developer
+# ID distribution profiles before sealing the widget and app.
+/usr/bin/install -m 0644 "$WIDGET_PROVISIONING_PROFILE_PATH" \
+  "$WIDGET_PATH/Contents/embedded.provisionprofile"
+/usr/bin/install -m 0644 "$APP_PROVISIONING_PROFILE_PATH" \
+  "$APP_PATH/Contents/embedded.provisionprofile"
+cmp -s "$WIDGET_PROVISIONING_PROFILE_PATH" "$WIDGET_PATH/Contents/embedded.provisionprofile" || \
+  fail "widget provisioning profile was not embedded exactly"
+cmp -s "$APP_PROVISIONING_PROFILE_PATH" "$APP_PATH/Contents/embedded.provisionprofile" || \
+  fail "app provisioning profile was not embedded exactly"
 
 # Sign nested executable code before its containing app, then verify both without
 # --deep so each trust boundary is independently checked.
@@ -171,8 +194,18 @@ mkdir -p "$OUTPUT_DIR" "$WORK_DIR"
   --entitlements "$ROOT_DIR/Canis97MotionConverter/Canis97MotionConverter.entitlements" \
   --sign "$SIGNING_IDENTITY" "$XPC_SERVICE_PATH"
 check_signed_product "$XPC_SERVICE_PATH" 'com.canis97.player.motion-converter' '{"com.apple.security.app-sandbox":true}'
-"$CODESIGN_BIN" --force --options runtime --timestamp --sign "$SIGNING_IDENTITY" "$APP_PATH"
-check_signed_product "$APP_PATH" 'com.canis97.player' '{}'
+"$CODESIGN_BIN" --force --options runtime --timestamp \
+  --entitlements "$ROOT_DIR/Canis97Widget/Canis97Widget.entitlements" \
+  --sign "$SIGNING_IDENTITY" "$WIDGET_PATH"
+check_signed_product "$WIDGET_PATH" 'com.canis97.player.widget' '{"com.apple.security.app-sandbox":true,"com.apple.security.application-groups":["group.com.canis97.player"]}'
+"$PROFILE_VALIDATOR_BIN" "$WIDGET_PATH/Contents/embedded.provisionprofile" "$APPLE_TEAM_ID" \
+  com.canis97.player.widget group.com.canis97.player "$SIGNING_CERTIFICATE_SHA1"
+"$CODESIGN_BIN" --force --options runtime --timestamp \
+  --entitlements "$ROOT_DIR/SiriusMac/Canis97.entitlements" \
+  --sign "$SIGNING_IDENTITY" "$APP_PATH"
+check_signed_product "$APP_PATH" 'com.canis97.player' '{"com.apple.security.application-groups":["group.com.canis97.player"]}'
+"$PROFILE_VALIDATOR_BIN" "$APP_PATH/Contents/embedded.provisionprofile" "$APPLE_TEAM_ID" \
+  com.canis97.player group.com.canis97.player "$SIGNING_CERTIFICATE_SHA1"
 
 "$DITTO_BIN" -c -k --keepParent "$APP_PATH" "$NOTARY_ARCHIVE"
 [[ -f "$NOTARY_ARCHIVE" ]] || fail "notarization submission archive was not created"
@@ -185,7 +218,8 @@ check_signed_product "$APP_PATH" 'com.canis97.player' '{}'
 "$XCRUN_BIN" stapler staple "$APP_PATH"
 "$XCRUN_BIN" stapler validate "$APP_PATH"
 check_signed_product "$XPC_SERVICE_PATH" 'com.canis97.player.motion-converter' '{"com.apple.security.app-sandbox":true}'
-check_signed_product "$APP_PATH" 'com.canis97.player' '{}'
+check_signed_product "$WIDGET_PATH" 'com.canis97.player.widget' '{"com.apple.security.app-sandbox":true,"com.apple.security.application-groups":["group.com.canis97.player"]}'
+check_signed_product "$APP_PATH" 'com.canis97.player' '{"com.apple.security.application-groups":["group.com.canis97.player"]}'
 "$SPCTL_BIN" --assess --type execute --verbose=2 "$APP_PATH"
 "$SYSPOLICY_CHECK_BIN" distribution "$APP_PATH"
 
@@ -207,7 +241,7 @@ check_signed_disk_image "$FINAL_ARCHIVE"
 "$XCRUN_BIN" stapler validate "$FINAL_ARCHIVE"
 check_signed_disk_image "$FINAL_ARCHIVE"
 "$SPCTL_BIN" --assess --type open --context context:primary-signature --verbose=2 "$FINAL_ARCHIVE"
-"$SYSPOLICY_CHECK_BIN" distribution "$APP_PATH"
+"$SYSPOLICY_CHECK_BIN" distribution "$FINAL_ARCHIVE"
 
 archive_sha="$($SHASUM_BIN -a 256 "$FINAL_ARCHIVE" | awk '{print $1}')"
 printf '%s  %s\n' "$archive_sha" "$(basename "$FINAL_ARCHIVE")" > "$CHECKSUMS_PATH"

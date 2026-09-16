@@ -34,6 +34,12 @@ has an independent release cadence. Its public API still follows SemVer.
 
    - `MACOS_CERTIFICATE_P12`: base64-encoded Developer ID Application `.p12`.
    - `MACOS_CERTIFICATE_PASSWORD`: password for the `.p12`.
+   - `MACOS_APP_PROVISIONING_PROFILE`: base64-encoded Developer ID
+     distribution profile for `com.canis97.player`, authorizing
+     `group.com.canis97.player`.
+   - `MACOS_WIDGET_PROVISIONING_PROFILE`: base64-encoded Developer ID
+     distribution profile for `com.canis97.player.widget`, authorizing the same
+     App Group.
    - `APPLE_ID`: Apple ID used by the notary service.
    - `APPLE_TEAM_ID`: Developer Program team identifier.
    - `APPLE_APP_SPECIFIC_PASSWORD`: app-specific password for notarization.
@@ -55,6 +61,12 @@ has an independent release cadence. Its public API still follows SemVer.
 The workflows pin third-party actions to full commit SHAs. Dependabot or a
 reviewed maintenance change should update those pins.
 
+Create the two distribution profiles after assigning the App Group to both
+explicit App IDs in Certificates, Identifiers & Profiles. They must be Developer
+ID profiles associated with the same certificate supplied in
+`MACOS_CERTIFICATE_P12`; development profiles from a local Xcode build are not
+release assets.
+
 After initially configuring or rotating any Apple release secret, run the
 manual `Release Preflight` workflow from a ref permitted by the `release`
 environment. It imports the Developer ID identity into an ephemeral keychain
@@ -72,12 +84,15 @@ upload, tag, or publish Canis97.
 4. Run the safe local checks:
 
    ```sh
-   script/validate_release_version.sh v0.1.0
-   swift test --package-path Packages/SiriusXMClient
+   package_scratch="$(mktemp -d /private/tmp/canis97-swiftpm.XXXXXX)"
+   derived_data="$(mktemp -d /private/tmp/canis97-build-for-testing.XXXXXX)"
+   script/validate_release_version.sh v0.3.0
+   swift test --package-path Packages/SiriusXMClient --scratch-path "$package_scratch"
    xcodebuild build-for-testing \
      -project SiriusMac.xcodeproj \
      -scheme Canis97 \
      -destination 'platform=macOS' \
+     -derivedDataPath "$derived_data" \
      -only-testing:Canis97Tests \
      -parallel-testing-enabled NO \
      CODE_SIGNING_ALLOWED=NO
@@ -97,8 +112,8 @@ repository immutable-release setting and protected `IMMUTABLE_RELEASES_CONFIRMED
 variable have both been checked:
 
 ```sh
-git tag -a v0.1.0 -m 'Canis97 0.1.0'
-git push origin v0.1.0
+git tag -a v0.3.0 -m 'Canis97 0.3.0'
+git push origin v0.3.0
 ```
 
 The `Release` workflow then:
@@ -107,16 +122,18 @@ The `Release` workflow then:
 2. Creates (or, on a retry, reuses) only the matching draft release. A published
    matching release is terminal: do not replace its tag or assets.
 3. Builds the exact tagged commit with Xcode 26.6 and a CI build number.
-4. Signs the embedded `Canis97MotionConverter.xpc` before `Canis97.app`, then
-   verifies both Developer ID identifiers, team, hardened runtime, secure
-   timestamp, and exact expected entitlements.
+4. Validates and embeds distinct Developer ID provisioning profiles for the app
+   and widget, then signs `Canis97MotionConverter.xpc` and
+   `Canis97Widget.appex` before `Canis97.app`. It verifies all three Developer
+   ID identifiers, team, hardened runtime, secure timestamp, exact expected
+   entitlements, and both embedded profiles.
 5. Submits a notary ZIP, waits for acceptance, staples the app, and validates the
    stapled app with `stapler`, strict `codesign`, `spctl`, and
    `syspolicy_check distribution`.
 6. Builds the branded drag-to-Applications DMG around the stapled app, signs the
    disk image with Developer ID Application, notarizes and staples the outermost
-   DMG, and validates it with `codesign`, `stapler`, and `spctl`.
-   The application is checked with `syspolicy_check distribution` again.
+   DMG, and validates it with `codesign`, `stapler`, `spctl`, and
+   `syspolicy_check distribution`.
 7. Derives `SHA256SUMS`, the SPDX SBOM, and the verification manifest from the
    final stapled DMG bytes.
 8. Attaches the final DMG, checksum, SBOM, and verification manifest to the draft,
@@ -135,9 +152,7 @@ the same final disk image. The cask URL is always the immutable
 digest of that final stapled DMG, never a pre-notary or `latest` asset.
 
 Before public publication, an owner may run the separately authorized local
-integration verifier with two immutable local archives. There is no earlier
-public Canis97 release, so its `--prior-archive` is deliberately a synthetic
-older archive used only to prove the first upgrade transition. The verifier uses
+integration verifier with two immutable local archives. The verifier uses
 a new explicit work directory, temporary app/cache/tap paths, performs clean
 install → upgrade → repeated upgrade → uninstall, and writes a residue report.
 It never launches Canis97, uses credentials or Keychain, contacts SiriusXM,
@@ -147,8 +162,8 @@ modifies `/Applications`, or pushes a tap.
 CANIS97_RUN_HOMEBREW_INTEGRATION=true \
   script/verify_homebrew_release.sh \
   --cask-fqn gabeosx/homebrew-tap/canis97 \
-  --prior-archive /absolute/path/Canis97-0.0.1-arm64.dmg \
-  --current-archive /absolute/path/Canis97-0.1.0-arm64.dmg \
+  --prior-archive /absolute/path/Canis97-0.2.1-arm64.dmg \
+  --current-archive /absolute/path/Canis97-0.3.0-arm64.dmg \
   --work-dir /absolute/path/new-canis97-homebrew-check
 ```
 

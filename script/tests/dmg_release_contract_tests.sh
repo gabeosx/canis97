@@ -8,20 +8,13 @@ ARTIFACT_SCRIPT="$ROOT_DIR/script/create_release_artifacts.sh"
 CASK_SCRIPT="$ROOT_DIR/script/render_homebrew_cask.sh"
 LANDING_SCRIPT="$ROOT_DIR/website/app.js"
 
-fail() {
-  echo "FAIL: $*" >&2
-  exit 1
-}
-
+fail() { echo "FAIL: $*" >&2; exit 1; }
 require_literal() {
-  local needle="$1"
-  local file="$2"
+  local needle="$1" file="$2"
   grep -Fq -- "$needle" "$file" || fail "expected $file to contain: $needle"
 }
-
 reject_literal() {
-  local needle="$1"
-  local file="$2"
+  local needle="$1" file="$2"
   ! grep -Fq -- "$needle" "$file" || fail "expected $file to omit: $needle"
 }
 
@@ -36,8 +29,8 @@ require_literal '--identifier "$DMG_IDENTIFIER"' "$ARTIFACT_SCRIPT"
 require_literal 'notarytool submit "$FINAL_ARCHIVE"' "$ARTIFACT_SCRIPT"
 require_literal 'stapler staple "$FINAL_ARCHIVE"' "$ARTIFACT_SCRIPT"
 require_literal '--type open --context context:primary-signature' "$ARTIFACT_SCRIPT"
-require_literal 'syspolicy_check distribution "$APP_PATH"' "$ARTIFACT_SCRIPT"
-reject_literal 'syspolicy_check distribution "$FINAL_ARCHIVE"' "$ARTIFACT_SCRIPT"
+require_literal 'distribution "$APP_PATH"' "$ARTIFACT_SCRIPT"
+require_literal 'distribution "$FINAL_ARCHIVE"' "$ARTIFACT_SCRIPT"
 require_literal 'Canis97-#{version}-arm64.dmg' "$CASK_SCRIPT"
 require_literal 'arm64\.dmg$' "$LANDING_SCRIPT"
 
@@ -45,4 +38,4 @@ for file in "$WORKFLOW" "$ARTIFACT_SCRIPT" "$CASK_SCRIPT" "$LANDING_SCRIPT"; do
   reject_literal 'arm64.zip' "$file"
 done
 
-echo 'PASS: DMG release integration contract'
+echo 'PASS: signed and notarized DMG release integration contract'

@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import SiriusXMClient
 
 /// The app-local semantic catalog boundary. Views never construct requests or
@@ -96,6 +97,8 @@ final class ListeningPresentationModel {
     private(set) var state: ListeningPresentationState = .idle
     private(set) var playbackState: LivePlaybackState = .idle
     let metadataPresentation: MetadataPresentationModel
+    let liveNow: LiveNowMonitor?
+    private var libraryMetadataVisible = false
     let artworkStore: ArtworkStore
     private(set) var selectedChannelID: LiveChannelID?
     private(set) var confirmedChannelID: LiveChannelID?
@@ -142,6 +145,11 @@ final class ListeningPresentationModel {
         self.flow = flow
         self.playbackCoordinator = playbackCoordinator
         self.beforeCoordinatorTune = beforeCoordinatorTune
+        if let liveNowFlow = flow as? any LiveNowFlow {
+            liveNow = LiveNowMonitor(refresh: { await liveNowFlow.liveNow(for: $0) })
+        } else {
+            liveNow = nil
+        }
         if let metadataFlow = flow as? any MetadataFlow {
             metadataPresentation = MetadataPresentationModel(flow: metadataFlow)
             artworkStore = ArtworkStore(flow: metadataFlow)
@@ -150,6 +158,7 @@ final class ListeningPresentationModel {
             artworkStore = ArtworkStore()
         }
         observePlaybackState()
+        observeLiveNow()
     }
 
     static func makeIfEntitled(
@@ -167,6 +176,7 @@ final class ListeningPresentationModel {
         generation += 1
         let refreshGeneration = generation
         state = .loading
+        updateLiveNowDemand()
         let flow = flow
         let task = Task { [weak self] in
             let availability = await flow.catalog()
@@ -283,6 +293,7 @@ final class ListeningPresentationModel {
         playbackState = .idle
         confirmedChannelID = nil
         metadataPresentation.clear()
+        liveNow?.reset()
         artworkStore.clear()
     }
 
@@ -297,6 +308,40 @@ final class ListeningPresentationModel {
             state = .failed(failure)
         case .unavailable:
             state = .failed(.unavailable)
+        }
+        updateLiveNowDemand()
+    }
+
+    func setLibraryMetadataVisible(_ visible: Bool) {
+        libraryMetadataVisible = visible
+        updateLiveNowDemand()
+    }
+
+    private func updateLiveNowDemand() {
+        liveNow?.setDemand(
+            channelIDs: state.snapshot?.channels.map(\.id) ?? [],
+            active: state.freshness == .fresh && (libraryMetadataVisible || playbackNeedsLiveMetadata)
+        )
+    }
+
+    private var playbackNeedsLiveMetadata: Bool {
+        if case .playing(.some) = playbackState { return true }
+        return false
+    }
+
+    private func observeLiveNow() {
+        guard let liveNow else { return }
+        withObservationTracking {
+            _ = liveNow.snapshot
+            _ = liveNow.failure
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if self.confirmedChannelID != nil {
+                    self.metadataPresentation.applyLiveNow(self.liveNow?.snapshot, failure: self.liveNow?.failure)
+                }
+                self.observeLiveNow()
+            }
         }
     }
 
@@ -340,6 +385,7 @@ final class ListeningPresentationModel {
 
         let state = publication.state
         playbackState = state
+        defer { updateLiveNowDemand() }
         switch state {
         case let .playing(channelID?):
             retireActiveTuneIfMatching(publication)
@@ -348,7 +394,8 @@ final class ListeningPresentationModel {
             }
             guard confirmedChannelID != channelID else { return }
             confirmedChannelID = channelID
-            metadataPresentation.select(channelID)
+            metadataPresentation.select(channelID, automaticallyRefresh: liveNow == nil)
+            if let liveNow { metadataPresentation.applyLiveNow(liveNow.snapshot, failure: liveNow.failure) }
         case .paused:
             // Pause retains the last confirmed active channel and its metadata.
             retireActiveTuneIfMatching(publication)

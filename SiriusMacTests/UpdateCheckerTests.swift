@@ -117,44 +117,83 @@ final class UpdateCheckerTests: XCTestCase {
         XCTAssertEqual(checker.alert, .unavailable)
     }
 
-    func testDownloadActionUsesTheMatchingDiskImageAndKeepsInstallInstructions() throws {
-        let repository = try XCTUnwrap(GitHubRepository("gabeosx/canis97"))
-        let url = "https://github.com/gabeosx/canis97/releases/download/v0.2.0/Canis97-0.2.0-arm64.dmg"
-        let release = try GitHubReleaseClient.decodeLatestRelease(releaseData(downloadURL: url), repository: repository)
-        let alert = SoftwareUpdateAlert.available(current: try XCTUnwrap(StableSemanticVersion("0.1.4")), release: release)
-        XCTAssertEqual(alert.updateURL?.absoluteString, url)
-        XCTAssertEqual(alert.actionTitle, "Download Update")
-        XCTAssertFalse(alert.message.contains("GitHub"))
-    }
+    func testReleaseValidationRejectsNoncanonicalAndUnsafePayloads() throws {
+        let repository = try XCTUnwrap(GitHubRepository("example/canis97"))
+        let valid = Data(#"{"tag_name":"v1.2.3","html_url":"https://github.com/example/canis97/releases/tag/v1.2.3","draft":false,"prerelease":false}"#.utf8)
+        let unsafePayloads = [
+            Data(#"{"tag_name":"v1.2.3-beta.1","html_url":"https://github.com/example/canis97/releases/tag/v1.2.3-beta.1","draft":false,"prerelease":false}"#.utf8),
+            Data(#"{"tag_name":"v1.2.3","html_url":"http://github.com/example/canis97/releases/tag/v1.2.3","draft":false,"prerelease":false}"#.utf8),
+            Data(#"{"tag_name":"v1.2.3","html_url":"https://github.com/example/canis97/releases/redirect","draft":false,"prerelease":false}"#.utf8),
+            Data(#"{"tag_name":"v1.2.3","html_url":"https://github.com/other/canis97/releases/tag/v1.2.3","draft":false,"prerelease":false}"#.utf8),
+            Data(repeating: 0, count: 1_048_577),
+        ]
 
-    func testUnexpectedDownloadDestinationsUseFriendlyInstallationPage() throws {
-        let repository = try XCTUnwrap(GitHubRepository("gabeosx/canis97"))
-        for url in [
-            "https://example.com/Canis97-0.2.0-arm64.dmg",
-            "https://github.com/other/repository/releases/download/v0.2.0/Canis97-0.2.0-arm64.dmg",
-            "https://github.com/gabeosx/canis97/releases/download/v0.1.4/Canis97-0.1.4-arm64.dmg",
-            "https://github.com/gabeosx/canis97/releases/download/v0.2.0/Canis97-0.2.0-arm64.dmg?redirect=evil",
-            "file:///Applications/Canis97.app"
-        ] {
-            let release = try GitHubReleaseClient.decodeLatestRelease(releaseData(downloadURL: url), repository: repository)
-            XCTAssertNil(release.downloadURL)
-            let alert = SoftwareUpdateAlert.available(current: try XCTUnwrap(StableSemanticVersion("0.1.4")), release: release)
-            XCTAssertEqual(alert.updateURL?.absoluteString, "https://canis97.com/#install")
-            XCTAssertEqual(alert.actionTitle, "Get the Update")
+        XCTAssertEqual(
+            try GitHubReleaseClient.decodeLatestStableRelease(valid, statusCode: 200, repository: repository).version.description,
+            "1.2.3"
+        )
+        for payload in unsafePayloads {
+            XCTAssertThrowsError(
+                try GitHubReleaseClient.decodeLatestStableRelease(payload, statusCode: 200, repository: repository)
+            )
         }
     }
 
-    func testReleasePageMustMatchTheAdvertisedVersionExactly() throws {
-        let repository = try XCTUnwrap(GitHubRepository("gabeosx/canis97"))
-        let data = releaseData(downloadURL: "https://example.com", pageURL: "https://github.com/gabeosx/canis97/releases/tag/v0.1.4")
-        XCTAssertThrowsError(try GitHubReleaseClient.decodeLatestRelease(data, repository: repository))
+    func testAutomaticManualOverlapSharesFetchAndPublishesManualCurrentState() async throws {
+        let client = GatedReleaseClient(release: GitHubReleaseInfo(
+            version: try XCTUnwrap(StableSemanticVersion("1.0.0")),
+            pageURL: try XCTUnwrap(URL(string: "https://github.com/example/canis97/releases/tag/v1.0.0"))
+        ))
+        let checker = UpdateChecker(
+            configuration: try configuration(version: "1.0.0"),
+            client: client,
+            defaults: defaults,
+            now: { Date(timeIntervalSince1970: 100_000) }
+        )
+
+        let automatic = Task { await checker.checkAutomaticallyIfNeeded() }
+        await client.waitUntilFetchStarts()
+        let manual = Task { await checker.check(manual: true) }
+        await client.completeFetch()
+        await automatic.value
+        await manual.value
+
+        let fetchCount = await client.count()
+        XCTAssertEqual(fetchCount, 1)
+        XCTAssertEqual(checker.alert?.title, "Canis97 Is Up to Date")
+        XCTAssertFalse(checker.isChecking)
     }
 
-    private func releaseData(downloadURL: String, pageURL: String = "https://github.com/gabeosx/canis97/releases/tag/v0.2.0") -> Data {
-        try! JSONSerialization.data(withJSONObject: [
-            "tag_name": "v0.2.0", "html_url": pageURL, "draft": false, "prerelease": false,
-            "assets": [["name": "Canis97-0.2.0-arm64.dmg", "browser_download_url": downloadURL]]
-        ])
+    func testAutomaticCheckIsEligibleAtTheExactRateLimitBoundary() async throws {
+        let client = CountingReleaseClient(release: GitHubReleaseInfo(
+            version: try XCTUnwrap(StableSemanticVersion("1.0.0")),
+            pageURL: try XCTUnwrap(URL(string: "https://github.com/example/canis97/releases/tag/v1.0.0"))
+        ))
+        let checker = UpdateChecker(
+            configuration: try configuration(version: "1.0.0"),
+            client: client,
+            defaults: defaults,
+            automaticCheckInterval: 24 * 60 * 60,
+            now: { Date(timeIntervalSince1970: 86_400) }
+        )
+        defaults.set(Date(timeIntervalSince1970: 0), forKey: "com.canis97.player.update-check.last-attempt.v1")
+
+        await checker.checkAutomaticallyIfNeeded()
+        let fetchCount = await client.count()
+        XCTAssertEqual(fetchCount, 1)
+    }
+
+    func testAvailableAlertIncludesTheExactHomebrewUpgradeCommand() throws {
+        let current = try XCTUnwrap(StableSemanticVersion("0.1.0"))
+        let release = GitHubReleaseInfo(
+            version: try XCTUnwrap(StableSemanticVersion("0.2.0")),
+            pageURL: try XCTUnwrap(URL(string: "https://github.com/example/canis97/releases/tag/v0.2.0"))
+        )
+
+        XCTAssertTrue(
+            SoftwareUpdateAlert.available(current: current, release: release)
+                .message.contains("brew upgrade --cask canis97")
+        )
     }
 
     private func configuration(version: String) throws -> UpdateCheckConfiguration {
@@ -194,4 +233,38 @@ private actor CountingReleaseClient: GitHubReleaseFetching {
         guard let release else { throw FixedReleaseError.failed }
         return release
     }
+
+    func count() -> Int { fetchCount }
+}
+
+private actor GatedReleaseClient: GitHubReleaseFetching {
+    private(set) var fetchCount = 0
+    private let release: GitHubReleaseInfo
+    private var startWaiters: [CheckedContinuation<Void, Never>] = []
+    private var completion: CheckedContinuation<Void, Never>?
+
+    init(release: GitHubReleaseInfo) {
+        self.release = release
+    }
+
+    func latestStableRelease(in repository: GitHubRepository) async throws -> GitHubReleaseInfo {
+        fetchCount += 1
+        let waiters = startWaiters
+        startWaiters.removeAll()
+        waiters.forEach { $0.resume() }
+        await withCheckedContinuation { completion = $0 }
+        return release
+    }
+
+    func waitUntilFetchStarts() async {
+        guard fetchCount == 0 else { return }
+        await withCheckedContinuation { startWaiters.append($0) }
+    }
+
+    func completeFetch() {
+        completion?.resume()
+        completion = nil
+    }
+
+    func count() -> Int { fetchCount }
 }

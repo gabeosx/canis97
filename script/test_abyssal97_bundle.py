@@ -10,13 +10,15 @@ assert manifest['schemaVersion']==4 and manifest['identifier']=='com.gabeosx.aby
 assert manifest['displayName']=='Abyssal 97 — Living Ocean'
 assert '"Abyssal97"' in (repo/'SiriusMac/Skins/SkinAppearance.swift').read_text()
 project=(repo/'SiriusMac.xcodeproj/project.pbxproj').read_text()
-resource=re.search(r'/\* Resources \*/ = \{isa = PBXResourcesBuildPhase;.*?files = \((.*?)\);',project,re.S)[1]
+resource_match=re.search(r'/\* Resources \*/ = \{\s*isa = PBXResourcesBuildPhase;.*?files = \((.*?)\);',project,re.S)
+assert resource_match is not None,'main app Resources build phase is missing'
+resource=resource_match[1]
 report={}
 for name in files:
  assert Path(name).name==name and name.startswith('Abyssal97')
  source=root/('Assets/Abyssal97/'+name if name.endswith('.png') else name)
  assert source.is_file(),source
- assert resource.count('/* '+name+' in Resources */')==1,name
+ assert resource.count(name+' in Resources')==1,name
  data=source.read_bytes();report[name]=hashlib.sha256(data).hexdigest()
  if len(sys.argv)>1:
   built=Path(sys.argv[1])/'Contents/Resources'/name

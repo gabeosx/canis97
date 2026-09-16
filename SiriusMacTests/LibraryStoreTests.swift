@@ -12,6 +12,7 @@ final class LibraryStoreTests: XCTestCase {
             for: FavoriteRecord.self,
             FavoriteSongRecord.self,
             RecentRecord.self,
+            ListeningHistoryRecord.self,
             PlayerPreferenceRecord.self,
             configurations: configuration
         )
@@ -119,6 +120,7 @@ final class LibraryStoreTests: XCTestCase {
             for: FavoriteRecord.self,
             FavoriteSongRecord.self,
             RecentRecord.self,
+            ListeningHistoryRecord.self,
             PlayerPreferenceRecord.self,
             configurations: configuration
         )
@@ -174,13 +176,17 @@ final class LibraryStoreTests: XCTestCase {
     }
 
     func testDurableModelsExposeOnlyTheDeclaredSafeAllowList() {
-        XCTAssertEqual(FavoriteRecord.persistedPropertyNames, ["channelID", "name", "displayNumber", "category"])
+        XCTAssertEqual(FavoriteRecord.persistedPropertyNames, ["channelID", "name", "displayNumber", "category", "rank"])
         XCTAssertEqual(FavoriteSongRecord.persistedPropertyNames, [
             "storageKey", "normalizedTitle", "normalizedArtist", "title", "artist",
             "albumName", "sourceChannelID", "sourceChannelName",
             "sourceChannelDisplayNumber", "savedAt",
         ])
         XCTAssertEqual(RecentRecord.persistedPropertyNames, ["channelID", "name", "displayNumber", "category", "rank", "confirmedAt"])
+        XCTAssertEqual(ListeningHistoryRecord.persistedPropertyNames, [
+            "storageKey", "channelID", "channelName", "channelDisplayNumber", "channelCategory",
+            "title", "artist", "kind", "programStartedAt", "firstHeardAt", "lastHeardAt", "heardDuration",
+        ])
         XCTAssertEqual(PlayerPreferenceRecord.persistedPropertyNames, ["selectedTab", "compactWindowAlwaysOnTop", "compactFrameAutosaveName", "libraryFrameAutosaveName"])
     }
 
@@ -190,6 +196,7 @@ final class LibraryStoreTests: XCTestCase {
             for: FavoriteRecord.self,
             FavoriteSongRecord.self,
             RecentRecord.self,
+            ListeningHistoryRecord.self,
             PlayerPreferenceRecord.self,
             configurations: configuration
         )
@@ -246,6 +253,7 @@ final class LibraryStoreTests: XCTestCase {
             for: FavoriteRecord.self,
             FavoriteSongRecord.self,
             RecentRecord.self,
+            ListeningHistoryRecord.self,
             PlayerPreferenceRecord.self,
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
         )
@@ -260,12 +268,86 @@ final class LibraryStoreTests: XCTestCase {
         XCTAssertTrue(store.lastSaveFailed)
     }
 
+    func testFavoritesKeepExplicitOrderAndCanMoveBothDirections() throws {
+        let store = try makeStore()
+        let first = channel("first")
+        let second = channel("second")
+        let third = channel("third")
+        store.setFavorite(first, isFavorite: true)
+        store.setFavorite(second, isFavorite: true)
+        store.setFavorite(third, isFavorite: true)
+
+        XCTAssertEqual(store.favoriteChannelIDs, [first.id, second.id, third.id])
+        XCTAssertTrue(store.moveFavorite(third.id, direction: .earlier))
+        XCTAssertEqual(store.favoriteChannelIDs, [first.id, third.id, second.id])
+        XCTAssertTrue(store.moveFavorite(first.id, direction: .later))
+        XCTAssertEqual(store.favoriteChannelIDs, [third.id, first.id, second.id])
+        XCTAssertFalse(store.canMoveFavorite(third.id, direction: .earlier))
+    }
+
+    func testListeningHistoryCollapsesExactSemanticProgramAndAccumulatesDuration() throws {
+        let store = try makeStore()
+        let heardAt = Date(timeIntervalSince1970: 100)
+        let program = LiveNowProgram(
+            title: "Fixture Program",
+            artist: nil,
+            kind: .show,
+            startedAt: Date(timeIntervalSince1970: 90)
+        )
+        store.recordListeningHistory(channel: channel("history"), program: program, heardAt: heardAt, duration: 0)
+        store.recordListeningHistory(channel: channel("history"), program: program, heardAt: heardAt.addingTimeInterval(30), duration: 30)
+
+        XCTAssertEqual(store.listeningHistory.count, 1)
+        XCTAssertEqual(store.listeningHistory[0].title, "Fixture Program")
+        XCTAssertNil(store.listeningHistory[0].artist)
+        XCTAssertEqual(store.listeningHistory[0].kind, .show)
+        XCTAssertEqual(store.listeningHistory[0].heardDuration, 30)
+
+        store.clearListeningHistory()
+        XCTAssertTrue(store.listeningHistory.isEmpty)
+    }
+
+    func testABReturnTracksConfirmedTransitionsAndDropsUnavailableCandidate() {
+        let one = LiveChannelID("one")
+        let two = LiveChannelID("two")
+        var tracker = ChannelReturnTracker()
+
+        tracker.observeConfirmed(one)
+        tracker.observeConfirmed(one)
+        XCTAssertNil(tracker.candidate(among: [one, two]))
+        tracker.observeConfirmed(two)
+        XCTAssertEqual(tracker.candidate(among: [one, two]), one)
+        XCTAssertNil(tracker.candidate(among: [two]))
+    }
+
+    func testTunePalettePutsFavoritesFirstAndFiltersSemanticChannelFields() {
+        let channels = [
+            LiveChannel(id: LiveChannelID("news"), name: "World News", displayNumber: 120, category: "Talk"),
+            LiveChannel(id: LiveChannelID("jazz"), name: "Real Jazz", displayNumber: 67, category: "Music"),
+        ]
+        let projection = LiveNowLibraryProjection(monitor: nil)
+
+        XCTAssertEqual(
+            TunePaletteSearch.results(channels: channels, favoriteIDs: [channels[0].id], query: "", liveNow: projection).map(\.id),
+            [channels[0].id, channels[1].id]
+        )
+        XCTAssertEqual(
+            TunePaletteSearch.results(channels: channels, favoriteIDs: [], query: "67", liveNow: projection).map(\.id),
+            [channels[1].id]
+        )
+        XCTAssertEqual(
+            TunePaletteSearch.results(channels: channels, favoriteIDs: [], query: "talk", liveNow: projection).map(\.id),
+            [channels[0].id]
+        )
+    }
+
     private func makeStore() throws -> LibraryStore {
         let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
         let container = try ModelContainer(
             for: FavoriteRecord.self,
             FavoriteSongRecord.self,
             RecentRecord.self,
+            ListeningHistoryRecord.self,
             PlayerPreferenceRecord.self,
             configurations: configuration
         )

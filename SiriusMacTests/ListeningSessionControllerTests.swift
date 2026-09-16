@@ -275,6 +275,7 @@ final class WindowLifecyclePolicyTests: XCTestCase {
             for: FavoriteRecord.self,
             FavoriteSongRecord.self,
             RecentRecord.self,
+            ListeningHistoryRecord.self,
             PlayerPreferenceRecord.self,
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
         )
@@ -1123,6 +1124,10 @@ final class ListeningSessionControllerTests: XCTestCase {
         remoteCommandCenter: any RemoteCommandCenterControlling = SystemRemoteCommandCenterAdapter(),
         nowPlayingPublisher: any NowPlayingInfoPublishing = SystemNowPlayingInfoAdapter()
     ) -> ListeningSessionController {
+        // Every controller test owns an in-memory library. Falling through to
+        // LibraryStore's production initializer writes synthetic recents into
+        // the developer's real Canis97 profile when a fake tune is confirmed.
+        let isolatedLibraryStore = libraryStore ?? (try! makeLibraryStore())
         let coordinator = PlaybackCoordinator(
             resolver: resolver ?? SessionPlaybackResolver(),
             runtime: runtime
@@ -1139,7 +1144,7 @@ final class ListeningSessionControllerTests: XCTestCase {
         return ListeningSessionController(
             composition: composition,
             authenticationModel: authenticationModel,
-            libraryStore: libraryStore,
+            libraryStore: isolatedLibraryStore,
             remoteCommandCenter: remoteCommandCenter,
             nowPlayingPublisher: nowPlayingPublisher
         )
@@ -1150,6 +1155,7 @@ final class ListeningSessionControllerTests: XCTestCase {
             for: FavoriteRecord.self,
             FavoriteSongRecord.self,
             RecentRecord.self,
+            ListeningHistoryRecord.self,
             PlayerPreferenceRecord.self,
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
         )

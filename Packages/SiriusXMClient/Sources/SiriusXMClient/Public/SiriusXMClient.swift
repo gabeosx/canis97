@@ -10,9 +10,13 @@ public actor SiriusXMClient {
     private let catalogRefresher: any CatalogRefreshing
     private let liveStreamResolver: any LiveStreamResolving
     private let metadataFetcher: any LiveMetadataFetching
+    private var liveNowCoordinator: LiveNowRefreshCoordinator?
     private var lastValidCatalogSnapshot: LiveCatalogSnapshot?
     private var catalogRefreshGeneration = 0
     private var liveResolutionGeneration = 0
+    private var metadataGeneration = 0
+    private var metadataLifecycleTransitions = 0
+    private var batchMetadataDemandGeneration = 0
 
     public init() {
         self.sessionCoordinator = nil
@@ -100,6 +104,13 @@ public actor SiriusXMClient {
     /// Consumes one opaque WebView credential and completes native authentication
     /// followed by native entitlement verification.
     public func authenticate() async -> AuthenticationOutcome {
+        metadataLifecycleTransitions += 1
+        defer { metadataLifecycleTransitions -= 1 }
+        metadataGeneration &+= 1
+        catalogRefreshGeneration &+= 1
+        lastValidCatalogSnapshot = nil
+        await liveNowCoordinator?.invalidate(before: metadataGeneration)
+        await metadataFetcher.invalidate()
         guard let sessionCoordinator else {
             return .waitingForAuthenticationComposition
         }
@@ -142,9 +153,13 @@ public actor SiriusXMClient {
 
     /// Ends the empty in-memory session without scheduling retry work.
     public func signOut() async -> SignOutOutcome {
+        metadataLifecycleTransitions += 1
+        defer { metadataLifecycleTransitions -= 1 }
+        metadataGeneration &+= 1
         lastValidCatalogSnapshot = nil
         catalogRefreshGeneration &+= 1
         liveResolutionGeneration &+= 1
+        await liveNowCoordinator?.invalidate(before: metadataGeneration)
         await liveStreamResolver.invalidate()
         await metadataFetcher.invalidate()
         guard let sessionCoordinator else {
@@ -159,12 +174,14 @@ public actor SiriusXMClient {
     /// plan can supply validated opaque inputs. It does not make a provider
     /// request, expose a request materialization API, or infer a wire schema.
     public func catalog() async -> CatalogAvailability {
+        metadataGeneration &+= 1
         let expectedGeneration = catalogRefreshGeneration
+        await liveNowCoordinator?.invalidate(before: metadataGeneration)
         guard let sessionCoordinator else {
             return .failed(.authenticationUnavailable)
         }
-        guard catalogRefreshGeneration == expectedGeneration,
-              await sessionCoordinator.entitlementAvailability == .entitled
+        guard await sessionCoordinator.entitlementAvailability == .entitled,
+              catalogRefreshGeneration == expectedGeneration
         else {
             return .failed(.notEntitled)
         }
@@ -174,13 +191,14 @@ public actor SiriusXMClient {
         // An intervening sign-out, reauthentication, or entitlement loss makes
         // the attempted refresh non-authoritative, even if it returned a
         // semantic snapshot. Never cache a prior session's catalog.
-        guard catalogRefreshGeneration == expectedGeneration,
-              await sessionCoordinator.entitlementAvailability == .entitled
+        guard await sessionCoordinator.entitlementAvailability == .entitled,
+              catalogRefreshGeneration == expectedGeneration
         else {
             return .failed(.cancelled)
         }
 
         if let snapshot = refreshed.snapshot, refreshed.failure == nil {
+            metadataGeneration &+= 1
             lastValidCatalogSnapshot = snapshot
             return .snapshot(snapshot)
         }
@@ -202,7 +220,43 @@ public actor SiriusXMClient {
     /// Retrieves one selected-channel snapshot through the fixed lookaround
     /// operation. It has no playback authority or retry loop.
     public func metadata(for channelID: LiveChannelID) async -> MetadataAvailability {
-        await metadataFetcher.metadata(for: channelID)
+        guard metadataLifecycleTransitions == 0 else { return .failed(.superseded) }
+        metadataGeneration &+= 1
+        let expected = metadataGeneration
+        let expectedBatchDemand = batchMetadataDemandGeneration
+        await liveNowCoordinator?.invalidate(before: metadataGeneration)
+        guard metadataGeneration == expected, metadataLifecycleTransitions == 0,
+              batchMetadataDemandGeneration == expectedBatchDemand else { return .failed(.superseded) }
+        let result = await metadataFetcher.metadata(for: channelID)
+        guard metadataGeneration == expected, batchMetadataDemandGeneration == expectedBatchDemand else { return .failed(.superseded) }
+        return result
+    }
+
+    /// Retrieves a full replacement of metadata for ordered entitled catalog IDs
+    /// through one fixed request. Missing channels are explicitly unavailable.
+    /// The observation time is local receipt time, not provider time. This
+    /// operation never authorizes playback and never schedules a polling loop.
+    /// Concurrent demand covered by the active batch shares its one response.
+    /// A new selection outside that coverage, catalog refresh, reauthentication,
+    /// or sign-out supersedes outstanding work. Cancelling one consumer preserves
+    /// other consumers; the last cancellation retires the shared request.
+    /// Private protocol changes fail closed.
+    public func liveNow(for channelIDs: [LiveChannelID]) async -> LiveNowAvailability {
+        guard !Task.isCancelled else { return .failed(.cancelled) }
+        guard metadataLifecycleTransitions == 0 else { return .failed(.superseded) }
+        batchMetadataDemandGeneration &+= 1
+        let expected = metadataGeneration
+        guard let fetcher = metadataFetcher as? any LiveNowFetching else {
+            return .failed(.authenticationUnavailable)
+        }
+        if liveNowCoordinator == nil {
+            liveNowCoordinator = LiveNowRefreshCoordinator(fetcher: fetcher)
+        }
+        guard let liveNowCoordinator else { return .failed(.authenticationUnavailable) }
+        let result = await liveNowCoordinator.refresh(for: channelIDs, context: expected)
+        guard !Task.isCancelled else { return .failed(.cancelled) }
+        guard metadataGeneration == expected else { return .failed(.superseded) }
+        return result
     }
 
     /// Compatibility spelling without a selected identity. It cannot issue a

@@ -268,6 +268,20 @@ extension PlaybackPlayerRuntime {
     var audioRoutingPlayer: AVPlayer? { nil }
 }
 
+/// Keeps automated playback silent inside Canis97 without changing the Mac's
+/// output device or system volume. Review launches opt in explicitly; XCTest
+/// hosts are muted defensively if one ever composes the production runtime.
+enum PlaybackAudioLaunchPolicy {
+    static let muteEnvironmentKey = "\(ProductIdentity.environmentPrefix)_MUTE_AUDIO"
+
+    static func shouldMute(
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> Bool {
+        environment[muteEnvironmentKey] == "1"
+            || environment["XCTestConfigurationFilePath"] != nil
+    }
+}
+
 /// Owns exactly one AVPlayer for the entire composed application graph.
 @MainActor
 final class AVFoundationPlaybackRuntime: PlaybackPlayerRuntime {
@@ -275,8 +289,12 @@ final class AVFoundationPlaybackRuntime: PlaybackPlayerRuntime {
     private let telemetry: PlaybackRuntimeTelemetry
     private var activeObservation: AVFoundationItemObservation?
 
-    init(telemetry: PlaybackRuntimeTelemetry = .live) {
+    init(
+        telemetry: PlaybackRuntimeTelemetry = .live,
+        isMuted: Bool = PlaybackAudioLaunchPolicy.shouldMute()
+    ) {
         self.telemetry = telemetry
+        player.isMuted = isMuted
     }
 
     var audioRoutingPlayer: AVPlayer? { player }

@@ -422,7 +422,38 @@ Plans:
   4. A subscriber can download an immutable GitHub Release artifact that is hardened, Developer-ID-signed, notarized, stapled, checksummed, and verified by Gatekeeper on a clean Mac.
   5. A subscriber can install or upgrade the canonical immutable release through the project-owned Homebrew Cask and receives a passive update notice that directs Homebrew installations to `brew upgrade` without in-app downloading or installation.
 
-**Plans**: TBD
+**Plans:** 8/8 plans executed
+
+Plans:
+**Wave 1**
+
+- [x] 05-01-PLAN.md — Prove the maintained-client support path end to end before expanding into public release work.
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 05-02-PLAN.md — Create the production isolation and canonical-data boundary for animated Canis97 appearances.
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [x] 05-03-PLAN.md — Add the schema-4 animation contract and atomic canonical-motion import transaction.
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [x] 05-04-PLAN.md — Render safe canonical motion and ship two constrained animated bundled appearances.
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [x] 05-05-PLAN.md — Add offline animation security gates and an authorization-gated evidence workflow.
+- [x] 05-07-PLAN.md — Harden immutable release automation and Homebrew verification.
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [x] 05-06-PLAN.md — Collect optimized runtime, accessibility, lifecycle, and human UAT evidence.
+
+**Wave 7** *(blocked on Wave 6 completion)*
+
+- [x] 05-08-PLAN.md — Historical first-release objective completed; public releases have advanced through v0.2.1. Future releases follow `RELEASING.md` and never reuse an existing version.
+
 **UI hint**: yes
 
 ## Progress
@@ -440,4 +471,4 @@ Active product execution proceeds 1 → 2 → 3 → 4 → 4.1 → 4.2 → 4.3 �
 | 4.1 Product Identity & Experience Polish | 6/6 | Complete    | 2026-08-27 |
 | 4.2 Expressive Skin Architecture & Bundled Themes | 4/4 | Complete    | 2026-08-28 |
 | 4.3 Local Song Favorites | 2/2 | Complete | 2026-08-28 |
-| 5. Public Release & Compatibility Support | 0/TBD | Not started | - |
+| 5. Public Release & Compatibility Support | 8/8 | Complete | 2026-09-05 |

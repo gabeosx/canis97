@@ -4,6 +4,7 @@
 
 - [Creating a Canis97 skin](skins/creating-a-skin.md) — build, package, import, and troubleshoot a declarative `.canis97skin` appearance.
 - [README](../README.md) — installation, first launch, privacy, and everyday use.
+- [Native Mac integrations](native-mac-integrations.md) — Shortcuts, Spotlight, widget behavior, freshness, and privacy boundaries.
 
 ## For contributors
 

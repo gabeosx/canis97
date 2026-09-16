@@ -37,6 +37,7 @@ Live radio, media keys, favorites, and a tiny skinnable player—without living 
 - Browses channels by list, category, favorites, favorite songs, and recents.
 - Shows current artwork, program or song metadata, and playback state.
 - Works with Mac media keys, Control Center, keyboard shortcuts, and an always-on-top player.
+- Exposes entitled channels to Spotlight and Shortcuts, and offers a stale-aware desktop widget for current metadata and favorite tuning.
 - Keeps you signed in using macOS Keychain.
 - Checks GitHub Releases for updates without silently downloading or installing anything.
 
@@ -146,7 +147,7 @@ xcodebuild build-for-testing \
   CODE_SIGNING_ALLOWED=NO
 ```
 
-CI runs these checks for pull requests and changes to `main`. Start with the [documentation index](docs/README.md) for skin, client, and release references.
+CI runs these checks for pull requests and changes to `main`. Start with the [documentation index](docs/README.md) for skin, native integration, client, and release references.
 
 ## Releases and versioning
 

@@ -258,6 +258,7 @@ struct LibraryView: View {
     let songFavoriteClipboardWriter: any SongFavoriteClipboardWriting
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.scenePhase) private var scenePhase
     @State private var tab: LibraryTab
     @State private var query = ""
     @State private var showsClearRecentsConfirmation = false
@@ -290,6 +291,7 @@ struct LibraryView: View {
         ScrollViewReader { proxy in
             VStack(spacing: 0) {
                 libraryContent
+                liveMetadataBanner
                 persistenceBanner
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -361,6 +363,9 @@ struct LibraryView: View {
         }
         .frame(minWidth: 760, minHeight: 540, alignment: .top)
         .accessibilityLabel("\(ProductIdentity.displayName) library")
+        .onAppear { updateLiveMetadataDemand() }
+        .onDisappear { model.setLibraryMetadataVisible(false) }
+        .onChange(of: scenePhase) { _, _ in updateLiveMetadataDemand() }
     }
 
     private var libraryTabPicker: some View {
@@ -371,9 +376,10 @@ struct LibraryView: View {
         }
         .pickerStyle(.segmented)
         .tint(Color(nsColor: .controlAccentColor))
-        .frame(width: 480)
+        .frame(width: 390)
         .onChange(of: tab) { _, value in
             libraryStore.setSelectedLibraryTab(value.rawValue)
+            updateLiveMetadataDemand()
         }
         .accessibilityIdentifier("library.tabs")
         .accessibilitySortPriority(30)
@@ -382,7 +388,7 @@ struct LibraryView: View {
     private var librarySearchField: some View {
         TextField("Search \(tab.title)", text: $query)
             .textFieldStyle(.roundedBorder)
-            .frame(width: 200)
+            .frame(width: 170)
             .accessibilityLabel("Search visible library collection")
             .accessibilityIdentifier("library.search")
             .focused($focusTarget, equals: .search)
@@ -400,6 +406,20 @@ struct LibraryView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(LibraryPalette.secondary)
                 .accessibilityIdentifier("library.persistence-notice")
+        }
+    }
+
+    @ViewBuilder
+    private var liveMetadataBanner: some View {
+        if tabShowsLiveMetadata, let notice = liveMetadataNotice {
+            Label(notice, systemImage: "clock.badge.exclamationmark")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(LibraryPalette.secondary)
+                .accessibilityIdentifier("library.live-metadata-notice")
         }
     }
 
@@ -604,12 +624,8 @@ struct LibraryView: View {
     private var filteredChannels: [LibraryChannelItem] {
         let search = LibrarySearchQuery(query)
         guard search.filtersVisibleCollection else { return tabChannels }
-        let needle: (String) -> Bool = { value in value.localizedCaseInsensitiveContains(search.value) }
-        return tabChannels.filter { item in
-            needle(item.channel.name ?? "")
-                || needle(item.channel.category ?? "")
-                || needle(item.channel.displayNumber.map(String.init) ?? "")
-        }
+        let projection = LiveNowLibraryProjection(monitor: model.liveNow)
+        return tabChannels.filter { projection.matches($0, query: search.value) }
     }
 
     private var filteredCategoryGroups: [LibraryCategoryGroup] {
@@ -623,6 +639,7 @@ struct LibraryView: View {
 
     private func libraryRow(_ item: LibraryChannelItem) -> some View {
         let channel = item.channel
+        let liveNow = LiveNowLibraryProjection(monitor: model.liveNow)
         return HStack(spacing: 8) {
             ChannelArtworkImage(reference: channel.artwork, artworkStore: model.artworkStore)
                 .frame(width: 28, height: 28)
@@ -644,11 +661,56 @@ struct LibraryView: View {
                 }
             }
             Spacer()
+            if let program = liveNow.program(for: channel.id) {
+                VStack(alignment: .trailing, spacing: 3) {
+                    Text(program.title)
+                        .font(.system(size: 13, weight: .medium))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Text(onAirDetail(program: program, freshness: liveNow.freshness))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                .frame(minWidth: 180, idealWidth: 260, maxWidth: 320, alignment: .trailing)
+                .help([program.title, program.artist].compactMap { $0 }.joined(separator: " — "))
+                .accessibilityElement(children: .combine)
+            } else if liveNow.state(for: channel.id) == .unsupported {
+                Text("Metadata unavailable")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+            }
             if model.confirmedChannelID == channel.id {
                 Label("Playing", systemImage: "speaker.wave.2.fill")
                     .font(.system(size: 12))
                     .foregroundStyle(LibraryPalette.accent)
                     .accessibilityLabel("Now Playing")
+            }
+            if tab == .favorites, !LibrarySearchQuery(query).filtersVisibleCollection {
+                VStack(spacing: 1) {
+                    Button {
+                        _ = libraryStore.moveFavorite(channel.id, direction: .earlier)
+                    } label: {
+                        Image(systemName: "chevron.up")
+                            .frame(width: 22, height: 16)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!libraryStore.canMoveFavorite(channel.id, direction: .earlier))
+                    .help("Move Favorite Earlier")
+                    .accessibilityLabel("Move \(channel.name ?? "favorite") earlier")
+
+                    Button {
+                        _ = libraryStore.moveFavorite(channel.id, direction: .later)
+                    } label: {
+                        Image(systemName: "chevron.down")
+                            .frame(width: 22, height: 16)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!libraryStore.canMoveFavorite(channel.id, direction: .later))
+                    .help("Move Favorite Later")
+                    .accessibilityLabel("Move \(channel.name ?? "favorite") later")
+                }
+                .foregroundStyle(.secondary)
             }
             let isFavorite = libraryStore.isFavorite(channel.id)
             Button {
@@ -676,6 +738,13 @@ struct LibraryView: View {
             Button("Tune") { tune(item) }
                 .disabled(model.isTunePending || !item.availability.canTune)
             Button(libraryStore.isFavorite(channel.id) ? "Remove from Favorites" : "Add to Favorites") { setFavorite(channel) }
+            if tab == .favorites, !LibrarySearchQuery(query).filtersVisibleCollection {
+                Divider()
+                Button("Move Earlier") { _ = libraryStore.moveFavorite(channel.id, direction: .earlier) }
+                    .disabled(!libraryStore.canMoveFavorite(channel.id, direction: .earlier))
+                Button("Move Later") { _ = libraryStore.moveFavorite(channel.id, direction: .later) }
+                    .disabled(!libraryStore.canMoveFavorite(channel.id, direction: .later))
+            }
         }
     }
 
@@ -747,6 +816,7 @@ struct LibraryView: View {
             model.confirmedChannelID == channel.id ? "Now Playing" : nil,
             libraryStore.isFavorite(channel.id) ? "Favorite" : nil,
             item.availability.detail,
+            onAirAccessibilityValue(channelID: channel.id),
         ]
         .compactMap { $0 }
         .joined(separator: ", ")
@@ -824,6 +894,42 @@ struct LibraryView: View {
         return [channel.displayNumber.map { "Channel \($0)" }, channel.category, item.availability.detail]
             .compactMap { $0 }
             .joined(separator: " · ")
+    }
+
+    private var tabShowsLiveMetadata: Bool { tab != .favoriteSongs }
+
+    private var liveMetadataNotice: String? {
+        guard let liveNow = model.liveNow else { return nil }
+        if liveNow.failure != nil {
+            return liveNow.snapshot == nil
+                ? "Live program details are unavailable. Channel browsing and tuning are still available."
+                : "Live program details may be out of date. Channel browsing and tuning are still available."
+        }
+        return liveNow.freshness(at: Date()) == .stale
+            ? "Live program details may be out of date."
+            : nil
+    }
+
+    private func updateLiveMetadataDemand() {
+        model.setLibraryMetadataVisible(tabShowsLiveMetadata && scenePhase == .active)
+    }
+
+    private func onAirDetail(program: LiveNowProgram, freshness: LiveNowFreshness) -> String {
+        [
+            program.artist,
+            program.kind == .show ? "Show" : nil,
+            freshness == .stale ? "Last known" : nil,
+        ]
+        .compactMap { $0 }
+        .joined(separator: " · ")
+    }
+
+    private func onAirAccessibilityValue(channelID: LiveChannelID) -> String? {
+        let projection = LiveNowLibraryProjection(monitor: model.liveNow)
+        guard let program = projection.program(for: channelID) else { return nil }
+        return ["On now: \(program.title)", program.artist, projection.freshness == .stale ? "Last known metadata" : nil]
+            .compactMap { $0 }
+            .joined(separator: ", ")
     }
 
     private var persistenceNotice: String? {

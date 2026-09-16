@@ -4,8 +4,8 @@ import Testing
 
 @Suite("Provider-neutral metadata refresh contracts")
 struct MetadataRefreshCoordinatorTests {
-    @Test("observed lookaround first cut maps its name and artistName into semantic metadata")
-    func observedLookaroundFirstCutMapsProgramAndArtist() throws {
+    @Test("observed lookaround current cut maps its name and optional artistName into semantic metadata")
+    func observedLookaroundCurrentCutMapsProgramAndArtist() throws {
         let channel = LiveChannelID("fixture-channel")
         let payload = try observedLookaroundPayload(cut: [
             "name": "  Synthetic Program  ",
@@ -195,7 +195,7 @@ struct MetadataRefreshCoordinatorTests {
         #expect(![catalogEvidence, lookaroundEvidence, tuneEvidence, artworkEvidence].joined().contains("fixture"))
     }
 
-    @Test("empty first-cut collection is unavailable and malformed input fails closed")
+    @Test("empty cut collection is unavailable and malformed input fails closed")
     func emptyAndMalformedMetadataFailClosed() throws {
         let channel = LiveChannelID("fixture-channel")
         let empty = try JSONSerialization.data(withJSONObject: ["channels": ["fixture-channel": ["cuts": []]], "delta": ""])
@@ -216,8 +216,6 @@ struct MetadataRefreshCoordinatorTests {
             ["name": "", "artistName": base["artistName"]!, "validFrom": base["validFrom"]!],
             ["name": "   ", "artistName": base["artistName"]!, "validFrom": base["validFrom"]!],
             ["name": 7, "artistName": base["artistName"]!, "validFrom": base["validFrom"]!],
-            ["name": base["name"]!, "validFrom": base["validFrom"]!],
-            ["name": base["name"]!, "artistName": "", "validFrom": base["validFrom"]!],
             ["name": base["name"]!, "artistName": ["not": "a string"], "validFrom": base["validFrom"]!],
             ["name": base["name"]!, "artistName": base["artistName"]!, "validFrom": "not-a-date"],
         ]

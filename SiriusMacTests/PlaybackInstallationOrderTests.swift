@@ -5,6 +5,21 @@ import XCTest
 
 @MainActor
 final class PlaybackInstallationOrderTests: XCTestCase {
+    func testAutomatedPlaybackMutePolicyMutesReviewAndTestHostsOnly() {
+        XCTAssertTrue(PlaybackAudioLaunchPolicy.shouldMute(environment: [
+            PlaybackAudioLaunchPolicy.muteEnvironmentKey: "1",
+        ]))
+        XCTAssertTrue(PlaybackAudioLaunchPolicy.shouldMute(environment: [
+            "XCTestConfigurationFilePath": "/private/tmp/Canis97Tests.xctestconfiguration",
+        ]))
+        XCTAssertFalse(PlaybackAudioLaunchPolicy.shouldMute(environment: [:]))
+
+        let mutedRuntime = AVFoundationPlaybackRuntime(isMuted: true)
+        let audibleRuntime = AVFoundationPlaybackRuntime(isMuted: false)
+        XCTAssertEqual(mutedRuntime.audioRoutingPlayer?.isMuted, true)
+        XCTAssertEqual(audibleRuntime.audioRoutingPlayer?.isMuted, false)
+    }
+
     func testRuntimeFailureTelemetryKeepsOnlyBoundedDomainAndCode() {
         XCTAssertEqual(
             PlaybackRuntimeTelemetry.failureLabel(
