@@ -51,6 +51,7 @@ struct MetadataRefreshCoordinatorTests {
         let resize = try #require(edits.first?["resize"] as? [String: Any])
         #expect((resize["width"] as? NSNumber)?.intValue == 450)
         #expect((resize["height"] as? NSNumber)?.intValue == 450)
+        #expect((edits.last?["format"] as? [String: Any])?["type"] as? String == "png")
 
         for unsafeKey in [
             "/relative-path",
@@ -356,6 +357,20 @@ struct MetadataRefreshCoordinatorTests {
         )
 
         #expect(await artwork.value == .unavailable)
+    }
+
+    @Test("A metadata refresh does not discard an in-flight validated image")
+    func metadataRefreshPreservesInFlightArtwork() async {
+        let session = metadataSessionCoordinator()
+        _ = await session.attemptSession()
+        let transport = BlockingMetadataTransport()
+        let fetcher = CurrentSessionMetadataFetcher(sessionCoordinator: session, transport: transport)
+        let artwork = Task { await fetcher.artwork(for: ChannelArtworkReference()) }
+        await transport.waitUntilArtworkRequested()
+        _ = await fetcher.liveNow(for: [LiveChannelID("fixture-channel")])
+        let png = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WlZtbkAAAAASUVORK5CYII=")!
+        await transport.releaseArtwork(NativeTransportResponse(statusCode: 200, contentType: "image/png", body: png))
+        #expect(await artwork.value == .current(ArtworkData(bytes: png, mediaType: .png)))
     }
 
     @Test("metadata transport uses a closed, finite ephemeral configuration")

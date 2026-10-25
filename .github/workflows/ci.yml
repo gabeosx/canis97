@@ -43,6 +43,9 @@ jobs:
             --package-path Packages/SiriusXMClient \
             --scratch-path "$RUNNER_TEMP/siriusxmclient-tests"
 
+      - name: Verify shared artwork lifecycle without an app host
+        run: bash script/test_metadata_artwork.sh
+
       - name: Validate bundled animation and offline runtime contracts
         run: |
           bash script/test_animation_source_contracts.sh

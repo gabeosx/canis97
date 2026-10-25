@@ -36,6 +36,10 @@ be filled with values from an older snapshot. Equatable semantic models permit
 local comparisons; compare channel states when checking content changes,
 because the snapshot observation time changes with every response.
 
+``LiveNowProgram/artwork`` carries an optional validated, opaque image reference.
+Fetch bytes separately with ``SiriusXMClient/artwork(for:)`` for the displayed
+program only. Bulk metadata does not download images for other channels.
+
 ## Time and current content
 
 ``LiveNowSnapshot/observedAt`` is the local response observation time. It is
@@ -78,7 +82,7 @@ even if the transport responds late.
 The selected-channel
 ``SiriusXMClient/metadata(for:)`` operation uses the same strict selection
 policy and retains its existing artwork behavior. That legacy artwork-bearing
-operation supersedes a pending batch; it does not join its metadata-only result.
+operation supersedes a pending batch; it does not join its result.
 Features using bulk metadata should share ``SiriusXMClient/liveNow(for:)``.
 
 The client retains no completed metadata cache and starts no polling, retry,

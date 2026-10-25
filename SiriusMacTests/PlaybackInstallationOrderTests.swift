@@ -5,6 +5,22 @@ import XCTest
 
 @MainActor
 final class PlaybackInstallationOrderTests: XCTestCase {
+    func testMediaAuthorizationFailuresAreNotReportedAsDecoderFailures() {
+        let rejected = NSError(domain: NSURLErrorDomain, code: NSURLErrorUserAuthenticationRequired)
+        XCTAssertEqual(PlaybackRuntimeTelemetry.listeningFailure(rejected), .authorizationUnavailable)
+        let wrapped = NSError(domain: AVFoundationErrorDomain, code: -11800, userInfo: [NSUnderlyingErrorKey: rejected])
+        XCTAssertEqual(PlaybackRuntimeTelemetry.listeningFailure(wrapped), .authorizationUnavailable)
+        XCTAssertEqual(PlaybackRuntimeTelemetry.listeningFailure(nil), .decoderUnavailable)
+        XCTAssertEqual(PlaybackRuntimeTelemetry.listeningFailure(NSError(domain: "untrusted", code: -1013)), .decoderUnavailable)
+    }
+
+    func testLiveReviewExplicitlyDisablesAutomaticRecovery() {
+        let review = PlaybackRecoveryPolicy.forLaunch(environment: ["CANIS97_LIVE_REVIEW_NO_RETRY": "1"])
+        XCTAssertEqual(review.maximumReResolutions, 0)
+        XCTAssertTrue(review.backoffs.isEmpty)
+        XCTAssertEqual(PlaybackRecoveryPolicy.forLaunch(environment: [:]).maximumReResolutions, 2)
+    }
+
     func testAutomatedPlaybackMutePolicyMutesReviewAndTestHostsOnly() {
         XCTAssertTrue(PlaybackAudioLaunchPolicy.shouldMute(environment: [
             PlaybackAudioLaunchPolicy.muteEnvironmentKey: "1",

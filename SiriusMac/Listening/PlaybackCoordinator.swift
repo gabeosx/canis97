@@ -44,7 +44,7 @@ struct SiriusXMPlaybackResolver: PlaybackResolving {
         }
     }
 
-    private static func map(_ failure: LiveStreamResolutionFailure) -> LiveListeningFailure {
+    fileprivate static func map(_ failure: LiveStreamResolutionFailure) -> LiveListeningFailure {
         switch failure {
         case .authenticationUnavailable: .authorizationUnavailable
         case .entitlementUnavailable: .entitlementUnavailable
@@ -116,6 +116,17 @@ struct PlaybackRecoveryPolicy: Sendable, Equatable {
     let maximumReResolutions: Int
     let stallGrace: TimeInterval
     let backoffs: [TimeInterval]
+
+    /// A live review must make only the owner-authorized tune attempt.
+    /// This opt-in affects debug builds only; normal playback keeps recovery.
+    static func forLaunch(environment: [String: String] = ProcessInfo.processInfo.environment) -> Self {
+#if DEBUG
+        if environment["CANIS97_LIVE_REVIEW_NO_RETRY"] == "1" {
+            return Self(maximumReResolutions: 0)
+        }
+#endif
+        return Self()
+    }
 
     init(
         maximumReResolutions: Int = 2,
@@ -377,6 +388,23 @@ struct PlaybackRuntimeTelemetry: Sendable {
         return "item-failed-\(domain)-\(error.code)-\(resourceKind(resourceURI))"
     }
 
+    static func listeningFailure(_ error: Error?) -> LiveListeningFailure {
+        var current = error as NSError?
+        // AVFoundation may wrap URL loading failures. Bound traversal and
+        // classify only a known domain/code; error messages stay private.
+        for _ in 0..<4 {
+            guard let error = current else { break }
+            if let failure = SiriusXMPlaybackError.resolutionFailure(from: error) {
+                return SiriusXMPlaybackResolver.map(failure)
+            }
+            if error.domain == NSURLErrorDomain, error.code == NSURLErrorUserAuthenticationRequired {
+                return .authorizationUnavailable
+            }
+            current = error.userInfo[NSUnderlyingErrorKey] as? NSError
+        }
+        return .decoderUnavailable
+    }
+
     static func resourceKind(_ uri: String?) -> String {
         guard let uri, let path = URL(string: uri)?.path.lowercased() else { return "resource-unknown" }
         if path.contains("/playback/key/v1/") { return "resource-key" }
@@ -463,7 +491,7 @@ private final class AVFoundationItemObservation: PlaybackItemObserving {
             onReady()
         case .failed:
             telemetry.record(failureLabel())
-            onFailure(.decoderUnavailable)
+            onFailure(PlaybackRuntimeTelemetry.listeningFailure(player.currentItem?.error))
         case .unknown, .readyToPlay:
             break
         @unknown default:
@@ -476,6 +504,7 @@ private final class AVFoundationItemObservation: PlaybackItemObserving {
         return PlaybackRuntimeTelemetry.failureLabel(
             item?.error,
             resourceURI: item?.errorLog()?.events.last?.uri
+                ?? ((item?.error as NSError?)?.userInfo[NSURLErrorFailingURLErrorKey] as? URL)?.absoluteString
         )
     }
 
@@ -581,7 +610,7 @@ final class PlaybackCoordinator {
     init(
         resolver: any PlaybackResolving,
         runtime: any PlaybackPlayerRuntime = AVFoundationPlaybackRuntime(),
-        recoveryPolicy: PlaybackRecoveryPolicy = PlaybackRecoveryPolicy(),
+        recoveryPolicy: PlaybackRecoveryPolicy = .forLaunch(),
         sleeper: any PlaybackRecoverySleeping = SystemPlaybackRecoverySleeper(),
         networkObserver: (any NetworkPathObserving)? = nil,
         workspaceObserver: (any WorkspacePowerObserving)? = nil

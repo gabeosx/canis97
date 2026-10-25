@@ -10,11 +10,9 @@ struct SystemMetadataResponseObservationClock: MetadataResponseObservationClock 
     func now() -> Date { Date() }
 }
 
-/// Short-lived adapter output. Batch callers receive only `availability`.
-/// Artwork exists solely to preserve the selected-channel compatibility API.
+/// Short-lived adapter output shared by bulk and selected-channel metadata.
 struct DecodedLookaroundSnapshot: Sendable {
     let availability: LiveNowAvailability
-    var artwork: [LiveChannelID: ChannelArtworkReference] = [:]
 
     func selectedChannel() -> MetadataAvailability {
         switch availability {
@@ -36,7 +34,7 @@ struct DecodedLookaroundSnapshot: Sendable {
                     channelID: channel.channelID,
                     program: LiveProgramMetadata(
                         title: program.title, artist: program.artist,
-                        artwork: artwork[channel.channelID]
+                        artwork: program.artwork
                     )
                 ))
             }
@@ -49,8 +47,7 @@ enum LookaroundSnapshotDecoder {
     static func decode(
         _ response: NativeTransportResponse,
         channelIDs: [LiveChannelID],
-        observedAt: Date,
-        includeArtwork: Bool = false
+        observedAt: Date
     ) -> DecodedLookaroundSnapshot {
         if let failure = response.transportFailure {
             return failed(failure == .cancelled ? .cancelled : .networkUnavailable)
@@ -79,7 +76,7 @@ enum LookaroundSnapshotDecoder {
               channels.count <= 2_000,
               root["delta"] is String
         else { return failed(.unsupportedResponse) }
-        if includeArtwork, let selectedChannelID = channelIDs.first {
+        if channelIDs.count == 1, let selectedChannelID = channelIDs.first {
             CompatibilitySchemaDiagnostics.recordLookaround(body: response.body, selectedChannelID: selectedChannelID)
         }
 
@@ -92,48 +89,44 @@ enum LookaroundSnapshotDecoder {
         }
         let timestamps = Timestamps()
         var decoded: [LiveChannelID: ChannelResult] = [:]
-        var artwork: [LiveChannelID: ChannelArtworkReference] = [:]
         let ordered = channelIDs.map { id in
             let result: ChannelResult
             if let existing = decoded[id] {
                 result = existing
             } else if let value = indexedChannels[id] {
-                result = decodeChannel(value, observedAt: observedAt, timestamps: timestamps, includeArtwork: includeArtwork)
+                result = decodeChannel(value, observedAt: observedAt, timestamps: timestamps)
                 decoded[id] = result
             } else {
                 result = ChannelResult(state: .unavailable)
             }
-            artwork[id] = result.artwork
             return LiveNowChannel(channelID: id, state: result.state)
         }
         return DecodedLookaroundSnapshot(
-            availability: .current(LiveNowSnapshot(observedAt: observedAt, channels: ordered)),
-            artwork: artwork
+            availability: .current(LiveNowSnapshot(observedAt: observedAt, channels: ordered))
         )
     }
 
     private struct ChannelResult {
         let state: LiveNowChannelState
-        var artwork: ChannelArtworkReference? = nil
     }
 
     private static func decodeChannel(
-        _ value: Any, observedAt: Date, timestamps: Timestamps, includeArtwork: Bool
+        _ value: Any, observedAt: Date, timestamps: Timestamps
     ) -> ChannelResult {
         guard let channel = value as? [String: Any],
               let cuts = channel["cuts"] as? [Any]
         else { return ChannelResult(state: .unsupported) }
-        let current = select(cuts, kind: .item, observedAt: observedAt, timestamps: timestamps, includeArtwork: includeArtwork)
+        let current = select(cuts, kind: .item, observedAt: observedAt, timestamps: timestamps)
         // A valid item always wins, and malformed items cannot be hidden by a show.
         guard current.state == .unavailable else { return current }
         guard let shows = channel["shows"] else { return current }
         guard let shows = shows as? [Any] else { return ChannelResult(state: .unsupported) }
-        return select(shows, kind: .show, observedAt: observedAt, timestamps: timestamps, includeArtwork: includeArtwork)
+        return select(shows, kind: .show, observedAt: observedAt, timestamps: timestamps)
     }
 
     private static func select(
         _ values: [Any], kind: LiveNowContentKind, observedAt: Date,
-        timestamps: Timestamps, includeArtwork: Bool
+        timestamps: Timestamps
     ) -> ChannelResult {
         guard values.count <= 256 else { return ChannelResult(state: .unsupported) }
         var winner: LiveNowProgram?
@@ -152,7 +145,7 @@ enum LookaroundSnapshotDecoder {
             }
             guard start <= observedAt else { continue }
             let program = LiveNowProgram(title: title, artist: artist, kind: kind, startedAt: start)
-            let artwork = includeArtwork ? LiveListeningAdapter.currentProgramArtworkReference(from: item) : nil
+            let artwork = LiveListeningAdapter.currentProgramArtworkReference(from: item)
             if let prior = winner {
                 if start < prior.startedAt { continue }
                 if start == prior.startedAt {
@@ -168,7 +161,10 @@ enum LookaroundSnapshotDecoder {
         }
         guard !conflicting else { return ChannelResult(state: .unsupported) }
         guard let winner else { return ChannelResult(state: .unavailable) }
-        return ChannelResult(state: .current(winner), artwork: winnerArtwork)
+        return ChannelResult(state: .current(LiveNowProgram(
+            title: winner.title, artist: winner.artist, kind: winner.kind,
+            startedAt: winner.startedAt, artwork: winnerArtwork
+        )))
     }
 
     private static func text(_ value: Any?) -> String? {

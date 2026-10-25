@@ -70,7 +70,7 @@ enum LiveListeningAdapter {
         observedAt: Date = Date()
     ) -> MetadataAvailability {
         LookaroundSnapshotDecoder.decode(
-            response, channelIDs: [channelID], observedAt: observedAt, includeArtwork: true
+            response, channelIDs: [channelID], observedAt: observedAt
         ).selectedChannel()
     }
 
@@ -107,7 +107,7 @@ enum LiveListeningAdapter {
               let resize = imageServiceResize(for: image)
         else { return nil }
 
-        return imageServiceArtworkReference(key: key, resize: resize)
+        return imageServiceArtworkReference(key: key, resize: resize, format: "png")
     }
 
     /// Browse image `url` values are image-service keys, despite the field
@@ -1477,9 +1477,119 @@ protocol FixedLiveTransporting: Sendable {
     ) async -> NativeTransportResponse
 }
 
-/// Opaque key identifier admitted only by the strict tune decoder.
-struct FixedLivePlaybackKeyID: Sendable, Equatable {
+/// Opaque key identity admitted by tune or a fixed provider playlist-key URL.
+struct FixedLivePlaybackKeyID: Sendable, Hashable {
     fileprivate let value: String
+
+    static func playlistKey(from url: URL) -> Self? {
+        guard url.scheme?.lowercased() == "https",
+              url.host?.lowercased() == SiriusXMRequestContract.host,
+              url.port == nil, url.user == nil, url.password == nil,
+              url.query == nil, url.fragment == nil,
+              url.pathComponents.count == 5,
+              url.pathComponents[1...3] == ["playback", "key", "v1"],
+              let value = url.lastPathComponent.removingPercentEncoding,
+              UUID(uuidString: value) != nil
+        else { return nil }
+        return Self(value: value)
+    }
+}
+
+enum FixedLivePlaybackKeyResult: Sendable, Equatable {
+    case authorized(Data)
+    case failed(LiveStreamResolutionFailure)
+}
+
+/// AES-128 identity keys and AVFoundation byte ranges are deliberately bounded.
+enum FixedLivePlaybackKeyData {
+    static func decode(_ body: Data, matching id: FixedLivePlaybackKeyID) -> Data? {
+        guard body.count <= 1_048_576,
+              let root = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+              Set(root.keys) == ["keyId", "key"],
+              root["keyId"] as? String == id.value,
+              let encoded = root["key"] as? String,
+              let key = Data(base64Encoded: encoded), key.count == 16
+        else { return nil }
+        return key
+    }
+
+    static func chunk(_ data: Data, offset: Int64, length: Int, allToEnd: Bool) -> Data? {
+        guard let offset = Int(exactly: offset), offset >= 0, offset <= data.count,
+              allToEnd || length >= 0 else { return nil }
+        let count = allToEnd ? data.count - offset : min(length, data.count - offset)
+        return data.subdata(in: offset..<(offset + count))
+    }
+}
+
+/// One item's bounded, memory-only key cache. Misses are serialized and a
+/// rejected operation ends the source; it never retries or guesses a key.
+actor FixedLivePlaybackKeySource {
+    private struct Pending {
+        let token = UUID()
+        let id: FixedLivePlaybackKeyID
+        let task: Task<FixedLivePlaybackKeyResult, Never>
+    }
+
+    private let authorize: @Sendable (FixedLivePlaybackKeyID) async -> FixedLivePlaybackKeyResult
+    private let isCurrent: @Sendable () async -> Bool
+    private var cached: [FixedLivePlaybackKeyID: Data]
+    private var order: [FixedLivePlaybackKeyID]
+    private var pending: Pending?
+    private var failure: LiveStreamResolutionFailure?
+
+    init(initialID: FixedLivePlaybackKeyID, initialKey: Data,
+         isCurrent: @escaping @Sendable () async -> Bool,
+         authorize: @escaping @Sendable (FixedLivePlaybackKeyID) async -> FixedLivePlaybackKeyResult) {
+        cached = [initialID: initialKey]
+        order = [initialID]
+        self.isCurrent = isCurrent
+        self.authorize = authorize
+    }
+
+    func key(for id: FixedLivePlaybackKeyID) async -> FixedLivePlaybackKeyResult {
+        guard !Task.isCancelled else { return .failed(.cancelled) }
+        if let failure { return .failed(failure) }
+        guard await isCurrent() else { return .failed(.superseded) }
+        guard !Task.isCancelled else { return .failed(.cancelled) }
+        if let failure { return .failed(failure) }
+        if let key = cached[id] { return .authorized(key) }
+        if let pending {
+            let key = await pending.task.value
+            finish(pending, key: key)
+            if pending.id == id { return await publish(key) }
+            return await self.key(for: id)
+        }
+        let operation = Pending(id: id, task: Task { [authorize] in await authorize(id) })
+        pending = operation
+        let key = await operation.task.value
+        finish(operation, key: key)
+        return await publish(key)
+    }
+
+    private func publish(_ result: FixedLivePlaybackKeyResult) async -> FixedLivePlaybackKeyResult {
+        guard !Task.isCancelled else { return .failed(.cancelled) }
+        // A denied operation may itself retire the session. Preserve its
+        // precise failure; only key bytes require the still-current lease.
+        if let failure { return .failed(failure) }
+        guard await isCurrent() else { return .failed(.superseded) }
+        guard !Task.isCancelled else { return .failed(.cancelled) }
+        return failure.map(FixedLivePlaybackKeyResult.failed) ?? result
+    }
+
+    private func finish(_ operation: Pending, key: FixedLivePlaybackKeyResult) {
+        guard pending?.token == operation.token else { return }
+        pending = nil
+        guard case let .authorized(bytes) = key, !bytes.isEmpty else {
+            if case let .failed(reason) = key { failure = reason }
+            else { failure = .unsupportedProtection }
+            cached.removeAll()
+            order.removeAll()
+            return
+        }
+        cached[operation.id] = bytes
+        order.append(operation.id)
+        if order.count > 4 { cached.removeValue(forKey: order.removeFirst()) }
+    }
 }
 
 private struct FixedLiveResourceSelection: Sendable {
@@ -1492,12 +1602,37 @@ private struct FixedLiveResourceSelection: Sendable {
 /// admitted it. The marker protocol provides no way for any public consumer
 /// to inspect or materialize its contents.
 private final class CurrentSessionLiveOperationContext: FixedLiveOperationContext, @unchecked Sendable {
+    private static let logger = Logger(subsystem: "com.siriusmac.client", category: "diagnostics")
     let resource: FixedLiveResourceSelection
     let handoff: FixedLiveAppleMediaHandoff
+    let sessionGeneration: Int
 
-    init(selection: FixedLiveResourceSelection) {
+    init(selection: FixedLiveResourceSelection, sessionGeneration: Int,
+         sessionCoordinator: SessionCoordinator, transport: any FixedLiveTransporting) {
         resource = selection
-        handoff = FixedLiveAppleMediaHandoff(url: selection.url, keyID: selection.keyID)
+        self.sessionGeneration = sessionGeneration
+        handoff = FixedLiveAppleMediaHandoff(
+            url: selection.url, keyID: selection.keyID,
+            isCurrent: { await sessionCoordinator.isPlaybackAuthorizationCurrent(sessionGeneration) },
+            authorizeKey: { keyID in
+                let result = await sessionCoordinator.withCurrentEntitledCredential(
+                    expectedSessionGeneration: sessionGeneration,
+                    { credential in await transport.playbackKey(for: keyID, using: credential) }
+                )
+                switch result {
+                case let .failed(failure): return .failed(failure)
+                case let .completed(response):
+                    if let failure = FixedLiveResponseDecoder.failure(for: response, operation: .playbackKey) {
+                        return .failed(failure)
+                    }
+                    guard let key = FixedLiveResponseDecoder.playbackKey(from: response.body, matching: keyID) else {
+                        return .failed(.unsupportedProtection)
+                    }
+                    Self.logger.info("SiriusXM client playlist-selected playback key authorized")
+                    return .authorized(key)
+                }
+            }
+        )
     }
 }
 
@@ -1516,7 +1651,8 @@ actor CurrentSessionFixedLiveOperations: FixedLiveStreamOperating {
     }
 
     func authorizeTune(for channelID: LiveChannelID) async -> FixedLiveTuneAuthorization {
-        switch await sessionCoordinator.withCurrentEntitledCredential({ [transport] credential in
+        let sessionGeneration = await sessionCoordinator.playbackAuthorizationGeneration
+        switch await sessionCoordinator.withCurrentEntitledCredential(expectedSessionGeneration: sessionGeneration, { [transport] credential in
             await transport.tune(for: channelID, using: credential)
         }) {
         case let .failed(failure):
@@ -1531,7 +1667,10 @@ actor CurrentSessionFixedLiveOperations: FixedLiveStreamOperating {
             ) else {
                 return .failed(.malformedResource)
             }
-            return .authorized(CurrentSessionLiveOperationContext(selection: selection))
+            return .authorized(CurrentSessionLiveOperationContext(
+                selection: selection, sessionGeneration: sessionGeneration,
+                sessionCoordinator: sessionCoordinator, transport: transport
+            ))
         }
     }
 
@@ -1547,7 +1686,7 @@ actor CurrentSessionFixedLiveOperations: FixedLiveStreamOperating {
     func authorizePlaybackKey(for context: any FixedLiveOperationContext) async -> LiveStreamResolutionFailure? {
         guard let context = context as? CurrentSessionLiveOperationContext else { return .resourceUnavailable }
 
-        switch await sessionCoordinator.withCurrentEntitledCredential({ [transport] credential in
+        switch await sessionCoordinator.withCurrentEntitledCredential(expectedSessionGeneration: context.sessionGeneration, { [transport] credential in
             await transport.playbackKey(for: context.resource.keyID, using: credential)
         }) {
         case let .failed(failure):
@@ -1575,11 +1714,17 @@ private final class FixedLiveAppleMediaHandoff: SiriusXMAppleMediaHandoff, @unch
     private let keyID: FixedLivePlaybackKeyID
     private let lock = NSLock()
     private var authorizedKey: Data?
+    private let isCurrent: @Sendable () async -> Bool
+    private let authorizeKey: @Sendable (FixedLivePlaybackKeyID) async -> FixedLivePlaybackKeyResult
     nonisolated(unsafe) private static var loaderAssociationKey: UInt8 = 0
 
-    init(url: URL, keyID: FixedLivePlaybackKeyID) {
+    init(url: URL, keyID: FixedLivePlaybackKeyID,
+         isCurrent: @escaping @Sendable () async -> Bool,
+         authorizeKey: @escaping @Sendable (FixedLivePlaybackKeyID) async -> FixedLivePlaybackKeyResult) {
         self.url = url
         self.keyID = keyID
+        self.isCurrent = isCurrent
+        self.authorizeKey = authorizeKey
     }
 
     func attachAuthorizedKey(_ key: Data) {
@@ -1595,7 +1740,8 @@ private final class FixedLiveAppleMediaHandoff: SiriusXMAppleMediaHandoff, @unch
         guard let key else { return nil }
 
         let asset = AVURLAsset(url: url)
-        let loader = FixedLivePlaybackKeyLoader(keyID: keyID, key: key)
+        let source = FixedLivePlaybackKeySource(initialID: keyID, initialKey: key, isCurrent: isCurrent, authorize: authorizeKey)
+        let loader = FixedLivePlaybackKeyLoader(source: source)
         asset.resourceLoader.setDelegate(loader, queue: loader.queue)
         let item = AVPlayerItem(asset: asset)
         objc_setAssociatedObject(
@@ -1610,34 +1756,78 @@ private final class FixedLiveAppleMediaHandoff: SiriusXMAppleMediaHandoff, @unch
 
 private final class FixedLivePlaybackKeyLoader: NSObject, AVAssetResourceLoaderDelegate, @unchecked Sendable {
     let queue = DispatchQueue(label: "com.siriusmac.playback.key-loader")
-    private let keyID: FixedLivePlaybackKeyID
-    private let key: Data
+    private let source: FixedLivePlaybackKeySource
+    // Both this dictionary and loading requests are confined to `queue`.
+    private var pending: [ObjectIdentifier: (request: AVAssetResourceLoadingRequest, task: Task<Void, Never>)] = [:]
     private let logger = Logger(subsystem: "com.siriusmac.client", category: "diagnostics")
 
-    init(keyID: FixedLivePlaybackKeyID, key: Data) {
-        self.keyID = keyID
-        self.key = key
-    }
+    init(source: FixedLivePlaybackKeySource) { self.source = source }
 
     func resourceLoader(
         _: AVAssetResourceLoader,
         shouldWaitForLoadingOfRequestedResource loadingRequest: AVAssetResourceLoadingRequest
     ) -> Bool {
         guard let url = loadingRequest.request.url,
-              url.path.hasPrefix("/playback/key/v1/"),
-              url.lastPathComponent.removingPercentEncoding == keyID.value,
-              let dataRequest = loadingRequest.dataRequest
-        else { return false }
+              url.path.hasPrefix("/playback/key/") else { return false }
+        guard let keyID = FixedLivePlaybackKeyID.playlistKey(from: url),
+              loadingRequest.dataRequest != nil || loadingRequest.contentInformationRequest != nil
+        else {
+            loadingRequest.finishLoading(with: SiriusXMPlaybackError.error(for: .unsupportedProtection))
+            return true
+        }
+        guard pending.count < 8 else {
+            loadingRequest.finishLoading(with: SiriusXMPlaybackError.error(for: .resourceUnavailable))
+            return true
+        }
+
+        let identifier = ObjectIdentifier(loadingRequest)
+        let task = Task { [source, weak self] in
+            let key = await source.key(for: keyID)
+            guard !Task.isCancelled, let self else { return }
+            queue.async { [weak self] in self?.finish(identifier, key: key) }
+        }
+        pending[identifier] = (loadingRequest, task)
+        return true
+    }
+
+    func resourceLoader(_: AVAssetResourceLoader, didCancel loadingRequest: AVAssetResourceLoadingRequest) {
+        pending.removeValue(forKey: ObjectIdentifier(loadingRequest))?.task.cancel()
+    }
+
+    private func finish(_ identifier: ObjectIdentifier, key: FixedLivePlaybackKeyResult) {
+        guard let pending = pending.removeValue(forKey: identifier),
+              !pending.request.isCancelled
+        else { return }
+        let loadingRequest = pending.request
+        guard case let .authorized(bytes) = key else {
+            if case let .failed(failure) = key {
+                loadingRequest.finishLoading(with: SiriusXMPlaybackError.error(for: failure))
+            }
+            return
+        }
 
         if let information = loadingRequest.contentInformationRequest {
+            guard information.allowedContentTypes?.isEmpty != false
+                    || information.allowedContentTypes?.contains(UTType.data.identifier) == true else {
+                loadingRequest.finishLoading(with: SiriusXMPlaybackError.error(for: .unsupportedProtection))
+                return
+            }
             information.contentType = UTType.data.identifier
-            information.contentLength = Int64(key.count)
-            information.isByteRangeAccessSupported = false
+            information.contentLength = Int64(bytes.count)
+            information.isByteRangeAccessSupported = true
         }
-        dataRequest.respond(with: key)
+        if let dataRequest = loadingRequest.dataRequest {
+            guard let chunk = FixedLivePlaybackKeyData.chunk(
+                bytes, offset: dataRequest.currentOffset, length: dataRequest.requestedLength,
+                allToEnd: dataRequest.requestsAllDataToEndOfResource
+            ) else {
+                loadingRequest.finishLoading(with: SiriusXMPlaybackError.error(for: .resourceUnavailable))
+                return
+            }
+            dataRequest.respond(with: chunk)
+        }
         loadingRequest.finishLoading()
         logger.info("SiriusXM client playback key loader handled")
-        return true
     }
 }
 
@@ -1759,14 +1949,7 @@ private enum FixedLiveResponseDecoder {
     }
 
     static func playbackKey(from body: Data, matching keyID: FixedLivePlaybackKeyID) -> Data? {
-        guard body.count <= maximumBodyBytes,
-              let root = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
-              Set(root.keys) == ["keyId", "key"],
-              root["keyId"] as? String == keyID.value,
-              let value = root["key"] as? String,
-              !value.isEmpty
-        else { return nil }
-        return Data(base64Encoded: value)
+        FixedLivePlaybackKeyData.decode(body, matching: keyID)
     }
 
     static func isCurrent(resource: FixedLiveResourceSelection, for channelID: LiveChannelID) -> Bool {

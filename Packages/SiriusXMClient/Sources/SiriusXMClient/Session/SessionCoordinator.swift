@@ -188,12 +188,24 @@ actor SessionCoordinator {
         return .active
     }
 
+    /// Non-secret lease for media work bound to the session that tuned it.
+    var playbackAuthorizationGeneration: Int { operationGeneration }
+
+    func isPlaybackAuthorizationCurrent(_ generation: Int) -> Bool {
+        guard generation == operationGeneration, case .active = state else { return false }
+        return lastEntitlement == .entitled && permitsCurrentOperations
+    }
+
     /// Revalidates entitlement immediately before a fixed live operation and
     /// invokes the supplied work while keeping the credential actor-owned.
     func withCurrentEntitledCredential<Value: Sendable>(
+        expectedSessionGeneration: Int? = nil,
         _ work: @Sendable (AuthenticationCredential) async -> Value
     ) async -> CurrentEntitledOperationResult<Value> {
         guard !Task.isCancelled else { return .failed(.cancelled) }
+        guard expectedSessionGeneration.map({ $0 == operationGeneration }) ?? true else {
+            return .failed(.superseded)
+        }
         let expectedGeneration = operationGeneration
         guard case let .active(activeSession) = state,
               lastEntitlement == .entitled,
