@@ -4,6 +4,38 @@ import Testing
 
 @Suite("Strict bulk live metadata decoding")
 struct LookaroundSnapshotDecoderTests {
+    @Test("Bulk metadata preserves the winning program's validated artwork without fetching it")
+    func selectedProgramArtwork() throws {
+        var older = lookaroundCut("Older", at: "2026-09-06T10:00:00Z")
+        older["image"] = ["url": "if/older", "width": 450, "height": 450]
+        var newest = lookaroundCut("Newest")
+        newest["image"] = ["url": "if/newest", "width": 450, "height": 450]
+        let expected = LiveListeningAdapter.currentProgramArtworkReference(from: newest)
+        for cuts in [[older, newest], [newest, older]] {
+            let response = try lookaroundResponse(["a": ["cuts": cuts]])
+            guard case let .current(program) = try snapshot(response).channels[0].state else {
+                Issue.record("expected current program"); return
+            }
+            #expect(program.title == "Newest")
+            #expect(program.artwork == expected)
+            #expect(program.artwork != nil)
+            #expect(!String(reflecting: program.artwork).contains("if/newest"))
+        }
+    }
+
+    @Test("Conflicting or unsafe images never invalidate valid program text or select an arbitrary image")
+    func inessentialArtworkDisagreements() throws {
+        var first = lookaroundCut("Same")
+        first["image"] = ["url": "if/first", "width": 450, "height": 450]
+        var second = first
+        second["image"] = ["url": "if/second", "width": 450, "height": 450]
+        var unsafe = first
+        unsafe["image"] = ["url": "https://attacker.invalid/image.png", "width": 450, "height": 450]
+        for cuts in [[first, second], [second, first], [first, second, first], [unsafe]] {
+            #expect(try snapshot(lookaroundResponse(["a": ["cuts": cuts]])).channels[0].state == current("Same"))
+        }
+    }
+
     @Test("One full response joins requested identities in catalog order, including repeats and missing coverage")
     func orderedFullSnapshot() throws {
         let response = try lookaroundResponse([
@@ -202,7 +234,6 @@ struct LookaroundSnapshotDecoderTests {
         guard case let .current(snapshot) = result.availability else {
             Issue.record("expected full snapshot"); throw FixtureFailure.unexpectedFailure
         }
-        #expect(result.artwork.isEmpty)
         return snapshot
     }
 

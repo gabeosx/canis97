@@ -13,6 +13,7 @@ import Testing
     let availability = LiveNowAvailability.current(snapshot)
     #expect(snapshot.channels.map(\.channelID) == ids)
     #expect(program.artist == nil)
+    #expect(program.artwork == nil)
     #expect(availability == .current(snapshot))
     #expect(await SiriusXMClient().liveNow(for: ids) == .failed(.authenticationUnavailable))
 }
@@ -21,7 +22,7 @@ import Testing
     let program = LiveNowProgram(title: "Synthetic", artist: "Host", kind: .item, startedAt: .distantPast)
     let channel = LiveNowChannel(channelID: LiveChannelID("fixture"), state: .current(program))
     let snapshot = LiveNowSnapshot(observedAt: .distantPast, channels: [channel])
-    #expect(Mirror(reflecting: program).children.compactMap(\.label) == ["title", "artist", "kind", "startedAt"])
+    #expect(Mirror(reflecting: program).children.compactMap(\.label) == ["title", "artist", "kind", "startedAt", "artwork"])
     #expect(Mirror(reflecting: channel).children.compactMap(\.label) == ["channelID", "state"])
     #expect(Mirror(reflecting: snapshot).children.compactMap(\.label) == ["observedAt", "channels"])
 
@@ -31,7 +32,7 @@ import Testing
     let package = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
     let source = try String(contentsOf: package.appendingPathComponent("Sources/SiriusXMClient/Public/LiveNowSnapshot.swift"), encoding: .utf8)
     let declarations = source.split(separator: "\n").filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("///") }.joined(separator: "\n")
-    for forbidden in ["URL", "Data", "ChannelArtworkReference", "AuthenticationCredential", "AVPlayer", "Handoff", "delta", "validFrom", "artistName", "headers", "token", "cookie", "encode", "Codable"] {
+    for forbidden in ["URL", "Data", "AuthenticationCredential", "AVPlayer", "Handoff", "delta", "validFrom", "artistName", "headers", "token", "cookie", "encode", "Codable"] {
         #expect(!declarations.contains(forbidden))
     }
 }

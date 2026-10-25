@@ -29,6 +29,27 @@ public enum LiveStreamResolutionFailure: Sendable, Equatable {
     case superseded
 }
 
+/// Closed classification for a key-loading error wrapped by AVFoundation.
+/// No URL, credential, response, or key material crosses the media boundary.
+@_spi(Playback)
+public enum SiriusXMPlaybackError {
+    private static let domain = "com.siriusmac.client.playback-key"
+    private static let failures: [LiveStreamResolutionFailure] = [
+        .authenticationUnavailable, .entitlementUnavailable, .selectionUnavailable,
+        .tuneUnavailable, .resourceUnavailable, .malformedResource, .protectedControl,
+        .networkUnavailable, .unsupportedProtection, .cancelled, .superseded,
+    ]
+
+    public static func resolutionFailure(from error: NSError) -> LiveStreamResolutionFailure? {
+        guard error.domain == domain, (1...failures.count).contains(error.code) else { return nil }
+        return failures[error.code - 1]
+    }
+
+    static func error(for failure: LiveStreamResolutionFailure) -> NSError {
+        NSError(domain: domain, code: failures.firstIndex(of: failure)! + 1)
+    }
+}
+
 /// Semantic availability for one explicit live-stream resolution attempt.
 /// A successful resource remains usable only through the SPI media handoff.
 public enum LiveStreamResolutionAvailability: Sendable, Equatable {

@@ -33,19 +33,22 @@ public enum LiveNowChannelState: Sendable, Equatable {
     case unsupported
 }
 
-/// Display text and start time only; no artwork or media authority is retained.
+/// Display metadata and an optional opaque artwork reference; no media authority.
 public struct LiveNowProgram: Sendable, Equatable {
     public let title: String
     /// Optional artist or host display text; absence does not imply music or talk.
     public let artist: String?
     public let kind: LiveNowContentKind
     public let startedAt: Date
+    /// A validated image reference. Bytes are fetched separately with `artwork(for:)`.
+    public let artwork: ChannelArtworkReference?
 
-    public init(title: String, artist: String? = nil, kind: LiveNowContentKind, startedAt: Date) {
+    public init(title: String, artist: String? = nil, kind: LiveNowContentKind, startedAt: Date, artwork: ChannelArtworkReference? = nil) {
         self.title = title
         self.artist = artist
         self.kind = kind
         self.startedAt = startedAt
+        self.artwork = artwork
     }
 }
 

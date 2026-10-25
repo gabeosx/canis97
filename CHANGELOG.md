@@ -6,6 +6,15 @@ Notable user-facing changes are recorded here. This project follows
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-10-25
+
+### Fixed
+
+- Restored playback for channels whose audio playlist requests a different key from the tuning response, affecting channels such as 1st Wave and SiriusXMU. Playlist-selected keys now use current-session authorization with bounded caching and cancellation handling.
+- Preserved distinct authentication, entitlement, network, and protection failures during native playback instead of reporting every media-key failure as a decoder error.
+- Restored current-song cover art on player skins by preserving artwork references in shared live metadata and requesting native-compatible images.
+- Sized library tabs to their labels so all five tabs fit alongside Search at the default window size.
+
 ## [0.3.1] - 2026-09-16
 
 ### Fixed

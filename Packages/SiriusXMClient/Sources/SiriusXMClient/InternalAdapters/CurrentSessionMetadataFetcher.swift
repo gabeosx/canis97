@@ -10,6 +10,7 @@ actor CurrentSessionMetadataFetcher: LiveMetadataFetching, LiveNowFetching {
     private let transport: any FixedMetadataTransporting
     private let responseObservationClock: any MetadataResponseObservationClock
     private var generation = 0
+    private var artworkGeneration = 0
 
     init(
         sessionCoordinator: SessionCoordinator,
@@ -21,17 +22,20 @@ actor CurrentSessionMetadataFetcher: LiveMetadataFetching, LiveNowFetching {
         self.responseObservationClock = responseObservationClock
     }
 
-    func invalidate() async { generation &+= 1 }
+    func invalidate() async {
+        generation &+= 1
+        artworkGeneration &+= 1
+    }
 
     func liveNow(for channelIDs: [LiveChannelID]) async -> LiveNowAvailability {
-        await refresh(channelIDs: channelIDs, includeArtwork: false).availability
+        await refresh(channelIDs: channelIDs).availability
     }
 
     func metadata(for channelID: LiveChannelID) async -> MetadataAvailability {
-        await refresh(channelIDs: [channelID], includeArtwork: true).selectedChannel()
+        await refresh(channelIDs: [channelID]).selectedChannel()
     }
 
-    private func refresh(channelIDs: [LiveChannelID], includeArtwork: Bool) async -> DecodedLookaroundSnapshot {
+    private func refresh(channelIDs: [LiveChannelID]) async -> DecodedLookaroundSnapshot {
         guard !Task.isCancelled else { return failed(.cancelled) }
         generation &+= 1
         let expected = generation
@@ -43,7 +47,7 @@ actor CurrentSessionMetadataFetcher: LiveMetadataFetching, LiveNowFetching {
                 }
                 return LookaroundSnapshotDecoder.decode(
                     response, channelIDs: channelIDs,
-                    observedAt: responseObservationClock.now(), includeArtwork: includeArtwork
+                    observedAt: responseObservationClock.now()
                 )
             },
             authorizationLoss: { result in
@@ -65,10 +69,10 @@ actor CurrentSessionMetadataFetcher: LiveMetadataFetching, LiveNowFetching {
     }
 
     func artwork(for reference: ChannelArtworkReference) async -> ArtworkAvailability {
-        let expected = generation
+        let expected = artworkGeneration
         let response = await transport.artwork(for: reference)
         CompatibilitySchemaDiagnostics.recordArtwork(response, origin: reference.fixedOrigin)
-        guard !Task.isCancelled, generation == expected else { return .unavailable }
+        guard !Task.isCancelled, artworkGeneration == expected else { return .unavailable }
         return LiveListeningAdapter.decodeArtwork(response)
     }
 

@@ -25,6 +25,35 @@ Change only the internal adapter for the failing stage. Preserve the public sema
 
 Add a regression test using the sanitized fixture. Include the previous supported shape when practical so a repair does not silently drop compatibility.
 
+## Playlist-selected playback keys
+
+Treat the tuning response's encryption-key identity as a prefetch hint, not a
+promise that every audio segment uses that key. The HLS playlist determines
+which key applies to each segment and may change it during playback
+([RFC 8216, sections 4.3.2.4 and 8.3](https://www.rfc-editor.org/rfc/rfc8216.html#section-4.3.2.4)).
+Pinning the resource loader to the prefetched identity can leave a different
+playlist key to AVFoundation's unauthenticated HTTP handling, producing an
+authentication error even when session verification and tuning both succeeded.
+
+The adapter authorizes playlist-selected keys only through its fixed HTTPS
+provider key endpoint, under the session generation that performed the tune.
+It serializes misses, coalesces duplicate requests, bounds the in-memory cache,
+and rejects late bytes after cancellation or session replacement. Unknown key
+paths and content types fail closed. Preserve the precise network, entitlement,
+protection, or authentication failure through AVFoundation rather than reporting
+every key failure as a decoder or sign-in problem.
+
+Run `PlaylistPlaybackKeyTests` and `LivePlaybackCoordinatorTests` when changing
+this path. Cover a playlist key different from the prefetch, subsequent key
+changes, duplicate and concurrent requests, cache eviction, denied requests,
+cancellation, session replacement, sixteen-byte key validation, and partial
+reads. AVFoundation can request content information without requesting bytes;
+that request must also be completed by the loader.
+
+During an authorized muted native check, confirm `playlist-selected playback
+key authorized`, `item-ready`, and `playing-confirmed`. These fixed labels are
+sufficient evidence; never record the key identities, key bytes, or media URLs.
+
 ## Verify
 
 Run the package suite in an isolated scratch directory:

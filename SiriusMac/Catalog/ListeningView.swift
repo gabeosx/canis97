@@ -74,6 +74,48 @@ enum LibraryTab: String, CaseIterable, Identifiable {
     }
 }
 
+/// SwiftUI's segmented Picker gives every label the width of "Favorite Songs".
+/// AppKit's fitting distribution preserves native interaction while allowing
+/// each label its own width, leaving room for Search in the library toolbar.
+struct NativeLibraryTabPicker: NSViewRepresentable {
+    @Binding var selection: LibraryTab
+
+    func makeCoordinator() -> Coordinator { Coordinator(selection: $selection) }
+
+    func makeNSView(context: Context) -> NSSegmentedControl {
+        let control = NSSegmentedControl(
+            labels: LibraryTab.allCases.map(\.title), trackingMode: .selectOne,
+            target: context.coordinator, action: #selector(Coordinator.selectTab(_:))
+        )
+        control.segmentDistribution = .fit
+        control.setAccessibilityLabel("Library")
+        control.setAccessibilityIdentifier("library.tabs")
+        control.setContentCompressionResistancePriority(.required, for: .horizontal)
+        return control
+    }
+
+    func updateNSView(_ control: NSSegmentedControl, context: Context) {
+        context.coordinator.selection = $selection
+        control.selectedSegment = LibraryTab.allCases.firstIndex(of: selection) ?? 0
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSSegmentedControl, context: Context) -> CGSize? {
+        nsView.intrinsicContentSize
+    }
+
+    @MainActor
+    final class Coordinator: NSObject {
+        var selection: Binding<LibraryTab>
+
+        init(selection: Binding<LibraryTab>) { self.selection = selection }
+
+        @objc func selectTab(_ sender: NSSegmentedControl) {
+            guard LibraryTab.allCases.indices.contains(sender.selectedSegment) else { return }
+            selection.wrappedValue = LibraryTab.allCases[sender.selectedSegment]
+        }
+    }
+}
+
 struct LibrarySearchQuery: Equatable {
     let value: String
 
@@ -369,14 +411,9 @@ struct LibraryView: View {
     }
 
     private var libraryTabPicker: some View {
-        Picker("Library", selection: $tab) {
-            ForEach(LibraryTab.allCases) { tab in
-                Text(tab.title).tag(tab)
-            }
-        }
-        .pickerStyle(.segmented)
+        NativeLibraryTabPicker(selection: $tab)
         .tint(Color(nsColor: .controlAccentColor))
-        .frame(width: 390)
+        .fixedSize(horizontal: true, vertical: false)
         .onChange(of: tab) { _, value in
             libraryStore.setSelectedLibraryTab(value.rawValue)
             updateLiveMetadataDemand()

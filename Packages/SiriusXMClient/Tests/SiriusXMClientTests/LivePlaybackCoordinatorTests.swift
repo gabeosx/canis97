@@ -4,6 +4,21 @@ import Testing
 
 @Suite("Provider-neutral live playback contracts")
 struct LivePlaybackCoordinatorTests {
+    @Test("An old media lease cannot use a reauthenticated session with the same clock instant")
+    func mediaLeaseDoesNotCrossSessionReplacement() async {
+        let session = makeActiveSession()
+        #expect(await session.attemptSession() == .active)
+        let retired = await session.playbackAuthorizationGeneration
+        #expect(await session.isPlaybackAuthorizationCurrent(retired))
+        _ = await session.signOut()
+        #expect(await session.attemptSession() == .active)
+        #expect(await session.isPlaybackAuthorizationCurrent(retired) == false)
+        let result = await session.withCurrentEntitledCredential(expectedSessionGeneration: retired) { _ in true }
+        guard case .failed(.superseded) = result else {
+            Issue.record("old media work must fail before using the replacement credential"); return
+        }
+    }
+
     @Test("stream resolution keeps current authorization failures distinct")
     func resolutionHasClosedCurrentAuthorizationFailures() {
         #expect(
@@ -376,7 +391,7 @@ private actor RecordingProductionLiveTransport: FixedLiveTransporting {
         using _: AuthenticationCredential
     ) async -> NativeTransportResponse {
         operations.append(.playbackKey)
-        return response(#"{"keyId":"fixture-key","key":"Zml4dHVyZS1rZXktbWF0ZXJpYWw="}"#)
+        return response(#"{"keyId":"fixture-key","key":"AAAAAAAAAAAAAAAAAAAAAA=="}"#)
     }
 
     private func response(_ body: String) -> NativeTransportResponse {

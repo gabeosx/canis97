@@ -129,8 +129,8 @@ final class MetadataPresentationModel {
         pollTask = Task { [weak self] in await self?.poll(channelID: channelID, generation: expected) }
     }
 
-    /// Compact text shares the library's live observation. Channel artwork remains a
-    /// separate catalog concern; this path issues no selected-channel poll.
+    /// Compact metadata shares the library's live observation. Only the selected
+    /// program's image is fetched; this path issues no selected-channel poll.
     func applyLiveNow(_ snapshot: LiveNowSnapshot?, failure: LiveNowFailure?) {
         let recoverableFailure: Bool = switch failure {
         case .networkUnavailable, .rateLimited, .superseded: true
@@ -139,6 +139,7 @@ final class MetadataPresentationModel {
         guard let snapshot, failure == nil || recoverableFailure,
               let channel = snapshot.channels.first(where: { $0.channelID == state.channelID }) else {
             expiryTask?.cancel()
+            resetArtwork()
             state = LiveMetadataState(channelID: state.channelID, text: .channelFallback(state.channelID), artwork: .unavailable, refreshedAt: nil)
             availability = failure == nil ? .unavailable : .failed
             programTitle = nil
@@ -148,6 +149,7 @@ final class MetadataPresentationModel {
         }
         guard case let .current(program) = channel.state else {
             expiryTask?.cancel()
+            resetArtwork()
             state = LiveMetadataState(channelID: state.channelID, text: .channelFallback(state.channelID), artwork: .unavailable, refreshedAt: snapshot.observedAt)
             availability = .unavailable
             programTitle = nil
@@ -161,6 +163,8 @@ final class MetadataPresentationModel {
         let text = presentationText(for: LiveProgramMetadata(title: program.title, artist: program.artist), channelID: state.channelID)
         let age = clock.now().timeIntervalSince(snapshot.observedAt)
         guard age >= 0, age < policy.unavailableAfter else {
+            expiryTask?.cancel()
+            resetArtwork()
             state = LiveMetadataState(channelID: state.channelID, text: .channelFallback(state.channelID), artwork: .unavailable, refreshedAt: nil)
             availability = .unavailable
             programTitle = nil
@@ -168,8 +172,12 @@ final class MetadataPresentationModel {
             currentLiveProgram = nil
             return
         }
-        state = LiveMetadataState(channelID: state.channelID, text: failure != nil || age >= policy.staleAfter ? stale(text) : text, artwork: .unavailable, refreshedAt: snapshot.observedAt)
+        let isStale = failure != nil || age >= policy.staleAfter
+        let retainedArtwork = program.artwork != nil && program.artwork == displayedArtworkReference
+            ? current(state.artwork) : .unavailable
+        state = LiveMetadataState(channelID: state.channelID, text: isStale ? stale(text) : text, artwork: isStale ? stale(retainedArtwork) : retainedArtwork, refreshedAt: snapshot.observedAt)
         availability = failure == nil ? .current : .failed
+        updateArtwork(for: program.artwork)
         scheduleExpiry(channelID: state.channelID, generation: generation, refreshedAt: snapshot.observedAt)
     }
 
@@ -305,10 +313,30 @@ final class MetadataPresentationModel {
             self.state = LiveMetadataState(
                 channelID: channelID,
                 text: self.state.text,
-                artwork: age >= self.policy.staleAfter ? .stale(artwork) : .current(artwork),
+                artwork: age >= self.policy.staleAfter || self.availability != .current ? .stale(artwork) : .current(artwork),
                 refreshedAt: refreshedAt
             )
         }
+    }
+
+    private func updateArtwork(for reference: ChannelArtworkReference?) {
+        if reference != displayedArtworkReference {
+            displayedArtworkReference = nil
+        }
+        guard let reference else {
+            resetArtwork()
+            return
+        }
+        if reference != displayedArtworkReference, reference != requestedArtworkReference {
+            startArtworkFetch(for: reference, channelID: state.channelID, generation: generation)
+        }
+    }
+
+    private func resetArtwork() {
+        artworkTask?.cancel()
+        artworkTask = nil
+        displayedArtworkReference = nil
+        requestedArtworkReference = nil
     }
 
     private func scheduleExpiry(channelID: LiveChannelID, generation expected: Int, refreshedAt: Date) {
