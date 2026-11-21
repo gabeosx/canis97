@@ -39,10 +39,6 @@ async function pointToLatestDownload() {
     downloadLabels.forEach((label) => {
       label.textContent = `Download ${release.tag_name ?? "Canis97"}`;
     });
-
-    releaseStatuses.forEach((status) => {
-      status.textContent = "Free and open source / macOS 26 or later / Apple silicon";
-    });
   } catch {
     releaseLinks.forEach((link) => {
       link.href = releasesPage;

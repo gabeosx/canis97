@@ -400,6 +400,15 @@ h2 {
   font-size: clamp(48px, 5.4vw, 82px);
 }
 
+.install-heading p {
+  max-width: 34ch;
+  margin: 24px 0 0;
+}
+
+.install-heading a:focus-visible {
+  outline-color: var(--night);
+}
+
 .install-steps {
   margin: 0;
   padding: 0;
