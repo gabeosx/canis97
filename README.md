@@ -2,9 +2,11 @@
 
 # Canis97
 
-### SiriusXM, built like a real Mac app.
+### A native SiriusXM app for Mac
 
-Live radio, media keys, favorites, and a tiny skinnable player—without living in a browser tab.
+Listen to live SiriusXM radio on your Mac with media keys, favorites, and a compact, skinnable player.
+
+[Visit Canis97.com](https://canis97.com/)
 
 [![CI](https://github.com/gabeosx/canis97/actions/workflows/ci.yml/badge.svg)](https://github.com/gabeosx/canis97/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/gabeosx/canis97?display_name=tag&sort=semver)](https://github.com/gabeosx/canis97/releases/latest)
@@ -92,7 +94,7 @@ Canis97 requires macOS 26 or later, an Apple silicon Mac, and an active SiriusXM
 
 ### GitHub Releases
 
-Download the latest signed build from [GitHub Releases](https://github.com/gabeosx/canis97/releases), unzip it, and move **Canis97.app** to Applications.
+Download the latest signed disk image from [GitHub Releases](https://github.com/gabeosx/canis97/releases/latest), open it, and drag **Canis97.app** into Applications.
 
 ### Homebrew
 
